@@ -25,8 +25,8 @@ extension InboxItem {
     /// presentation derivation over the EXISTING `sourceID` / derived
     /// `InboxItemCategory` — no new field/schema/query (§5-safe, same class as
     /// `nexusInboxSourceLabel`). Buckets 1:1 with `InboxSectionBuilder`:
-    /// `tasks.no-date` → BEZ DATY, `tasks.snoozed` → UŚPIONE, `.digests` →
-    /// E-MAIL, `.mentions` → WZMIANKI. The `tray` fallback covers orphan /
+    /// `tasks.no-date` → NO DATE, `tasks.snoozed` → SNOOZED, `.digests` →
+    /// E-MAIL, `.mentions` → MENTIONS. The `tray` fallback covers orphan /
     /// `.people` items, which the section builder drops anyway (no oracle
     /// section), so it is never actually rendered today.
     var nexusInboxSourceIcon: String {

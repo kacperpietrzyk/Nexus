@@ -28,16 +28,16 @@ enum InboxSectionBuilder {
     /// `InboxItemCategory` only (read-only — NO new field/schema/query; the
     /// audit's "add groupID/iconName" suggestion is §5-FORBIDDEN, rejected).
     ///
-    /// - `sourceID == "tasks.no-date"` → "BEZ DATY"
-    /// - `sourceID == "tasks.snoozed"` → "UŚPIONE"
+    /// - `sourceID == "tasks.no-date"` → "NO DATE"
+    /// - `sourceID == "tasks.snoozed"` → "SNOOZED"
     /// - remaining, `category == .digests` → "E-MAIL"
-    /// - remaining, `category == .mentions` → "WZMIANKI"
+    /// - remaining, `category == .mentions` → "MENTIONS"
     ///
-    /// Section order = oracle order (BEZ DATY, UŚPIONE, E-MAIL, WZMIANKI),
+    /// Section order = oracle order (NO DATE, SNOOZED, E-MAIL, MENTIONS),
     /// enforced by fixed-order iteration (NOT a dictionary). §10/§3: a section
     /// renders ONLY if it has ≥1 item — empty buckets are omitted entirely,
     /// never faked or placeholder-counted. With only `TasksNoDateSource` +
-    /// `TasksSnoozedSource` registered today, E-MAIL / WZMIANKI simply will
+    /// `TasksSnoozedSource` registered today, E-MAIL / MENTIONS simply will
     /// not appear; that is correct, not a bug.
     ///
     /// Pure: inputs → `[InboxSection]`. Independently testable.
@@ -55,10 +55,10 @@ enum InboxSectionBuilder {
         let mentions = rest.filter { $0.category == .mentions }
 
         let ordered: [InboxSection] = [
-            InboxSection(id: "tasks.no-date", title: "BEZ DATY", items: noDate),
-            InboxSection(id: "tasks.snoozed", title: "UŚPIONE", items: snoozed),
+            InboxSection(id: "tasks.no-date", title: "NO DATE", items: noDate),
+            InboxSection(id: "tasks.snoozed", title: "SNOOZED", items: snoozed),
             InboxSection(id: "digests", title: "E-MAIL", items: mail),
-            InboxSection(id: "mentions", title: "WZMIANKI", items: mentions),
+            InboxSection(id: "mentions", title: "MENTIONS", items: mentions),
         ]
         return ordered.filter { !$0.items.isEmpty }
     }
@@ -97,14 +97,14 @@ struct InboxListPanel: View {
             // sections + the reader's neutral nothing-selected state.
             if error != nil {
                 InboxPanelEmptyState(
-                    title: "Nie udało się wczytać Inboxa",
-                    subtitle: "Spróbuj odświeżyć widok za chwilę.",
+                    title: "Couldn't load the Inbox",
+                    subtitle: "Try refreshing in a moment.",
                     systemImage: "exclamationmark.triangle"
                 )
             } else if items.isEmpty {
                 InboxPanelEmptyState(
-                    title: "Skrzynka jest pusta",
-                    subtitle: "Nowe wzmianki, digesty i przechwycone pozycje pojawią się tutaj.",
+                    title: "Inbox is empty",
+                    subtitle: "New mentions, digests, and captured items appear here.",
                     systemImage: "tray"
                 )
             } else {

@@ -28,35 +28,35 @@ struct InboxSectionBuilderTests {
 
     // MARK: - Oracle section order
 
-    @Test("sections returns oracle order: BEZ DATY / UŚPIONE / E-MAIL / WZMIANKI")
+    @Test("sections returns oracle order: NO DATE / SNOOZED / E-MAIL / MENTIONS")
     func oracleOrder() {
         let items = [
-            item(sourceID: "linear.feed", title: "@alice review"),  // .mentions → WZMIANKI
+            item(sourceID: "linear.feed", title: "@alice review"),  // .mentions → MENTIONS
             item(sourceID: "github.notifications", title: "PR #42"),  // .digests → E-MAIL
-            item(sourceID: "tasks.snoozed"),  // → UŚPIONE
-            item(sourceID: "tasks.no-date"),  // → BEZ DATY
+            item(sourceID: "tasks.snoozed"),  // → SNOOZED
+            item(sourceID: "tasks.no-date"),  // → NO DATE
         ]
         let sections = InboxSectionBuilder.sections(from: items)
-        #expect(sections.map(\.title) == ["BEZ DATY", "UŚPIONE", "E-MAIL", "WZMIANKI"])
+        #expect(sections.map(\.title) == ["NO DATE", "SNOOZED", "E-MAIL", "MENTIONS"])
     }
 
     // MARK: - sourceID bucketing
 
-    @Test("tasks.no-date goes to BEZ DATY")
+    @Test("tasks.no-date goes to NO DATE")
     func noDateBucket() {
         let noDateItem = item(sourceID: "tasks.no-date", title: "Buy oat milk")
         let sections = InboxSectionBuilder.sections(from: [noDateItem])
         #expect(sections.count == 1)
-        #expect(sections[0].title == "BEZ DATY")
+        #expect(sections[0].title == "NO DATE")
         #expect(sections[0].items.map(\.id) == [noDateItem.id])
     }
 
-    @Test("tasks.snoozed goes to UŚPIONE")
+    @Test("tasks.snoozed goes to SNOOZED")
     func snoozedBucket() {
         let snoozedItem = item(sourceID: "tasks.snoozed", title: "Follow up")
         let sections = InboxSectionBuilder.sections(from: [snoozedItem])
         #expect(sections.count == 1)
-        #expect(sections[0].title == "UŚPIONE")
+        #expect(sections[0].title == "SNOOZED")
         #expect(sections[0].items.map(\.id) == [snoozedItem.id])
     }
 
@@ -64,7 +64,7 @@ struct InboxSectionBuilderTests {
 
     @Test("github sourceID resolves to digests bucket (E-MAIL)")
     func digestsBucket() {
-        // category heuristic: searchable contains "github" → .digests
+        // category heuristic: searchable contains "github" → .digests → E-MAIL
         let digestItem = item(sourceID: "github.notifications", title: "PR merged")
         let sections = InboxSectionBuilder.sections(from: [digestItem])
         #expect(sections.count == 1)
@@ -72,13 +72,13 @@ struct InboxSectionBuilderTests {
         #expect(sections[0].items.map(\.id) == [digestItem.id])
     }
 
-    @Test("linear sourceID resolves to mentions bucket (WZMIANKI)")
+    @Test("linear sourceID resolves to mentions bucket (MENTIONS)")
     func mentionsBucket() {
-        // category heuristic: searchable contains "linear" → .mentions
+        // category heuristic: searchable contains "linear" → .mentions → MENTIONS
         let mentionItem = item(sourceID: "linear.feed", title: "Review requested")
         let sections = InboxSectionBuilder.sections(from: [mentionItem])
         #expect(sections.count == 1)
-        #expect(sections[0].title == "WZMIANKI")
+        #expect(sections[0].title == "MENTIONS")
         #expect(sections[0].items.map(\.id) == [mentionItem.id])
     }
 
@@ -91,7 +91,7 @@ struct InboxSectionBuilderTests {
         let onlyNoDate = item(sourceID: "tasks.no-date")
         let sections = InboxSectionBuilder.sections(from: [onlyNoDate])
         #expect(sections.count == 1)
-        #expect(sections[0].title == "BEZ DATY")
+        #expect(sections[0].title == "NO DATE")
     }
 
     @Test("empty input produces no sections")
@@ -118,9 +118,9 @@ struct InboxSectionBuilderTests {
         let allIDs = sections.flatMap { $0.items.map(\.id) }
         #expect(!allIDs.contains(orphanID))
 
-        // Only the BEZ DATY section with the valid item remains.
+        // Only the NO DATE section with the valid item remains.
         #expect(sections.count == 1)
-        #expect(sections[0].title == "BEZ DATY")
+        #expect(sections[0].title == "NO DATE")
     }
 
     @Test("tasks-category item from unregistered source is also dropped")
@@ -157,10 +157,10 @@ struct InboxSectionBuilderTests {
         let sections = InboxSectionBuilder.sections(from: [noDate, snoozed, digest, mention])
         #expect(sections.count == 4)
 
-        let bezDaty = sections.first { $0.title == "BEZ DATY" }
-        let uspione = sections.first { $0.title == "UŚPIONE" }
+        let bezDaty = sections.first { $0.title == "NO DATE" }
+        let uspione = sections.first { $0.title == "SNOOZED" }
         let email = sections.first { $0.title == "E-MAIL" }
-        let wzmianki = sections.first { $0.title == "WZMIANKI" }
+        let wzmianki = sections.first { $0.title == "MENTIONS" }
 
         #expect(bezDaty?.items.map(\.id) == [ndID])
         #expect(uspione?.items.map(\.id) == [snoozedID])
@@ -178,7 +178,7 @@ struct InboxSectionBuilderTests {
         let second = item(id: secondID, sourceID: "tasks.no-date", title: "Second")
 
         let sections = InboxSectionBuilder.sections(from: [first, second])
-        let bezDaty = sections.first { $0.title == "BEZ DATY" }
+        let bezDaty = sections.first { $0.title == "NO DATE" }
 
         // Guards against an accidental rewrite to sort/dedup: a non-stable
         // bucketing would still pass every other test but break this.

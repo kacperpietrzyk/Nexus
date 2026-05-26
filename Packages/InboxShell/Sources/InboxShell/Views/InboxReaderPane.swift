@@ -159,7 +159,7 @@ public struct InboxReaderPane: View {
                 label: {
                     HStack(spacing: 5) {
                         Image(systemName: "arrow.right.circle")
-                        Text("Do zadań")
+                        Text("Send to Tasks")
                     }
                 }
             )
@@ -170,7 +170,7 @@ public struct InboxReaderPane: View {
                 label: {
                     HStack(spacing: 5) {
                         Image(systemName: "moon.zzz")
-                        Text("Uśpij 1d")
+                        Text("Snooze 1d")
                     }
                 }
             )
@@ -181,7 +181,7 @@ public struct InboxReaderPane: View {
                 label: {
                     HStack(spacing: 5) {
                         Image(systemName: "archivebox")
-                        Text("Archiwizuj")
+                        Text("Archive")
                     }
                 }
             )
@@ -194,16 +194,16 @@ extension InboxReaderEmptyState {
     fileprivate var title: String {
         switch self {
         case .noSelection:
-            return "Brak podglądu"
+            return "No preview"
         case .emptyInbox:
-            return "Nic do przejrzenia"
+            return "Nothing to review"
         }
     }
 
     fileprivate var subtitle: String? {
         switch self {
         case .noSelection:
-            return "Wybierz pozycję, żeby ją tu przejrzeć."
+            return "Select an item to read it here."
         case .emptyInbox:
             return nil
         }
