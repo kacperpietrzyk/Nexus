@@ -63,7 +63,7 @@ struct TodayCircularView: View {
                     Text("\(totalCount)")
                         .font(.system(size: 22, weight: .semibold, design: .rounded))
                         .foregroundStyle(priorityColor)
-                    Text(entry.snapshot.overdueCount > 0 ? "late" : "dziś")
+                    Text(entry.snapshot.overdueCount > 0 ? "late" : "today")
                         .font(.system(size: 9, weight: .medium))
                         .textCase(.uppercase)
                         .foregroundStyle(.secondary)
@@ -108,8 +108,8 @@ struct TodayCircularComplication: Widget {
                 .containerBackground(.clear, for: .widget)
                 .widgetURL(URL(string: "nexus://today"))
         }
-        .configurationDisplayName("Dziś - liczba")
-        .description("Liczba zadań na dziś")
+        .configurationDisplayName("Today — count")
+        .description("Task count for today")
         .supportedFamilies([.accessoryCircular, .accessoryCorner, .accessoryInline])
     }
 }

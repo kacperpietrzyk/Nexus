@@ -50,7 +50,7 @@ import TasksFeature
 ///   capture, byte-for-byte unaffected (`BottomBar == EmptyView` is
 ///   inferred at every existing call site).
 /// - **Surface-input mode** — a surface whose oracle bottom band is a real
-///   input (Agent: `"Napisz do Nexusa…"`, an actual message composer, not
+///   input (Agent: `"Write to Nexus…"`, an actual message composer, not
 ///   the palette opener) supplies a bespoke `bottomBar` view; the shell
 ///   renders it in the SAME outer band padding the `NexusCommandBar`
 ///   already gets (`.h26/.t14/.b20`, unchanged). Backend-retention rule
@@ -265,10 +265,10 @@ extension NexusShell where TopTrailing == EmptyView {
 /// view's internals — see `NexusShell` header).
 ///
 /// **Audit B1 — the middle region is now a real inline composer.** The
-/// placeholder text used to promise an input (`"Zapisz zadanie albo
-/// zapytaj Nexusa…"`) while the *entire capsule* was a single
+/// placeholder text used to promise an input (`"Save a task or
+/// ask Nexus…"`) while the *entire capsule* was a single
 /// `.onTapGesture` that merely opened the command palette — a lying
-/// affordance (the reported "szybki zapis = UX tragedia": click the
+/// affordance (the reported "quick save = UX disaster": click the
 /// promised input → palette → Add Task → a mispositioned popup). It now
 /// hosts a `TextField` wired to the existing, already-tested
 /// `CapturePaneState` (the same parse+commit machine `CapturePane` uses),
@@ -317,10 +317,10 @@ private struct NexusCommandBar: View {
             // Geist-Regular 13 = the oracle `LabCommandBar` placeholder
             // type, byte-identical to the static Text it replaced; only the
             // ink moves to `Text.primary` so typed text is legible (the
-            // placeholder still renders muted by default). The "albo zapytaj
-            // Nexusa" half was dropped: this bar only creates tasks, so
+            // placeholder still renders muted by default). The "or ask Nexus"
+            // half was dropped: this bar only creates tasks, so
             // carrying the agent-ask promise would just be a second lie.
-            TextField("Dodaj zadanie albo termin…", text: inputBinding)
+            TextField("Add a task or date…", text: inputBinding)
                 .textFieldStyle(.plain)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -406,7 +406,7 @@ private struct NexusShellPreviewHarness: View {
                     onOpenCommandPalette: {},
                     onOpenCapture: { _ in },
                     topTrailing: {
-                        Text("7 otwartych · 3 spotkania")
+                        Text("7 open · 3 meetings")
                             .font(NexusType.mono)
                             .foregroundStyle(NexusColor.Text.muted)
                     },

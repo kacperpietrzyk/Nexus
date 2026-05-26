@@ -44,7 +44,7 @@ final class WatchOverdueDigestScheduler {
         let fireDate = nextNineAM(after: now)
 
         let content = UNMutableNotificationContent()
-        content.title = "Zaległe zadania"
+        content.title = "Overdue tasks"
         content.body = "\(count) \(pluralisation(for: count))"
         content.categoryIdentifier = NotificationCategory.overdueDigest.rawValue
 
@@ -96,19 +96,9 @@ final class WatchOverdueDigestScheduler {
         return calendar.date(byAdding: .day, value: 1, to: nineToday) ?? nineToday
     }
 
-    /// Inlined Polish three-form rule. Canonical helper is
-    /// `PolishPlurals` in `TasksFeature` — duplicated here because the Watch
-    /// target cannot depend on `TasksFeature` and uses the adjective-prefixed
-    /// form ("zaległe / zaległych") that `PolishPlurals` does not expose.
+    /// Counts are inlined in English here; the Watch target can't import TasksFeature directly.
     nonisolated private func pluralisation(for count: Int) -> String {
         let absoluteCount = abs(count)
-        let lastTwoDigits = absoluteCount % 100
-        let lastDigit = absoluteCount % 10
-
-        if absoluteCount == 1 { return "zaległe zadanie" }
-        if (2...4).contains(lastDigit), !(12...14).contains(lastTwoDigits) {
-            return "zaległe zadania"
-        }
-        return "zaległych zadań"
+        return absoluteCount == 1 ? "overdue task" : "overdue tasks"
     }
 }

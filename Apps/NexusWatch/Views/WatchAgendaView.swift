@@ -57,10 +57,10 @@ struct WatchAgendaView: View {
                             Image(systemName: "checkmark.circle")
                                 .font(.system(size: 30, weight: .semibold))
                                 .foregroundStyle(NexusColor.Text.secondary)
-                            Text("Brak zadań")
+                            Text("No tasks")
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundStyle(NexusColor.Text.primary)
-                            Text("Dodaj dyktowaniem albo zapytaj Nexusa.")
+                            Text("Add by dictation or ask Nexus.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(NexusColor.Text.tertiary)
                                 .multilineTextAlignment(.center)
@@ -130,7 +130,7 @@ struct WatchAgendaView: View {
                             pendingUndo = nil
                         }
                     } label: {
-                        Text("Cofnij: \(undo.title)")
+                        Text("Undo: \(undo.title)")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(NexusColor.Text.primary)
                             .padding(.horizontal, 10)

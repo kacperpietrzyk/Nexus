@@ -48,7 +48,7 @@ struct AgentMessageGroupingTests {
 
         #expect(blocks.count == 1)
         #expect(blocks[0].kind == .user)
-        #expect(blocks[0].eyebrow == "TY")
+        #expect(blocks[0].eyebrow == "YOU")
         #expect(blocks[0].text == "hi nexus")
         #expect(blocks[0].tools.isEmpty)
         #expect(blocks[0].redacted == false)

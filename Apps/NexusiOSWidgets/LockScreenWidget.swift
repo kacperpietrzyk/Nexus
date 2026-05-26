@@ -46,7 +46,7 @@ struct LockScreenEntryView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
             }
-            Text("\(entry.snapshot.overdueCount) zaległe · \(entry.snapshot.todayCount) dziś")
+            Text("\(entry.snapshot.overdueCount) overdue · \(entry.snapshot.todayCount) today")
                 .font(.system(size: 10))
         }
     }
@@ -60,8 +60,8 @@ struct LockScreenWidget: Widget {
             LockScreenEntryView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Dziś (ekran blokady)")
-        .description("Pierwszy tytuł + kompaktowe liczniki.")
+        .configurationDisplayName("Today (Lock Screen)")
+        .description("First title + compact counts.")
         .supportedFamilies([.accessoryRectangular])
     }
 }

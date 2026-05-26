@@ -112,13 +112,13 @@ public struct InboxView: View {
     private var listContent: some View {
         List {
             if error != nil {
-                ContentUnavailableView("Nie udało się wczytać Inboxa", systemImage: "exclamationmark.triangle")
+                ContentUnavailableView("Couldn't load the Inbox", systemImage: "exclamationmark.triangle")
                     .listRowBackground(Color.clear)
             } else if filteredItems.isEmpty {
                 ContentUnavailableView(
-                    "Skrzynka jest pusta",
+                    "Inbox is empty",
                     systemImage: "tray",
-                    description: Text("Nowe wzmianki, digesty i przechwycone pozycje pojawią się tutaj.")
+                    description: Text("New mentions, digests, and captured items appear here.")
                 )
                 .listRowBackground(Color.clear)
             } else {
@@ -257,10 +257,10 @@ public enum InboxFilter: String, Hashable, Sendable, CaseIterable {
     /// Tab label, 1:1 with the Inbox oracle's `InboxTab` strings.
     public var displayLabel: String {
         switch self {
-        case .all: return "Wszystko"
-        case .people: return "Ludzie"
-        case .digests: return "Digesty"
-        case .mentions: return "Wzmianki"
+        case .all: return "All"
+        case .people: return "People"
+        case .digests: return "Digests"
+        case .mentions: return "Mentions"
         }
     }
 

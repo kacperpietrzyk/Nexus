@@ -6,7 +6,7 @@ import SwiftUI
 // MARK: - Embedded-Today status-sectioned main column (MP-2 slice 2)
 //
 // Rebuilds the Today main column to the accepted Lab organism: a vertical
-// stack of status sections — DZIŚ / CZEKA NA CIEBIE / PÓŹNIEJ — each an
+// stack of status sections — TODAY / AWAITING YOU / LATER — each an
 // eyebrow + count header over the shipped MP-2.1 row idiom (`TaskRowView`,
 // status glyph + title + meta + Mac hover quick-actions). No greeting hero,
 // no linear day-progress, no time-slot schedule (those stay on the
@@ -24,7 +24,7 @@ extension TodayDashboard {
             // MP-2 slice-5: empty is a real, earned state — not absence.
             // When every loaded bucket is empty AND nothing is pinned AND
             // there is no error to surface, the column shows the Lab
-            // `.achievement` "Dzień czysty" reward instead of bare/absent
+            // `.achievement` "All clear" reward instead of bare/absent
             // section headers (oracle: `TodayHUDPreview.swift` `isEmpty`
             // branch → `LabEmptyState(tone: .achievement, …)`). The error
             // term is part of the predicate deliberately: an inline error
@@ -96,7 +96,7 @@ extension TodayDashboard {
     /// The `error` term is load-bearing: a data-load failure zeros the
     /// buckets and sets `embeddedError` — without this guard the
     /// zeroed-bucket path would satisfy the gate and falsely show the
-    /// "Dzień czysty" achievement while simultaneously signalling a failure.
+    /// "All clear" achievement while simultaneously signalling a failure.
     /// Extracted as a pure `internal static` (not `public` — §5 surface-area
     /// guard) so the production path and the test suite call the same function.
     static func embeddedTodayIsEmpty(
@@ -113,7 +113,7 @@ extension TodayDashboard {
             && error == nil
     }
 
-    /// The Lab `.achievement` empty state ("Dzień czysty"), built from Nexus
+    /// The Lab `.achievement` empty state ("All clear"), built from Nexus
     /// tokens only — no `Lab*` import. Mirrors the oracle's
     /// `LabEmptyState(tone: .achievement, …)`
     /// (`LabKit.swift` ≈443–520): a circle-stroked check glyph (34pt
@@ -130,11 +130,11 @@ extension TodayDashboard {
     /// precedent, as the Canvas sub-tokens in `+EmbeddedTimeline.swift`.
     ///
     /// TELEMETRY PILL OMITTED (explicit, reported to the user): the oracle
-    /// composes a `LabBackgroundTelemetry` "N rzeczy obsłużone w tle dziś"
+    /// composes a `LabBackgroundTelemetry` "N items handled in background today"
     /// pill under the achievement copy. That pill needs a today-scoped
     /// `AgentActivityLog` count which is NOT reachable from this view — it
     /// would require a new query into agent-activity state. That is the
-    /// SAME deferred-backend family as the "OD KIEDY PATRZYŁEŚ" delta-strip
+    /// SAME deferred-backend family as the "since you last looked" delta-strip
     /// (persisted last-viewed state): building either is backend-reach the
     /// user must decide (`feedback_no_canvas_emulation_without_backend`).
     /// The pill is therefore intentionally omitted; the achievement copy
@@ -157,14 +157,14 @@ extension TodayDashboard {
             .frame(height: 46)
             .padding(.bottom, 20)
 
-            Text("Dzień czysty")
+            Text("All clear")
                 .font(Font.custom("Geist-SemiBold", size: 22))
                 .foregroundStyle(NexusColor.Text.primary)
                 .multilineTextAlignment(.center)
 
             Text(
-                "Nic nie czeka na Ciebie. Agent pilnuje tła — "
-                    + "odezwie się, gdy coś będzie wymagać decyzji."
+                "Nothing is waiting for you. The agent watches the background — "
+                    + "it will reach out when something needs a decision."
             )
             .font(Font.custom("Geist-Regular", size: 13.5))
             .foregroundStyle(NexusColor.Text.tertiary)
@@ -173,7 +173,7 @@ extension TodayDashboard {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 8)
 
-            Text("Brak zadań i bloków na dziś")
+            Text("No tasks or blocks today")
                 .font(NexusType.meta)
                 .foregroundStyle(NexusColor.Text.muted)
                 .padding(.top, 16)
@@ -186,7 +186,7 @@ extension TodayDashboard {
                     HStack(spacing: 7) {
                         Image(systemName: "plus")
                             .font(.system(size: 12, weight: .semibold))
-                        Text("Dodaj pierwsze zadanie")
+                        Text("Add your first task")
                     }
                 }
             )
@@ -221,7 +221,7 @@ extension TodayDashboard {
             //     placeholder) via the `if let` below.
             //   • one pinned   → NowCard for it.
             //   • many pinned  → first in existing bucket order
-            //     (DZIŚ → CZEKA → PÓŹNIEJ), deterministic, no new sort.
+            //     (TODAY → AWAITING → LATER), deterministic, no new sort.
             //
             // DEFERRED PRODUCT DECISION (explicit follow-up for the
             // user, NOT decided here): the policy for what "TERAZ"
@@ -234,7 +234,7 @@ extension TodayDashboard {
             // KNOWN GATING LIMITATION (also reported): a task with
             // `pinnedAsFocus == true` that lives OUTSIDE the three
             // already-loaded buckets (e.g. snoozed, done, or otherwise
-            // outside DZIŚ/CZEKA/PÓŹNIEJ) will NOT surface here. Adding
+            // outside TODAY/AWAITING/LATER) will NOT surface here. Adding
             // a dedicated pinned-task query is intentionally NOT done
             // (it would be invented backend); it is a deferred product
             // decision tied to the selection-policy follow-up above.
@@ -247,20 +247,20 @@ extension TodayDashboard {
             }
 
             if !embeddedTodayTasks.isEmpty {
-                embeddedSection(eyebrow: "DZIŚ", count: embeddedTodayTasks.count) {
+                embeddedSection(eyebrow: "TODAY", count: embeddedTodayTasks.count) {
                     embeddedRows(embeddedTodayTasks)
                 }
             }
 
             if !embeddedAwaiting.isEmpty {
-                embeddedSection(eyebrow: "CZEKA NA CIEBIE", count: embeddedAwaiting.count) {
+                embeddedSection(eyebrow: "AWAITING YOU", count: embeddedAwaiting.count) {
                     embeddedAwaitingRows(embeddedAwaiting)
                 }
             }
 
             if !embeddedLaterTasks.isEmpty {
-                embeddedSection(eyebrow: "PÓŹNIEJ", count: embeddedLaterTasks.count) {
-                    // PÓŹNIEJ is rendered recessed. The recession is a
+                embeddedSection(eyebrow: "LATER", count: embeddedLaterTasks.count) {
+                    // LATER is rendered recessed. The recession is a
                     // presentation-only opacity on the ROWS only — the
                     // eyebrow + count stay at full tone so the section
                     // label keeps its legibility (matches the Lab oracle,
@@ -299,8 +299,8 @@ extension TodayDashboard {
     ///
     /// Pure first-match filter over the data the embedded column ALREADY
     /// loaded — NOT a new query/predicate/sort. Walk order is the exact
-    /// on-screen section order: DZIŚ (`embeddedTodayTasks`) → CZEKA
-    /// (`embeddedAwaiting`, unwrapping `AwaitingEntry.task`) → PÓŹNIEJ
+    /// on-screen section order: TODAY (`embeddedTodayTasks`) → AWAITING YOU
+    /// (`embeddedAwaiting`, unwrapping `AwaitingEntry.task`) → LATER
     /// (`embeddedLaterTasks`). The first task with `pinnedAsFocus == true`
     /// in that order wins; if none carry the flag the property is `nil`
     /// and the NowCard region is omitted entirely.
@@ -329,9 +329,9 @@ extension TodayDashboard {
     }
 
     /// The `Nexus*`/token equivalent of the Lab `NowCard` oracle
-    /// (`TodayHUDPreview.swift` `NowCard`): 9pt ink dot + "TERAZ" eyebrow
+    /// (`TodayHUDPreview.swift` `NowCard`): 9pt ink dot + "NOW" eyebrow
     /// (mono, traced) + title + optional project subtitle + a glass-capsule
-    /// "Skup się" pill, all on a `.nexusGlass` rounded-18 card with 20pt
+    /// "Focus" pill, all on a `.nexusGlass` rounded-18 card with 20pt
     /// padding. Achromatic — every tone is a `NexusColor.Text.*` token; no
     /// hue, no `Lab*` import. The shell already paints the wallpaper in
     /// embedded chrome, so the card layers glass over it (no double-glass).
@@ -347,7 +347,7 @@ extension TodayDashboard {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("TERAZ")
+                Text("NOW")
                     .nexusType(.eyebrow)
                     .foregroundStyle(NexusColor.Text.muted)
 
@@ -375,7 +375,7 @@ extension TodayDashboard {
 
             Spacer(minLength: 16)
 
-            // "Skup się" — routes to the EXISTING focus-mode entry only.
+            // "Focus" — routes to the EXISTING focus-mode entry only.
             embeddedFocusPill(task)
         }
         .padding(20)
@@ -384,7 +384,7 @@ extension TodayDashboard {
         .nexusAppear(0)
     }
 
-    /// The glass-capsule "Skup się" pill. Mirrors the Lab oracle's
+    /// The glass-capsule "Focus" pill. Mirrors the Lab oracle's
     /// inner-pill-over-outer-card layering: a custom HStack clipped to a
     /// `Capsule()` with its own `.nexusGlass` (NOT a `NexusButton` — its
     /// chrome differs from the Lab capsule and structural conformance is
@@ -398,7 +398,7 @@ extension TodayDashboard {
             HStack(spacing: 7) {
                 Image(systemName: "play.fill")
                     .font(.system(size: 9))
-                Text("Skup się")
+                Text("Focus")
                     .font(NexusType.meta)
             }
             .foregroundStyle(NexusColor.Text.primary)
@@ -555,9 +555,9 @@ extension TodayDashboard {
 
     /// Buckets feeding the embedded-Today status sections, mapped 1:1 onto
     /// pre-existing `TodayQuery` facets — no new query or behaviour:
-    ///   DZIŚ            → `TodayQuery.today` (today's open dated tasks)
-    ///   CZEKA NA CIEBIE → `TodayQuery.awaiting` (open tasks blocking others)
-    ///   PÓŹNIEJ         → `TodayQuery.noDate` (open undated tasks, recessed)
+    ///   TODAY           → `TodayQuery.today` (today's open dated tasks)
+    ///   AWAITING YOU    → `TodayQuery.awaiting` (open tasks blocking others)
+    ///   LATER           → `TodayQuery.noDate` (open undated tasks, recessed)
     struct EmbeddedTodaySections {
         let today: [TaskItem]
         let awaiting: [AwaitingEntry]

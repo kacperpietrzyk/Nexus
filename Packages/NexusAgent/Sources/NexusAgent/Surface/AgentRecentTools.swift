@@ -2,16 +2,16 @@ import Foundation
 import NexusCore
 
 // MP-3.2 slice 4 — pure presentation derivation for the Agent rail's
-// OSTATNIE NARZĘDZIA section.
+// RECENT TOOLS section.
 //
 // The §1b precedent (same class as MP-3.1's `InboxSectionBuilder` and slice 3's
 // sibling `AgentMessageGrouping`): the Agent oracle
 // (`Lab/AgentChatPreview.swift`, read-only, never imported) ships a rail with
-// three sections — PAMIĘĆ, OSTATNIE NARZĘDZIA, HARMONOGRAMY. Per slice 4's
-// advisor-locked §10 ruling, only OSTATNIE NARZĘDZIA is §10-REACHABLE: it is
+// three sections — MEMORY, RECENT TOOLS, SCHEDULES. Per slice 4's
+// advisor-locked §10 ruling, only RECENT TOOLS is §10-REACHABLE: it is
 // derivable purely from the already-loaded `AgentChatViewModel.messages` (each
 // `.tool` row carries a decodable `toolCallJSON` transcript and every
-// `AgentMessage` has a `createdAt`). PAMIĘĆ + HARMONOGRAMY are §10-OMITTED — no
+// `AgentMessage` has a `createdAt`). MEMORY + SCHEDULES are §10-OMITTED — no
 // memory/schedule read is reachable from this surface and wiring one would be a
 // §11 new-query/behavior violation.
 //
@@ -22,7 +22,7 @@ import NexusCore
 
 // MARK: - Typed result
 
-/// One rendered row in the rail's OSTATNIE NARZĘDZIA list.
+/// One rendered row in the rail's RECENT TOOLS list.
 ///
 /// The oracle rail row (`Lab/AgentChatPreview.swift` `tool(_:_:_:)`) is
 /// `name · detail · Spacer · age` with NO leading glyph (unlike the in-block
@@ -40,8 +40,8 @@ struct AgentRecentToolRow: Equatable, Identifiable {
     let id: UUID
     /// The tool's fully-qualified name (e.g. `tasks.search`).
     let name: String
-    /// A deterministic Polish relative age (`"teraz"` / `"{n}m"` /
-    /// `"{n}g"` / `"{n}d"`).
+    /// A deterministic English relative age (`"now"` / `"{n}m"` /
+    /// `"{n}h"` / `"{n}d"`).
     let age: String
 }
 
@@ -111,9 +111,9 @@ enum AgentRecentTools {
     /// `nexusInboxSourceIcon` pure map over an existing field).
     ///
     /// Buckets (strict `<`, so an exact boundary rolls up):
-    /// - `< 60s` → `"teraz"`
+    /// - `< 60s` → `"now"`
     /// - `< 3600s` → `"{n}m"`
-    /// - `< 86400s` → `"{n}g"`
+    /// - `< 86400s` → `"{n}h"`
     /// - else → `"{n}d"`
     ///
     /// Negative intervals (clock skew / future-dated fixtures) are clamped to
@@ -121,9 +121,9 @@ enum AgentRecentTools {
     /// negative count.
     static func relativeAge(_ interval: TimeInterval) -> String {
         let seconds = max(0, interval)
-        if seconds < 60 { return "teraz" }
+        if seconds < 60 { return "now" }
         if seconds < 3600 { return "\(Int(seconds / 60))m" }
-        if seconds < 86400 { return "\(Int(seconds / 3600))g" }
+        if seconds < 86400 { return "\(Int(seconds / 3600))h" }
         return "\(Int(seconds / 86400))d"
     }
 }

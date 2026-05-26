@@ -81,7 +81,7 @@ public final class WatchAgentHandler {
         if let normalized, !normalized.isEmpty {
             text = normalized
         } else {
-            text = "Brak odpowiedzi."
+            text = "No response."
         }
         return String(text.prefix(160))
     }

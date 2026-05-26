@@ -59,9 +59,9 @@ private let defaultDefinitions = [
         kind: .builtIn,
         cronExpression: "0 8 * * *",
         prompt: """
-            Zbuduj brief dnia: dzisiejsze taski (priority + deadline),
-            eventy w kalendarzu, otwarte PR-y czekające na mnie,
-            sugestie 'na czym zacząć'. Zapisz jako card w Today + notyfikacja.
+            Build today's brief: tasks due today (priority + deadline),
+            calendar events, open PRs waiting on me,
+            suggestions for where to start. Save as a card in Today + send a notification.
             """,
         enabled: true
     ),
@@ -70,8 +70,8 @@ private let defaultDefinitions = [
         kind: .builtIn,
         cronExpression: "0 18 * * *",
         prompt: """
-            Podsumuj dzień: co skończone, co przesunąć, co utknęło.
-            Zaproponuj 3 najważniejsze rzeczy na jutro (z uzasadnieniem).
+            Summarise the day: what's done, what to reschedule, what's stuck.
+            Propose the 3 most important things for tomorrow (with reasoning).
             """,
         enabled: true
     ),
@@ -80,8 +80,8 @@ private let defaultDefinitions = [
         kind: .builtIn,
         cronExpression: "0 18 * * 0",
         prompt: """
-            Per-projekt review tygodnia: progress vs poprzedni tydzień,
-            stuck items, action items na nadchodzący tydzień.
+            Per-project weekly review: progress vs last week,
+            stuck items, action items for the coming week.
             """,
         enabled: true
     ),
@@ -89,7 +89,7 @@ private let defaultDefinitions = [
         name: "Project Digest",
         kind: .projectDigest,
         cronExpression: "0 9 * * 1",
-        prompt: "Custom digest — user definiuje per-projekt w UI projektu.",
+        prompt: "Custom digest — user defines per-project in the project UI.",
         enabled: false
     ),
 ]

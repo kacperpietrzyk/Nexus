@@ -71,7 +71,7 @@ struct TodayWidgetEntryView: View {
 
     private var medium: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("\(entry.snapshot.overdueCount) zaległe · \(entry.snapshot.todayCount) dziś")
+            Text("\(entry.snapshot.overdueCount) overdue · \(entry.snapshot.todayCount) today")
                 .font(.system(size: 13, weight: .medium))
             ForEach(entry.snapshot.firstTodayTitles.prefix(3), id: \.self) { title in
                 Text("• \(title)")
@@ -92,8 +92,8 @@ struct TodayWidget: Widget {
             TodayWidgetEntryView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Dziś")
-        .description("Liczniki + pierwsze zaległe zadanie.")
+        .configurationDisplayName("Today")
+        .description("Counts + first overdue task.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

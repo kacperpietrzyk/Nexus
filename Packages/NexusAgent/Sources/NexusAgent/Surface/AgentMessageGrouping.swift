@@ -29,7 +29,7 @@ struct AgentToolRow: Equatable {
 }
 
 /// One settled block in the stream. The oracle has exactly two idioms —
-/// `msg("TY", …)` (user) and `agentMsg(…, tools:)` (agent) — so the block kind
+/// `msg("YOU", …)` (user) and `agentMsg(…, tools:)` (agent) — so the block kind
 /// is binary; tool rows only ever attach to an agent block.
 struct AgentMessageBlock: Identifiable, Equatable {
     enum Kind: Equatable {
@@ -39,7 +39,7 @@ struct AgentMessageBlock: Identifiable, Equatable {
 
     let id: UUID
     let kind: Kind
-    /// `"TY"` for user, `"NEXUS"` for agent (oracle eyebrows).
+    /// `"YOU"` for user, `"NEXUS"` for agent (oracle eyebrows).
     let eyebrow: String
     let text: String
     /// Always empty for `.user`; the buffered tool rows for `.agent`.
@@ -90,7 +90,7 @@ enum AgentMessageGrouping {
     /// `slidingWindow` returns) and derive the oracle's flat block stream.
     ///
     /// Algorithm:
-    /// - `.user` → emit a user block (`eyebrow:"TY"`, `text: content`).
+    /// - `.user` → emit a user block (`eyebrow:"YOU"`, `text: content`).
     /// - `.tool` → decode `toolCallJSON` (`AgentToolTranscript`); buffer a tool
     ///   row `(name, icon)`. **§10-class real-data decision:** if
     ///   `toolCallJSON` is `nil` or fails to decode (malformed/legacy `.tool`
@@ -127,7 +127,7 @@ enum AgentMessageGrouping {
                     AgentMessageBlock(
                         id: message.id,
                         kind: .user,
-                        eyebrow: "TY",
+                        eyebrow: "YOU",
                         text: message.content,
                         tools: [],
                         redacted: false

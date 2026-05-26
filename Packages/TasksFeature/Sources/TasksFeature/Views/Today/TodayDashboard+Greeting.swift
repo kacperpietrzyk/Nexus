@@ -45,7 +45,7 @@ extension TodayDashboard {
                     .fill(NexusColor.Line.hairline)
                     .frame(width: 1, height: 10)
 
-                Text("Tydzień \(Self.weekLabel(for: now))")
+                Text("Week \(Self.weekLabel(for: now))")
                     .font(NexusType.caption)
                     .foregroundStyle(NexusColor.Text.tertiary)
 
@@ -65,11 +65,11 @@ extension TodayDashboard {
             HStack(spacing: 6) {
                 Text(Self.meetingsPhrase(meetingsCount))
                 Text("·")
-                Text(PolishPlurals.countWithTasks(tasksCount))
+                Text("\(tasksCount) \(tasksCount == 1 ? "task" : "tasks")")
 
                 if let focusBlockTime {
                     Text("·")
-                    Text("blok fokus o \(focusBlockTime)")
+                    Text("focus block at \(focusBlockTime)")
                         .foregroundStyle(NexusColor.Text.primary)
                 }
             }
@@ -234,13 +234,13 @@ extension TodayDashboard {
     static func greetingPrefix(_ date: Date) -> String {
         switch timeOfDay(date) {
         case .morning:
-            return "Dzień dobry"
+            return "Good morning"
         case .afternoon:
-            return "Dzień dobry"
+            return "Good afternoon"
         case .evening:
-            return "Dobry wieczór"
+            return "Good evening"
         case .night:
-            return "Dobranoc"
+            return "Good night"
         }
     }
 
@@ -268,18 +268,6 @@ extension TodayDashboard {
     }
 
     private static func meetingsPhrase(_ count: Int) -> String {
-        // Polish plural rules: 1 = "spotkanie", 2-4 (excl. teens) = "spotkania", else = "spotkań".
-        let absoluteCount = abs(count)
-        let lastTwoDigits = absoluteCount % 100
-        let lastDigit = absoluteCount % 10
-        let form: String
-        if absoluteCount == 1 {
-            form = "spotkanie"
-        } else if (2...4).contains(lastDigit), !(12...14).contains(lastTwoDigits) {
-            form = "spotkania"
-        } else {
-            form = "spotkań"
-        }
-        return "\(count) \(form)"
+        "\(count) \(count == 1 ? "meeting" : "meetings")"
     }
 }

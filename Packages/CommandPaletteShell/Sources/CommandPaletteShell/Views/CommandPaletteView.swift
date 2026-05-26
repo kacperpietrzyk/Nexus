@@ -149,16 +149,16 @@ public struct CommandPaletteView: View {
             // §8: raw Geist-SemiBold/Geist-Regular — oracle weights not
             // expressible via a semantic token; locked stopgap, same precedent
             // as the raw GeistMono-* / Geist-Medium usages above.
-            Text("Brak dopasowania")
+            Text("No matches")
                 .font(Font.custom("Geist-SemiBold", size: 15))
                 .foregroundStyle(NexusColor.Text.secondary)
-            Text("Nic nie pasuje do „\(query)”.")
+            Text("Nothing matches \"\(query)\".")
                 .font(Font.custom("Geist-Regular", size: 12.5))
                 .foregroundStyle(NexusColor.Text.muted)
-            // §10: the oracle's "↩ zapytaj Nexusa zamiast" pill is omitted
-            // entirely — no reachable query→agent backend at the palette layer
-            // (init exposes only CommandRegistry + onDismiss; both mounts pass
-            // dismiss only). Omitted = gone (no orphan ↩, no faked routing).
+            // §10: the oracle's "↩ ask Nexus instead" pill is omitted entirely
+            // — no reachable query→agent backend at the palette layer (init exposes
+            // only CommandRegistry + onDismiss; both mounts pass dismiss only).
+            // Omitted = gone (no orphan ↩, no faked routing).
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
@@ -169,9 +169,9 @@ public struct CommandPaletteView: View {
 
     private var footerRow: some View {
         HStack(spacing: 14) {
-            foot("↑↓", "nawiguj")
-            foot("↩", "otwórz")
-            // Oracle's `⌘↩ akcja` hint is §10-omitted: commandRow exposes no
+            foot("↑↓", "navigate")
+            foot("↩", "open")
+            // Oracle's `⌘↩ action` hint is §10-omitted: commandRow exposes no
             // secondary command-row action, so the cue is not surfaced
             // (formal §10 record lands in the slice-3/4 counts closeout).
             Spacer()

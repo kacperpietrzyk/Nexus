@@ -21,7 +21,7 @@ struct AskNexusInputView: View {
                     .foregroundStyle(NexusColor.Text.primary)
                     .lineLimit(1)
 
-                Text("Krótka komenda albo pytanie do iPhone.")
+                Text("A short command or question for iPhone.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(NexusColor.Text.tertiary)
                     .lineLimit(2)
@@ -62,7 +62,7 @@ struct AskNexusInputView: View {
     }
 
     private var buttonTitle: String {
-        phase == .sending ? "Wysyłam" : "Wyślij"
+        phase == .sending ? "Sending" : "Send"
     }
 
     private var buttonSystemImage: String {

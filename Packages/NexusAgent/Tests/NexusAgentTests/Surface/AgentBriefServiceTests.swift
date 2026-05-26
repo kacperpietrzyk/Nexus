@@ -56,7 +56,7 @@ struct AgentBriefServiceTests {
         #expect(text == "Agentowy brief.")
         let threads = try harness.threadStore.allActive()
         #expect(threads.map(\.title) == ["Daily Briefs"])
-        #expect(harness.provider.prompts.first?.contains("Napisz dzisiejszy brief po polsku") == true)
+        #expect(harness.provider.prompts.first?.contains("Write today's brief for the Today view in Nexus") == true)
     }
 
     @Test

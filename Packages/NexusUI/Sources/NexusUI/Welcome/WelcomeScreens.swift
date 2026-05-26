@@ -18,11 +18,11 @@ public struct WhatIsNexusScreen: View {
                 .accessibilityHidden(true)
 
             VStack(spacing: 12) {
-                Text("Witaj w Nexus")
+                Text("Welcome to Nexus")
                     .font(NexusType.h1)
                     .foregroundStyle(NexusColor.Text.primary)
 
-                Text("Twoje zadania, notatki i spotkania w jednym miejscu. Lokalnie, w Twoim iCloud.")
+                Text("Your tasks, notes, and meetings in one place. Local, in your iCloud.")
                     .font(NexusType.body)
                     .foregroundStyle(NexusColor.Text.tertiary)
                     .multilineTextAlignment(.center)
@@ -48,7 +48,7 @@ public struct CaptureFlowScreen: View {
                 .accessibilityHidden(true)
 
             VStack(spacing: 12) {
-                Text("Szybki capture")
+                Text("Quick capture")
                     .font(NexusType.h1)
                     .foregroundStyle(NexusColor.Text.primary)
 
@@ -69,9 +69,9 @@ public struct CaptureFlowScreen: View {
 
     private var copy: String {
         #if os(macOS)
-        "Wciśnij ⌘⌃N w dowolnym momencie, żeby otworzyć okno capture i wpisać zadanie naturalnym językiem."
+        "Press \u{2318}\u{2303}N at any time to open the capture window and type a task in natural language."
         #else
-        "Stuknij pillkę „Capture” na dole ekranu, żeby szybko zapisać zadanie naturalnym językiem."
+        "Tap the \"Capture\" pill at the bottom of the screen to quickly save a task in natural language."
         #endif
     }
 

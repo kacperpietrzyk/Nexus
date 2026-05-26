@@ -35,11 +35,11 @@ final class NotificationViewController: UIViewController, UNNotificationContentE
     func didReceive(_ notification: UNNotification) {
         let counts = countOverdue()
         if counts.titles.isEmpty {
-            titleLabel.text = "Brak przeterminowanych zadań"
+            titleLabel.text = "No overdue tasks"
             bodyLabel.text = ""
             return
         }
-        titleLabel.text = "\(counts.count) tasków przeterminowanych"
+        titleLabel.text = "\(counts.count) overdue tasks"
         let firstThree = counts.titles.prefix(3).joined(separator: "\n• ")
         bodyLabel.text = firstThree.isEmpty ? "" : "• \(firstThree)"
     }

@@ -12,13 +12,13 @@ public enum MeetingsFilter: String, CaseIterable, Identifiable, Sendable {
     public var label: String {
         switch self {
         case .all:
-            "Wszystkie"
+            "All"
         case .thisWeek:
-            "Ten tydzień"
+            "This week"
         case .hasActions:
-            "Z zadaniami"
+            "With action items"
         case .imported:
-            "Z importu"
+            "Imported"
         }
     }
 }

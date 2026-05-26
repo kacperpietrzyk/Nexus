@@ -28,8 +28,8 @@ public struct CapturePane: View {
 
         var placeholder: String {
             switch self {
-            case .task: return "co dodać?"
-            case .voiceMemo: return "podyktuj notatkę..."
+            case .task: return "what to add?"
+            case .voiceMemo: return "dictate a note..."
             }
         }
     }
@@ -167,7 +167,7 @@ public struct CapturePane: View {
                     HStack(spacing: 6) {
                         Image(systemName: saveFeedbackVisible ? "checkmark" : "return")
                             .accessibilityHidden(true)
-                        Text(saveFeedbackVisible ? "Zapisano" : "Zapisz")
+                        Text(saveFeedbackVisible ? "Saved" : "Save")
                     }
                 }
                 .disabled(!canSave)

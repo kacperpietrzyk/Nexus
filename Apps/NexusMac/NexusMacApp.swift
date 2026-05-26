@@ -387,7 +387,7 @@ struct NexusMacApp: App {
                     ),
                     onExportRequested: { exportPickerPresented = true }
                 )
-                .navigationTitle("Ustawienia")
+                .navigationTitle("Settings")
             }
             // MP-4.1 §3: native Toggle/DatePicker/Button controls in the
             // Settings Form inherit this scene tint — burning it
@@ -746,7 +746,7 @@ private struct NexusMenuBarContent: View {
         Divider()
 
         SettingsLink {
-            Text("Ustawienia…")
+            Text("Settings…")
         }
 
         Divider()

@@ -33,7 +33,7 @@ public struct SyncSettingsSection: View {
                             .foregroundStyle(
                                 cloudKitEnabled ? NexusColor.Text.tertiary : NexusColor.Text.secondary
                             )
-                        Text(cloudKitEnabled ? "iCloud aktywny" : "iCloud niedostępny")
+                        Text(cloudKitEnabled ? "iCloud active" : "iCloud unavailable")
                             .font(NexusType.bodySmall.weight(.semibold))
                             .foregroundStyle(NexusColor.Text.primary)
                     }
@@ -42,15 +42,15 @@ public struct SyncSettingsSection: View {
                         .foregroundStyle(NexusColor.Text.tertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text(cloudKitEnabled ? "Prywatna baza CloudKit jest włączona." : "Wyłączone w lokalnym środowisku deweloperskim.")
+                    Text(cloudKitEnabled ? "CloudKit private database is enabled." : "Disabled in the local development environment.")
                         .font(NexusType.caption)
                         .foregroundStyle(NexusColor.Text.tertiary)
                     #else
                     LabeledContent("CloudKit") {
-                        Text(cloudKitEnabled ? "Włączony" : "Wyłączony (dev)")
+                        Text(cloudKitEnabled ? "On" : "Off (dev)")
                             .foregroundStyle(cloudKitEnabled ? NexusColor.Text.primary : NexusColor.Text.secondary)
                     }
-                    LabeledContent("Kontener") {
+                    LabeledContent("Container") {
                         Text(containerIdentifier)
                             .font(NexusType.mono)
                             .foregroundStyle(NexusColor.Text.tertiary)
@@ -62,7 +62,7 @@ public struct SyncSettingsSection: View {
             }
             if let syncStateView { syncStateView }
         } header: {
-            nexusSettingsSectionHeader("Synchronizacja")
+            nexusSettingsSectionHeader("Sync")
         }
     }
 

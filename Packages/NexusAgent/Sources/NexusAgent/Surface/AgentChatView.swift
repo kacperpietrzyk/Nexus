@@ -84,13 +84,13 @@ public struct AgentChatView: View {
         // rail's content gate had not yet been adjudicated.
         //
         // That §10 ruling is now locked (advisor-decided): of the oracle
-        // rail's three sections only OSTATNIE NARZĘDZIA is §10-REACHABLE —
+        // rail's three sections only RECENT TOOLS is §10-REACHABLE —
         // it derives purely from the already-loaded `viewModel.messages`
-        // (see `AgentRecentTools`, §1b/§11, no new query). PAMIĘĆ +
-        // HARMONOGRAMY are §10-OMITTED: no memory/schedule read is reachable
+        // (see `AgentRecentTools`, §1b/§11, no new query). MEMORY +
+        // SCHEDULES are §10-OMITTED: no memory/schedule read is reachable
         // from this surface and wiring one would be a §11 new-query/behavior
         // violation. Omitted = GONE ENTIRELY — the rail is JUST the
-        // OSTATNIE NARZĘDZIA section: no omitted headers, no empty bodies,
+        // RECENT TOOLS section: no omitted headers, no empty bodies,
         // and no orphan section dividers (the oracle's inter-section rules
         // separated three sections; with one surviving section there is
         // nothing to divide). This is the established MP-3.1/MP-2 precedent.
@@ -210,9 +210,9 @@ public struct AgentChatView: View {
     // MARK: - Rail (§10-gated)
 
     // The oracle rail (`Lab/AgentChatPreview.swift` lines 132-191) had three
-    // sections; per the slice-4 §10 ruling only OSTATNIE NARZĘDZIA survives
-    // (the only one derivable from already-loaded state). PAMIĘĆ +
-    // HARMONOGRAMY are GONE ENTIRELY — no headers, no empty bodies, and no
+    // sections; per the slice-4 §10 ruling only RECENT TOOLS survives
+    // (the only one derivable from already-loaded state). MEMORY +
+    // SCHEDULES are GONE ENTIRELY — no headers, no empty bodies, and no
     // orphan dividers (a lone section needs no separator).
     private var rail: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -226,7 +226,7 @@ public struct AgentChatView: View {
                     // Oracle `eyebrow(_:)`: `GeistMono-SemiBold` 10 / tracking
                     // 1.8 / §2 `faint` → `Text.muted`, optically lifted here
                     // so the rail remains discoverable over the dark wallpaper.
-                    Text("OSTATNIE NARZĘDZIA")
+                    Text("RECENT TOOLS")
                         .font(Font.custom("GeistMono-SemiBold", size: 10))
                         .tracking(1.8)
                         .foregroundStyle(NexusColor.Text.tertiary)
@@ -241,7 +241,7 @@ public struct AgentChatView: View {
                     // `Text.disabled`. Fires when there is no thread OR no
                     // §10-reachable tool call yet (both fall here — a thread
                     // with no tool messages must not render a blank body).
-                    Text("Brak aktywności")
+                    Text("No activity")
                         .font(Font.custom("Geist-Regular", size: 12))
                         .foregroundStyle(NexusColor.Text.muted)
                 }

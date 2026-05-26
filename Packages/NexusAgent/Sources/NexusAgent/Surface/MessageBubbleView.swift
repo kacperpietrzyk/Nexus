@@ -60,8 +60,8 @@ struct MessageBubbleView: View {
     }
 
     // Oracle `agentMsg(text, tools:)`. §10: the undo pill is OMITTED entirely
-    // (the oracle's `agentMsg(undo:true)` shows a "Cofnij" pill +
-    // "dotknięto N zadań" — `AgentChatViewModel` exposes NO undo API and the
+    // (the oracle's `agentMsg(undo:true)` shows an "Undo" pill +
+    // "touched N tasks" — `AgentChatViewModel` exposes NO undo API and the
     // transcript carries no affected-entity count; surfacing it needs new
     // backend/query, §10-forbidden — delta-strip / achievement-pill
     // precedent). The tool-row "detail" string is OMITTED for the same reason

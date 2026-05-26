@@ -48,7 +48,7 @@ import Testing
 /// size 10 / tracking 1.8 / `Text.muted`) against accidental removal.
 @MainActor
 @Test func nexusSettingsSectionHeader_resolves() {
-    _ = nexusSettingsSectionHeader("Zadania")
+    _ = nexusSettingsSectionHeader("Tasks")
 }
 
 #endif

@@ -44,15 +44,15 @@ public struct ProductivityDashboardView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("PRODUKTYWNOŚĆ")
+            Text("PRODUCTIVITY")
                 .nexusType(.eyebrow)
                 .foregroundStyle(NexusColor.Text.muted)
 
-            Text("Statystyki")
+            Text("Statistics")
                 .font(NexusType.h1)
                 .foregroundStyle(NexusColor.Text.primary)
 
-            Text("Rytm domykania zadań z ostatnich 30 dni.")
+            Text("Task-completion rhythm over the last 30 days.")
                 .nexusType(.body)
                 .foregroundStyle(NexusColor.Text.tertiary)
         }
@@ -75,7 +75,7 @@ public struct ProductivityDashboardView: View {
                     .background(NexusColor.Background.controlHover, in: RoundedRectangle(cornerRadius: 11))
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Bieżąca passa")
+                    Text("Current streak")
                         .nexusType(.eyebrow)
                         .foregroundStyle(NexusColor.Text.muted)
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -98,7 +98,7 @@ public struct ProductivityDashboardView: View {
     private var totalCard: some View {
         NexusCard(.elev1, padding: 18) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Ostatnie 30 dni")
+                Text("Last 30 days")
                     .nexusType(.eyebrow)
                     .foregroundStyle(NexusColor.Text.muted)
                 Text("\(completedTotal)")
@@ -114,20 +114,20 @@ public struct ProductivityDashboardView: View {
     private var completionsChartCard: some View {
         NexusCard(.elev1, padding: 20) {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeader(title: "Ukończone", detail: "Ostatnie 30 dni")
+                sectionHeader(title: "Completed", detail: "Last 30 days")
 
                 if completedTotal == 0 {
                     EmptyStatsState(
                         systemImage: "chart.bar",
-                        title: "Brak ukończeń",
-                        subtitle: "Wykres pojawi się po domknięciu pierwszych zadań."
+                        title: "No completions yet",
+                        subtitle: "The chart will appear after you complete your first tasks."
                     )
                     .frame(height: 172)
                 } else {
                     Chart(dailyCounts) { entry in
                         BarMark(
-                            x: .value("Dzień", entry.day, unit: .day),
-                            y: .value("Ukończone", entry.count),
+                            x: .value("Day", entry.day, unit: .day),
+                            y: .value("Completed", entry.count),
                             width: .fixed(24)
                         )
                         .foregroundStyle(NexusColor.Text.secondary)
@@ -164,13 +164,13 @@ public struct ProductivityDashboardView: View {
     private var projectBreakdownCard: some View {
         NexusCard(.elev1, padding: 20) {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeader(title: "Według projektu", detail: "Ukończone w ostatnich 30 dniach")
+                sectionHeader(title: "By project", detail: "Completed in the last 30 days")
 
                 if perProject.isEmpty {
                     EmptyStatsState(
                         systemImage: "folder",
-                        title: "Brak ukończeń w projektach",
-                        subtitle: "Zadania przypisane do projektów pojawią się tutaj."
+                        title: "No project completions",
+                        subtitle: "Tasks assigned to projects will appear here."
                     )
                     .frame(height: 120)
                 } else {
@@ -209,15 +209,11 @@ public struct ProductivityDashboardView: View {
     }
 
     private var streakUnitLabel: String {
-        streak == 1 ? "dzień" : "dni"
+        streak == 1 ? "day" : "days"
     }
 
     private var completedTaskLabel: String {
-        switch completedTotal {
-        case 1: return "zadanie ukończone"
-        case 2...4: return "zadania ukończone"
-        default: return "zadań ukończonych"
-        }
+        completedTotal == 1 ? "task completed" : "tasks completed"
     }
 
     @MainActor
@@ -280,7 +276,7 @@ private struct ProjectBreakdownRow: View {
             .frame(height: 6)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.projectName), \(entry.completedCount) ukończonych")
+        .accessibilityLabel("\(entry.projectName), \(entry.completedCount) completed")
     }
 }
 

@@ -30,60 +30,57 @@ public enum TaskListEmptyState: Equatable, Sendable {
         if hasError { return .none }
         guard isEmpty else { return .none }
 
-        // User-facing copy is Polish — consistent with the rest of the app's
-        // empty-state vocabulary (Today "Dzień czysty", the DZIEŃ rail's
-        // "Brak zaplanowanych bloków", the capture bar's "Zapisz zadanie…").
-        // The `.savedFilter` precedent renders English, but that is the
-        // codebase outlier, not the rule; CLAUDE.md keeps code/comments/
-        // commits English while user-facing UI copy follows the app language.
+        // User-facing copy in English — consistent with the rest of the app's
+        // empty-state vocabulary (Today "All clear", the DAY rail's
+        // "No blocks scheduled", the capture bar's "What to add?").
         switch filter {
         case .all:
             return .empty(
-                title: "Brak zadań",
+                title: "No tasks",
                 systemImage: "tray",
-                message: "Zapisz pierwsze zadanie — pojawi się tutaj."
+                message: "Add your first task — it will appear here."
             )
         case .today:
             return .empty(
-                title: "Dzień czysty",
+                title: "All clear",
                 systemImage: "checkmark.circle",
-                message: "Nic zaległego, na dziś ani bez terminu."
+                message: "Nothing overdue, due today, or without a date."
             )
         case .upcoming:
             return .empty(
-                title: "Nic na horyzoncie",
+                title: "Nothing on the horizon",
                 systemImage: "calendar",
-                message: "Brak zadań w najbliższych 7 dniach."
+                message: "No tasks in the next 7 days."
             )
         case .inbox:
             return .empty(
-                title: "Inbox pusty",
+                title: "Inbox empty",
                 systemImage: "tray",
-                message: "Brak nieposortowanych zadań."
+                message: "No unsorted tasks."
             )
         case .completed:
             return .empty(
-                title: "Nic ukończonego",
+                title: "Nothing completed",
                 systemImage: "checkmark.circle",
-                message: "Ukończone zadania pojawią się tutaj."
+                message: "Completed tasks will appear here."
             )
         case .byTag(let tag):
             return .empty(
-                title: "Brak zadań z #\(tag)",
+                title: "No tasks with #\(tag)",
                 systemImage: "tag",
-                message: "Oznacz zadanie #\(tag), a pojawi się tutaj."
+                message: "Tag a task with #\(tag) and it will appear here."
             )
         case .project:
             return .empty(
-                title: "Brak zadań",
+                title: "No tasks",
                 systemImage: "folder",
-                message: "Ten projekt nie ma otwartych zadań."
+                message: "This project has no open tasks."
             )
         case .projectSection:
             return .empty(
-                title: "Brak zadań",
+                title: "No tasks",
                 systemImage: "folder",
-                message: "Ta sekcja nie ma otwartych zadań."
+                message: "This section has no open tasks."
             )
         case .savedFilter:
             // Unreachable — handled above; kept for exhaustiveness.

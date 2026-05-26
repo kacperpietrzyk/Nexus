@@ -52,13 +52,13 @@ private struct MeetingsEmptyDetailState: View {
             Image(systemName: "person.wave.2")
                 .font(.system(size: 38, weight: .light))
                 .foregroundStyle(NexusColor.Text.muted)
-            Text("Wybierz spotkanie")
+            Text("Select a meeting")
                 .font(Font.custom("Geist-SemiBold", size: 25))
                 .foregroundStyle(NexusColor.Text.secondary)
             Text(
                 hasVisibleMeetings
-                    ? "Wybierz spotkanie z listy, żeby zobaczyć notatki i transkrypcję."
-                    : "Nagrania i importy pojawią się po lewej stronie."
+                    ? "Select a meeting from the list to view its notes and transcript."
+                    : "Recordings and imports will appear on the left."
             )
             .font(Font.custom("Geist-Regular", size: 14))
             .foregroundStyle(NexusColor.Text.tertiary)

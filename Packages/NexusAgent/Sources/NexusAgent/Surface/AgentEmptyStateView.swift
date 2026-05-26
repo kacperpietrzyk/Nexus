@@ -41,14 +41,14 @@ public struct AgentEmptyStateView: View {
                 .padding(.bottom, 18)
                 .accessibilityHidden(true)
 
-            Text("Zapytaj Nexusa")
+            Text("Ask Nexus")
                 .font(Font.custom("Geist-SemiBold", size: 17))
                 .foregroundStyle(NexusColor.Text.secondary)
                 .multilineTextAlignment(.center)
 
             Text(
-                "Pracuje na Twoich zadaniach, notatkach, spotkaniach "
-                    + "i kalendarzu — lokalnie, z cofnięciem każdej akcji."
+                "Works on your tasks, notes, meetings, "
+                    + "and calendar — locally, with undo for every action."
             )
             .font(Font.custom("Geist-Regular", size: 12.5))
             .foregroundStyle(NexusColor.Text.muted)
@@ -96,9 +96,9 @@ public struct AgentEmptyStateView: View {
     }
 
     nonisolated private static let samples = [
-        "Co dziś jest najpilniejsze?",
-        "Przenieś resztę „dziś” na jutro",
-        "Podsumuj spotkanie „Design crit”",
-        "Co zmienił Codex od rana?",
+        "What's most urgent today?",
+        "Move the rest of today to tomorrow",
+        "Summarise the Design crit meeting",
+        "What did Codex change since this morning?",
     ]
 }
