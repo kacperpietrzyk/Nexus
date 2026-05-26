@@ -154,7 +154,7 @@ public struct AgentInputBar: View {
                 voiceButton
                 imageButton
 
-                TextField("Napisz do Nexusa…", text: $input, axis: .vertical)
+                TextField("Message Nexus…", text: $input, axis: .vertical)
                     .lineLimit(1...6)
                     .textFieldStyle(.plain)
                     .foregroundStyle(NexusColor.Text.primary)
@@ -171,24 +171,24 @@ public struct AgentInputBar: View {
                     size: .md,
                     action: { Task { await send() } },
                     label: {
-                        Text(isThinking || isSending ? "..." : "Wyślij")
+                        Text(isThinking || isSending ? "..." : "Send")
                     }
                 )
                 .disabled(!canSend)
                 .opacity(canSend ? 1 : 0.56)
-                .accessibilityLabel("Wyślij wiadomość")
+                .accessibilityLabel("Send message")
             }
 
             if isThinking {
-                Text("Nexus pracuje...")
+                Text("Nexus is thinking...")
                     .font(.caption)
                     .foregroundStyle(NexusColor.Text.tertiary)
-                    .accessibilityLabel("Nexus pracuje")
+                    .accessibilityLabel("Nexus is thinking")
             } else if isVoiceTranscribing {
-                Text("Przepisuję głos...")
+                Text("Transcribing voice...")
                     .font(.caption)
                     .foregroundStyle(NexusColor.Text.tertiary)
-                    .accessibilityLabel("Nexus przepisuje głos")
+                    .accessibilityLabel("Nexus is transcribing voice")
             } else if let voiceError {
                 Text(voiceError)
                     .font(.caption)
@@ -318,16 +318,11 @@ extension AgentInputBar {
     }
 
     nonisolated public static func localizedImageDeferralMessage(
-        reason: ImageAttachmentDeferralReason,
-        locale: Locale = .current
+        reason: ImageAttachmentDeferralReason
     ) -> String {
         switch reason {
         case .pendingLocalAIPhase:
-            if locale.identifier.lowercased().hasPrefix("pl") {
-                return "Załączniki obrazów pojawią się wraz z lokalnym modelem w kolejnej fazie."
-            }
-
-            return "Image attachments arrive with on-device AI in the next phase."
+            return "Image attachments arrive with the on-device model in a later phase."
         }
     }
 

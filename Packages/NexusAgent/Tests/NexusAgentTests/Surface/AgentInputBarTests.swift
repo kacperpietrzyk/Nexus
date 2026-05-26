@@ -63,20 +63,10 @@ import Testing
     #expect(!AgentInputBar.shouldClearImageDropTargeting(isTargeted: false, isImageDropTargetingEnabled: false))
 }
 
-@Test func inputBarLocalizesImageAttachmentDeferralBannerCopy() {
+@Test func inputBarImageAttachmentDeferralBannerCopy() {
     #expect(
-        AgentInputBar.localizedImageDeferralMessage(
-            reason: .pendingLocalAIPhase,
-            locale: Locale(identifier: "en_US")
-        )
-            == "Image attachments arrive with on-device AI in the next phase."
-    )
-    #expect(
-        AgentInputBar.localizedImageDeferralMessage(
-            reason: .pendingLocalAIPhase,
-            locale: Locale(identifier: "pl_PL")
-        )
-            == "Załączniki obrazów pojawią się wraz z lokalnym modelem w kolejnej fazie."
+        AgentInputBar.localizedImageDeferralMessage(reason: .pendingLocalAIPhase)
+            == "Image attachments arrive with the on-device model in a later phase."
     )
 }
 

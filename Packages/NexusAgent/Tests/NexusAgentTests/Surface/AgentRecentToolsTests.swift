@@ -198,20 +198,20 @@ struct AgentRecentToolsTests {
     // MARK: - Relative-age buckets (strict `<`, exact boundary rolls up)
 
     @Test func relativeAgeNowBucket() {
-        #expect(AgentRecentTools.relativeAge(0) == "teraz")
-        #expect(AgentRecentTools.relativeAge(59) == "teraz")
+        #expect(AgentRecentTools.relativeAge(0) == "now")
+        #expect(AgentRecentTools.relativeAge(59) == "now")
     }
 
     @Test func relativeAgeMinutesBucket() {
-        // Exact 60s boundary rolls UP into minutes ("1m", not "teraz").
+        // Exact 60s boundary rolls UP into minutes ("1m", not "now").
         #expect(AgentRecentTools.relativeAge(60) == "1m")
         #expect(AgentRecentTools.relativeAge(3599) == "59m")
     }
 
     @Test func relativeAgeHoursBucket() {
         // Exact 3600s boundary rolls UP into hours.
-        #expect(AgentRecentTools.relativeAge(3600) == "1g")
-        #expect(AgentRecentTools.relativeAge(86_399) == "23g")
+        #expect(AgentRecentTools.relativeAge(3600) == "1h")
+        #expect(AgentRecentTools.relativeAge(86_399) == "23h")
     }
 
     @Test func relativeAgeDaysBucket() {
@@ -222,9 +222,9 @@ struct AgentRecentToolsTests {
 
     @Test func relativeAgeNegativeIntervalClampsToNow() {
         // Clock skew / future-dated fixture: clamp BEFORE bucketing so it
-        // reads "teraz" rather than a truncated negative count.
-        #expect(AgentRecentTools.relativeAge(-30) == "teraz")
-        #expect(AgentRecentTools.relativeAge(-10_000) == "teraz")
+        // reads "now" rather than a truncated negative count.
+        #expect(AgentRecentTools.relativeAge(-30) == "now")
+        #expect(AgentRecentTools.relativeAge(-10_000) == "now")
     }
 
     @Test func agePropagatesThroughDerivation() {
@@ -237,7 +237,7 @@ struct AgentRecentToolsTests {
 
         let rows = AgentRecentTools.rows(from: messages, now: now)
 
-        #expect(rows[0].age == "teraz")
+        #expect(rows[0].age == "now")
         #expect(rows[1].age == "1m")
     }
 }

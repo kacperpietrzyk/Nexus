@@ -146,21 +146,22 @@ public final class AgentBriefService: AgentBriefServiceProtocol, @unchecked Send
         let titles = request.firstTitles.prefix(3).map { "- \($0)" }.joined(separator: "\n")
         let formattedDate = Self.dateFormatter.string(from: request.now)
         return """
-            Napisz dzisiejszy brief po polsku dla widoku Today w Nexusie.
-            Zachowaj ton konkretny, spokojny i operacyjny. Zwróć tylko gotową treść briefu.
-            Format: 1-2 krótkie akapity. Możesz użyć maksymalnie dwóch znaczników [[accent]]...[[/accent]].
+            Write today's brief for the Today view in Nexus.
+            Keep the tone concrete, calm, and operational. Return only the finished brief.
+            Format: 1-2 short paragraphs. Use at most two [[accent]]...[[/accent]] markers.
 
-            Data: \(formattedDate)
-            Liczby: \(counts.overdue) przeterminowanych, \(counts.today) na dziś, \
-            \(counts.noDate) bez daty, \(counts.awaiting) blokujących.
-            Pierwsze zadania:
-            \(titles.isEmpty ? "- brak" : titles)
+            Date: \(formattedDate)
+            Numbers: \(counts.overdue) overdue, \(counts.today) today, \
+            \(counts.noDate) with no date, \(counts.awaiting) blocking.
+            First tasks:
+            \(titles.isEmpty ? "- none" : titles)
             """
     }
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "pl_PL")
+        // English UI — explicit en_US (system locale may be pl_PL)
+        formatter.locale = Locale(identifier: "en_US")
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter
