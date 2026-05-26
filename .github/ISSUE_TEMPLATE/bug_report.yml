@@ -1,0 +1,34 @@
+name: Bug report
+description: Something isn't working
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected vs. what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS, iOS, iPadOS, watchOS]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App / OS version
+      placeholder: "Nexus 0.1.0 (2), macOS 26.0"
+    validations:
+      required: true
