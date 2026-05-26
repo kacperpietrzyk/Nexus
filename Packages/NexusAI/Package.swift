@@ -14,7 +14,7 @@ let package = Package(
         .package(path: "../NexusCore"),
         .package(path: "../NexusSync"),
         .package(url: "https://github.com/argmaxinc/argmax-oss-swift.git", from: "1.0.0"),
-        .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.1.9"),
+        .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.3"),
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.31.3"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.3"),
     ],
