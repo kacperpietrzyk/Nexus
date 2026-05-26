@@ -16,8 +16,8 @@ public actor OverdueDigestScheduler {
 
     public func registerDailyDigest() async throws {
         let content = UNMutableNotificationContent()
-        content.title = "Zaległe zadania"
-        content.body = "Sprawdź zaległe zadania"  // overwritten by the content extension
+        content.title = "Overdue tasks"
+        content.body = "Check your overdue tasks"  // overwritten by the content extension
         content.categoryIdentifier = NotificationCategory.overdueDigest.rawValue
 
         var components = DateComponents()

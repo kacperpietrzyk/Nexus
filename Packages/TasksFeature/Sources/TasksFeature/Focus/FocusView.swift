@@ -228,7 +228,7 @@ public struct FocusView: View {
 
     private var focusLabel: String {
         if focusMinutes <= 0 {
-            return "Czas minął — domknij i przejdź dalej."
+            return "Time is up — close it and move on."
         }
         let hours = focusMinutes / 60
         let remainder = focusMinutes % 60

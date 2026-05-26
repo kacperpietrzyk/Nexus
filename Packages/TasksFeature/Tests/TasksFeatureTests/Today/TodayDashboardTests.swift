@@ -122,7 +122,7 @@ struct TodayDashboardTests {
         // This is the regression the pure seam was extracted to lock:
         // a data-load failure zeros all buckets AND sets embeddedError.
         // Without the `error == nil` guard the zeroed buckets would satisfy
-        // the gate and falsely show "Dzień czysty" on a failure.
+        // the gate and falsely show "All clear" on a failure.
         #expect(
             TodayDashboard.embeddedTodayIsEmpty(
                 todayTasks: [],

@@ -2,7 +2,7 @@ import Foundation
 import NexusAI
 import NexusCore
 
-/// Generates the Today hero brief — 1-2 PL sentences. Uses the existing
+/// Generates the Today hero brief — 1-2 EN sentences. Uses the existing
 /// `AIRouter` cascade (Apple Intelligence first per D5); falls back to a
 /// deterministic template when no provider is available or the call errors.
 /// Caches the last result for 30 minutes keyed on calendar-day + counts so
@@ -83,22 +83,22 @@ public actor HeroBriefService {
     private func makePrompt(counts: Counts, firstTitles: [String]) -> String {
         let titles = firstTitles.prefix(3).map { "- \($0)" }.joined(separator: "\n")
         return """
-            Napisz brief dla użytkownika po polsku w dwóch akapitach:
+            Write a brief for the user in English, in two paragraphs:
 
-            Pierwszy akapit (10–18 słów): nagłówek narracyjny w stylu \
-            "Trzy rzeczy mają znaczenie dziś — ...". Wyróżnij kluczowe akcje \
-            owinając je w [[accent]]...[[/accent]] (maks. 2 wyróżnienia). \
-            Przykład: "Trzy rzeczy mają znaczenie dziś — [[accent]]wypchnij auth flow[[/accent]], \
-            review PR Sama."
+            First paragraph (10-18 words): a narrative headline like \
+            "Three things matter today - ...". Wrap the key actions in \
+            [[accent]]...[[/accent]] (max 2). \
+            Example: "Three things matter today - [[accent]]push the auth flow[[/accent]], \
+            review Sam's PR."
 
-            Drugi akapit (10–25 słów): krótkie zdanie podsumowujące kontekst lub \
-            zobowiązanie. Bez znaczników.
+            Second paragraph (10-25 words): a short sentence summarizing context or a \
+            commitment. No markers.
 
-            Oddziel akapity podwójnym znakiem nowej linii.
+            Separate paragraphs with a double newline.
 
-            Liczby: \(counts.overdue) przeterminowanych, \(counts.today) na dziś, \
-            \(counts.noDate) bez daty, \(counts.awaiting) blokujących.
-            Pierwsze tytuły:
+            Numbers: \(counts.overdue) overdue, \(counts.today) today, \
+            \(counts.noDate) with no date, \(counts.awaiting) blocking.
+            Top titles:
             \(titles)
             """
     }
@@ -107,29 +107,33 @@ public actor HeroBriefService {
         let hour = calendar.component(.hour, from: now)
         let greeting: String
         switch hour {
-        case 5..<12: greeting = "Dzień dobry"
-        case 12..<18: greeting = "Cześć"
-        case 18..<23: greeting = "Dobry wieczór"
-        default: greeting = "Późno"
+        case 5..<12: greeting = "Good morning"
+        case 12..<18: greeting = "Hi"
+        case 18..<23: greeting = "Good evening"
+        default: greeting = "Working late"
         }
 
         let headline: String
         if counts.overdue > 0 {
+            let overduePhrase = "\(counts.overdue) overdue \(counts.overdue == 1 ? "task" : "tasks")"
             headline =
-                "\(greeting). Najpierw [[accent]]\(PolishPlurals.overdueTasksPhrase(counts.overdue))[[/accent]] — "
-                + "potem \(counts.today) na dziś."
+                "\(greeting). First [[accent]]\(overduePhrase)[[/accent]] — "
+                + "then \(counts.today) today."
         } else if counts.awaiting > 0 {
+            let awaitingPhrase = "\(counts.awaiting) \(counts.awaiting == 1 ? "task" : "tasks") blocking others"
             headline =
-                "\(greeting). [[accent]]\(PolishPlurals.awaitingBlocksPhrase(counts.awaiting))[[/accent]] — rusz je przed resztą."
+                "\(greeting). [[accent]]\(awaitingPhrase)[[/accent]] — move them before the rest."
         } else if counts.today > 0 {
+            let todayPhrase = "\(counts.today) \(counts.today == 1 ? "task" : "tasks")"
             headline =
-                "\(greeting). Dziś masz [[accent]]\(PolishPlurals.countWithTasks(counts.today))[[/accent]] do zamknięcia."
+                "\(greeting). You have [[accent]]\(todayPhrase)[[/accent]] to close today."
         } else {
+            let noDatePhrase = "\(counts.noDate) \(counts.noDate == 1 ? "task" : "tasks") with no date waiting"
             headline =
-                "\(greeting). Spokojny dzień — \(PolishPlurals.noDateWaitingPhrase(counts.noDate))."
+                "\(greeting). Quiet day — \(noDatePhrase)."
         }
 
-        let subtitle = "Wszystko inne zostało po cichu odłożone."
+        let subtitle = "Everything else has been quietly set aside."
         return "\(headline)\n\n\(subtitle)"
     }
 

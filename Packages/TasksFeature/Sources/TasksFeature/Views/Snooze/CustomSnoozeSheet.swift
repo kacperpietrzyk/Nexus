@@ -46,10 +46,10 @@ public struct CustomSnoozeSheet: View {
             .padding(20)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Anuluj") { dismiss() }
+                    Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Zapisz") { commit() }
+                    Button("Save") { commit() }
                         .keyboardShortcut(.defaultAction)
                 }
             }

@@ -7,8 +7,8 @@ public struct TaskShortcuts: AppShortcutsProvider {
             intent: AddTaskIntent(),
             phrases: [
                 "Add task in \(.applicationName)",
-                "Dodaj task w \(.applicationName)",
                 "Capture task in \(.applicationName)",
+                "New task in \(.applicationName)",
             ],
             shortTitle: "Add Task",
             systemImageName: "plus.circle"
@@ -18,7 +18,7 @@ public struct TaskShortcuts: AppShortcutsProvider {
             intent: MarkDoneIntent(),
             phrases: [
                 "Mark task done in \(.applicationName)",
-                "Oznacz task jako zrobiony w \(.applicationName)",
+                "Complete task in \(.applicationName)",
             ],
             shortTitle: "Mark Done",
             systemImageName: "checkmark.circle"
@@ -28,7 +28,7 @@ public struct TaskShortcuts: AppShortcutsProvider {
             intent: SnoozeTaskIntent(),
             phrases: [
                 "Snooze task in \(.applicationName)",
-                "Odłóż task w \(.applicationName)",
+                "Defer task in \(.applicationName)",
             ],
             shortTitle: "Snooze Task",
             systemImageName: "clock"

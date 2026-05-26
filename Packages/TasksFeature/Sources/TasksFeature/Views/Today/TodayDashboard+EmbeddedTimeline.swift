@@ -372,7 +372,7 @@ private struct EmbeddedDayTimeline: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
-                Text("DZIEŃ")
+                Text("DAY")
                     .font(Self.headerFont)
                     .foregroundStyle(NexusColor.Text.tertiary)
                 Text("9:00–20:00")
@@ -540,7 +540,7 @@ private struct EmbeddedDayTimeline: View {
     /// Audit B3 (a): an empty day (no scheduled tasks/events) used to
     /// render just the faint hour grid + now-line, reading as a broken,
     /// unfinished strip. A quiet achromatic placeholder under the
-    /// "DZIEŃ 9–20" header makes "nothing scheduled" legible instead, in
+    /// "DAY 9–20" header makes "nothing scheduled" legible instead, in
     /// the same muted idiom the rest of the rail uses (the grid labels and
     /// "wolne · …" free-time text are `Text.disabled`). Kept at `canvasH`
     /// so the glass card does not change height between empty and populated.
@@ -561,10 +561,10 @@ private struct EmbeddedDayTimeline: View {
                 Image(systemName: "calendar")
                     .font(.system(size: 19, weight: .regular))
                     .foregroundStyle(NexusColor.Text.muted)
-                Text("Brak zaplanowanych bloków")
+                Text("No blocks scheduled")
                     .font(Self.emptyTitleFont)
                     .foregroundStyle(NexusColor.Text.tertiary)
-                Text("Dzień jest pusty od 9:00 do 20:00")
+                Text("Your day is clear from 9:00 to 20:00")
                     .font(Self.emptyBodyFont)
                     .foregroundStyle(NexusColor.Text.muted)
             }

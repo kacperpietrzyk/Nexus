@@ -34,8 +34,8 @@ extension TodayDashboard {
 
     // MP-5.1a iOS Today RE-ROUTE: iPhone-compact now renders the
     // MP-2-migrated `embeddedTodayContent` status-sectioned organism — the
-    // `IOSTodayPreview` oracle idiom (TERAZ NowCard + DZIŚ / CZEKA NA CIEBIE
-    // / PÓŹNIEJ sections) — replacing the legacy greeting + day-progress +
+    // `IOSTodayPreview` oracle idiom (NOW NowCard + TODAY / AWAITING YOU
+    // / LATER sections) — replacing the legacy greeting + day-progress +
     // schedule `todayContent` (which stays untouched: it is still the
     // `.standalone` content router's iPad/regular path at
     // `TodayDashboard.swift:318`). `embeddedTodayContent` is REUSED by
@@ -48,7 +48,7 @@ extension TodayDashboard {
     // Lab oracles ship full screen-level mockups including their own chrome;
     // the production `NavigationStack` `.navigationTitle("Today")` (in
     // `TodayTab.swift`, not this file) IS the retained host chrome, so the
-    // oracle's in-content header (Dziś/date/synced) is Lab-screen-mockup
+    // oracle's in-content header (Today/date/synced) is Lab-screen-mockup
     // chrome and is NOT rebuilt as a second in-content header (date/synced
     // are §10-omit-as-redundant), and the oracle's floating bottom capsule
     // is Lab-device chrome — the production iOS `TabView` tab bar is the

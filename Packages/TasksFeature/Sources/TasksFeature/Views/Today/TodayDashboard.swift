@@ -51,7 +51,7 @@ enum TodayDashboardContentRoute: Equatable {
     /// Whether the embedded (Nexus shell) Today day-timeline right rail
     /// (`embeddedTimelineRail`) is mounted on this route.
     ///
-    /// Audit B3 — user decision "globalny ale dopracowany": the DZIEŃ rail
+    /// Audit B3 — user decision "global but refined": the DAY rail
     /// stays the single global right rail on routes that have no right
     /// column of their own (`today`, `tasks`, `productivity`, `settings`),
     /// but `inbox` (owns `InboxReaderPane`, fixed 380) and `meetings` (owns
@@ -105,7 +105,7 @@ public struct TodayDashboard: View {
     @Environment(\.aiRouter) private var aiRouter
     @Environment(\.agentBriefService) private var agentBriefService
     @Environment(\.calendarEventProvider) private var calendarProvider
-    // The embedded-Today NowCard "Skup się" pill routes to this existing
+    // The embedded-Today NowCard "Focus" pill routes to this existing
     // focus-mode entry (`FocusModeState.enter(taskID:)` — the same state
     // `ContentView.activeFocusState` reads and the ⌘. menu command drives
     // via `NexusMacApp.resolveFocusCandidate`). nil default = host app did
@@ -150,7 +150,7 @@ public struct TodayDashboard: View {
     @State private var localSelection: TodayNavSelection = .today
     // Internal (not `private`): read from the `+Standalone` extension file.
     @State var scheduleTasks: [TaskItem] = []
-    // Embedded-Today status sections (DZIŚ / CZEKA NA CIEBIE / PÓŹNIEJ).
+    // Embedded-Today status sections (TODAY / AWAITING YOU / LATER).
     // Separate from `scheduleTasks` so the standalone schedule + day-progress
     // path keeps its own feed untouched. Internal: read from +EmbeddedToday.
     @State var embeddedTodayTasks: [TaskItem] = []
@@ -278,7 +278,7 @@ public struct TodayDashboard: View {
                 // MP-2 slice-5 — AUTHORITATIVE DELTA-STRIP OMISSION (this is the
                 // single canonical statement; the slice-4 header note in
                 // `+EmbeddedTimeline.swift` points here). The Lab oracle's right
-                // rail composes a "OD KIEDY PATRZYŁEŚ" delta-strip BELOW the
+                // rail composes a "since you last looked" delta-strip BELOW the
                 // `DayTimeline` (oracle: `TodayHUDPreview.swift` — `DayTimeline`
                 // then `DeltaStrip`). It is INTENTIONALLY OMITTED from the
                 // embedded rail: a "since you last looked" feed requires
@@ -338,7 +338,7 @@ public struct TodayDashboard: View {
     ///
     /// First attempt relied solely on the nav-rail's ambient
     /// `withAnimation(NexusMotion.nav)` reaching this deep identity swap; it
-    /// did not propagate reliably (user: "C1 chyba nie działa"). Now the
+    /// did not propagate reliably (user: "C1 was not working"). Now the
     /// cross-fade is self-contained: an explicit `.animation(_:value:)`
     /// keyed on the resolved route drives the `.id`/`.transition(.opacity)`
     /// swap regardless of how `selection` changed (rail tap, ⌘⇧A, a
@@ -583,7 +583,7 @@ public struct TodayDashboard: View {
             }
             todaysEvents = events
             // A data-load failure must surface as the inline error row, NOT
-            // as the celebratory "Dzień czysty" achievement: with all
+            // as the celebratory "All clear" achievement: with all
             // buckets zeroed and nothing pinned the empty-state gate would
             // otherwise fire and falsely reward the user on a FAILURE.
             // Setting `embeddedError` makes `embeddedTodayIsEmpty`'s

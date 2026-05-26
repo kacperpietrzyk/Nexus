@@ -84,13 +84,13 @@ struct TodayDashboardGreetingTests {
         #expect(TodayDashboard.timeOfDay(try makeDate(hour: 23, minute: 30)) == .night)
     }
 
-    @Test("greetingPrefix maps each time-of-day to a Polish phrase")
+    @Test("greetingPrefix maps each time-of-day to an English phrase")
     @MainActor
-    func greetingPrefixPolish() throws {
-        #expect(TodayDashboard.greetingPrefix(try makeDate(hour: 9, minute: 0)) == "Dzień dobry")
-        #expect(TodayDashboard.greetingPrefix(try makeDate(hour: 14, minute: 0)) == "Dzień dobry")
-        #expect(TodayDashboard.greetingPrefix(try makeDate(hour: 20, minute: 0)) == "Dobry wieczór")
-        #expect(TodayDashboard.greetingPrefix(try makeDate(hour: 1, minute: 0)) == "Dobranoc")
+    func greetingPrefixEnglish() throws {
+        #expect(TodayDashboard.greetingPrefix(try makeDate(hour: 9, minute: 0)) == "Good morning")
+        #expect(TodayDashboard.greetingPrefix(try makeDate(hour: 14, minute: 0)) == "Good afternoon")
+        #expect(TodayDashboard.greetingPrefix(try makeDate(hour: 20, minute: 0)) == "Good evening")
+        #expect(TodayDashboard.greetingPrefix(try makeDate(hour: 1, minute: 0)) == "Good night")
     }
 
     @Test("focusBlockTime returns earliest future startAt")
