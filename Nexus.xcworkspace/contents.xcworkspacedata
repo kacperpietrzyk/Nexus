@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "container:Nexus.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/NexusCore">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/NexusSync">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/NexusAI">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/NexusUI">
+   </FileRef>
+</Workspace>

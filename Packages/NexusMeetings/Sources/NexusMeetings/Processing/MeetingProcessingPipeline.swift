@@ -1,0 +1,205 @@
+import Foundation
+import NexusAI
+import NexusCore
+
+@MainActor
+public final class MeetingProcessingPipeline {
+    private let repo: MeetingRepository
+    private let vad: VADTrimStage
+    private let transcription: TranscriptionStage
+    private let diarization: DiarizationStage
+    private let merge: MergeStage
+    private let summary: SummaryStage
+    private let actionItems: ActionItemsStage
+    private let providerProfile: @MainActor () -> String
+    private let customSummaryTemplateProvider: @MainActor () -> String?
+    private let summaryProviderPreference: @MainActor () -> MeetingsSummaryProviderPreference
+    private let metadataStore: RecordingMetadataStore
+    private let now: @MainActor () -> Date
+
+    public init(
+        repo: MeetingRepository,
+        vad: VADTrimStage,
+        transcription: TranscriptionStage,
+        diarization: DiarizationStage,
+        merge: MergeStage,
+        summary: SummaryStage,
+        actionItems: ActionItemsStage,
+        providerProfile: @escaping @MainActor () -> String,
+        customSummaryTemplateProvider: @escaping @MainActor () -> String? = {
+            MeetingsPromptStore.shared.load()
+        },
+        summaryProviderPreference: @escaping @MainActor () -> MeetingsSummaryProviderPreference = {
+            MeetingsProviderSettingsStore.shared.summaryProvider()
+        },
+        metadataStore: RecordingMetadataStore = RecordingMetadataStore(),
+        now: @escaping @MainActor () -> Date = Date.init
+    ) {
+        self.repo = repo
+        self.vad = vad
+        self.transcription = transcription
+        self.diarization = diarization
+        self.merge = merge
+        self.summary = summary
+        self.actionItems = actionItems
+        self.providerProfile = providerProfile
+        self.customSummaryTemplateProvider = customSummaryTemplateProvider
+        self.summaryProviderPreference = summaryProviderPreference
+        self.metadataStore = metadataStore
+        self.now = now
+    }
+
+    public func process(meeting: Meeting, audioFolder: URL) async throws {
+        let meURL = audioFolder.appendingPathComponent("me.wav")
+        let othersURL = audioFolder.appendingPathComponent("others.wav")
+        let durationMs = max(0, meeting.durationSec) * 1_000
+        var currentStage = MeetingProcessingStatus.processingVAD.rawValue
+
+        do {
+            try setStatus(meeting, .processingVAD)
+            _ = try await vad.run(audioURL: meURL, durationMs: durationMs)
+            _ = try await vad.run(audioURL: othersURL, durationMs: durationMs)
+
+            currentStage = MeetingProcessingStatus.processingASR.rawValue
+            try setStatus(meeting, .processingASR)
+            let transcriptionOutput = try await transcription.run(
+                meURL: meURL,
+                othersURL: othersURL,
+                languageHint: meeting.languageCode
+            )
+            meeting.languageCode = transcriptionOutput.detectedLanguage
+
+            currentStage = MeetingProcessingStatus.processingDiarization.rawValue
+            try setStatus(meeting, .processingDiarization)
+            let diarizationOutput = try await diarization.run(audioURL: othersURL)
+
+            currentStage = MeetingProcessingStatus.processingMerge.rawValue
+            try setStatus(meeting, .processingMerge)
+            let segments = merge.merge(
+                me: transcriptionOutput.me,
+                others: transcriptionOutput.others,
+                othersDiarization: diarizationOutput
+            )
+            meeting.segmentsJSON = try MeetingSpeakerSegment.encode(segments)
+            meeting.transcriptText = merge.renderLinear(segments)
+            try metadataStore.markTranscriptComplete(meeting: meeting, folder: audioFolder, completedAt: now())
+
+            currentStage = MeetingProcessingStatus.processingSummary.rawValue
+            try setStatus(meeting, .processingSummary)
+            meeting.summaryText = try await summary.run(
+                transcript: meeting.transcriptText,
+                title: meeting.title,
+                durationSec: meeting.durationSec,
+                customTemplate: customSummaryTemplateProvider(),
+                providerPreference: summaryProviderPreference()
+            )
+
+            currentStage = MeetingProcessingStatus.processingActions.rawValue
+            try setStatus(meeting, .processingActions)
+            _ = try await actionItems.run(
+                meeting: meeting,
+                transcript: meeting.transcriptText,
+                summary: meeting.summaryText
+            )
+
+            let stamp = now()
+            meeting.providerProfile = Self.providerProfile(
+                transcriptionProfile: transcriptionOutput.providerProfile,
+                diarizationProfile: providerProfile()
+            )
+            meeting.processingStatus = MeetingProcessingStatus.ready.rawValue
+            meeting.processedAt = stamp
+            meeting.updatedAt = stamp
+            try repo.upsert(meeting)
+            try metadataStore.markProcessed(meeting: meeting, folder: audioFolder, processedAt: stamp)
+        } catch {
+            try? setFailureStatus(meeting, stage: currentStage)
+            throw error
+        }
+    }
+
+    private func setStatus(_ meeting: Meeting, _ status: MeetingProcessingStatus) throws {
+        meeting.processingStatus = status.rawValue
+        meeting.updatedAt = now()
+        try repo.updateProcessingStatus(status.rawValue, for: meeting.id)
+    }
+
+    private func setFailureStatus(_ meeting: Meeting, stage: String) throws {
+        let failedStatus = MeetingProcessingStatus.failedAt(stage: stage)
+        meeting.processingStatus = failedStatus
+        meeting.updatedAt = now()
+        try repo.updateProcessingStatus(failedStatus, for: meeting.id)
+    }
+
+    private static func providerProfile(
+        transcriptionProfile: String,
+        diarizationProfile: String
+    ) -> String {
+        let suffix = "+sortformer"
+        if diarizationProfile.hasSuffix(suffix) {
+            return "\(transcriptionProfile)\(suffix)"
+        }
+        return transcriptionProfile
+    }
+}
+
+extension MeetingProcessingPipeline {
+    public static func stubbed(
+        repo: MeetingRepository,
+        finalProviderProfile: String
+    ) -> MeetingProcessingPipeline {
+        let provider = NoopMeetingTranscriptionProvider()
+        let router = NoopMeetingProcessingRouter()
+        return MeetingProcessingPipeline(
+            repo: repo,
+            vad: VADTrimStage(sileroLoader: { NoopSileroVADSession() }),
+            transcription: TranscriptionStage(primary: provider, fallback: provider),
+            diarization: DiarizationStage(sessionLoader: { NoopSortformerSession() }),
+            merge: MergeStage(),
+            summary: SummaryStage(router: router),
+            actionItems: ActionItemsStage(
+                router: router,
+                taskRepository: TaskItemRepository(
+                    context: repo.context,
+                    scheduler: RRuleScheduler(),
+                    now: Date.init
+                ),
+                meetingRepository: repo,
+                linkRepository: LinkRepository(context: repo.context),
+                sourceID: "meetings.action-items"
+            ),
+            providerProfile: { finalProviderProfile }
+        )
+    }
+}
+
+private struct NoopMeetingTranscriptionProvider: MeetingTranscriptionProvider {
+    let identifier = "noop"
+
+    func transcribe(
+        audioURL: URL,
+        languageHint: String?,
+        progress: @MainActor @Sendable (Double) -> Void
+    ) async throws -> TranscriptionResult {
+        TranscriptionResult(text: "", segments: [], detectedLanguage: languageHint ?? "und")
+    }
+}
+
+private struct NoopSileroVADSession: SileroVADSession {
+    func detectSpeechRanges(audioURL: URL, durationMs: Int) async throws -> [VADSpeechRange] {
+        guard durationMs > 0 else { return [] }
+        return [VADSpeechRange(startMs: 0, endMs: durationMs)]
+    }
+}
+
+private struct NoopSortformerSession: SortformerSession {
+    func diarize(audioURL: URL) async throws -> [DiarizationSegment] {
+        []
+    }
+}
+
+private struct NoopMeetingProcessingRouter: MeetingProcessingRouting {
+    func route(_ request: AIRequest) async throws -> AIResponse {
+        AIResponse(text: "[]", providerUsed: .appleIntelligence)
+    }
+}

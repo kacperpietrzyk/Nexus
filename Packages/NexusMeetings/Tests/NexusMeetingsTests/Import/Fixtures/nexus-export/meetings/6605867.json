@@ -1,0 +1,54 @@
+{
+  "id": 6605867,
+  "linkId": "6605867",
+  "name": "VendorA event - brief z Participant 1iem",
+  "createdAt": "2026-02-12T10:05:01.656Z",
+  "duration": 2697.512,
+  "notes": "#### Overview\n* Participant 2 przedstawił Participant 3 koncepcję eventu VendorC zaplanowanego na **19 marca 2026** o **15:00** w klubie bilardowym\n* Event podzielony na dwie części po **60 minut**: pierwsza to interaktywna Adversary Simulation prowadzona przez Participant 2 i Participant 4a, druga to case study produktowe prowadzone przez Przemka\n* Participant 2 zbudował prototyp aplikacji webowej do symulacji (zamiast PowerPointa jak VendorA) z drzewem decyzyjnym zoptymalizowanym z **256** ścieżek do **40** poprzez konwergencję wyborów\n* Participant 4 zobowiązał się dostarczyć uwagi do scenariusza i prototypu do **czwartku 19 lutego** (Participant 2 będzie w CityA na szkoleniu **poniedziałek 16 lutego** i **środę 18 lutego**)\n* Cel biznesowy eventu: otworzyć drzwi do projektów VendorA u **~15** firm, które nie mają jeszcze otwartych szans sprzedażowych w CustomerCo\n* Format będzie reusable dla przyszłych webinarów online i eventów targetujących różne moduły VendorA\n\n#### Format i cele eventu VendorC\n* Event trwa **2 godziny** w klubie bilardowym z dostępem do ekranu jako wsparcia wizualnego\n* Agnieszka buduje komunikację w tym tygodniu i od przyszłego tygodnia zacznie zapraszać uczestników\n* Grupa docelowa to **około 15 osób** z firm bez otwartych szans sprzedażowych na VendorA w CustomerCo\n* Agnieszka podzieliła zaproszenia na trzy fazy—pierwsza fala targetuje firmy bez istniejących opportunitów\n* Outcome eventu: zaproszenie uczestników na indywidualną prezentację platformy VendorX\n* Format ma być luźną dyskusją z elementami interaktywnymi, nie hands-on labami\n\n#### Koncepcja Adversary Simulation\n* Participant 2 uczestniczył wczoraj w Adversary Simulation VendorA, gdzie **1400 osób** było online, **1000** aktywnie głosowało\n* VendorA prezentuje scenariusz ataku, uczestnicy głosują na opcje ABCD przez aplikację, wybory wpływają na dalszy przebieg historii\n* Participant 2 zaadaptował format do eventu CustomerCo—uczestnicy wcielają się w emergency team fikcyjnej firmy przeżywającej cyberatak\n* Narracja: uczestnicy nie reprezentują swoich firm, tylko są zespołem reagowania na incydent i mogą dyskutować między sobą przed głosowaniem\n* Participant 2 i Participant 4 podzielą się prowadzeniem **4 segmentów** (po **2** na osobę), na zmianę jak robił VendorA\n* Format pozwala uczestnikom pokłócić się i przedyskutować opcje, dając prowadzącym chwilę oddechu\n\n#### Scenariusz ataku i mechanika gry\n* Fikcyjna firma: Nowa Tech System (spółka z o.o., profil produkcyjny, usługi rusztowań)\n* Adwersarz: Scattered Spider (najbardziej medialny temat VendorA, odpowiedzialny za atak na MGM Resorts przez helpdesk)\n* Profil firmy oparty na rzeczywistym ataku na firmę AITU, gdzie **6 terabajtów** danych zostało skradzionych w **2024 roku**\n* Mechanika: **4 injekty** (etapy ataku), każdy z **4 opcjami** reakcji, decyzje wpływają na **5 metryk** (business disruption, financial cost itp.)\n* Drzewo decyzyjne zoptymalizowane z **256 możliwych ścieżek** do **40** przez konwergencję—niektóre odpowiedzi prowadzą do tych samych outcome'ów\n* Uczestnicy dostają poczucie wyboru, ale nie wszystkie ścieżki generują unikalną fabułę\n* Luki w zabezpieczeniach fikcyjnej firmy: legacy antivirus (VendorB), brak MFA, słabe polityki haseł\n* Koncept: nie ma złych odpowiedzi, każda prowadzi do czegoś innego, prowadzący wyjaśniają opcje bez nakierowywania\n\n#### Demo prototypu aplikacji webowej\n* Participant 2 zbudował prototyp aplikacji webowej wczoraj z pomocą spersonalizowanego asystenta AI\n* Aplikacja w HTML zastępuje PowerPoint VendorA (który oni sami nazwali \"zajebiście dużym PowerPointem\")\n* Funkcjonalności: dynamiczne metryki przeliczane real-time na podstawie wag przypisanych do opcji, animowany lateral movement diagram\n* Wyświetla się prowadzący aktualny, wyniki głosowania, outcome poprzednich decyzji wpływa na kolejne injekty\n* Aplikacja będzie hostowana webowo z wersją preview dla Participant 4a do przeglądania zmian\n* Participant 2 planuje dodać tryb prowadzącego z ściągą na laptopach skierowanych do prowadzących\n* Trzeba zaimplementować mechanizm głosowania, żeby prowadzący klikali to co uczestnicy wybiorą\n* Design i kolorystyka do dopracowania, ale prototyp jest funkcjonalny\n* Długoterminowa wizja: pełnoprawna apka z możliwością dodawania scenariuszy i wyboru który odpalić\n\n#### Podział ról i timeline projektu\n* Participant 2 i Participant 4 prowadzą pierwszą część (Adversary Simulation), Participant 6 prowadzi drugą część (case study produktowe)\n* Participant 2 przygotował draft scenariusza z drzewem decyzyjnym i udostępni wszystkie materiały Participant 3\n* Participant 4 zobowiązał się przygotować uwagi do **czwartku 19 lutego** (przyszły czwartek po tygodniu nieobecności Participant 2)\n* Participant 2 jedzie do CityA **poniedziałek 16 lutego** i **środę 18 lutego** prowadzić szkolenie\n* Po otrzymaniu uwag Participant 4a spotkają się ponownie, przegadają i zrobią kolejną iterację dokumentów\n* Participant 2 zbierze uwagi i wrzuci do asystenta AI, który będzie poprawiał drafty\n* Participant 4 potwierdził dostępność na event **19 marca**—ma wbite w kalendarzu i jest w **100%** potwierdzony\n* Participant 2 jutro spotyka się z Participant 7, żeby przekazać mu brief drugiej części eventu\n* Participant 8ina pomogła wczoraj Participant 2 zebrać myśli i zasugerowała konwergencję odpowiedzi zamiast pełnej customizacji wszystkich ścieżek\n\n#### Wizja przyszłych eventów i webinarów\n* Format będzie reusable—można modyfikować scenariusze i wypełnić kalendarz roczny webinarów online jak zrobił VendorA\n* Można robić symulacje targetujące konkretne moduły VendorA (identity, cloud, SaaS) jako podkładkę pod promocję produktu\n* Participant 2 chce rozbudować aplikację o możliwość dodawania scenariuszy i wyboru który odpalić przed eventem/webinarem\n* Długoterminowa wizja: hands-on laby dla klientów z Adversary Simulation praktyczną, nie na sucho\n* Pomysł na zaangażowanie VendorA: przywieźć wielkie figurki adwersarzy, klienci dostają środowisko wirtualne i bronią się przed atakiem konkretnej grupy\n* Taki event wymaga najpierw zbudowania bazy klientów VendorA i skojarzenia CustomerCo z VendorA\n* Pomysł na aktywność upsellową: event dla klientów z czystym EDR, dać dostęp do pełniejszej konsoli, pokazać dodatkowe moduły\n* Participant 2 pokazał Participant 9owi (kontakt VendorA) słowny zarys planów—był zadowolony i zaciekawiony, chce przyjść na event\n* Nikt poza Participant 5 jeszcze nie widział prototypu aplikacji",
+  "attendees": [
+    {
+      "name": "Participant 2",
+      "email": "p1@example.com"
+    },
+    {
+      "name": "Participant 10",
+      "email": null
+    }
+  ],
+  "actionItems": [
+    {
+      "id": 12949245,
+      "title": "Wrzuć brief Participant 11",
+      "description": "Brief drugiej części eventu (case study) - Participant 6 ma opracować tę część.",
+      "assignee": {
+        "name": "Participant 2",
+        "email": "p1@example.com"
+      },
+      "status": "PENDING"
+    },
+    {
+      "id": 12949244,
+      "title": "Przygotuj uwagi do materiałów eventu",
+      "description": "Pierwsza część uwag do scenariusza symulacji i dokumentów eventu VendorC na 19 marca.",
+      "assignee": {
+        "name": "Participant 10",
+        "email": null
+      },
+      "status": "PENDING"
+    },
+    {
+      "id": 12949246,
+      "title": "Udostępnij materiały do eventu",
+      "description": "Dokumenty, prototyp aplikacji i draft scenariusza dla Participant 10 do przeglądu.",
+      "assignee": {
+        "name": "Participant 2",
+        "email": "p1@example.com"
+      },
+      "status": "DONE"
+    }
+  ],
+  "insights": {},
+  "tags": [],
+  "url": null,
+  "icalUid": null
+}

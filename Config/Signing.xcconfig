@@ -1,0 +1,7 @@
+// Signing configuration.
+// DEVELOPMENT_TEAM is intentionally empty in the committed file so the repo
+// builds for Simulator / `CODE_SIGNING_ALLOWED=NO` with no Apple account.
+// To build signed/device targets, copy Signing.local.xcconfig.example to
+// Signing.local.xcconfig and set your own Team ID. See CONTRIBUTING.md.
+DEVELOPMENT_TEAM =
+#include? "Signing.local.xcconfig"

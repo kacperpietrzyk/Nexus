@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "exportedAt": "2026-05-15T14:00:58Z",
+  "items": [
+    {
+      "id": 12949245,
+      "title": "Wrzuć brief Participant 1",
+      "description": "Brief drugiej części eventu (case study) - Participant 2 ma opracować tę część.",
+      "status": "PENDING",
+      "completedAt": null,
+      "createdAt": "2026-02-12T10:53:23.849Z",
+      "assignee": {
+        "profileId": 14587519,
+        "name": "Participant 1",
+        "email": "p1@example.com"
+      },
+      "meeting": {
+        "id": 6605867,
+        "name": "VendorA event - brief z Participant 3iem",
+        "createdAt": "2026-02-12T10:05:01.656Z"
+      }
+    },
+    {
+      "id": 12949246,
+      "title": "Udostępnij materiały do eventu",
+      "description": "Dokumenty, prototyp aplikacji i draft scenariusza dla Participant 4 do przeglądu.",
+      "status": "DONE",
+      "completedAt": null,
+      "createdAt": "2026-02-12T10:53:23.849Z",
+      "assignee": {
+        "profileId": 14587519,
+        "name": "Participant 1",
+        "email": "p1@example.com"
+      },
+      "meeting": {
+        "id": 6605867,
+        "name": "VendorA event - brief z Participant 3iem",
+        "createdAt": "2026-02-12T10:05:01.656Z"
+      }
+    }
+  ]
+}

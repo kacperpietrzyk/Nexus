@@ -1,0 +1,216 @@
+import Foundation
+import NexusAI
+import NexusCore
+import os
+
+// Transcript, tool-dispatch, and prompt-building methods extracted from `AgentRuntime`
+// to keep each file/type within the strict lint size budgets.
+
+extension AgentRuntime {
+    // MARK: - Tool dispatch
+
+    func handleAIResponse(
+        _ aiResponse: AIResponse,
+        request: AgentTurnRequest,
+        window: AgentContextWindow,
+        toolCallsExecuted: inout Int
+    ) async throws -> AgentRuntimeStep {
+        // Structured-first: providers with native tool-calling (e.g. MLX) populate
+        // `aiResponse.toolCalls`. `AIToolCall.arguments` and `AgentToolCallEnvelope.input`
+        // are now the same relocated `JSONValue` → 1:1 assignment, no JSON re-roundtrip.
+        // When `aiResponse.toolCalls` is empty (Apple/Whisper), control falls through to
+        // the legacy `AgentProviderTextEnvelope` path below, which is unchanged. The
+        // multi-tool-call array case is NOT handled here — see the TODO at the dispatch.
+        if let firstToolCall = aiResponse.toolCalls.first {
+            if aiResponse.toolCalls.count > 1 {
+                logger.warning(
+                    """
+                    Provider returned \(aiResponse.toolCalls.count, privacy: .public) tool calls; \
+                    only the first (\(firstToolCall.name, privacy: .public)) is dispatched — \
+                    the rest are silently discarded this turn.
+                    """
+                )
+            }
+            // TODO(Task 11/12): single-tool-call-per-turn is the intentional current
+            // limitation. Supporting multiple structured tool calls requires either
+            // configuring MLX to emit a single call per turn, or replacing this with a
+            // per-call loop here that dispatches every entry in `aiResponse.toolCalls`.
+            return try await handleToolCall(
+                AgentToolCallEnvelope(name: firstToolCall.name, input: firstToolCall.arguments),
+                request: request,
+                window: window,
+                aiResponse: aiResponse,
+                toolCallsExecuted: &toolCallsExecuted
+            )
+        }
+
+        switch AgentProviderTextEnvelope.parse(aiResponse.text) {
+        case .toolCall(let toolCall):
+            return try await handleToolCall(
+                toolCall,
+                request: request,
+                window: window,
+                aiResponse: aiResponse,
+                toolCallsExecuted: &toolCallsExecuted
+            )
+        case .final(let content):
+            try appendAssistantFinal(content, request: request, window: window, aiResponse: aiResponse)
+            return .return(
+                AgentTurnResponse(
+                    finalAssistantContent: content,
+                    haltReason: .completed,
+                    toolCallsExecuted: toolCallsExecuted
+                )
+            )
+        case .malformedToolCall(let reason):
+            return .return(
+                AgentTurnResponse(
+                    finalAssistantContent: nil,
+                    haltReason: .providerError(reason),
+                    toolCallsExecuted: toolCallsExecuted
+                )
+            )
+        }
+    }
+
+    func handleToolCall(
+        _ toolCall: AgentToolCallEnvelope,
+        request: AgentTurnRequest,
+        window: AgentContextWindow,
+        aiResponse: AIResponse,
+        toolCallsExecuted: inout Int
+    ) async throws -> AgentRuntimeStep {
+        let result: ToolDispatchResult
+        do {
+            result = try await dispatcher.dispatch(
+                toolName: toolCall.name,
+                input: toolCall.input,
+                threadID: request.threadID
+            )
+        } catch {
+            return .return(
+                AgentTurnResponse(
+                    finalAssistantContent: nil,
+                    haltReason: .providerError(String(describing: error)),
+                    toolCallsExecuted: toolCallsExecuted
+                )
+            )
+        }
+
+        toolCallsExecuted += 1
+        try appendToolTranscript(
+            call: toolCall,
+            result: result,
+            request: request,
+            window: window,
+            aiResponse: aiResponse
+        )
+        return .continueLoop
+    }
+
+    // MARK: - Message appending
+
+    func appendUserMessage(_ request: AgentTurnRequest, effectiveContent: String) throws {
+        try messageStore.append(
+            threadID: request.threadID,
+            role: .user,
+            content: effectiveContent,
+            attachments: request.attachments
+        )
+    }
+
+    func appendToolTranscript(
+        call: AgentToolCallEnvelope,
+        result: ToolDispatchResult,
+        request: AgentTurnRequest,
+        window: AgentContextWindow,
+        aiResponse: AIResponse
+    ) throws {
+        let transcript = AgentToolTranscript(
+            call: call,
+            result: result.output,
+            auditLogID: result.auditLogID
+        )
+        let transcriptJSON = try encoder.encode(transcript)
+        try messageStore.append(
+            threadID: request.threadID,
+            role: .tool,
+            content: String(data: transcriptJSON, encoding: .utf8) ?? "{}",
+            toolCallJSON: transcriptJSON,
+            tokensIn: window.estimatedTokens,
+            tokensOut: aiResponse.tokensUsed.completion,
+            providerID: aiResponse.providerUsed.rawValue
+        )
+    }
+
+    func appendAssistantFinal(
+        _ content: String,
+        request: AgentTurnRequest,
+        window: AgentContextWindow,
+        aiResponse: AIResponse
+    ) throws {
+        try messageStore.append(
+            threadID: request.threadID,
+            role: .agent,
+            content: content,
+            tokensIn: window.estimatedTokens,
+            tokensOut: aiResponse.tokensUsed.completion,
+            providerID: aiResponse.providerUsed.rawValue
+        )
+    }
+
+    func appendMaxIterationsMessage(threadID: UUID) throws {
+        try messageStore.append(
+            threadID: threadID,
+            role: .system,
+            content: "Agent stopped after \(maxIterations) tool iterations.",
+            providerID: "nexus-agent"
+        )
+    }
+
+    // MARK: - Prompt building
+
+    func makePrompt(request: AgentTurnRequest, window: AgentContextWindow) -> String {
+        var sections = [
+            "System:\n\(window.systemPrompt)",
+            "Memory:\n\(window.memorySection.isEmpty ? "(none)" : window.memorySection)",
+            "Recent messages:\n\(recentMessagesText(window.recentMessages))",
+            "Tool definitions JSON:\n\(String(data: window.toolDefinitionsJSON, encoding: .utf8) ?? "[]")",
+        ]
+
+        if let contextPrefix = Self.normalizedContextPrefix(request.contextPrefix) {
+            sections.insert("Ephemeral context for this turn only:\n\(contextPrefix)", at: 3)
+        }
+
+        if !window.retrievedHits.isEmpty {
+            sections.append("Retrieved context:\n\(retrievedHitsText(window.retrievedHits))")
+        }
+        return sections.joined(separator: "\n\n")
+    }
+
+    nonisolated static func normalizedContextPrefix(_ contextPrefix: String?) -> String? {
+        guard let trimmed = contextPrefix?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !trimmed.isEmpty
+        else {
+            return nil
+        }
+        return trimmed
+    }
+
+    func recentMessagesText(_ messages: [AgentMessageSnapshot]) -> String {
+        guard !messages.isEmpty else { return "(none)" }
+        return
+            messages
+            .map { message in
+                let marker = message.attachments.isEmpty ? "" : " [attachments: \(message.attachments.count)]"
+                return "\(message.role.rawValue): \(message.content)\(marker)"
+            }
+            .joined(separator: "\n")
+    }
+
+    func retrievedHitsText(_ hits: [RagHit]) -> String {
+        hits
+            .map { "- [\($0.kind)] \($0.title): \($0.snippet)" }
+            .joined(separator: "\n")
+    }
+}

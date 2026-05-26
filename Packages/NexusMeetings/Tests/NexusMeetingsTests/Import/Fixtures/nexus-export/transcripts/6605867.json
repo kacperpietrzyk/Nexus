@@ -1,0 +1,156 @@
+{
+  "meetingId": "6605867",
+  "meetingName": "VendorA event - brief z Participant 1iem",
+  "transcript": [
+    {
+      "speaker": "Participant 10",
+      "text": "Siema, siema już, minutka. Siema, jak tam zdrowko?",
+      "timestamp": 9.4
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "W porządku, a u ciebie?",
+      "timestamp": 18.88
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "Dzisiaj to dobrze, ale w środę było słabiutko. Pomyślałem tylko, że współczuję tobie i Participant 12, bo ty w robocie, drugi dzień. Participant 13 na szkoleniu. Mówię, Jacek, ręce.",
+      "timestamp": 21.98
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Ale jakoś się przeżyło.",
+      "timestamp": 39.52
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "Młodość robi swoje.",
+      "timestamp": 44
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Ale lekko nie było, lekko nie było.",
+      "timestamp": 47.5
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "Ja wczoraj pojechałem do firmy i taki wystraszony, to w ogóle tam ogarnęliśmy wszystko, ale mówię, nikt nie dzwonił, to chyba było w miarę, bo że alarm włączyłem jeszcze i wszystko dobrze, bo nikt się nic nie odezwał, mówię dobra, mów.",
+      "timestamp": 51.44
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Wesoło, wesoło.",
+      "timestamp": 69.05
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "No, spoko. Co tam za plany mamy?",
+      "timestamp": 71.43
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Plany są ambitne. Dobra, ile wiesz o tym evencie? Czy Participant 14 jeszcze się z tobą niczym nie podzielił?",
+      "timestamp": 76.19
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "Wiem tylko, że jest jakiś event. Nawet nie pamiętam kiedy teraz.",
+      "timestamp": 86.15
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "19 marca.",
+      "timestamp": 90.67
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "19 marca. Dobra, poczekaj, zerknę. Break tech. To na billardzie czy coś takiego tak? No to tyle wiem.",
+      "timestamp": 92.81
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Generalnie kwestia jest taka, że Tutaj Agnieszka z Participant 14em sobie wymyślili ten event i teraz my musimy go zrobić. Nie no, a tak poważnie to koncept jest taki, że event tam zaczyna się bodajże o 15 w klubie bilardowym. Będziemy mieli do dyspozycji gdzieś tam jakiś ekran. ale raczej na zasadzie tego, że to jest jako takie wsparcie dla nas, żebyśmy mogli coś pokazać, ale to na pewno nie jest event na, nie wiem, tam hands-on laby i tak dalej, nie? To raczej luźna dyskusja miała być i takie były gdzieś tam wstępne założenia. No i Agnieszka szukała pomysłu na content. No i pierwsza wersja z poniedziałku była taka, że dobra, to po prostu zrobimy storytelling i weźmiemy jakieś tam customer story kilka od CrowdStrika, te globalne takie. Ja już tam nawet trzy wybrałem wstępnie. i po prostu będziemy opowiadać na takiej zasadzie, że tam duże firmy z tego korzystają, jakie miały problemy, jak sobie z nimi porodziły i tak dalej, żeby była jakaś taka dyskusja. Nie było to idealne, natomiast to jest też event na zasadzie zasiać ziarno dopiero w głowach osób, które przyjdą, tak? W zasadzie. Natomiast ja wczoraj byłem na tym Adversary Simulation, które VendorA co jakiś czas robi, gdzie oni mają prezentację i ludzie głosują. I masz scenariusz ataku i jest kilka punktów, nie, podejmuje decyzje, tak? Mają tam te odpowiedzi ABCD, sobie tam przez aplikację głosują i to co wybiorą, no to tak się historia toczy dalej.",
+      "timestamp": 104.63
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "A ty, to ja nie byłem na takim czymś. Nie?",
+      "timestamp": 232.26
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "No ja już drugi raz byłem. To jest mega spoko generalnie i wiesz, nawet online'owo, tam było 1400 osób, to 1000 było aktywnie zaangażowane w głosowanie, tam wiesz, kilkadziesiąt pytań na Q&A, co punkt i tak dalej. Także fajnie angażujące Ludzi, nie? No i teraz finalna wersja eventu jest taka, że dzielimy go na dwie części, bo będziemy mieli dwie godziny, bo nie wiem czy to powiedziałem. Zresztą ja za chwilę wyświetlę Ci takiego briefa, sobie też przygotowałem, żeby też nie zapomnieć o rzeczach. które mam Ci powiedzieć. Na razie tak bardzo chaotycznie nakreślam, a za chwilę wyświetlę Ci briefa i będziemy gadać dalej. Więc finalna wersja jest taka, że mamy dwie godziny, więc dzielimy event na dwie części. Pierwsza godzina to robimy takie Adversary Simulation jak zrobił VendorA, a druga część to jest ten Storytelling i W tym momencie ta symulacja fajnie zbuduje fundament pod to, żeby w drugiej części pogadać, słuchajcie, zobaczyliście przed chwilą z czym się organizacje mierzą, tak? Z jakimi decyzjami, jak trochę tak z perspektywy może nie do końca technicznej, ale takiego emergency team pomieszanego z ludzi biznesowo-technicznych. przebiega taki atak i ile to może wygenerować problematycznych decyzji, stresu i tak dalej, gdzie my tu sobie robimy na sucho i w formie de facto zabawy. To teraz pogadajmy o tym, jak organizacje rozwiązują te problemy, jakie rozwiązania stosują, żeby, że tak powiem, było mniej stresu i było łatwiej. Generalnie jest tak, że w firmie też jest taki przemek, który jest pre-sale'em, bo tutaj w CustomerCo jest trochę inny podział niż ja miałem w CustomerCo2ie, tak? i pomysł jest taki, że my we dwóch robimy tą symulację a Participant 6 coś tam sobie popitoli produktowo w tej drugiej części. Więc jest taki pomysł, żeby tak to podzielić. VendorA miał takich pięć segmentów, ja zszedłem do czterech i wtedy byśmy się po dwa podzielili, bo oni też tak robili, bo tam generalnie Kilka było, kilku. I to było tak, że w sumie nawet jedna osoba to robiła, jeden segment, bo to byli ci goście z tego Global Incident Response Teamu. I oni to prowadzili. Więc my byśmy sobie po dwa segmenty się po prostu podzielili na zmianę, bo też jak jest dwóch prowadzących, to nawet jak trochę sala, że tak powiem, złapie czkawkę w dyskusji, między sobą możemy pogadać. Koncept też jest taki, że ja mam plan dać im możliwość się pokłócić. Chodzi mi o to, że narracja na początek jest taka, że słuchajcie, w trakcie tej zabawy nie jesteście przedstawicielami swoich firm i tak dalej, tylko jesteście emergency team'em tej organizacji, która przeżywa ten atak i mimo że każdy tam ze swojego telefonu indywidualnie głosuje na opcję, tego, którą on uważa za najlepszą, to zanim przejdziemy do głosowania macie możliwość dyskusji nie tylko z nami, ale między sobą, co uważacie, że team powinien zrobić. Tak żebyśmy nawet my mieli chwilę oddechu, niech oni po prostu między sobą.",
+      "timestamp": 235.06
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "Słuchaj, a powiedz mi, ta symulacja jeszcze, bo nie widziałem tego tak, że wiesz, zaskoczyłeś mnie, że to coś takiego, bo zawsze myślałem, że to jest takie, że masz pytanie i klikasz tam i szybko szukasz odpowiedzi, jak to zawsze było w tych, wiesz, scavenger games.",
+      "timestamp": 467.42
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Tak, w scavengerach tak jest, ale to jest takie bardziej techniczne i z konsolą i tak dalej. Tutaj ludzie co najwyżej będą mieli telefon przy sobie, nie?",
+      "timestamp": 485.72
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "No no.",
+      "timestamp": 494.03
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Na następnych eventach może, na następnych etapach będziemy starali się robić jakieś, wiesz, takie hands-on laby i tak dalej, taki deep dive techniczny. Teraz jest moment na to, żeby zbudować świadomość.",
+      "timestamp": 495.03
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "Spoko, spoko. Tylko chodzi mi o to, że do końca nie wiem jak to wygląda i jak my to planujemy. To jest w VendorA jakiś na Encounterze to jest? Jeli nam to udostępnią, czy sami musimy zbudować?",
+      "timestamp": 509.14
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Musimy sobie sami zrobić, dlatego że to jest, jak to VendorA sam na czacie określił, zajebiście duży powerpoint i A, bo.",
+      "timestamp": 518.82
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "To jest w powerpointzie.",
+      "timestamp": 528.56
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Tak, oni to zrobili w powerpointzie, wiesz, z jakimiś tam pewnie hyperlinkami i tak dalej. I oni to określili, że to jest zajebiście duży powerpoint po prostu ze scenariuszem przygotowanym. Nie dzielą się tym deckiem niestety, więc my musimy to zrobić sami. I teraz tak, ja wczoraj do tego zacząłem przy tym grzebać i wyszło mi, że Jakbyśmy mieli cztery segmenty, w których są cztery opcje do wyboru, to powstaje drzewo decyzyjne, 256 ścieżek, co rodzi ponad 2000 slajdów. No. Ale. Ale, ale, ale. Już wiem jak to ogramy. I zrobimy to lepiej niż VendorA. Po pierwsze, ja zrobiłem draft już scenariusza razem z drzewem decyzyjnym. Drzewo decyzyjne jest obcięte na ten moment z 256 ścieżek do 40. Jest po prostu konwergencja wyborów, że są ścieżki, które generują zupełnie nową, nazwijmy to fabułę, bo technicznie tak wyglądają, że wygenerują nową fabułę, nową sytuację i tak dalej, ale niektóre odpowiedzi prowadzą do tego samego później, więc publiczność dostaje poczucie wyboru na niektórych etapach, żeby właśnie to nam się nie, zbytnio nie rozpompowało. A technicznie nie zrobimy tego w PowerPointzie, zrobimy to w postaci aplikacji webowej.",
+      "timestamp": 529.42
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "Więc... Słuchaj, a dobra, a byś mi podał przykład, jakie tam są na przykład pytania w tym, na tym kraju strajkowym?",
+      "timestamp": 632.7
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Wiesz co, ja mam, ja mam ten, poczekaj, wrzucę ci, bo ja zrobiłem, udało mi się zrobić kilka screenów. Gdzie jest czat? Tu jest czat. Udało mi się zrobić kilka screenów, ale to z środka prezentacji, dosłownie. Czemu ja nie mogę nic załączyć?",
+      "timestamp": 643.13
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "No nie ma, no faktycznie. Bo na zewnątrz.",
+      "timestamp": 664.7
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "A czekaj, jak zrobię tak i tak.",
+      "timestamp": 668.8
+    },
+    {
+      "speaker": "Participant 10",
+      "text": "Huh? Majdan, możesz przesłać.",
+      "timestamp": 671.96
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Nie, ten, albo WhatsApp'em.",
+      "timestamp": 673.72
+    }
+  ]
+}

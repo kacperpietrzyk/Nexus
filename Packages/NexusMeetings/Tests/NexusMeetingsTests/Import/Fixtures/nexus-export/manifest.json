@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "source": "circleback-mcp",
+  "exportedAt": "2026-05-15T14:00:58Z",
+  "counts": {
+    "meetings": 2,
+    "transcripts": 2,
+    "actionItems": 2
+  },
+  "meetings": [
+    {
+      "id": 6605867,
+      "linkId": "6605867",
+      "title": "VendorA event - brief z Participant 1iem",
+      "createdAt": "2026-02-12T10:05:01.656Z"
+    },
+    {
+      "id": 7330997,
+      "linkId": "7330997",
+      "title": "VendorA Architecture Review & POC Planning",
+      "createdAt": "2026-03-17T10:59:20.982Z"
+    }
+  ]
+}

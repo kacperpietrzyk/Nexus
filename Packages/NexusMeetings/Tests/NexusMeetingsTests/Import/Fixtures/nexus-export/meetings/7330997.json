@@ -1,0 +1,72 @@
+{
+  "id": 7330997,
+  "linkId": "7330997",
+  "name": "VendorA Architecture Review & POC Planning",
+  "createdAt": "2026-03-17T10:59:20.982Z",
+  "duration": 5933.956,
+  "notes": "#### Przegląd\n* Spotkanie poświęcone prezentacji VendorA — VendorB (Participant 1, Participant 2) omówił architekturę, nowości i przeprowadził demo konsoli dla zespołu klienta\n* Klient miał poprzedni POC ok. **1,5 roku** temu, który nie został ukończony z powodu braku zasobów po stronie klienta — temat wraca z pełnym zaangażowaniem\n* Klient korzysta z VendorC, EMS i VendorF, ale nie używa tagów ZTNA — SASE jest naturalnym rozszerzeniem istniejącego stosu\n* Kluczowe ustalenia: VendorA ma POP produkcyjny w CityA (VendorH), Secure Browser wchodzi do produkcji za ok. **1–2 miesiące**, SASE działa jako spoke sieci SD-WAN (nie hub), brak VDOMów, ograniczona konfiguracja niskopoziomowa w porównaniu do on-prem VendorC\n* Następny krok: klient zredaguje listę pytań i prześle do VendorBu, po czym zostanie umówione kolejne spotkanie z pogłębioną dyskusją i ustaleniem zakresu POC\n\n#### Co to jest SASE i jak działa\n* SASE to architektura, nie pojedynczy produkt — składa się z elementów, które klient już posiada (VendorC, SD-WAN, VendorE) oraz komponentu SSE (Secure Service Edge) dla użytkowników zewnętrznych\n* SSE umożliwia bezpieczne połączenie z internetem, aplikacjami SaaS, IaaS i siecią wewnętrzną niezależnie od lokalizacji użytkownika\n* Trzy główne zadania SASE: ochrona dostępu do internetu i kontrola aplikacji SaaS, zastąpienie VPN przez always-on ZTNA, centralne zarządzanie całym stosem przez jeden interfejs (VendorD)\n* ZTNA pozwala uzależnić dostęp do zasobów wewnętrznych od stanu stacji (np. brak EDR = brak dostępu), co ogranicza rozprzestrzenianie się zagrożeń\n* Klient ma EMS wdrożony, ale nie używa tagów ZTNA — Participant 1 zachęcił do ich wdrożenia jako elementu SASE\n\n#### Co nowego w VendorA\n* POP w CityA (VendorH) jest produkcyjny i aktywnie używany przez klientów\n* VendorD dostępny jako centralny interfejs konfiguracji polityk dla wszystkich POPów jednocześnie\n* Secure Browser — plugin do przeglądarek (Chrome, Firefox), nie osobna przeglądarka — analizuje renderowane treści, skrypty, URL-e, wykrywa phishing i obfuskację; nie jest jeszcze produkcyjny, spodziewany za ok. **1–2 miesiące**\n* VendorF **7.4.5** w produkcji — VendorB używa go wewnętrznie na własnych stacjach\n* Licencja SASE obejmuje **3** urządzenia; trwa wdrożenie nowego klienta mobilnego (Android i iOS)\n* DLP rozszerzony o Index Data Matching, Exact Data Matching oraz obsługę etykiet VendorG\n* Kontrola narzędzi AI (np. blokowanie Gemini, wymuszanie Copilota)\n* Digital Experience Monitor znacząco rozbudowany — historyczne trendy, własne feedy monitorowania, dodatkowe metryki\n* Automatyczne skalowanie środowiska na podstawie wykorzystania zasobów\n* Dedykowany publiczny adres IP na wyjściu dla każdego POPu — możliwość geolokalizacji i whitelistowania\n* Dwie ścieżki aktualizacji: stabilna (konserwatywna) i z nowymi funkcjami (częstsze zmiany)\n* W ciągu ostatniego roku dodano ok. **60** nowych POPów globalnie (VendorH, Oracle, VendorI, własne VendorB)\n\n#### VendorF i EMS w SASE\n* EMS w SASE to podzbiór funkcjonalności pełnego on-prem EMS — mniej elastyczny, ale zarządzany po stronie VendorBu (rolling upgrade, okno serwisowe ~**5** minut)\n* Profil endpointowy pozwala konfigurować m.in. tryb połączenia (auto/ręczny), reguły on-net/off-net, split tunneling, dodatkowe VPN-y, blokadę USB, sandbox\n* VendorF z licencją advanced zawiera antywirus, antimalware, skaner podatności, lokalny backup folderów, kontrolę nośników USB oraz integrację z sandboxem chmurowym (wliczonym w cenę)\n* Klient z agentem pozwala sprawdzać stan stacji (procesy, klucze rejestru, wersja OS, patch Windows, przynależność do grupy, stan EDR) i uzależniać od tego dostęp\n* Klient bez agenta (clientless ZTNA, proxy, access point) daje ograniczoną kontrolę — brak wglądu w stan stacji\n* Participant 5 potwierdził: klient ma EMS, ale nie ma włączonego ZTNA ani tagów\n\n#### Demo konsoli VendorA\n* Participant 2 pokazał środowisko z **2** POPami (CityA, CityB) i **1** hubem (wirtualny VendorC w Amazonie, CityB)\n* Widok endpointów pokazuje stan stacji, zainstalowane komponenty VendorF, wyniki skanowania podatności (np. nieaktualny Wireshark) oraz tagi ZTNA\n* Digital Experience Monitor prezentuje metryki CPU, RAM, baterii, ruchu sieciowego, opóźnienia do POPu oraz umożliwia zdalne uruchomienie trace route i packet capture z poziomu konsoli\n* Polityki bezpieczeństwa konfiguruje się w jednym miejscu — trafiają automatycznie na wszystkie POPy\n* Tagi ZTNA (np. \"Compliant\" — aktualny Windows + aktywny antywirus) można wykorzystać w politykach, np. blokując dostęp do Office 365 dla stacji non-compliant\n* Polityki dzielą się na Secure Internet Access (ruch do internetu) i Secure Private Access (ruch do datacenter przez hub)\n* Każdy POP ma dedykowany, stały publiczny adres IP — możliwość geolokalizacji (np. wymuszenie polskiego IP nawet przy połączeniu przez CityB)\n* Tunel do huba działa na logice SD-WAN z progami SLA; BGP dostępny, ale z ograniczoną liczbą parametrów (tryb, met, router ID)\n\n#### SASE jako hub dla branchy i farm\n* VendorA jest spokiem (nie hubem) w sieci SD-WAN — dołącza się do istniejącej architektury, nie zastępuje jej\n* Możliwe scenariusze podłączenia lokalizacji: VendorF na stacji, access pointy/extendery (mikro-branche), VendorC przez IPsec (branch onramp), dowolny router z IPsec\n* Branch onramp (tunel IPsec z non-VendorB lub VendorC do POPu) jest dostępny, ale nie był widoczny w demo środowisku Kuby\n* Brak VDOMów w VendorA — jedna instancja, brak separacji ruchu na poziomie wirtualnych domen\n* Participant 4 podniósł temat OT (farmy własne i klientów) — Participant 1 zaznaczył, że scenariusze dostępu do sterowników PLC i adresacji OT wymagają doprecyzowania przed potwierdzeniem możliwości\n* Participant 1 zasugerował, że dla małych lokalizacji spełniających kryteria brancha można rozważyć przeniesienie funkcjonalności do SASE zamiast stawiania osobnego VendorC\n\n#### Routing i SD-WAN w SASE\n* Pod spodem VendorA działa SD-WAN z logiką ciągłego monitorowania łączy i przełączania na najlepsze dostępne\n* Konfiguracja BGP w SASE jest uproszczona — dostępne parametry: tryb (per-overlay/loopback), met, router ID; brak pełnej elastyczności on-prem VendorC\n* Można podłączyć wiele łączy do tego samego huba i sterować ruchem przez BGP met lub priorytety w konfiguracji\n* Możliwe podłączenie VendorC brancha do **4** POPów jednocześnie z rozkładem ruchu — konfiguracja po stronie VendorC lub VendorDa, nie po stronie SASE\n* Failover między POPami: GSLB wykrywa awarię POPu i przekierowuje użytkowników — czas przełączenia ok. **5** minut\n* Brak współdzielenia sesji między POPami — przy awarii POPu sesje są przerywane i nawiązywane od nowa\n* Przy większej liczbie użytkowników (szacunkowo tysiące) SASE stosuje horizontal scaling (wiele instancji w jednej lokalizacji), ale bez współdzielenia sesji\n\n#### CASB, DLP i analiza behawioralna\n* CASB rozpoznaje aplikacje SaaS — Participant 2 nie potwierdził pełnego pokrycia VendorG 365; zobowiązał się przesłać listę dostępnych sygnatur po doprecyzowaniu przez klienta, które aplikacje są istotne\n* DLP sieciowe wbudowane w SASE — inspekcja ruchu SSL (pełna dekrypcja), słowniki gotowe (numery kart, dokumenty tożsamości z różnych krajów), własne wyrażenia regularne, Index Data Matching, Exact Data Matching, integracja z etykietami VendorG (MIP)\n* Endpoint DLP to osobny produkt z osobną konsolą — działa jak EDR w kontekście dostępu do danych, monitoruje procesy sięgające do plików, akcje użytkownika (drukowanie, upload, pendrive), buduje baseline zachowania\n* Analiza behawioralna (UEBA) dostępna w ramach endpoint DLP — wykrywa odstępstwa od normy (np. masowe drukowanie w piątek, logowanie z nieznanej sieci, anomalie w liczbie zapytań) i może generować cichy alarm lub blokować akcję\n* Participant 3 zapytał o certyfikat przy inspekcji SSL — możliwe użycie własnego certyfikatu klienta zamiast certyfikatu VendorBu\n\n#### Scenariusz z wieloma VPN-ami\n* Participant 3 opisał scenariusz: pracownicy muszą się odłączyć od środowiska głównego i podłączyć do izolowanego obszaru sieciowego (inny VDOM/organizacja) bez dostępu do internetu — cel: ograniczenie rozprzestrzeniania się kompromitacji\n* Participant 1 potwierdził: VendorF pozwala mieć always-on SASE i jednocześnie listę dodatkowych VPN-ów, do których użytkownik może się ręcznie podłączyć (lub które są predefiniowane przez admina)\n* VendorB używa tego scenariusza wewnętrznie — pracownicy mają SASE + możliwość dopięcia dodatkowych koncentratorów VPN\n* Participant 3 zaznaczył, że inspekcja SSL w SASE nie rozwiązuje problemu komunikacji C2 przez certificate pinning (np. VendorG) — Participant 2 przyznał rację\n\n#### Następne kroki i zakres POC\n* Klient prześle listę przygotowanych pytań (głównie architektoniczne: routing, steering, underlay, połączeniówka dla branchy i farm) do Grzegorza i Kuby drogą mailową\n* VendorB zaproponował kolejne spotkanie w celu omówienia odpowiedzi i doprecyzowania architektury przed ustaleniem zakresu POC\n* Participant 1 wyjaśnił model dojrzewania do POC: najpierw dyskusja i weryfikacja budżetu, potem POC — który w przypadku SASE jest de facto wdrożeniem produkcyjnym (wymaga podłączenia do środowiska klienta)\n* Na etapie poprzedzającym POC VendorB może udostępnić laby do samodzielnego testowania funkcji, w tym z możliwością podłączenia do internetu\n* Klient chce zobaczyć, jak SASE wpasowuje się w istniejącą infrastrukturę bez naruszania ciągłości biznesowej",
+  "attendees": [
+    {
+      "name": "Participant 1",
+      "email": null
+    },
+    {
+      "name": "Participant 2",
+      "email": null
+    },
+    {
+      "name": "Participant 3",
+      "email": null
+    },
+    {
+      "name": "Participant 4",
+      "email": null
+    },
+    {
+      "name": "Participant 5",
+      "email": null
+    },
+    {
+      "name": "Participant 6",
+      "email": null
+    },
+    {
+      "name": "Participant 7",
+      "email": null
+    },
+    {
+      "name": "Participant 9",
+      "email": null
+    },
+    {
+      "name": "Participant 8",
+      "email": null
+    }
+  ],
+  "actionItems": [
+    {
+      "id": 14206966,
+      "title": "Zredagować i przesłać listę pytań do VendorBu",
+      "description": "Pytania dotyczą architektury, routingu, traffic steeringu i opcji wdrożenia VendorA w istniejącej infrastrukturze. Po przesłaniu pytań umówić kolejne spotkanie z Participant 1iem i Kubą.",
+      "assignee": {
+        "name": "Participant 7",
+        "email": null
+      },
+      "status": "PENDING"
+    },
+    {
+      "id": 14206967,
+      "title": "Przygotować i przesłać listę obsługiwanych sygnatur aplikacji VendorG w CASB",
+      "description": "Participant 3 zapytał, czy VendorA wspiera wszystkie aplikacje VendorG. Participant 2 zobowiązał się sprawdzić dostępne sygnatury i wysłać listę.",
+      "assignee": {
+        "name": "Participant 9",
+        "email": null
+      },
+      "status": "PENDING"
+    }
+  ],
+  "insights": {},
+  "tags": [],
+  "url": null,
+  "icalUid": null
+}

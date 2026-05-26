@@ -1,0 +1,4 @@
+version: 0.1.6
+url: https://github.com/asg017/sqlite-vec/releases/download/v0.1.6/sqlite-vec-0.1.6-amalgamation.tar.gz
+source: 639fca5739fe056fdc98f3d539c4cd79328d7dc7
+archive-layout: root files sqlite-vec.c and sqlite-vec.h

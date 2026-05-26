@@ -1,0 +1,156 @@
+{
+  "meetingId": "7330997",
+  "meetingName": "VendorA Architecture Review & POC Planning",
+  "transcript": [
+    {
+      "speaker": "Participant 1",
+      "text": "Jeszcze widzę, że Bartek jest i Participant 6, nie wiem, czekamy. Chwilę.",
+      "timestamp": 2.09
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "No poczekajmy chwilkę. Marku, jesteś w stanie tam sprawdzić jak Bartek?",
+      "timestamp": 8.41
+    },
+    {
+      "speaker": "Participant 3",
+      "text": "Witam wszystkich, cześć. Słychać coś?",
+      "timestamp": 17.47
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Serwus, tak, tak, słychać cię. Tak, tak.",
+      "timestamp": 22.53
+    },
+    {
+      "speaker": "Participant 3",
+      "text": "A dobra, był jakiś problem, chyba słuchawka mi ma. Bartka raczej nie będzie, bo Bartek jest w delegacji w CityC.",
+      "timestamp": 24.39
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Okej.",
+      "timestamp": 30.55
+    },
+    {
+      "speaker": "Participant 3",
+      "text": "Więc...",
+      "timestamp": 32.65
+    },
+    {
+      "speaker": "Participant 2",
+      "text": "Weźmy temat na swoje barki.",
+      "timestamp": 34.45
+    },
+    {
+      "speaker": "Participant 3",
+      "text": "Tak, poprowadzimy jakoś wspólnie chyba wszyscy damy radę także. Czy chcecie nagrywać to spotkanie?",
+      "timestamp": 38.67
+    },
+    {
+      "speaker": "Participant 1",
+      "text": "Chcecie nagranie? Nie będzie problemu?",
+      "timestamp": 46.67
+    },
+    {
+      "speaker": "Participant 4",
+      "text": "Nie, nie będzie no co wy, jasne. Tylko jakby trochę wam tam podpowiemy ewentualnie więcej niż... Zachowajcie za siebie.",
+      "timestamp": 50.93
+    },
+    {
+      "speaker": "Participant 5",
+      "text": "Dobrze. No to tak, to jak najbardziej, pewnie. przyszłość przyszłość przyszłość przyszłości też się przyda na granie.",
+      "timestamp": 60.85
+    },
+    {
+      "speaker": "Participant 1",
+      "text": "No dobra to Participant 1 to chyba możesz zaczynać no bo mamy tutaj spory skład Participant 1 który odpowiada za za sasji no i Participant 2 technicznie m.in. sasji jest w jego obrębie działań. I to w sumie Participant 1 będzie ten i wejść.",
+      "timestamp": 115.4
+    },
+    {
+      "speaker": "Participant 4",
+      "text": "Słuchajcie rozmawialiśmy z.",
+      "timestamp": 136.2
+    },
+    {
+      "speaker": "Participant 1",
+      "text": "Może to nagranie co. Czy ktoś jest właścicielem",
+      "timestamp": 139.3
+    },
+    {
+      "speaker": "Participant 4",
+      "text": "spotkania? Rozmawiałem, już patrzę. Dobrze, dobrze. Rekord. Dobra, to oficjalnie włączam. Jeszcze, no jeszcze będzie chciał robić postulowanie tekstu. Dobrze. Nagrywanie włączone. Słuchajcie, więc rozmawiałem z Bartkiem wcześniej o waszym tutaj w zaawansowaniu, bo mieliśmy chwilę temu okazję o sasji pomówić wspólnie. Warto dać znać, że jesteście zainteresowani zrobieniem POCA, że już trochę dalej w zagadnieniach sasji jesteście, przemyśleliście temat. Jakbyście mogli powiedzieć, jakie są wasze oczekiwania do rozwiązania sasji, ile wiecie, ile chcecie, żebyśmy powiedzieli dzisiaj i ewentualnie jakie takie kroki chcecie poczynić, to do tego razem z Kubą byśmy nawiązali. Ja się zajmuję, tak jak Damian mi przedstawił, rozwiązaniami SASS-i, wprowadzeniem ich na polski rynek i razem z Kubą odpowiadamy za to, żeby te środowiska testować i pokazywać i możliwie najlepiej dopasować je do potrzeb właśnie takich jak wasze. Tylko byście powiedzieli, jak dzisiaj, jak wy postrzegacie rozwiązanie SASS-i, jaka jest wasza wiedza, to do tego bym od razu się odniosł.",
+      "timestamp": 143.49
+    },
+    {
+      "speaker": "Participant 3",
+      "text": "To ja muszę chyba trochę nawiązać historycznie do tego SASS-i, bo z Kubą Leszewskim No pewnie to już dwa lata temu. Tak, to będzie z półtora tygodnia, z półtora roku temu żeśmy próbowali, odpalaliśmy POC-a, SAS i nawet te POC-i jeszcze mamy skonfigurowane, te tunele do POC-ów. My żeśmy ich dalej cały czas nie kasowali, bo w perspektywie mieliśmy nadzieję, że wrócimy do tego. Dużo się w tej sesji zmieniło i Bartek nam przekazywał, że po rozmowie z opiekunem z VendorBu to jednak bardzo duże zmiany tam zaszły. Ten POC udał się, nie udał się, raczej się chyba nie udał. Musimy się przyznać bez bicia, że to jednak po naszej stronie, ze względów na brak zasobów i personalnych i braku czasu, po prostu nie poświęciliśmy tego czasu tak, jak byśmy chcieli. Więc tutaj się przyznajemy, ten POC udał się do pewnego momentu, później już po prostu braku czasu. z naszego punktu widzenia, no i jak najbardziej wracamy do tego tematu i jesteśmy zaangażowani pewnie całą mocą.",
+      "timestamp": 214.78
+    },
+    {
+      "speaker": "Participant 4",
+      "text": "To słuchajcie, ja rozumiem, no ile jesteście już zaznanymi z SASS-i, a na ile ewentualnie chcecie, żebym jeszcze wprowadził od podstaw, czy bardziej różnice powiedzieć, czy też jakiś taki załóżnik wstępnych? Możemy,",
+      "timestamp": 294.7
+    },
+    {
+      "speaker": "Participant 6",
+      "text": "możemy sobie tak odświeżyć od podstaw, ale głównie się skupić na tych różnicach między tym właśnie co, co, co tam nowego się pojawiło. Ale jak najbardziej możemy tak.",
+      "timestamp": 306.14
+    },
+    {
+      "speaker": "Participant 4",
+      "text": "Dobra. to w ogóle czemu mówimy o SASE i czym jest SASE na początek? Bo słuchajcie, SASE w sumie nie jest produkt, tylko jest architektura. Architektura, która składa się z elementów, które w dużej mierze już macie, używacie i parę komponentów, które dorzuciliśmy, pozwala nam teraz zaproponować bezpieczeństwo w zasadzie na każdym kroku i tym generalnie jest SASE. Secure Access, bezpieczny dostęp i serwisy, czyli realizacja tego dostępu, najlepiej gdzie się da. WEG macie ogarnięty, urządzenia zarówno w chmurze jak i fizyczne, VendorC, nic nowego. VendorE, komponent, który zbiera logi w jakiś jeden centralny, sensowny sposób, pozwala je przetwarzać i ewentualnie eksportuje dalej. Jak się pojawiają użytkownicy na zewnątrz, to coraz częściej powtarza się, pojawia się MFA, w zasadzie pewnie już od dawna macie, więc jest to na razie no-brainer. I teraz tego typu ochrona na razie to jest ochrona brzegowa, która super się sprawdza wtedy, kiedy zasoby są w konkretnym jednym miejscu, w fizycznej lokalizacji, ale jak mówimy o tym, że pracownicy nam migrują, no to tu pojawia się ten komponent zewnętrzny i to, co się tu niebieskiego pojawiło, to nie jest SASE, to jest SSE, Secure Service Edge. Jest to rozwiązanie, które ma umożliwić bezpieczne połączenie z punktami, gdzie znajdują się aplikacje, czy to z internetem, czy z JAS-em, z PAS-em, z SAS-em, czy z siedzibą główną i dać temu użytkownikowi zdalny dostęp. Możemy ten dostęp zrobić podobnie jak VPN, ale staramy się jednak wdrażać z ETNi ograniczać dostęp płytkowników do jak najmniejszej ilości aplikacji i na tym poziomie już wskazywać, które zasoby są osiągalne, a nie wszystko jak w zwykłym VPNie. Idziemy dalej. Porti menedżer. Important Manager jako komponent zarządza wszystkimi tymi elementami za pomocą jednej centralnej polityki bezpieczeństwa. I tym de facto te wszystkie elementy razem, plus może jeszcze PAM, którego moglibyśmy dołączyć, to jest architektura Unified SAS. Nie ma znaczenia gdzie jest pracownik, nie ma znaczenia gdzie są aplikacje, chcemy żeby ta polityka bezpieczeństwa była jedna, i za każdym razem możliwie skutecznie ochroniła go przed zagrożeniami, kontrolowała, co on robi i jednocześnie chcemy, żeby te mechanizmy bezpieczeństwa były implementowane tam, gdzie jest najlepiej, czyli jak ktoś jest na zewnątrz, to tę ochronę uruchomimy możliwie blisko jego punktu. Jakby na przykład mówimy sobie o chmurze publicznej, gdzie macie zasoby, to do tej chmury dostarczmy tylko ten ruch, który rzeczywiście jest tam dedykowany, a cała reszta ruchu internetowego i SAS-owego puśćmy go bokiem, nie? Bo on też potrzebuje inspekcji, ale już pewnie niekoniecznie przez tego gate'a, który jest w chmurze, bo wtedy z kolei to też jest nieoptymalne. Więc ogólnie rzecz biorąc, architektura SASE mówi o tym, że nie nagle wszystko wywalamy do chmury, nie, że uzupełniamy, jakby wszystko robimy lokalnie, tylko tam, gdzie jest lepiej, robimy chmurowo, tam, gdzie jest lepiej, robimy lokalnie, zawsze mamy opcję wyboru, możemy żonglować, że tak powiem tymi mechanizmami, tak jak użytkownik się przenosi w aplikacji, gdzie są wstępne. Sorry, coś mi dopadło w kaszlu. Więc tak pokrótce SASSI. SASSI nie jest jednym produktem. Te elementy, które macie już od SASSI i SD-WAN, i VendorJgaty, to jest część całej architektury. I teraz SASSI ma trzy zadania. Takie może najprościej na początek. Zabezpieczenie dostępu do internetu. Ja bym tu jeszcze dodał kontrolę aplikacji SASS-owych. Zawsze użytkownik, nie ma znaczenia gdzie jest, ma mieć bezpieczny dostęp. To będzie ta podstawa. Druga sprawa, zastępujemy VPN-a. czyli chcemy, żeby to był always on, chcemy zmienić podejście z VPN-owego tradycyjnego na ZTNA-owe, ograniczać dostęp w zależności od prawa użytkowników. Nie trzeba, ale warto to robić. Zapytam, wy macie u siebie wdrożonego MS-a właśnie z regułami ZTNA i używacie tagów na przykład? Jak wasza konfiguracja wygląda? Ja po prostu już nie pamiętam, dlatego tak, podpytuję.",
+      "timestamp": 315.12
+    },
+    {
+      "speaker": "Participant 7",
+      "text": "Jeszcze raz, można powtórzyć pytanie, sorry.",
+      "timestamp": 577.38
+    },
+    {
+      "speaker": "Participant 4",
+      "text": "Czy macie u siebie wdrożonego EMS-a z DNA-owymi tagami, w sensie czy używacie jakoś bardziej granulatnych?",
+      "timestamp": 579.62
+    },
+    {
+      "speaker": "Participant 7",
+      "text": "To Participant 5, to Participant 5 to się musi wypowiedzieć, to jest jego tutaj, a nie Participant 5.",
+      "timestamp": 587.08
+    },
+    {
+      "speaker": "Participant 6",
+      "text": "Nie, nie, nie, nie, nie, my nie mamy włączonego z DNA, a nie EMS-a.",
+      "timestamp": 592.2
+    },
+    {
+      "speaker": "Participant 4",
+      "text": "Tam",
+      "timestamp": 597.26
+    },
+    {
+      "speaker": "Participant 6",
+      "text": "tych tagów nie używamy.",
+      "timestamp": 597.78
+    },
+    {
+      "speaker": "Participant 4",
+      "text": "A w ogóle EMS-a macie, używacie EMS-a do zarządzania klientami?",
+      "timestamp": 599.68
+    },
+    {
+      "speaker": "Participant 6",
+      "text": "EMS-a mamy, tak, tak, tak. Tylko tam nie mamy zcienek.",
+      "timestamp": 604.93
+    },
+    {
+      "speaker": "Participant 4",
+      "text": "Dobra. SASI pozwala to zrobić, nie wymusza, znaczy nie trzeba tak zawsze tak używać, ale warto, bo faktycznie tego typu dostęp powoduje, że nawet jak stacja zostanie skompromitowana, no to potencjalnie te TAG-i jeszcze dają nam możliwość na tej podstawie po prostu wyblokowania pewnych rodzajów ruchu i zmniejszenia ekspozycji zarówno tych aplikacji zewnętrznych na dostęp od użytkowników z wewnątrz. albo zareagowanie jak ktoś ubije np. jakiś komponent krytyczny bezpieczeństwa, dajmy na to na tej stacji, to bez tego komponentu użytkownik nie pójdzie dalej, w związku z tym też te zagrożenia nie będą się rozprzestrzeniały. Zachęcamy mocno do ZDNA, jest częścią. jak najbardziej SASE, czyli ten pierwszy punkt to jest ochrona przed zagrożeniami z internetu, drugi to jest automatyczne połączenie, czyli zastąpienie VPN-a, trzeci punkt to jest utrzymanie tego wszystkiego. Właśnie wspomniany EMS, VendorC, które są tutaj połączone wersjami funkcjonalności VPN-a brzegowego, no też wymagają odpowiedniej wersji load balancing, bo to jest wiele punktów dostępu, funkcjonalności Digital Experience Monitor, całkiem niemały stos komponentów. Wyrażamy teraz w SASE też Secure Browser mechanizm, Znowu kolejny element. Te wszystkie rzeczy wymagają między sobą współgrania, interakcji, odpowiednich wersji softu. SASE daje aktualny stos zintegrowanych komponentów, z jednym interfejsem zarządzającym. Dzisiaj może to być nawet na koniec 40 manager, który te polityki będzie utrzymywał, czyli centralizacja polityk, a plus tam jeszcze jakieś rzeczy pewnie lokalnie trzeba zrobić, ale upraszczamy, możliwie upraszczamy cały ten stos. żeby mieć zawsze aktualną wersję, zawsze wyskalowaną. I to będzie ten trzeci element, którego oczekujemy od Saski. Chcecie, żebym wszedł głębiej jeszcze w rzeczy tutaj po drodze? Bo ja przy okazji podrzucę, co się nowego wydarzyło. Czy to już wszystkich wiecie i idziemy dalej?",
+      "timestamp": 607.91
+    },
+    {
+      "speaker": "Participant 3",
+      "text": "Możemy iść dalej. Pewnie pytania się po drodze jakieś nasuną. Ja mam od razu takie pytanie, czy da się, bo tak, musi być odpowiednia wersja Forty Clienta z tego, co kojarzę.",
+      "timestamp": 718.05
+    }
+  ]
+}

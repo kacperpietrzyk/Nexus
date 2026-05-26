@@ -1,0 +1,335 @@
+name: Nexus
+options:
+  bundleIdPrefix: com.kacperpietrzyk
+  createIntermediateGroups: true
+  developmentLanguage: en
+  groupSortPosition: top
+  generateEmptyDirectories: true
+  deploymentTarget:
+    macOS: "26.0"
+    iOS: "26.0"
+    watchOS: "26.0"
+
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.2"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SWIFT_STRICT_CONCURRENCY: complete
+
+packages:
+  NexusCore:
+    path: Packages/NexusCore
+  NexusSync:
+    path: Packages/NexusSync
+  NexusAI:
+    path: Packages/NexusAI
+  NexusUI:
+    path: Packages/NexusUI
+  NexusSearch:
+    path: Packages/NexusSearch
+  TasksFeature:
+    path: Packages/TasksFeature
+  InboxShell:
+    path: Packages/InboxShell
+  CommandPaletteShell:
+    path: Packages/CommandPaletteShell
+  NexusAgentTools:
+    path: Packages/NexusAgentTools
+  NexusAgent:
+    path: Packages/NexusAgent
+  NexusMeetings:
+    path: Packages/NexusMeetings
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    from: "0.12.4"
+  mcp-swift-sdk:
+    url: https://github.com/modelcontextprotocol/swift-sdk.git
+    from: "0.11.0"
+
+schemes:
+  NexusMac:
+    build:
+      targets:
+        NexusMac: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  NexusiOS:
+    build:
+      targets:
+        NexusiOS: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  NexusWatch:
+    build:
+      targets:
+        NexusWatch: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  NexusMeetingsHelper:
+    build:
+      targets:
+        NexusMeetingsHelper: all
+  NexusWatchTests:
+    build:
+      targets:
+        NexusWatchTests: all
+    test:
+      targets:
+        - NexusWatchTests
+
+targets:
+  NexusMac:
+    type: application
+    platform: macOS
+    sources: [Apps/NexusMac]
+    settings:
+      base:
+        PRODUCT_NAME: Nexus
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.Mac
+        INFOPLIST_FILE: Apps/NexusMac/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/NexusMac/NexusMac.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    postBuildScripts:
+      - name: Copy nexus-mcp sidecar binary into app bundle
+        script: |
+          set -e
+          SIDECAR_PATH="${BUILT_PRODUCTS_DIR}/nexus-mcp"
+          DEST_DIR="${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Contents/MacOS"
+          if [ -f "$SIDECAR_PATH" ]; then
+            mkdir -p "$DEST_DIR"
+            cp -f "$SIDECAR_PATH" "$DEST_DIR/nexus-mcp"
+            echo "Copied nexus-mcp into $DEST_DIR"
+          else
+            echo "warning: nexus-mcp binary not found at $SIDECAR_PATH; build NexusMCPSidecar target first"
+          fi
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/$(WRAPPER_NAME)/Contents/MacOS/nexus-mcp
+      - name: Copy meetings helper LaunchAgent plist into app bundle
+        script: |
+          set -e
+          SRC="${SRCROOT}/Apps/NexusMac/LaunchAgents/com.kacperpietrzyk.nexus.meetings-helper.plist"
+          DEST_DIR="${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Contents/Library/LaunchAgents"
+          mkdir -p "$DEST_DIR"
+          cp -f "$SRC" "$DEST_DIR/com.kacperpietrzyk.nexus.meetings-helper.plist"
+        inputFiles:
+          - $(SRCROOT)/Apps/NexusMac/LaunchAgents/com.kacperpietrzyk.nexus.meetings-helper.plist
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/$(WRAPPER_NAME)/Contents/Library/LaunchAgents/com.kacperpietrzyk.nexus.meetings-helper.plist
+    dependencies:
+      - package: NexusCore
+      - package: NexusSync
+      - package: NexusAI
+      - package: NexusUI
+      - package: NexusSearch
+      - package: TasksFeature
+      - package: InboxShell
+      - package: CommandPaletteShell
+      - package: NexusAgentTools
+        product: NexusAgentTools
+      - package: NexusAgentTools
+        product: NexusAgentToolsExtras
+      - package: NexusAgent
+      - package: NexusMeetings
+      - target: NexusMeetingsHelper
+        embed: true
+        link: false
+        copy:
+          destination: wrapper
+          subpath: Contents/Library/LoginItems
+      - target: NexusMCPSidecar
+        embed: false
+        link: false
+
+  NexusiOS:
+    type: application
+    platform: iOS
+    sources: [Apps/NexusiOS]
+    settings:
+      base:
+        PRODUCT_NAME: Nexus
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.iOS
+        INFOPLIST_FILE: Apps/NexusiOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/NexusiOS/NexusiOS.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+    dependencies:
+      - package: NexusCore
+      - package: NexusSync
+      - package: NexusAI
+      - package: NexusUI
+      - package: NexusSearch
+      - package: TasksFeature
+      - package: InboxShell
+      - package: CommandPaletteShell
+      - package: NexusAgentTools
+      - package: NexusAgent
+      - package: NexusMeetings
+      - target: NexusiOSDigestExtension
+      - target: NexusiOSWidgets
+      - target: NexusiOSShare
+        embed: true
+      - target: NexusWatch
+        embed: true
+
+  NexusiOSDigestExtension:
+    type: app-extension
+    platform: iOS
+    sources: [Apps/NexusiOSDigestExtension]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.iOS.DigestExtension
+        INFOPLIST_FILE: Apps/NexusiOSDigestExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/NexusiOSDigestExtension/NexusiOSDigestExtension.entitlements
+    dependencies:
+      - package: NexusCore
+      - package: NexusSync
+
+  NexusiOSWidgets:
+    type: app-extension
+    platform: iOS
+    sources: [Apps/NexusiOSWidgets]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.iOS.Widgets
+        INFOPLIST_FILE: Apps/NexusiOSWidgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/NexusiOSWidgets/NexusiOSWidgets.entitlements
+    dependencies:
+      - package: NexusCore
+      - package: NexusSync
+
+  NexusiOSShare:
+    type: app-extension
+    platform: iOS
+    sources: [Apps/NexusiOSShare]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.iOS.Share
+        INFOPLIST_FILE: Apps/NexusiOSShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/NexusiOSShare/NexusiOSShare.entitlements
+    dependencies:
+      - package: NexusCore
+      - package: NexusSync
+      - package: NexusAI
+      - package: NexusUI
+      - package: TasksFeature
+
+  NexusWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: Apps/NexusWatch
+        excludes:
+          - Tests
+    settings:
+      base:
+        PRODUCT_NAME: Nexus
+        PRODUCT_MODULE_NAME: NexusWatch
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.iOS.Watch
+        INFOPLIST_FILE: Apps/NexusWatch/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/NexusWatch/NexusWatch.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - package: NexusCore
+      - package: NexusSync
+      - package: NexusUI
+      - target: NexusWatchComplications
+
+  NexusWatchTests:
+    type: bundle.unit-test
+    platform: watchOS
+    sources: [Apps/NexusWatch/Tests]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.iOS.WatchTests
+        INFOPLIST_FILE: Apps/NexusWatch/Tests/Info.plist
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Nexus.app/Nexus
+        BUNDLE_LOADER: $(TEST_HOST)
+    dependencies:
+      - target: NexusWatch
+      - package: NexusCore
+
+  NexusWatchComplications:
+    type: app-extension
+    platform: watchOS
+    sources: [Apps/NexusWatchComplications]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.iOS.Watch.Complications
+        INFOPLIST_FILE: Apps/NexusWatchComplications/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/NexusWatchComplications/NexusWatchComplications.entitlements
+    dependencies:
+      - package: NexusCore
+      - package: NexusSync
+
+  NexusMeetingsHelper:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources: [Apps/NexusMeetingsHelper]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.nexus.meetings-helper
+        INFOPLIST_FILE: Apps/NexusMeetingsHelper/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/NexusMeetingsHelper/NexusMeetingsHelper.entitlements
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Nexus records the microphone during meetings so it can attribute your speech in the transcript.
+        SKIP_INSTALL: YES
+        INSTALL_PATH: "$(LOCAL_LIBRARY_DIR)/LoginItems"
+    dependencies:
+      - package: NexusMeetings
+      - package: NexusCore
+      - package: NexusAI
+      - package: NexusSync
+
+  # NexusMCPSidecar is a macOS command-line tool target embedded into NexusMac
+  # at build time via the host app's postBuildScript. Its 7 unit tests live in
+  # `Apps/NexusMCPSidecar/Tests/NexusMCPSidecarTests` and run via SPM:
+  #   cd Apps/NexusMCPSidecar && swift test
+  # There is no `NexusMCPSidecarTests` Xcode target, so `xcodebuild test
+  # -scheme NexusMCPSidecar` is not supported. CI runs `swift test` for the
+  # sidecar in a dedicated job (see .github/workflows/ci.yml).
+  NexusMCPSidecar:
+    type: tool
+    platform: macOS
+    sources: [Apps/NexusMCPSidecar/Sources]
+    settings:
+      base:
+        PRODUCT_NAME: nexus-mcp
+        PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.MCPSidecar
+        INFOPLIST_FILE: Apps/NexusMCPSidecar/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Apps/NexusMCPSidecar/NexusMCPSidecar.entitlements
+        CREATE_INFOPLIST_SECTION_IN_BINARY: NO
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: mcp-swift-sdk
+        product: MCP

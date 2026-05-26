@@ -1,0 +1,61 @@
+included:
+  - Apps
+  - Packages
+
+excluded:
+  - .build
+  - .swiftpm
+  - DerivedData
+  - Apps/*/.build
+  - Apps/*/.swiftpm
+  - Packages/*/.build
+  - Packages/*/.swiftpm
+  - Packages/*/build
+  - Packages/*/Package.swift
+  - Packages/NexusUI/Sources/NexusUI/Lab
+
+disabled_rules:
+  - todo                       # TODO/FIXME OK at this stage
+  - identifier_name            # too aggressive for SwiftUI
+  - trailing_comma             # swift-format's TrailingComma rule mandates trailing commas; let it win
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - first_where
+  - last_where
+  - sorted_first_last
+  - contains_over_first_not_nil
+  - reduce_into
+  - redundant_nil_coalescing
+
+# analyzer_rules require `swiftlint analyze --compiler-log-path <log>`.
+# Plain `swiftlint lint` (used by CI in Task 6) does NOT run these.
+# Wire `swiftlint analyze` against an xcodebuild log if/when CI catches unused-import regressions.
+analyzer_rules:
+  - unused_import
+  - unused_declaration
+
+line_length:
+  warning: 140
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+type_body_length:
+  warning: 400
+  error: 600
+
+file_length:
+  warning: 600
+  error: 1000
+
+function_body_length:
+  warning: 60
+  error: 120
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+reporter: "xcode"

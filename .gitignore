@@ -1,0 +1,47 @@
+# Brainstorm artifacts
+.superpowers/
+.bug-hunter/
+.DS_Store
+
+# Claude Code: local-only permission overrides (project skills tracked separately)
+.claude/settings.local.json
+
+# Xcode
+*.xcodeproj
+!project.yml
+xcuserdata/
+*.xcuserstate
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+build/
+.build/
+
+# Swift Package Manager
+Packages/*/.build/
+Packages/*/.swiftpm/
+Packages/*/Package.resolved
+.swiftpm/
+
+# CocoaPods (not used; defensive)
+Pods/
+
+# Carthage (not used; defensive)
+Carthage/Build/
+
+# fastlane (not used; defensive)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Local signing override (per-developer Team ID)
+Config/Signing.local.xcconfig
+
+# AI assistant scaffolding (kept in the private archive only)
+.claude/
+.codex/
+.agents/
+skills-lock.json

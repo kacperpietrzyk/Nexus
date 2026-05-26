@@ -1,0 +1,402 @@
+[
+  {
+    "id": "1001",
+    "content": "Buy milk",
+    "due_date": "2026-06-01T17:00:00Z",
+    "priority": 4,
+    "labels": ["shopping", "errands"],
+    "is_completed": false
+  },
+  {
+    "id": "1002",
+    "content": "Quarterly review prep",
+    "due_date": "2026-06-15T09:00:00Z",
+    "priority": 1,
+    "labels": ["work", "review"],
+    "is_completed": false
+  },
+  {
+    "id": "1003",
+    "content": "Call dentist",
+    "due_date": null,
+    "priority": 2,
+    "labels": ["personal", "health"],
+    "is_completed": false
+  },
+  {
+    "id": "1004",
+    "content": "Submit expense report",
+    "due_date": "2026-05-15T17:00:00Z",
+    "priority": 3,
+    "labels": ["work", "admin"],
+    "is_completed": true
+  },
+  {
+    "id": "1005",
+    "content": "Renew parking permit",
+    "due_date": "2026-05-18T08:00:00Z",
+    "priority": 2,
+    "labels": ["admin", "errands"],
+    "is_completed": false
+  },
+  {
+    "id": "1006",
+    "content": "Draft release notes",
+    "due_date": "2026-05-19T12:00:00Z",
+    "priority": 1,
+    "labels": ["work", "writing"],
+    "is_completed": false
+  },
+  {
+    "id": "1007",
+    "content": "Book train tickets",
+    "due_date": "2026-05-20T18:30:00Z",
+    "priority": 3,
+    "labels": ["travel"],
+    "is_completed": false
+  },
+  {
+    "id": "1008",
+    "content": "Water balcony plants",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["home"],
+    "is_completed": false
+  },
+  {
+    "id": "1009",
+    "content": "Prepare design critique",
+    "due_date": "2026-05-21T10:00:00Z",
+    "priority": 2,
+    "labels": ["work", "design"],
+    "is_completed": false
+  },
+  {
+    "id": "1010",
+    "content": "Archive old invoices",
+    "due_date": "2026-05-22T16:00:00Z",
+    "priority": 3,
+    "labels": ["finance", "admin"],
+    "is_completed": true
+  },
+  {
+    "id": "1011",
+    "content": "Plan weekend menu",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["home", "food"],
+    "is_completed": false
+  },
+  {
+    "id": "1012",
+    "content": "Follow up with accountant",
+    "due_date": "2026-05-25T09:30:00Z",
+    "priority": 1,
+    "labels": ["finance"],
+    "is_completed": false
+  },
+  {
+    "id": "1013",
+    "content": "Order replacement charger",
+    "due_date": "2026-05-25T14:00:00Z",
+    "priority": 3,
+    "labels": ["shopping", "tech"],
+    "is_completed": false
+  },
+  {
+    "id": "1014",
+    "content": "Update project roadmap",
+    "due_date": "2026-05-26T11:00:00Z",
+    "priority": 1,
+    "labels": ["work", "planning"],
+    "is_completed": false
+  },
+  {
+    "id": "1015",
+    "content": "Clean downloads folder",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["admin", "digital"],
+    "is_completed": false
+  },
+  {
+    "id": "1016",
+    "content": "Schedule bike service",
+    "due_date": "2026-05-27T15:00:00Z",
+    "priority": 2,
+    "labels": ["errands", "health"],
+    "is_completed": false
+  },
+  {
+    "id": "1017",
+    "content": "Review tax documents",
+    "due_date": "2026-05-28T19:00:00Z",
+    "priority": 1,
+    "labels": ["finance", "review"],
+    "is_completed": false
+  },
+  {
+    "id": "1018",
+    "content": "Send birthday card",
+    "due_date": "2026-05-29T08:00:00Z",
+    "priority": 2,
+    "labels": ["personal"],
+    "is_completed": false
+  },
+  {
+    "id": "1019",
+    "content": "Reconcile subscriptions",
+    "due_date": "2026-05-29T13:00:00Z",
+    "priority": 3,
+    "labels": ["finance", "digital"],
+    "is_completed": true
+  },
+  {
+    "id": "1020",
+    "content": "Read saved research papers",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["learning"],
+    "is_completed": false
+  },
+  {
+    "id": "1021",
+    "content": "Prepare demo script",
+    "due_date": "2026-06-02T09:00:00Z",
+    "priority": 1,
+    "labels": ["work", "demo"],
+    "is_completed": false
+  },
+  {
+    "id": "1022",
+    "content": "Buy printer paper",
+    "due_date": "2026-06-02T17:30:00Z",
+    "priority": 4,
+    "labels": ["shopping", "office"],
+    "is_completed": false
+  },
+  {
+    "id": "1023",
+    "content": "Organize meeting notes",
+    "due_date": "2026-06-03T11:30:00Z",
+    "priority": 3,
+    "labels": ["work", "notes"],
+    "is_completed": false
+  },
+  {
+    "id": "1024",
+    "content": "Confirm doctor appointment",
+    "due_date": "2026-06-03T15:00:00Z",
+    "priority": 2,
+    "labels": ["personal", "health"],
+    "is_completed": false
+  },
+  {
+    "id": "1025",
+    "content": "Refill coffee beans",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["shopping", "home"],
+    "is_completed": false
+  },
+  {
+    "id": "1026",
+    "content": "Finalize sprint goals",
+    "due_date": "2026-06-04T10:00:00Z",
+    "priority": 1,
+    "labels": ["work", "planning"],
+    "is_completed": false
+  },
+  {
+    "id": "1027",
+    "content": "Check passport expiry",
+    "due_date": "2026-06-04T18:00:00Z",
+    "priority": 2,
+    "labels": ["travel", "admin"],
+    "is_completed": false
+  },
+  {
+    "id": "1028",
+    "content": "Create backup archive",
+    "due_date": "2026-06-05T20:00:00Z",
+    "priority": 2,
+    "labels": ["digital", "admin"],
+    "is_completed": false
+  },
+  {
+    "id": "1029",
+    "content": "Donate unused books",
+    "due_date": "2026-06-06T12:00:00Z",
+    "priority": 3,
+    "labels": ["home", "errands"],
+    "is_completed": false
+  },
+  {
+    "id": "1030",
+    "content": "Watch conference recording",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["learning", "work"],
+    "is_completed": true
+  },
+  {
+    "id": "1031",
+    "content": "Polish onboarding checklist",
+    "due_date": "2026-06-08T09:00:00Z",
+    "priority": 2,
+    "labels": ["work", "process"],
+    "is_completed": false
+  },
+  {
+    "id": "1032",
+    "content": "Pick up dry cleaning",
+    "due_date": "2026-06-08T17:45:00Z",
+    "priority": 3,
+    "labels": ["errands"],
+    "is_completed": false
+  },
+  {
+    "id": "1033",
+    "content": "Update emergency contacts",
+    "due_date": "2026-06-09T08:30:00Z",
+    "priority": 2,
+    "labels": ["personal", "admin"],
+    "is_completed": false
+  },
+  {
+    "id": "1034",
+    "content": "Review pull request queue",
+    "due_date": "2026-06-09T13:00:00Z",
+    "priority": 1,
+    "labels": ["work", "code"],
+    "is_completed": false
+  },
+  {
+    "id": "1035",
+    "content": "Plan July budget",
+    "due_date": "2026-06-10T18:00:00Z",
+    "priority": 2,
+    "labels": ["finance", "planning"],
+    "is_completed": false
+  },
+  {
+    "id": "1036",
+    "content": "Sort photo library",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["digital", "personal"],
+    "is_completed": false
+  },
+  {
+    "id": "1037",
+    "content": "Prepare client agenda",
+    "due_date": "2026-06-11T09:15:00Z",
+    "priority": 1,
+    "labels": ["work", "meeting"],
+    "is_completed": false
+  },
+  {
+    "id": "1038",
+    "content": "Replace air filter",
+    "due_date": "2026-06-11T19:00:00Z",
+    "priority": 3,
+    "labels": ["home"],
+    "is_completed": false
+  },
+  {
+    "id": "1039",
+    "content": "Refresh gym plan",
+    "due_date": "2026-06-12T07:00:00Z",
+    "priority": 2,
+    "labels": ["health"],
+    "is_completed": false
+  },
+  {
+    "id": "1040",
+    "content": "Close stale browser tabs",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["digital"],
+    "is_completed": false
+  },
+  {
+    "id": "1041",
+    "content": "Update home inventory",
+    "due_date": "2026-06-13T11:00:00Z",
+    "priority": 3,
+    "labels": ["home", "admin"],
+    "is_completed": false
+  },
+  {
+    "id": "1042",
+    "content": "Send workshop feedback",
+    "due_date": "2026-06-13T16:00:00Z",
+    "priority": 2,
+    "labels": ["learning", "work"],
+    "is_completed": true
+  },
+  {
+    "id": "1043",
+    "content": "Plan team retro",
+    "due_date": "2026-06-16T10:00:00Z",
+    "priority": 1,
+    "labels": ["work", "meeting"],
+    "is_completed": false
+  },
+  {
+    "id": "1044",
+    "content": "Restock first aid kit",
+    "due_date": "2026-06-16T18:30:00Z",
+    "priority": 3,
+    "labels": ["health", "home"],
+    "is_completed": false
+  },
+  {
+    "id": "1045",
+    "content": "Research standing desk mats",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["shopping", "office"],
+    "is_completed": false
+  },
+  {
+    "id": "1046",
+    "content": "Clean task labels",
+    "due_date": "2026-06-17T12:00:00Z",
+    "priority": 2,
+    "labels": ["digital", "review"],
+    "is_completed": false
+  },
+  {
+    "id": "1047",
+    "content": "Send insurance documents",
+    "due_date": "2026-06-18T09:30:00Z",
+    "priority": 1,
+    "labels": ["finance", "admin"],
+    "is_completed": false
+  },
+  {
+    "id": "1048",
+    "content": "Schedule deep work block",
+    "due_date": "2026-06-18T14:00:00Z",
+    "priority": 2,
+    "labels": ["work", "focus"],
+    "is_completed": false
+  },
+  {
+    "id": "1049",
+    "content": "Recycle old electronics",
+    "due_date": "2026-06-19T17:00:00Z",
+    "priority": 3,
+    "labels": ["errands", "tech"],
+    "is_completed": false
+  },
+  {
+    "id": "1050",
+    "content": "Plan next import batch",
+    "due_date": null,
+    "priority": 4,
+    "labels": ["planning", "digital"],
+    "is_completed": false
+  }
+]
