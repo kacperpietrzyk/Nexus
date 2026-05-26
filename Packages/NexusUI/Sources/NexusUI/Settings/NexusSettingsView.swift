@@ -32,7 +32,7 @@ public struct NexusSettingsView: View {
     /// Optional Tasks-section wiring. When `notificationsAuthorized` is non-nil
     /// the Tasks section renders — apps inject this from a
     /// `NotificationPermissionState` (TasksFeature) at the composition root.
-    /// `false` triggers the "Notyfikacje wyłączone" banner.
+    /// `false` triggers the "Notifications disabled" banner.
     private let notificationsAuthorized: Bool?
     private let quietHoursStartTime: Binding<Date>?
     private let quietHoursEndTime: Binding<Date>?
@@ -132,21 +132,21 @@ public struct NexusSettingsView: View {
             label: "Manage Models",
             systemImage: "cpu",
             destination: manageModelsContent,
-            footer: "Pobrane modele lokalne, przypisanie czatu/embeddera, pamięć i zwalnianie zasobów."
+            footer: "Downloaded local models, chat/embedder assignment, memory, and resource release."
         )
         macNavigationSection(
             title: "Agent",
             label: "Agent",
             systemImage: "sparkles",
             destination: agentSettingsContent,
-            footer: "Pamięć agenta, indeksowanie, harmonogramy, audyt i routing dostawców."
+            footer: "Agent memory, indexing, schedules, audit, and provider routing."
         )
         macNavigationSection(
-            title: "Spotkania",
-            label: "Spotkania",
+            title: "Meetings",
+            label: "Meetings",
             systemImage: "person.wave.2",
             destination: meetingsSettingsContent,
-            footer: "Nagrywanie, transkrypcja, prompty podsumowań, retencja i importy."
+            footer: "Recording, transcription, summary prompts, retention, and imports."
         )
         if advancedEnabled, let config = externalAccessConfig {
             ExternalAccessSection(
@@ -160,10 +160,10 @@ public struct NexusSettingsView: View {
     }
 
     private var macGeneralSection: some View {
-        macSettingsSection("Ogólne") {
+        macSettingsSection("General") {
             VStack(spacing: 0) {
-                macSettingsRow("Motyw") {
-                    Picker("Motyw", selection: $theme) {
+                macSettingsRow("Theme") {
+                    Picker("Theme", selection: $theme) {
                         ForEach(NexusTheme.allCases, id: \.rawValue) { value in
                             Text(label(for: value)).tag(value.rawValue)
                         }
@@ -173,28 +173,28 @@ public struct NexusSettingsView: View {
                     .frame(width: 142)
                 }
                 macDivider()
-                macHelperText("Tryb jasny pojawi się po ustabilizowaniu bazowych tokenów.")
+                macHelperText("Light mode arrives once the base tokens stabilize.")
                 macDivider()
-                macSettingsRow("Pokaż zaawansowane funkcje") {
+                macSettingsRow("Show advanced features") {
                     Toggle("", isOn: $advancedEnabled)
                         .labelsHidden()
                         .toggleStyle(.switch)
                 }
                 macDivider()
-                macHelperText("Odsłania dostęp zewnętrzny i zaawansowane ustawienia dostawców chmurowych.")
+                macHelperText("Reveals external access and advanced cloud-provider settings.")
             }
         }
     }
 
     private var macSyncSection: some View {
-        macSettingsSection("Synchronizacja") {
+        macSettingsSection("Sync") {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: cloudKitEnabled ? "checkmark.icloud.fill" : "icloud.slash")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(cloudKitEnabled ? NexusColor.Text.tertiary : NexusColor.Text.secondary)
                     .frame(width: 18, alignment: .center)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(cloudKitEnabled ? "iCloud aktywny" : "iCloud niedostępny")
+                    Text(cloudKitEnabled ? "iCloud active" : "iCloud unavailable")
                         .font(NexusType.bodySmall.weight(.semibold))
                         .foregroundStyle(NexusColor.Text.primary)
                     Text(containerIdentifier)
@@ -202,7 +202,7 @@ public struct NexusSettingsView: View {
                         .foregroundStyle(NexusColor.Text.tertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text(cloudKitEnabled ? "Prywatna baza CloudKit jest włączona." : "Wyłączone w lokalnym środowisku deweloperskim.")
+                    Text(cloudKitEnabled ? "CloudKit private database is enabled." : "Disabled in the local development environment.")
                         .font(NexusType.caption)
                         .foregroundStyle(NexusColor.Text.tertiary)
                 }
@@ -224,8 +224,8 @@ public struct NexusSettingsView: View {
     private var macTasksSection: some View {
         if let config = tasksConfig {
             macSettingsSection(
-                "Zadania",
-                footer: "Nexus czyta wydarzenia z systemowego Kalendarza w trybie tylko do odczytu. Nic nie tworzy ani nie modyfikuje."
+                "Tasks",
+                footer: "Nexus reads events from the system Calendar in read-only mode. It never creates or modifies anything."
             ) {
                 VStack(spacing: 0) {
                     if !config.authorized {
@@ -235,19 +235,19 @@ public struct NexusSettingsView: View {
                             .padding(.vertical, 12)
                         macDivider()
                     }
-                    macSettingsRow("Cisza nocna od") {
+                    macSettingsRow("Quiet hours from") {
                         DatePicker("", selection: config.start, displayedComponents: .hourAndMinute)
                             .labelsHidden()
                             .frame(width: 102)
                     }
                     macDivider()
-                    macSettingsRow("Cisza nocna do") {
+                    macSettingsRow("Quiet hours until") {
                         DatePicker("", selection: config.end, displayedComponents: .hourAndMinute)
                             .labelsHidden()
                             .frame(width: 102)
                     }
                     macDivider()
-                    macSettingsRow("Pokaż wydarzenia z Kalendarza w Today") {
+                    macSettingsRow("Show Calendar events in Today") {
                         Toggle("", isOn: $calendarEventsInTodayEnabled)
                             .labelsHidden()
                             .toggleStyle(.switch)
@@ -260,7 +260,7 @@ public struct NexusSettingsView: View {
                         macCalendarDeniedRow
                         macDivider()
                     }
-                    macSettingsRow("Uprawnienia Kalendarza") {
+                    macSettingsRow("Calendar permissions") {
                         HStack(spacing: 12) {
                             calendarPermissionStatusLabel
                                 .font(NexusType.bodySmall.weight(.medium))
@@ -279,10 +279,10 @@ public struct NexusSettingsView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(NexusColor.Text.secondary)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Dostęp do Kalendarza wyłączony")
+                Text("Calendar access disabled")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(NexusColor.Text.primary)
-                Text("Włącz uprawnienia w Ustawieniach systemowych, aby zobaczyć wydarzenia w Today.")
+                Text("Enable permission in System Settings to see events in Today.")
                     .font(NexusType.caption)
                     .foregroundStyle(NexusColor.Text.muted)
             }
@@ -501,7 +501,7 @@ public struct NexusSettingsView: View {
 
     private func label(for theme: NexusTheme) -> String {
         switch theme {
-        case .amberDark: return "Ciemny"
+        case .amberDark: return "Dark"
         }
     }
 
@@ -587,20 +587,20 @@ public struct NexusSettingsView: View {
                     deniedBanner
                 }
                 DatePicker(
-                    "Cisza nocna od",
+                    "Quiet hours from",
                     selection: config.start,
                     displayedComponents: .hourAndMinute
                 )
                 DatePicker(
-                    "Cisza nocna do",
+                    "Quiet hours until",
                     selection: config.end,
                     displayedComponents: .hourAndMinute
                 )
                 calendarSettingsArea
             } header: {
-                nexusSettingsSectionHeader("Zadania")
+                nexusSettingsSectionHeader("Tasks")
             } footer: {
-                Text("Nexus czyta wydarzenia z systemowego Kalendarza w trybie tylko do odczytu. Nic nie tworzy ani nie modyfikuje.")
+                Text("Nexus reads events from the system Calendar in read-only mode. It never creates or modifies anything.")
                     .font(NexusType.caption)
                     .foregroundStyle(NexusColor.Text.muted)
             }
@@ -609,7 +609,7 @@ public struct NexusSettingsView: View {
 
     @ViewBuilder
     private var calendarSettingsArea: some View {
-        Toggle("Pokaż wydarzenia z Kalendarza w Today", isOn: $calendarEventsInTodayEnabled)
+        Toggle("Show Calendar events in Today", isOn: $calendarEventsInTodayEnabled)
             .onChange(of: calendarEventsInTodayEnabled) { _, newValue in
                 guard newValue else { return }
                 switch calendarPermission.status {
@@ -633,10 +633,10 @@ public struct NexusSettingsView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(NexusColor.Text.secondary)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Dostęp do Kalendarza wyłączony")
+                        Text("Calendar access disabled")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(NexusColor.Text.primary)
-                        Text("Włącz uprawnienia w Ustawieniach systemowych, aby zobaczyć wydarzenia w Today.")
+                        Text("Enable permission in System Settings to see events in Today.")
                             .font(NexusType.caption)
                             .foregroundStyle(NexusColor.Text.muted)
                     }
@@ -648,7 +648,7 @@ public struct NexusSettingsView: View {
 
         inlineStatusCard {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text("Uprawnienia Kalendarza")
+                Text("Calendar permissions")
                     .font(NexusType.bodySmall.weight(.medium))
                     .foregroundStyle(NexusColor.Text.secondary)
                 Spacer(minLength: 12)
@@ -682,10 +682,10 @@ public struct NexusSettingsView: View {
     @ViewBuilder
     private var openCalendarSettingsButton: some View {
         #if os(macOS)
-        Button("Otwórz Ustawienia", action: openCalendarSettings)
+        Button("Open Settings", action: openCalendarSettings)
             .buttonStyle(.link)
         #else
-        Button("Otwórz Ustawienia", action: openCalendarSettings)
+        Button("Open Settings", action: openCalendarSettings)
         #endif
     }
 
@@ -699,19 +699,19 @@ public struct NexusSettingsView: View {
         // are low-salience → `Text.muted`.
         switch calendarPermission.status {
         case .notDetermined:
-            Text("Nie pytano")
+            Text("Not requested")
                 .foregroundStyle(NexusColor.Text.muted)
         case .denied:
-            Text("Odmówiono")
+            Text("Denied")
                 .foregroundStyle(NexusColor.Text.primary)
         case .restricted:
-            Text("Ograniczony")
+            Text("Restricted")
                 .foregroundStyle(NexusColor.Text.primary)
         case .fullAccess:
-            Text("Przyznany")
+            Text("Granted")
                 .foregroundStyle(NexusColor.Text.secondary)
         case .writeOnly:
-            Text("Tylko zapis")
+            Text("Write only")
                 .foregroundStyle(NexusColor.Text.muted)
         }
     }
@@ -743,9 +743,9 @@ public struct NexusSettingsView: View {
                     Label("Manage Models", systemImage: "cpu")
                 }
             } header: {
-                nexusSettingsSectionHeader("Modele")
+                nexusSettingsSectionHeader("Models")
             } footer: {
-                Text("Pobrane modele lokalne, przypisanie czatu/embeddera, pamięć i zwalnianie zasobów.")
+                Text("Downloaded local models, chat/embedder assignment, memory, and resource release.")
                     .font(NexusType.caption)
                     .foregroundStyle(NexusColor.Text.muted)
             }
@@ -764,7 +764,7 @@ public struct NexusSettingsView: View {
             } header: {
                 nexusSettingsSectionHeader("Agent")
             } footer: {
-                Text("Pamięć agenta, indeksowanie, harmonogramy, audyt i routing dostawców.")
+                Text("Agent memory, indexing, schedules, audit, and provider routing.")
                     .font(NexusType.caption)
                     .foregroundStyle(NexusColor.Text.muted)
             }
@@ -778,12 +778,12 @@ public struct NexusSettingsView: View {
                 NavigationLink {
                     meetingsSettingsContent
                 } label: {
-                    Label("Spotkania", systemImage: "person.wave.2")
+                    Label("Meetings", systemImage: "person.wave.2")
                 }
             } header: {
-                nexusSettingsSectionHeader("Spotkania")
+                nexusSettingsSectionHeader("Meetings")
             } footer: {
-                Text("Nagrywanie, transkrypcja, prompty podsumowań, retencja i importy.")
+                Text("Recording, transcription, summary prompts, retention, and imports.")
                     .font(NexusType.caption)
                     .foregroundStyle(NexusColor.Text.muted)
             }
@@ -797,10 +797,10 @@ public struct NexusSettingsView: View {
             // shape already carries the negative semantic, and the
             // heavier Geist weight + `Text.primary` ink step (§2
             // LabPalette.ink) restore the lost salience without color.
-            Label("Notyfikacje wyłączone", systemImage: "bell.slash.fill")
+            Label("Notifications disabled", systemImage: "bell.slash.fill")
                 .foregroundStyle(NexusColor.Text.primary)
                 .font(.subheadline.weight(.bold))
-            Button("Otwórz Ustawienia systemowe", action: openSystemSettings)
+            Button("Open System Settings", action: openSystemSettings)
                 .buttonStyle(.borderless)
         }
         .padding(.vertical, 4)

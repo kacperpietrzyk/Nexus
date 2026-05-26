@@ -29,7 +29,7 @@ public struct NexusToast: View {
                 Rectangle()
                     .fill(Color.white.opacity(0.07))
                     .frame(width: 1, height: 12)
-                Text("Cofnij")
+                Text("Undo")
                     .font(NexusType.meta)
                     .foregroundStyle(NexusColor.Text.primary)
             }
@@ -42,8 +42,8 @@ public struct NexusToast: View {
 
 #Preview {
     VStack(spacing: 12) {
-        NexusToast(icon: "checkmark.circle", message: "Zadanie zapisane")
-        NexusToast(icon: "arrow.uturn.backward", message: "Cofnięto", undo: true)
+        NexusToast(icon: "checkmark.circle", message: "Task saved")
+        NexusToast(icon: "arrow.uturn.backward", message: "Undone", undo: true)
     }
     .padding(40)
     .background(NexusColor.Background.base)

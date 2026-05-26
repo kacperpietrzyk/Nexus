@@ -13,28 +13,28 @@ public struct GeneralSettingsSection: View {
 
     public var body: some View {
         Section {
-            Picker("Motyw", selection: $theme) {
+            Picker("Theme", selection: $theme) {
                 ForEach(NexusTheme.allCases, id: \.rawValue) { value in
                     Text(label(for: value)).tag(value.rawValue)
                 }
             }
             .pickerStyle(.menu)
-            Text("Tryb jasny pojawi się po ustabilizowaniu bazowych tokenów.")
+            Text("Light mode arrives once the base tokens stabilize.")
                 .font(NexusType.caption)
                 .foregroundStyle(NexusColor.Text.muted)
 
-            Toggle("Pokaż zaawansowane funkcje", isOn: $advancedEnabled)
-            Text("Odsłania dostęp zewnętrzny i zaawansowane ustawienia dostawców chmurowych.")
+            Toggle("Show advanced features", isOn: $advancedEnabled)
+            Text("Reveals external access and advanced cloud-provider settings.")
                 .font(NexusType.caption)
                 .foregroundStyle(NexusColor.Text.muted)
         } header: {
-            nexusSettingsSectionHeader("Ogólne")
+            nexusSettingsSectionHeader("General")
         }
     }
 
     private func label(for theme: NexusTheme) -> String {
         switch theme {
-        case .amberDark: return "Ciemny"
+        case .amberDark: return "Dark"
         }
     }
 }

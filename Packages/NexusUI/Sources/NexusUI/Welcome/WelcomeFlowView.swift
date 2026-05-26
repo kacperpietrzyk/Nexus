@@ -26,7 +26,7 @@ public struct WelcomeFlowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             NexusButton(variant: .outline, size: .sm, action: skip) {
-                Text("Pomiń")
+                Text("Skip")
             }
             .padding(20)
         }
@@ -54,14 +54,14 @@ public struct WelcomeFlowView: View {
             //   real Mac sheet host `WelcomeFlowView(...).frame(minWidth: 640, …)`
             //   (see `Apps/NexusMac/NexusMacApp.swift`) — macOS sheets render at the
             //   minimum, so at 640 the centred card's right edge is at x≈526. The
-            //   "Pomiń" button is `ZStack(.topTrailing)` + `.padding(20)` over
+            //   "Skip" button is `ZStack(.topTrailing)` + `.padding(20)` over
             //   `NexusButton(.outline, .sm)` (`hPadding` 10×2 + `NexusType.meta`
             //   6-char label) ⇒ its left edge sits at x≈550 (button width ≈70,
             //   right inset 20), leaving ~24pt clearance so the card never collides
             //   with the skip affordance. Widened from the oracle's 320-content
             //   (which crushes the screens' 64pt hero icon + `NexusType.h1` title +
             //   their own `.padding(.horizontal, 32)`) up to the largest width that
-            //   still clears "Pomiń" at minWidth 640. No fixed height: the built-in
+            //   still clears "Skip" at minWidth 640. No fixed height: the built-in
             //   screens' `Spacer(minLength:40)…Spacer()` expand to fill the proposed
             //   sheet height through the layout-transparent `nexusGlass` (card ≈
             //   fills flexible height, expands via the screens' internal Spacers,
@@ -75,13 +75,13 @@ public struct WelcomeFlowView: View {
             //   `WelcomeFlowPresenter` in a `.fullScreenCover`. iPhone logical width
             //   is ~390pt (SE: 375pt). A centred glass card wide enough to be usable
             //   (~360 content + 2×26 padding = ~412pt outer) overflows the screen,
-            //   and a narrower card that fits collides with the top-trailing "Pomiń"
-            //   affordance at `.padding(20)`. Relocating "Pomiń" on iPhone is a
+            //   and a narrower card that fits collides with the top-trailing "Skip"
+            //   affordance at `.padding(20)`. Relocating "Skip" on iPhone is a
             //   structural design decision with no oracle answer (the oracle storyboard
             //   is a Mac 3-up canvas, not a runtime iPhone layout) and no user was
             //   available under the autonomous mandate to choose. Therefore the iOS
             //   Welcome oracle-card geometry is **deferred to MP-5.1** (requires
-            //   "Pomiń" placement decision + iPhone hardware smoke) — same precedent
+            //   "Skip" placement decision + iPhone hardware smoke) — same precedent
             //   class as MP-4.1's iOS Settings deferral. The #else arm is the
             //   byte-identical pre-slice-1 fluid layout.
             #if os(macOS)
@@ -143,12 +143,12 @@ public struct WelcomeFlowView: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Krok \(flow.currentScreen + 1) z \(flow.totalScreenCount)")
+        .accessibilityLabel("Step \(flow.currentScreen + 1) of \(flow.totalScreenCount)")
     }
 
     private var primaryButton: some View {
         NexusButton(variant: .primary, size: .lg, action: advance) {
-            Text(flow.isLastScreen ? "Zacznijmy" : "Dalej")
+            Text(flow.isLastScreen ? "Let's go" : "Next")
                 .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: 320)

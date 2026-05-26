@@ -120,14 +120,14 @@ public struct DownloadModelStep: View {
                     .accessibilityHidden(true)
 
                 VStack(spacing: 10) {
-                    Text("Modele AI na urządzeniu")
+                    Text("On-device AI models")
                         .font(NexusType.h1)
                         .foregroundStyle(NexusColor.Text.primary)
                         .multilineTextAlignment(.center)
 
                     Text(
-                        "Nexus może używać lokalnych modeli MLX do inteligentnego podsumowywania"
-                            + " i wyszukiwania semantycznego bez wysyłania danych do chmury."
+                        "Nexus can use local MLX models for intelligent summarization"
+                            + " and semantic search without sending data to the cloud."
                     )
                     .font(NexusType.body)
                     .foregroundStyle(NexusColor.Text.tertiary)
@@ -157,7 +157,7 @@ public struct DownloadModelStep: View {
             }
             .padding(.horizontal, 32)
         }
-        .accessibilityLabel("Konfiguracja modeli AI")
+        .accessibilityLabel("AI model setup")
     }
 
     // MARK: - Subviews
@@ -165,7 +165,7 @@ public struct DownloadModelStep: View {
     @ViewBuilder
     private var deviceMemoryLabel: some View {
         let ramGB = Int(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
-        Text("Pamięć urządzenia: \(ramGB) GB RAM")
+        Text("Device memory: \(ramGB) GB RAM")
             .font(NexusType.meta)
             .foregroundStyle(NexusColor.Text.muted)
     }
@@ -197,14 +197,14 @@ public struct DownloadModelStep: View {
                 Text(entry.displayName)
                     .font(NexusType.bodySmall)
                     .foregroundStyle(NexusColor.Text.primary)
-                Text(String(format: "%.1f GB · %d K kontekstu", entry.sizeGB, entry.contextLength / 1000))
+                Text(String(format: "%.1f GB · %d K context", entry.sizeGB, entry.contextLength / 1000))
                     .font(NexusType.caption)
                     .foregroundStyle(NexusColor.Text.tertiary)
             }
             Spacer()
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(NexusColor.Text.secondary)
-                .accessibilityLabel("\(label) rekomendowany")
+                .accessibilityLabel("\(label) recommended")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -234,7 +234,7 @@ public struct DownloadModelStep: View {
                 // Skip row
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Pomiń — tylko chmura / Apple Intelligence")
+                        Text("Skip — cloud only / Apple Intelligence")
                             .font(NexusType.bodySmall)
                             .foregroundStyle(NexusColor.Text.secondary)
                     }
@@ -256,7 +256,7 @@ public struct DownloadModelStep: View {
                 .padding(.vertical, 8)
             }
         } label: {
-            Text("Wybierz ręcznie")
+            Text("Choose manually")
                 .font(NexusType.meta)
                 .foregroundStyle(NexusColor.Text.tertiary)
         }
@@ -273,7 +273,7 @@ public struct DownloadModelStep: View {
                     action: {
                         applyDefaultRecommendation(); onContinue()
                     },
-                    label: { Text("Zainstaluj rekomendowane").frame(maxWidth: .infinity) }
+                    label: { Text("Install recommended").frame(maxWidth: .infinity) }
                 )
                 .frame(maxWidth: 320)
 
@@ -283,7 +283,7 @@ public struct DownloadModelStep: View {
                     action: {
                         applySkipPath(); onContinue()
                     },
-                    label: { Text("Pomiń na razie") }
+                    label: { Text("Skip for now") }
                 )
             } else {
                 NexusButton(
@@ -292,7 +292,7 @@ public struct DownloadModelStep: View {
                     action: {
                         applySkipPath(); onContinue()
                     },
-                    label: { Text("Kontynuuj").frame(maxWidth: .infinity) }
+                    label: { Text("Continue").frame(maxWidth: .infinity) }
                 )
                 .frame(maxWidth: 320)
             }
@@ -321,7 +321,7 @@ private struct ModelRadioRow: View {
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(NexusColor.Text.secondary)
-                    .accessibilityLabel("Wybrany")
+                    .accessibilityLabel("Selected")
             } else {
                 Circle()
                     .strokeBorder(NexusColor.Line.regular, lineWidth: 1.5)
