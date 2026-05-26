@@ -1,0 +1,25 @@
+name: DCO
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  dco:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check Signed-off-by on all PR commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          missing=0
+          for c in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
+            if ! git log -1 --format=%B "$c" | grep -qiE '^Signed-off-by: .+ <.+@.+>'; then
+              echo "::error::Commit $c is missing Signed-off-by (use git commit -s)"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 0 ]; then echo "All commits signed off."; fi
+          exit "$missing"
