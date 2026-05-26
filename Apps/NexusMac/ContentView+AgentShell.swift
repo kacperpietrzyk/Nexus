@@ -28,9 +28,9 @@ import SwiftUI
 ///
 /// The thread label is derived from the live view-model (`threads` +
 /// `currentThreadID`, both already published — no new query / behaviour):
-/// `"Wątek: <title>"` for a titled thread, `"Wątek: bieżący"` for the
-/// untitled-default subcase, `"Wątek: nowy"` when no thread is selected.
-/// The oracle's literal `"dziś · 15 maja"` is hard-coded sample text, not a
+/// `"Thread: <title>"` for a titled thread, `"Thread: current"` for the
+/// untitled-default subcase, `"Thread: new"` when no thread is selected.
+/// The oracle's literal `"today · May 15"` is hard-coded sample text, not a
 /// format spec, so no date is rendered (§11 — no invented backend). The
 /// `nowy ⌘⇧A` hint is a real affordance: `⌘⇧A` now navigates-to-Agent
 /// globally, so the hint creates a new thread via the existing
@@ -40,10 +40,10 @@ struct AgentTopControl: View {
 
     private var threadLabel: String {
         guard let currentID = viewModel.currentThreadID else {
-            return "Nowy wątek"
+            return "New thread"
         }
         let title = viewModel.threads.first { $0.id == currentID }?.title ?? ""
-        return title.isEmpty ? "Bieżący wątek" : title
+        return title.isEmpty ? "Current thread" : title
     }
 
     var body: some View {
@@ -64,7 +64,7 @@ struct AgentTopControl: View {
                     .foregroundStyle(NexusColor.Text.primary)
             }
 
-            Text("gotowy")
+            Text("ready")
                 .font(Font.custom("GeistMono-Medium", size: 11))
                 .foregroundStyle(NexusColor.Text.secondary)
                 .padding(.horizontal, 8)
@@ -92,7 +92,7 @@ struct AgentTopControl: View {
                     HStack(spacing: 5) {
                         Image(systemName: "plus")
                             .font(.system(size: 10, weight: .semibold))
-                        Text("Nowy")
+                        Text("New")
                             .font(Font.custom("Geist-SemiBold", size: 12))
                     }
                     .foregroundStyle(NexusColor.Text.secondary)
@@ -103,7 +103,7 @@ struct AgentTopControl: View {
                 }
             )
             .buttonStyle(.plain)
-            .accessibilityLabel("Nowy wątek")
+            .accessibilityLabel("New thread")
         }
     }
 }

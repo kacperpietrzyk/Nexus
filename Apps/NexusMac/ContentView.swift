@@ -192,12 +192,12 @@ struct ContentView: View {
             .init(id: .meetings, systemImage: "person.wave.2", label: "Meetings"),
             .init(id: .tasks, systemImage: "checkmark.square", label: "Tasks"),
             .init(id: .agent, systemImage: "sparkles", label: "Agent"),
-            .init(id: .stats, systemImage: "chart.bar", label: "Statystyki"),
+            .init(id: .stats, systemImage: "chart.bar", label: "Stats"),
         ]
     }
 
     private var railSettingsItem: NexusNavRailItem<TodayNavSelection> {
-        .init(id: .settings, systemImage: "gearshape", label: "Ustawienia")
+        .init(id: .settings, systemImage: "gearshape", label: "Settings")
     }
 
     /// The invariant icon-rail. Lives in `ContentView` (stable) so its
@@ -333,8 +333,8 @@ struct ContentView: View {
         // control mode anyway (no `NexusTopBar`), so this is defensive
         // plumbing parity only.
         case .agent: return "Nexus"
-        case .stats: return "Statystyki"
-        case .settings: return "Ustawienia"
+        case .stats: return "Stats"
+        case .settings: return "Settings"
         }
     }
 
