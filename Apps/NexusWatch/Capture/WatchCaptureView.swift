@@ -9,12 +9,12 @@ struct WatchCaptureView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Nowe zadanie")
+                Text("New task")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(NexusColor.Text.primary)
                     .lineLimit(1)
 
-                Text("Podyktuj krótko. iPhone sparsuje datę i projekt.")
+                Text("Dictate briefly. iPhone will parse the date and project.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(NexusColor.Text.tertiary)
                     .lineLimit(2)
@@ -43,7 +43,7 @@ struct WatchCaptureView: View {
                         }
                     }
                 } label: {
-                    Label("Zapisz", systemImage: "checkmark.circle.fill")
+                    Label("Save", systemImage: "checkmark.circle.fill")
                         .font(.system(size: 16, weight: .semibold))
                         .frame(maxWidth: .infinity, minHeight: 38)
                 }

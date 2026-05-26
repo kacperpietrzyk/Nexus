@@ -27,7 +27,7 @@ struct WatchTaskShortcuts: AppShortcutsProvider {
             intent: WatchAddTaskIntent(),
             phrases: [
                 "Add task in \(.applicationName)",
-                "Dodaj task w \(.applicationName)",
+                "Add a task in \(.applicationName)",
             ],
             shortTitle: "Add Task",
             systemImageName: "plus.circle"

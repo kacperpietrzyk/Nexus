@@ -61,7 +61,7 @@ struct WatchTaskDetailSheet: View {
     }
 
     private var buttonTitle: String {
-        task.statusRaw == TaskStatus.done.rawValue ? "Cofnij" : "Wykonane"
+        task.statusRaw == TaskStatus.done.rawValue ? "Undo" : "Done"
     }
 
     private var buttonIcon: String {
@@ -91,9 +91,9 @@ struct WatchTaskDetailSheet: View {
 
     private func label(for priority: TaskPriority) -> String {
         switch priority {
-        case .high: "Wysoki"
-        case .medium: "Średni"
-        case .low: "Niski"
+        case .high: "High"
+        case .medium: "Medium"
+        case .low: "Low"
         case .none: ""
         }
     }

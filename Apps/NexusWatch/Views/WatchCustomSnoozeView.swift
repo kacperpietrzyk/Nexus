@@ -7,7 +7,7 @@ import SwiftUI
 enum WatchCustomSnoozeChip: String, CaseIterable, Identifiable {
     case oneHour = "1h"
     case fourHours = "4h"
-    case tomorrow = "Jutro"
+    case tomorrow = "Tomorrow"
 
     var id: String { rawValue }
 }
@@ -43,7 +43,7 @@ final class WatchCustomSnoozeViewState {
     }
 }
 
-/// Sheet presented after the user taps "Wybierz…" on a Watch task notification.
+/// Sheet presented after the user taps "Choose…" on a Watch task notification.
 /// Three quick chips seed `selectedUntil`; the Digital Crown DatePicker can
 /// then refine the time.
 struct WatchCustomSnoozeView: View {
@@ -64,14 +64,14 @@ struct WatchCustomSnoozeView: View {
                     }
                 }
                 DatePicker(
-                    "Drzemka do",
+                    "Snooze until",
                     selection: $state.selectedUntil,
                     in: Date()...,
                     displayedComponents: [.date, .hourAndMinute]
                 )
-                Button("Drzemij") { onCommit(state.selectedUntil) }
+                Button("Snooze") { onCommit(state.selectedUntil) }
                     .buttonStyle(.borderedProminent)
-                Button("Anuluj", role: .cancel) { onCancel() }
+                Button("Cancel", role: .cancel) { onCancel() }
                     .buttonStyle(.bordered)
             }
             .padding()

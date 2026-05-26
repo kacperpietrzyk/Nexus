@@ -89,7 +89,7 @@ struct WatchOverdueDigestSchedulerTests {
         await scheduler.refreshAndSchedule()
 
         #expect(delivery.added.count == 1)
-        #expect(delivery.added.first?.content.body == "3 zaległe zadania")
+        #expect(delivery.added.first?.content.body == "3 overdue tasks")
         #expect(delivery.removedIds.contains("digest-overdue") == true)
     }
 
@@ -110,7 +110,7 @@ struct WatchOverdueDigestSchedulerTests {
 
         await scheduler.refreshAndSchedule()
 
-        #expect(delivery.added.first?.content.body == "1 zaległe zadanie")
+        #expect(delivery.added.first?.content.body == "1 overdue task")
     }
 
     @Test func skips_when_iphone_was_reachable_late_yesterday() async throws {

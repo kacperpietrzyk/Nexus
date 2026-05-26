@@ -18,7 +18,7 @@ enum WatchPhoneBridgeError: Error, Equatable {
 }
 
 struct WatchAskNexusReachableReply: Equatable {
-    static let queuedMessage = "Wysłałem do Nexusa. Odpowiedź wróci za chwilę."
+    static let queuedMessage = "Sent to Nexus. A reply will arrive shortly."
 
     let status: String
     let message: String?

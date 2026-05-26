@@ -48,7 +48,7 @@ struct TodayRectangularView: View {
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
             } else {
-                Text("Nic w kalendarzu")
+                Text("Nothing scheduled")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -57,9 +57,9 @@ struct TodayRectangularView: View {
 
     private var headline: String {
         if entry.snapshot.overdueCount > 0 {
-            return "\(entry.snapshot.overdueCount) overdue · \(entry.snapshot.todayCount) dziś"
+            return "\(entry.snapshot.overdueCount) overdue · \(entry.snapshot.todayCount) today"
         }
-        return "\(entry.snapshot.todayCount) dziś"
+        return "\(entry.snapshot.todayCount) today"
     }
 }
 
@@ -72,8 +72,8 @@ struct TodayRectangularComplication: Widget {
                 .containerBackground(.clear, for: .widget)
                 .widgetURL(URL(string: "nexus://today"))
         }
-        .configurationDisplayName("Dziś - podsumowanie")
-        .description("Liczba zadań i najbliższy termin")
+        .configurationDisplayName("Today — summary")
+        .description("Task count and next deadline")
         .supportedFamilies([.accessoryRectangular])
     }
 }

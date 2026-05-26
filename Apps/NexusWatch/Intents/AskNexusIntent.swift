@@ -15,7 +15,7 @@ struct AskNexusIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return .result(dialog: "Nic nie dyktowałeś.")
+            return .result(dialog: "You didn't dictate anything.")
         }
         let reply = try await WatchPhoneBridge.shared.sendAskNexus(prompt: trimmed)
         return .result(dialog: IntentDialog(stringLiteral: reply))
