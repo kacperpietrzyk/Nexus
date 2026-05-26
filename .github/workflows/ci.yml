@@ -26,7 +26,7 @@ jobs:
     name: Lint (SwiftLint + swift-format)
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install SwiftLint
         run: brew install swiftlint
@@ -45,7 +45,7 @@ jobs:
       matrix:
         package: [NexusCore, NexusSync, NexusAI, NexusUI, NexusSearch, TasksFeature, InboxShell, CommandPaletteShell]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Test ${{ matrix.package }}
         working-directory: Packages/${{ matrix.package }}
@@ -55,7 +55,7 @@ jobs:
     name: Test NexusMCPSidecar (SPM)
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # NexusMCPSidecar has no Xcode test target; its tests live in
       # Apps/NexusMCPSidecar/Tests/NexusMCPSidecarTests and only run via SPM.
@@ -67,7 +67,7 @@ jobs:
     name: Build NexusMac
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install XcodeGen + xcbeautify
         run: brew install xcodegen xcbeautify
@@ -93,7 +93,7 @@ jobs:
     name: Build NexusiOS
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install XcodeGen + xcbeautify
         run: brew install xcodegen xcbeautify
@@ -133,7 +133,7 @@ jobs:
     name: Build NexusWatch
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install XcodeGen + xcbeautify
         run: brew install xcodegen xcbeautify
