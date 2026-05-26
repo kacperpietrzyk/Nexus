@@ -1,6 +1,8 @@
 # Brainstorm artifacts
 .superpowers/
 .bug-hunter/
+# Internal specs/plans (AI-narrative) — kept local-only, not in the public repo
+docs/superpowers/
 .DS_Store
 
 # Claude Code: local-only permission overrides (project skills tracked separately)
