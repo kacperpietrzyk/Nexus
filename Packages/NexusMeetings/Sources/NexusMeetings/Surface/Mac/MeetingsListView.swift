@@ -87,7 +87,7 @@ public struct MeetingsListView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(NexusColor.Text.muted)
-            TextField("Szukaj spotkań...", text: $viewModel.searchQuery)
+            TextField("Search meetings...", text: $viewModel.searchQuery)
                 .textFieldStyle(.plain)
                 .font(Font.custom("Geist-Regular", size: 13))
                 .foregroundStyle(NexusColor.Text.secondary)
@@ -203,13 +203,13 @@ private struct MeetingsListEmptyState: View {
             Image(systemName: isSearching ? "magnifyingglass" : "person.wave.2")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(NexusColor.Text.muted)
-            Text(isSearching ? "Brak wyników" : "Brak spotkań")
+            Text(isSearching ? "No results" : "No meetings")
                 .font(Font.custom("Geist-SemiBold", size: 17))
                 .foregroundStyle(NexusColor.Text.secondary)
             Text(
                 isSearching
-                    ? "Zmień zapytanie albo filtr."
-                    : "Nagrania i importy pojawią się tutaj."
+                    ? "Try a different search or filter."
+                    : "Recordings and imports will appear here."
             )
             .font(Font.custom("Geist-Regular", size: 12.5))
             .foregroundStyle(NexusColor.Text.muted)
