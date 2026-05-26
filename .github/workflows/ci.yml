@@ -11,6 +11,12 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege default for GITHUB_TOKEN: every job here only checks out
+# and builds/tests, so read-only is sufficient. Override per-job if a future
+# job needs to write (e.g. upload artifacts, comment on PRs).
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

@@ -2,6 +2,10 @@ name: DCO
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
 jobs:
   dco:
     runs-on: ubuntu-latest
@@ -16,6 +20,12 @@ jobs:
         run: |
           missing=0
           for c in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
+            # Bots (e.g. dependabot[bot]) don't add Signed-off-by; their commits
+            # are exempt — version/security bumps are already gated by review + CI.
+            author_email=$(git log -1 --format='%ae' "$c")
+            case "$author_email" in
+              *dependabot* | *"[bot]"*) continue ;;
+            esac
             if ! git log -1 --format=%B "$c" | grep -qiE '^Signed-off-by: .+ <.+@.+>'; then
               echo "::error::Commit $c is missing Signed-off-by (use git commit -s)"
               missing=1

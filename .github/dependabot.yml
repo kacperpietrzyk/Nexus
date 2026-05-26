@@ -1,0 +1,58 @@
+# Dependabot version updates. Security updates (CVE fixes) are controlled
+# separately in repo Settings → Code security, not here.
+#
+# Swift Package Manager has no auto-discovery: each Package.swift with
+# external dependencies needs its own `directory` entry. Pure-Apple-framework
+# packages (no third-party deps) are intentionally omitted.
+#
+# Note: Dependabot's commits carry no Signed-off-by; the DCO workflow exempts
+# the dependabot[bot] author so these PRs stay mergeable.
+version: 2
+updates:
+  # GitHub Actions pinned in CI workflows — supply-chain hygiene, low churn.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # Swift packages with third-party dependencies. Grouped per package so the
+  # fast-moving ML/audio libs (mlx-swift, swift-transformers, FluidAudio, …)
+  # land as one weekly PR each instead of a flood.
+  - package-ecosystem: "swift"
+    directory: "/Packages/NexusAI"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build"
+    groups:
+      nexusai:
+        patterns: ["*"]
+
+  - package-ecosystem: "swift"
+    directory: "/Packages/NexusMeetings"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build"
+    groups:
+      nexusmeetings:
+        patterns: ["*"]
+
+  - package-ecosystem: "swift"
+    directory: "/Apps/NexusMCPSidecar"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build"
+    groups:
+      mcp-sidecar:
+        patterns: ["*"]
