@@ -182,6 +182,12 @@ public struct AgentChatView: View {
             .padding(.top, 4)
             .padding(.bottom, 24)
         }
+        // iOS-only: swipe down over the conversation interactively dismisses the
+        // keyboard. Compiled out on macOS so the shared `regularBody` Mac path
+        // remains byte-identical (load-bearing invariant per `body` comment).
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
     }
 
     private var compactInputBar: some View {

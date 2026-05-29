@@ -85,6 +85,7 @@ public struct AgentInputBar: View {
     private let imageAttachmentDeferralReasonProvider: ImageAttachmentDeferralReasonProvider?
 
     @State private var input = ""
+    @FocusState private var isInputFocused: Bool
     @State private var voiceSession: AgentVoiceCaptureSession?
     @State private var voiceStartTask: Task<Void, Never>?
     @State private var isVoiceCaptureAvailable = false
@@ -163,6 +164,7 @@ public struct AgentInputBar: View {
                     .background(NexusColor.Background.control, in: fieldShape)
                     .overlay(fieldShape.strokeBorder(NexusColor.Line.hairline, lineWidth: 1))
                     .disabled(isThinking || isSending)
+                    .focused($isInputFocused)
                     .submitLabel(.send)
                     .onSubmit { Task { await send() } }
 
@@ -248,6 +250,21 @@ public struct AgentInputBar: View {
             allowsMultipleSelection: false,
             onCompletion: handleFileImport(_:)
         )
+        #if os(iOS)
+        // Without an explicit dismiss affordance the software keyboard stays up
+        // and occludes the tab bar / nav, trapping the user in the agent chat.
+        // A standard keyboard-accessory "Done" button releases focus; the
+        // message ScrollView additionally gets `.scrollDismissesKeyboard` in
+        // `AgentChatView`. iOS-gated so the shared Mac `regularBody` path that
+        // reuses `messageList` stays byte-identical (no AppKit keyboard concept).
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isInputFocused = false }
+                .accessibilityLabel("Dismiss keyboard")
+            }
+        }
+        #endif
         .onDisappear {
             cleanupVoiceCapture()
         }
