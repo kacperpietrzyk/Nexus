@@ -72,6 +72,9 @@ struct NexusMacApp: App {
         let made = Self.makeModelContainer(environment: env)
         self.environment = env
         self.container = made
+        // Developer-only CloudKit schema deploy helper (gated by env flags). No-op in
+        // normal launches. See CloudKitSchemaSeeder for the deploy runbook.
+        CloudKitSchemaSeeder.runIfRequested(context: made.mainContext)
         self.search = SearchSubsystem.makeLive()
         self.aiGraph = AIComposition.makeGraph(container: made)
         self.aiRouter = self.aiGraph.router
