@@ -231,7 +231,15 @@ struct NexusiOSApp: App {
         agentComposition: AgentComposition
     ) {
         let completion = BGTaskCompletionGuard()
-        let work = _Concurrency.Task { @MainActor in
+        // The BGTaskScheduler launch handler runs on a private background queue. Under
+        // Swift 6.2 strict concurrency, creating `Task { @MainActor in … }` here is
+        // fatal: task creation performs a synchronous "is current executor" check for
+        // the inferred MainActor isolation, which off the main queue lowers to
+        // `dispatch_assert_queue(main)` and traps (EXC_BREAKPOINT in
+        // swift_task_isCurrentExecutorWithFlags, queue nexus.agent.scheduleRun). Keep
+        // the Task nonisolated and hop onto the MainActor with `await` instead — the
+        // async hop is safe from any executor.
+        let work = _Concurrency.Task {
             guard let scheduler = agentComposition.scheduler as? IOSAgentScheduler else {
                 completion.complete(success: false) { task.setTaskCompleted(success: $0) }
                 return
