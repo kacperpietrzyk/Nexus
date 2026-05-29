@@ -82,7 +82,8 @@ struct NexusiOSApp: App {
                 taskRepository: self.taskRepository,
                 heroBriefService: heroBriefService,
                 meetingTools: self.meetingsComposition.agentTools(),
-                ocrPipeline: graph.ocrPipeline
+                ocrPipeline: graph.ocrPipeline,
+                mlxLifecycle: graph.mlxLifecycle
             )
         )
         self.agentComposition = agentComposition
@@ -153,6 +154,22 @@ struct NexusiOSApp: App {
         }
     }
 
+    /// Probe for the agent chat surface: is an on-device chat model actually downloaded
+    /// and assigned? Mirrors the `chatReady` check in `preloadMLXIfRequested`. Used to
+    /// show a "download the model" banner in the agent — Apple Intelligence being on is
+    /// NOT sufficient (it can't serve the agent's structured tool-calling turns), so a
+    /// router capability probe would give a false negative; only a concrete MLX chat
+    /// model makes the agent usable on device.
+    private static func makeChatModelAvailabilityProbe(
+        lifecycle: MLXLifecycleController
+    ) -> @MainActor () -> Bool {
+        { @MainActor in
+            let store = ModelManifestLocalState.Store()
+            return store.currentChatAssignment() != nil
+                && FileManager.default.fileExists(atPath: lifecycle.chatFolderURL().path)
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             NexusiOSRootView(
@@ -195,6 +212,7 @@ struct NexusiOSApp: App {
         let heroBriefService: HeroBriefService
         let meetingTools: [any AgentTool]
         let ocrPipeline: OCRPipeline
+        let mlxLifecycle: MLXLifecycleController
     }
 
     /// Background callback. `task.expirationHandler` cancels the work if the system reclaims the
@@ -286,6 +304,9 @@ struct NexusiOSApp: App {
                 aiLiveData: AISettingsLiveData(router: dependencies.router),
                 additionalTools: dependencies.meetingTools,
                 ocrPipeline: dependencies.ocrPipeline,
+                chatModelAvailability: Self.makeChatModelAvailabilityProbe(
+                    lifecycle: dependencies.mlxLifecycle
+                ),
                 legacyBrief: makeLegacyBrief(using: dependencies.heroBriefService)
             )
         } catch {
