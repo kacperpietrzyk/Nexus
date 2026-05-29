@@ -8,6 +8,11 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public private(set) var currentThreadID: UUID?
     @Published public private(set) var isThinking = false
     @Published public private(set) var lastError: String?
+    /// Whether an on-device chat model is downloaded and assigned. `true` when no probe
+    /// was injected (Mac / tests / callers that don't gate on a local model) so the
+    /// "model not downloaded" banner stays hidden by default. Refreshed via
+    /// `refreshChatModelAvailability()` on view appearance.
+    @Published public private(set) var isChatModelAvailable = true
 
     public let voiceCapture: AgentVoiceCapture?
 
@@ -15,21 +20,33 @@ public final class AgentChatViewModel: ObservableObject {
     private let threadStore: AgentThreadStore
     private let messageStore: AgentMessageStore
     private let memoryStore: AgentMemoryStore
+    private let chatModelAvailabilityProbe: (@MainActor () -> Bool)?
 
     public init(
         runtime: AgentRuntime,
         threadStore: AgentThreadStore,
         messageStore: AgentMessageStore,
         memoryStore: AgentMemoryStore,
-        voiceCapture: AgentVoiceCapture? = nil
+        voiceCapture: AgentVoiceCapture? = nil,
+        chatModelAvailability: (@MainActor () -> Bool)? = nil
     ) {
         self.runtime = runtime
         self.threadStore = threadStore
         self.messageStore = messageStore
         self.memoryStore = memoryStore
         self.voiceCapture = voiceCapture
+        self.chatModelAvailabilityProbe = chatModelAvailability
+        self.isChatModelAvailable = chatModelAvailability?() ?? true
 
         reloadThreads()
+    }
+
+    /// Re-evaluates whether the on-device chat model is present. A no-op when no probe
+    /// was injected. Call from the chat view's `onAppear` so the banner clears once the
+    /// user returns from downloading the model in Settings.
+    public func refreshChatModelAvailability() {
+        guard let probe = chatModelAvailabilityProbe else { return }
+        isChatModelAvailable = probe()
     }
 
     public func reloadThreads() {

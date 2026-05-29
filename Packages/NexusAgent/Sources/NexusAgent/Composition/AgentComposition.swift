@@ -38,6 +38,7 @@ public struct AgentComposition {
         agentContext: AgentContext? = nil,
         additionalTools: [any AgentTool] = [],
         ocrPipeline: OCRPipeline? = nil,
+        chatModelAvailability: (@MainActor () -> Bool)? = nil,
         legacyBrief: @escaping @Sendable (AgentBriefRequest) async -> String
     ) throws -> AgentComposition {
         let stores = AgentStores(context: context)
@@ -94,7 +95,8 @@ public struct AgentComposition {
             threadStore: stores.threadStore,
             messageStore: stores.messageStore,
             memoryStore: stores.memoryStore,
-            voiceCapture: .live(router: router)
+            voiceCapture: .live(router: router),
+            chatModelAvailability: chatModelAvailability
         )
         let settingsContext = AgentSettingsContext(
             memoryStore: stores.memoryStore,

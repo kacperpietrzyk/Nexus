@@ -45,6 +45,10 @@ public struct AgentChatView: View {
         // that does not apply to a single column, so the compact empty-state
         // is `maxWidth: .infinity` instead. `messageList` is reused as-is.
         VStack(spacing: 0) {
+            modelUnavailableBanner
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+
             Group {
                 if viewModel.currentThreadID == nil {
                     AgentEmptyStateView { sample in
@@ -61,16 +65,58 @@ public struct AgentChatView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
         }
+        .onAppear { viewModel.refreshChatModelAvailability() }
     }
 
     private var regularBodyWithInlineInput: some View {
         VStack(spacing: 0) {
+            modelUnavailableBanner
+                .padding(.horizontal, 18)
+                .padding(.top, 12)
+
             regularBody
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             compactInputBar
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
+        }
+        .onAppear { viewModel.refreshChatModelAvailability() }
+    }
+
+    // Proactive nudge (iOS): the agent's on-device brain is an MLX chat model that may
+    // never have been downloaded (e.g. the Welcome download step was skipped or the
+    // `welcomeShown` flag was set by an earlier build). When absent, every turn fails
+    // silently — this banner points the user at Settings → Manage Models. Hidden when
+    // no availability probe was injected (Mac / tests), so it never renders there.
+    @ViewBuilder private var modelUnavailableBanner: some View {
+        if !viewModel.isChatModelAvailable {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(NexusColor.Text.secondary)
+                    .frame(width: 18, height: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("On-device model not downloaded")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(NexusColor.Text.primary)
+                    Text("Nexus needs the on-device AI model to answer. Download it in Settings → Manage Models.")
+                        .font(.caption2)
+                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(NexusColor.Background.raised.opacity(0.84), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(NexusColor.Line.regular.opacity(0.9), lineWidth: 1)
+            )
+            .accessibilityElement(children: .combine)
         }
     }
 
@@ -182,6 +228,12 @@ public struct AgentChatView: View {
             .padding(.top, 4)
             .padding(.bottom, 24)
         }
+        // iOS-only: swipe down over the conversation interactively dismisses the
+        // keyboard. Compiled out on macOS so the shared `regularBody` Mac path
+        // remains byte-identical (load-bearing invariant per `body` comment).
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
     }
 
     private var compactInputBar: some View {
