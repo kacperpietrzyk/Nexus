@@ -14,6 +14,20 @@ struct NexusEnvironmentTests {
         #expect(env.cloudKitEnabled == false)
     }
 
+    /// When the env var is entirely absent (the real distributed-build case — scheme env
+    /// vars are NOT injected into archived/TestFlight builds), the default is build-config
+    /// driven: off in DEBUG, on in release. This locks the fix for the bug where every
+    /// TestFlight build reported sync "disabled (dev)" because the env var never existed.
+    @Test func unsetFallsBackToBuildConfigurationDefault() {
+        unsetenv(NexusEnvironment.cloudKitEnabledKey)
+        let env = NexusEnvironment(processInfo: ProcessInfo.processInfo)
+        #if DEBUG
+        #expect(env.cloudKitEnabled == false, "DEBUG builds default CloudKit off")
+        #else
+        #expect(env.cloudKitEnabled == true, "Release builds default CloudKit on")
+        #endif
+    }
+
     @Test func truthyValuesEnableCloudKit() {
         defer { unsetenv(NexusEnvironment.cloudKitEnabledKey) }
         for value in ["1", "true", "TRUE", "yes", "YES"] {
