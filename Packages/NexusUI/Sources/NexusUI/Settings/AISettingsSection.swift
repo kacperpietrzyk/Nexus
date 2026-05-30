@@ -8,6 +8,12 @@ import NexusAI
 public struct AISettingsSection: View {
     private let liveData: AISettingsLiveData?
 
+    /// Self-contained — the download base + variant are deterministic, so the
+    /// row owns the coordinator directly with no app-root wiring. Reads the
+    /// already-downloaded state on init (so the button hides when the model is
+    /// present).
+    @State private var whisperDownloader = WhisperKitModelDownloadCoordinator()
+
     public init(liveData: AISettingsLiveData? = nil) {
         self.liveData = liveData
     }
@@ -60,11 +66,56 @@ public struct AISettingsSection: View {
                 )
             }
 
+            if liveData != nil {
+                whisperDownloadControl
+            }
             WhisperKitPreloadToggle()
         } header: {
             nexusSettingsSectionHeader("Voice")
         }
         .task { await liveData?.refresh() }
+    }
+
+    /// Download button + progress for the WhisperKit transcription model. Driven
+    /// by the self-owned coordinator; hidden once the model is present (the row's
+    /// "Local" badge then communicates readiness).
+    @ViewBuilder
+    private var whisperDownloadControl: some View {
+        switch whisperDownloader.phase {
+        case .done:
+            EmptyView()
+        case .idle:
+            Button("Download transcription model (~1 GB)") {
+                Task {
+                    await whisperDownloader.download()
+                    await liveData?.refresh()
+                }
+            }
+        case .downloading(let fraction):
+            ProgressView(value: fraction) {
+                Text("Downloading transcription model… \(Int(fraction * 100))%")
+                    .font(.caption)
+            }
+        case .preparing:
+            ProgressView {
+                Text("Preparing transcription model…").font(.caption)
+            }
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Download failed", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                Button("Retry") {
+                    Task {
+                        await whisperDownloader.download()
+                        await liveData?.refresh()
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder
