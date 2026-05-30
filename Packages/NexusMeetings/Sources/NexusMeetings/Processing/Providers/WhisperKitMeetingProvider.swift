@@ -1,4 +1,5 @@
 import Foundation
+import NexusAI
 @preconcurrency import WhisperKit
 
 public enum MeetingTranscriptionProviderError: Error, Equatable, Sendable {
@@ -10,12 +11,16 @@ public final class WhisperKitMeetingProvider: MeetingTranscriptionProvider, @unc
 
     private let engine: WhisperKitMeetingProviderEngine
 
-    public init(localModelFolder: URL? = WhisperKitMeetingProvider.defaultLocalModelFolder()) {
-        self.engine = WhisperKitMeetingProviderEngine(localModelFolder: localModelFolder)
+    public init() {
+        self.engine = WhisperKitMeetingProviderEngine(
+            resolveModelFolder: { WhisperKitProvider.defaultLocalModelFolder() },
+            tokenizerFolder: WhisperKitProvider.defaultDownloadBase()
+        )
     }
 
     init(localModelFolder: URL?, loader: @escaping WhisperKitMeetingProviderEngine.Loader) {
-        self.engine = WhisperKitMeetingProviderEngine(localModelFolder: localModelFolder, loader: loader)
+        self.engine = WhisperKitMeetingProviderEngine(
+            resolveModelFolder: { localModelFolder }, loader: loader)
     }
 
     public func transcribe(
@@ -26,11 +31,11 @@ public final class WhisperKitMeetingProvider: MeetingTranscriptionProvider, @unc
         try await engine.transcribe(audioURL: audioURL, languageHint: languageHint, progress: progress)
     }
 
+    /// Shares NexusAI's persisted WhisperKit model location, so a model
+    /// downloaded once (via ``WhisperKitModelDownloadCoordinator``) is visible to
+    /// both the meetings engine and the Settings availability badge.
     public static func defaultLocalModelFolder() -> URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first?
-            .appending(path: "Nexus", directoryHint: .isDirectory)
-            .appending(path: "WhisperKit", directoryHint: .isDirectory)
+        WhisperKitProvider.defaultLocalModelFolder()
     }
 }
 
@@ -60,9 +65,10 @@ struct WhisperKitMeetingRawWord: Sendable {
 final class LiveWhisperKitMeetingTranscriber: WhisperKitMeetingTranscribing, @unchecked Sendable {
     private let whisperKit: WhisperKit
 
-    init(modelFolder: URL) async throws {
+    init(modelFolder: URL, tokenizerFolder: URL?) async throws {
         let config = WhisperKitConfig(
             modelFolder: modelFolder.path,
+            tokenizerFolder: tokenizerFolder,
             verbose: false,
             prewarm: false,
             load: true,
@@ -99,20 +105,24 @@ final class LiveWhisperKitMeetingTranscriber: WhisperKitMeetingTranscribing, @un
 actor WhisperKitMeetingProviderEngine {
     typealias Loader = @Sendable (URL) async throws -> any WhisperKitMeetingTranscribing
 
-    private let localModelFolder: URL?
+    private let resolveModelFolder: @Sendable () -> URL?
     private let loader: Loader
     private var transcriber: (any WhisperKitMeetingTranscribing)?
     private var busy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
     init(
-        localModelFolder: URL?,
-        loader: @escaping Loader = { folder in
-            try await LiveWhisperKitMeetingTranscriber(modelFolder: folder)
-        }
+        resolveModelFolder: @escaping @Sendable () -> URL?,
+        tokenizerFolder: URL? = nil,
+        loader: Loader? = nil
     ) {
-        self.localModelFolder = localModelFolder
-        self.loader = loader
+        self.resolveModelFolder = resolveModelFolder
+        self.loader =
+            loader
+            ?? { folder in
+                try await LiveWhisperKitMeetingTranscriber(
+                    modelFolder: folder, tokenizerFolder: tokenizerFolder)
+            }
     }
 
     func transcribe(
@@ -141,11 +151,12 @@ actor WhisperKitMeetingProviderEngine {
         if let transcriber {
             return transcriber
         }
-        guard let localModelFolder, Self.isUsableLocalModelFolder(localModelFolder) else {
-            throw MeetingTranscriptionProviderError.localModelUnavailable(localModelFolder?.path)
+        let folder = resolveModelFolder()
+        guard let folder, Self.isUsableLocalModelFolder(folder) else {
+            throw MeetingTranscriptionProviderError.localModelUnavailable(folder?.path)
         }
 
-        let loaded = try await loader(localModelFolder)
+        let loaded = try await loader(folder)
         transcriber = loaded
         return loaded
     }
@@ -158,8 +169,12 @@ actor WhisperKitMeetingProviderEngine {
             return false
         }
 
+        // Only the three CoreML models are required locally. The tokenizer is
+        // NOT bundled in the downloaded variant — WhisperKit resolves it at load
+        // time (see WhisperKitProvider's type doc); requiring tokenizer.json here
+        // is what made transcription permanently unavailable.
         let requiredModelNames = ["MelSpectrogram", "AudioEncoder", "TextDecoder"]
-        let hasRequiredModels = requiredModelNames.allSatisfy { modelName in
+        return requiredModelNames.allSatisfy { modelName in
             let compiledModel = folder.appending(path: "\(modelName).mlmodelc")
             let packageModel = folder.appending(
                 path: "\(modelName).mlpackage/Data/com.apple.CoreML/model.mlmodel"
@@ -167,11 +182,6 @@ actor WhisperKitMeetingProviderEngine {
             return FileManager.default.fileExists(atPath: compiledModel.path)
                 || FileManager.default.fileExists(atPath: packageModel.path)
         }
-        let hasLocalTokenizer = FileManager.default.fileExists(
-            atPath: folder.appending(path: "tokenizer.json").path
-        )
-
-        return hasRequiredModels && hasLocalTokenizer
     }
 
 }
