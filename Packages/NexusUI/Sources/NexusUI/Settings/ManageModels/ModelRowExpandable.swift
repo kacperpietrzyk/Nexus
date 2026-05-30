@@ -147,6 +147,18 @@ public struct ModelRowExpandable: View {
                         .foregroundStyle(.secondary)
                 }
 
+                // Surface a failed download instead of silently swallowing it. The
+                // download manager records the reason on `localState.downloadError`
+                // (status `.error`), but it was never shown — a failed download
+                // looked identical to one that never started. Selectable so the
+                // user can copy the reason when reporting a problem.
+                if localState.status == .error, let downloadError = localState.downloadError {
+                    Label("Download failed: \(downloadError)", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
                 actionRow(state: state)
             }
             .padding(.top, 4)
