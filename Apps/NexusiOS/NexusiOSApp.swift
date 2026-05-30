@@ -25,7 +25,9 @@ import WidgetKit
 
 @main
 struct NexusiOSApp: App {
-    static let tombstonePurgeTaskID = "com.kacperpietrzyk.Nexus.tombstonePurge"
+    // `nonisolated` so the nonisolated BGTask launch handlers can reference it (it is an
+    // immutable Sendable constant; no MainActor ownership is needed).
+    nonisolated static let tombstonePurgeTaskID = "com.kacperpietrzyk.Nexus.tombstonePurge"
 
     private let container: ModelContainer
     private let environment: NexusEnvironment
@@ -192,7 +194,11 @@ struct NexusiOSApp: App {
 
     /// Submits a `BGProcessingTaskRequest` for ~24h from now. Called on launch and after each
     /// successful background run. `requiresExternalPower = false` because purge work is cheap.
-    static func scheduleNextBGTask() {
+    ///
+    /// `nonisolated`: this runs inside BGTaskScheduler launch handlers (a private background
+    /// queue). It only touches the thread-safe `BGTaskScheduler.shared`, so keeping it off the
+    /// MainActor avoids a synchronous `dispatch_assert_queue(main)` trap on that queue.
+    nonisolated static func scheduleNextBGTask() {
         let request = BGProcessingTaskRequest(identifier: tombstonePurgeTaskID)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60 * 24)
         request.requiresExternalPower = false
@@ -217,8 +223,19 @@ struct NexusiOSApp: App {
 
     /// Background callback. `task.expirationHandler` cancels the work if the system reclaims the
     /// budget; otherwise we run the scheduler's force-run path and reschedule.
-    static func handle(task: BGTask, scheduler: Scheduler, container: ModelContainer) {
+    ///
+    /// `nonisolated` is load-bearing: BGTaskScheduler invokes this launch handler on a private
+    /// background queue. `Scheduler` is an `actor`, so `await scheduler.runNow(…)` hops onto its
+    /// executor from any thread — no MainActor is involved. See `handleAgentScheduleTask` for the
+    /// full rationale on why the launch path must never be MainActor-isolated.
+    nonisolated static func handle(task: BGTask, scheduler: Scheduler, container: ModelContainer) {
         scheduleNextBGTask()
+        // `BGTask` is non-Sendable; the work Task and the expiration handler both reference it.
+        // Capturing it `nonisolated(unsafe)` only silences the Sendable check — the Task stays
+        // genuinely nonisolated (no MainActor assert at creation). Safety invariant: `task` is
+        // completed exactly once (the success path runs to completion before the expiration
+        // handler, which only cancels), and BackgroundTasks documents these calls as thread-safe.
+        nonisolated(unsafe) let task = task
         let work = _Concurrency.Task {
             await scheduler.runNow(.tombstonePurge)
             task.setTaskCompleted(success: true)
@@ -226,36 +243,63 @@ struct NexusiOSApp: App {
         task.expirationHandler = { work.cancel() }
     }
 
-    static func handleAgentScheduleTask(
+    // The BGTaskScheduler launch handler runs on a private background queue. Because
+    // `NexusiOSApp` conforms to `App` it is `@MainActor`, so EVERY static member —
+    // including this handler and any `Task { … }` it creates — *inherits* MainActor
+    // isolation under Swift 6.2 strict-concurrency, even without an explicit
+    // `@MainActor in`. Creating that inherited-MainActor Task off the main queue performs
+    // a synchronous "is current executor" check that lowers to
+    // `dispatch_assert_queue(main)` and traps (EXC_BREAKPOINT in
+    // swift_task_isCurrentExecutorWithFlags, queue nexus.agent.scheduleRun). The earlier
+    // fix that only dropped `@MainActor in` was a no-op for exactly this reason — the
+    // isolation is inherited, not annotated. The robust fix is to make the whole launch
+    // path `nonisolated` so the `Task` is genuinely nonisolated, then hop onto the
+    // MainActor with a single `await` into `runAgentScheduleBody` — the async hop is safe
+    // from any executor.
+    nonisolated static func handleAgentScheduleTask(
         task: BGTask,
         agentComposition: AgentComposition
     ) {
         let completion = BGTaskCompletionGuard()
-        // The BGTaskScheduler launch handler runs on a private background queue. Under
-        // Swift 6.2 strict concurrency, creating `Task { @MainActor in … }` here is
-        // fatal: task creation performs a synchronous "is current executor" check for
-        // the inferred MainActor isolation, which off the main queue lowers to
-        // `dispatch_assert_queue(main)` and traps (EXC_BREAKPOINT in
-        // swift_task_isCurrentExecutorWithFlags, queue nexus.agent.scheduleRun). Keep
-        // the Task nonisolated and hop onto the MainActor with `await` instead — the
-        // async hop is safe from any executor.
+        // `BGTask` is non-Sendable; it is referenced by the work Task (via the MainActor body)
+        // and the expiration handler. `nonisolated(unsafe)` only silences the Sendable check —
+        // the Task stays genuinely nonisolated (no MainActor assert at creation). Safety
+        // invariant: `BGTaskCompletionGuard` makes `setTaskCompleted` idempotent, so the work
+        // path and the expiration handler can never double-complete `task`.
+        nonisolated(unsafe) let task = task
         let work = _Concurrency.Task {
-            guard let scheduler = agentComposition.scheduler as? IOSAgentScheduler else {
-                completion.complete(success: false) { task.setTaskCompleted(success: $0) }
-                return
-            }
-            await scheduler.runBackgroundTask()
-            guard !Task.isCancelled else {
-                completion.complete(success: false) { task.setTaskCompleted(success: $0) }
-                return
-            }
-
-            completion.complete(success: true) { task.setTaskCompleted(success: $0) }
+            await runAgentScheduleBody(
+                task: task,
+                agentComposition: agentComposition,
+                completion: completion
+            )
         }
         task.expirationHandler = {
             work.cancel()
             completion.complete(success: false) { task.setTaskCompleted(success: $0) }
         }
+    }
+
+    /// MainActor body of the agent-schedule BGTask. Reached only via `await` from the
+    /// nonisolated launch handler, so the executor hop happens asynchronously (safe from any
+    /// queue). `AgentComposition` is `@MainActor`, so its `scheduler` must be read here.
+    @MainActor
+    private static func runAgentScheduleBody(
+        task: BGTask,
+        agentComposition: AgentComposition,
+        completion: BGTaskCompletionGuard
+    ) async {
+        guard let scheduler = agentComposition.scheduler as? IOSAgentScheduler else {
+            completion.complete(success: false) { task.setTaskCompleted(success: $0) }
+            return
+        }
+        await scheduler.runBackgroundTask()
+        guard !Task.isCancelled else {
+            completion.complete(success: false) { task.setTaskCompleted(success: $0) }
+            return
+        }
+
+        completion.complete(success: true) { task.setTaskCompleted(success: $0) }
     }
 
     private static func rebuildSearchIndexOnLaunch(
@@ -271,7 +315,12 @@ struct NexusiOSApp: App {
         }
     }
 
-    private static func registerBackgroundTasks(
+    // `nonisolated` so the launch-handler closures registered below do NOT inherit MainActor
+    // isolation from the `@MainActor` `App` type. A MainActor-isolated launch handler invoked on
+    // BGTaskScheduler's private background queue traps the same way the inner Task did. All three
+    // handlers (`handle`, `handleAgentScheduleTask`, `ModelDownloadManager.registerBackgroundHandler`)
+    // are nonisolated for this reason.
+    nonisolated private static func registerBackgroundTasks(
         scheduler: Scheduler,
         container: ModelContainer,
         agentComposition: AgentComposition

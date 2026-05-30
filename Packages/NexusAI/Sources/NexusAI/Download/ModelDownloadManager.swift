@@ -103,8 +103,13 @@ public final class ModelDownloadManager {
     /// via `registerBackgroundTasks`). The `notify` closure is invoked by iOS
     /// when it schedules the task; since downloads are managed by the running
     /// `URLSession`, waking the process is enough to let them continue.
-    @MainActor
-    public static func registerBackgroundHandler(notify: @escaping @Sendable () -> Void) {
+    ///
+    /// `nonisolated`: BGTaskScheduler runs the launch handler on a private background queue.
+    /// If this static method were `@MainActor` (inherited from the class), the launch-handler
+    /// closure and its inner `Task` would inherit MainActor isolation and trap with
+    /// `dispatch_assert_queue(main)` off the main queue — the same Swift 6.2 crash as the
+    /// agent-schedule handler. Nothing here touches MainActor state.
+    nonisolated public static func registerBackgroundHandler(notify: @escaping @Sendable () -> Void) {
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: backgroundTaskIdentifier,
             using: nil
@@ -115,10 +120,12 @@ public final class ModelDownloadManager {
             // currently uses a foreground HubApi/URLSession, so waking the process and
             // completing immediately does not extend a suspended-app download window;
             // it only helps an already-in-progress foreground transfer.
-            Task {
-                notify()
-                task.setTaskCompleted(success: true)
-            }
+            //
+            // `notify()` and `setTaskCompleted` are both synchronous, so no `Task` wrapper is
+            // needed — and spawning one here would send the non-Sendable `BGTask` across an
+            // isolation boundary now that this handler is `nonisolated`.
+            notify()
+            task.setTaskCompleted(success: true)
         }
     }
 
