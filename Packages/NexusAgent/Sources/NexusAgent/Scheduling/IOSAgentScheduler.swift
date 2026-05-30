@@ -27,7 +27,9 @@ public struct SystemBGTaskScheduler: BGTaskSchedulerInterface {
 
 @MainActor
 public final class IOSAgentScheduler: AgentScheduler {
-    public static let bgTaskIdentifier = "nexus.agent.scheduleRun"
+    // `nonisolated` so the nonisolated BGTask launch-handler registration can reference it
+    // (immutable Sendable constant; no MainActor ownership needed).
+    public nonisolated static let bgTaskIdentifier = "nexus.agent.scheduleRun"
 
     private let scheduleStore: AgentScheduleStore
     private let onFire: @MainActor (UUID) async -> Void
