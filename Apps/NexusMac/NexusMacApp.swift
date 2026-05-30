@@ -72,6 +72,12 @@ struct NexusMacApp: App {
         let made = Self.makeModelContainer(environment: env)
         self.environment = env
         self.container = made
+        // Seed the on-device model catalog (ModelManifest) into the live store.
+        // NexusSchemaV7 documents that this runs idempotently from the composition
+        // root (NexusSync cannot import ModelCatalog without a package cycle).
+        // Without it the `@Query` in Manage Models is empty, so no MLX model can
+        // be downloaded or assigned. Idempotent: existing rows are never touched.
+        try? ModelCatalog.bootstrap.seed(into: made.mainContext)
         // Developer-only CloudKit schema deploy helper (gated by env flags). No-op in
         // normal launches. See CloudKitSchemaSeeder for the deploy runbook.
         CloudKitSchemaSeeder.runIfRequested(context: made.mainContext)
@@ -392,6 +398,12 @@ struct NexusMacApp: App {
                 )
                 .navigationTitle("Settings")
             }
+            // The Settings scene is SEPARATE from the main `Window` and does NOT
+            // inherit its `.modelContainer`. Without this, the `@Query` in
+            // `ManageModelsSection` has no SwiftData container in scope and Manage
+            // Models renders empty (no model rows — the Mac-only "can't manage
+            // models" bug). The main window already attaches the same container.
+            .modelContainer(container)
             // MP-4.1 §3: native Toggle/DatePicker/Button controls in the
             // Settings Form inherit this scene tint — burning it
             // achromatic is what makes the whole Form render without
