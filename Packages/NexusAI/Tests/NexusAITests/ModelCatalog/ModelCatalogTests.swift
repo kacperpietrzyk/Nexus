@@ -13,11 +13,11 @@ import Testing
     #expect(catalog.chat.count >= 4)
     #expect(catalog.embedders.count >= 1)
 
-    let qwen9b = catalog.chat.first { $0.id == "qwen3.5-9b-instruct-4bit" }
-    #expect(qwen9b != nil)
-    #expect(qwen9b?.sizeGB == 5.8)
-    #expect(qwen9b?.recommendedRAMGB == 32)
-    #expect(qwen9b?.supportsTools == true)
+    let qwen14b = catalog.chat.first { $0.id == "qwen2.5-14b-instruct-4bit" }
+    #expect(qwen14b != nil)
+    #expect(qwen14b?.sizeGB == 8.3)
+    #expect(qwen14b?.recommendedRAMGB == 32)
+    #expect(qwen14b?.supportsTools == true)
 }
 
 @MainActor
@@ -29,7 +29,7 @@ import Testing
     try ModelCatalog.bootstrap.seed(into: ctx)
     let manifests = try ctx.fetch(FetchDescriptor<ModelManifest>())
     #expect(manifests.count >= 5)  // 4 chat + 1 embedder
-    #expect(manifests.contains { $0.id == "qwen3.5-27b-instruct-4bit" })
+    #expect(manifests.contains { $0.id == "qwen2.5-32b-instruct-4bit" })
     #expect(manifests.contains { $0.id == "gemma-4-e4b-it-4bit" })
     #expect(manifests.contains { $0.id == "multilingual-e5-large" })
 }
