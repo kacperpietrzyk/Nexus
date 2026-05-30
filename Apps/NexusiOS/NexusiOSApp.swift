@@ -56,6 +56,12 @@ struct NexusiOSApp: App {
         let made = Self.makeModelContainer(environment: env)
         self.environment = env
         self.container = made
+        // Seed the on-device model catalog (ModelManifest) into the live store.
+        // NexusSchemaV7 documents that this runs idempotently from the composition
+        // root (NexusSync cannot import ModelCatalog without a package cycle).
+        // Without it the `@Query` in Manage Models is empty, so no MLX model can
+        // be downloaded or assigned. Idempotent: existing rows are never touched.
+        try? ModelCatalog.bootstrap.seed(into: made.mainContext)
         self.search = SearchSubsystem.makeLive()
         let graph = AIComposition.makeGraph(container: made)
         self.aiGraph = graph
