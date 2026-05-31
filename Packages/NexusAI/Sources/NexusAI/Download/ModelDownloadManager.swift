@@ -462,24 +462,20 @@ public struct LiveHFFetcher: ModelFileFetching {
 
     public init() {}
 
-    /// Whether to download through a background `URLSession`.
-    ///
-    /// On iOS a multi-GB transfer over a foreground `URLSession` dies the moment
-    /// the app is suspended (screen lock / app switch), so chat models (4–16 GB)
-    /// were unreliable while the 1 GB embedder — short enough to finish before a
-    /// suspension — slipped through. swift-transformers' background session
-    /// (`URLSessionConfiguration.background`) keeps the bytes flowing while the
-    /// app is suspended and resumes the await when it wakes. macOS apps aren't
-    /// suspended mid-download, so the proven foreground path is kept there (and
-    /// in the opt-in CLI integration smoke), avoiding background-session quirks
-    /// in a non-app context.
-    static var prefersBackgroundSession: Bool {
-        #if os(iOS)
-        return true
-        #else
-        return false
-        #endif
-    }
+    // NOTE: do NOT enable swift-transformers' `useBackgroundSession` here.
+    //
+    // The intent was to survive iOS app suspension during a multi-GB transfer
+    // (a foreground URLSession is torn down when the app is suspended). But
+    // swift-transformers 1.3.3's background path routes the fetch through
+    // `URLSession.data(for:)`, and iOS forbids data tasks on a background
+    // `URLSessionConfiguration.background` session — it throws an uncaught
+    // NSException (`-[__NSURLBackgroundSession _dataTaskWithTaskForClass:]`)
+    // that aborts the app the instant a download starts (SIGABRT at 0%,
+    // confirmed on a build-11 TestFlight crash report). Background downloads
+    // therefore require a custom `URLSessionDownloadDelegate` (download tasks
+    // only) rather than this flag; until that exists we use the foreground
+    // session, which downloads reliably as long as the app stays in the
+    // foreground. See the matching follow-up note in the PR.
 
     public func fetch(
         hfPath: String,
@@ -494,9 +490,7 @@ public struct LiveHFFetcher: ModelFileFetching {
         try FileManager.default.createDirectory(
             at: cacheBase, withIntermediateDirectories: true)
 
-        let hub = HubApi(
-            downloadBase: cacheBase,
-            useBackgroundSession: Self.prefersBackgroundSession)
+        let hub = HubApi(downloadBase: cacheBase)
         let snapshotURL = try await hub.snapshot(
             from: Hub.Repo(id: hfPath),
             revision: "main",
