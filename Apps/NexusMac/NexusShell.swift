@@ -292,6 +292,7 @@ private struct NexusCommandBar: View {
     @Environment(\.taskParser) private var parser
     @Environment(\.taskRepository) private var repository
     @State private var state: CapturePaneState?
+    @State private var saveError: String?
 
     private var inputBinding: Binding<String> {
         Binding(
@@ -364,6 +365,18 @@ private struct NexusCommandBar: View {
                 .strokeBorder(Color.white.opacity(0.105), lineWidth: 1)
         }
         .nexusGlass(.regular, in: Capsule())
+        .alert("Couldn’t save", isPresented: isShowingSaveError) {
+            Button("OK", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
+        }
+    }
+
+    private var isShowingSaveError: Binding<Bool> {
+        Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )
     }
 
     @MainActor
@@ -384,7 +397,13 @@ private struct NexusCommandBar: View {
             // bar, unlike `CapturePane`, has no visible Save button to gate).
             await state.handleInputChange(state.input)
             guard state.lastResult != nil else { return }
-            await state.commit { task in try? repository.insert(task) }
+            do {
+                try await state.commit { task in try repository.insert(task) }
+            } catch {
+                // Keep the typed text in the bar and surface the failure
+                // rather than letting the task vanish on a lost save.
+                saveError = "Couldn’t save the task. Please try again."
+            }
         }
     }
 }

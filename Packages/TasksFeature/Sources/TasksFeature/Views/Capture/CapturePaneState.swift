@@ -64,8 +64,10 @@ public final class CapturePaneState {
     }
 
     /// Builds a `TaskItem` from `lastResult` and hands it to the inserter.
-    /// Resets the input string on success.
-    public func commit(insert: @MainActor (TaskItem) -> Void) async {
+    /// Resets the input string only after the inserter succeeds, so a failed
+    /// persist (e.g. `context.save()` throws) leaves the user's text and parse
+    /// intact instead of silently discarding them.
+    public func commit(insert: @MainActor (TaskItem) throws -> Void) async throws {
         guard let result = lastResult else { return }
         let task = TaskItem(
             title: result.title,
@@ -77,7 +79,7 @@ public final class CapturePaneState {
             tags: result.tags,
             recurrenceRule: result.recurrence
         )
-        insert(task)
+        try insert(task)
         self.input = ""
         self.lastResult = nil
     }

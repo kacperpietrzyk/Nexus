@@ -37,6 +37,16 @@ public struct TaskDetailInspector: View {
         self._customRRule = State(initialValue: task.recurrenceRule ?? "")
     }
 
+    /// Re-derives the editor's `@State` from the current `task`. Mirrors the
+    /// `init` derivations; called when the bound task identity changes while
+    /// the view is reused, so the controls reflect the new task instead of the
+    /// previous one.
+    private func resyncDerivedState() {
+        allDay = task.startAt == nil
+        recurrenceChoice = RecurrenceChoice.from(rrule: task.recurrenceRule)
+        customRRule = task.recurrenceRule ?? ""
+    }
+
     public var body: some View {
         ZStack {
             NexusWallpaper()
@@ -58,7 +68,15 @@ public struct TaskDetailInspector: View {
         .background(NexusColor.Background.base)
         .navigationTitle(task.title.isEmpty ? "Task" : task.title)
         .task { loadLinkState() }
-        .onChange(of: task.id) { _, _ in loadLinkState() }
+        .onChange(of: task.id) { _, _ in
+            // The inspector view identity is reused when the selection switches
+            // to another task (the Mac host returns it without an `.id(task.id)`),
+            // so `init` does not re-run. Resync the derived editor state from the
+            // new task — otherwise an edit would write the previous task's
+            // all-day/recurrence values onto the newly selected one.
+            resyncDerivedState()
+            loadLinkState()
+        }
         .onKeyPress(.escape) {
             onClose?()
             return onClose == nil ? .ignored : .handled

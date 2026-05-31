@@ -59,7 +59,7 @@ struct CapturePaneStateTests {
             debounce: .zero
         )
         await state.handleInputChange("call mom !1 #personal")
-        await state.commit { item in
+        try await state.commit { item in
             recorder.insertedTitle = item.title
             recorder.insertedPriority = item.priority
             recorder.insertedTags = item.tags
@@ -73,6 +73,28 @@ struct CapturePaneStateTests {
         #expect(recorder.insertedDeadlineAt == deadlineAt)
         let resetInput = state.input
         #expect(resetInput.isEmpty, "commit must reset the input string")
+    }
+
+    @Test("commit preserves input and result when the inserter throws")
+    @MainActor
+    func commitPreservesStateOnInsertFailure() async {
+        struct InsertFailure: Error {}
+        let state = CapturePaneState(
+            parser: FixedParser(
+                result: ParseResult(title: "call mom", confidence: 1.0)),
+            locale: Locale(identifier: "en"),
+            nowProvider: { [now] in now },
+            debounce: .zero
+        )
+        await state.handleInputChange("call mom")
+
+        await #expect(throws: InsertFailure.self) {
+            try await state.commit { _ in throw InsertFailure() }
+        }
+
+        // A failed save must not silently discard the user's text or parse.
+        #expect(state.input == "call mom", "failed commit must keep the input string")
+        #expect(state.lastResult != nil, "failed commit must keep the parsed result")
     }
 
     @Test("handleInputChange skips redundant write when value unchanged")
