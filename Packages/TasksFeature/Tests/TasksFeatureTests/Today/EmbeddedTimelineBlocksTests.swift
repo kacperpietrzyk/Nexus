@@ -236,7 +236,7 @@ struct EmbeddedTimelineBlocksTests {
                 endTime: "10:00")
         ]
         let label = TodayDashboard.embeddedFreeTimeLabel(nowFrac: 9.0, blocks: blocks)
-        #expect(label?.text == "wolne · 45m")
+        #expect(label?.text == "free · 45m")
         // Midpoint of the [9.0, 9.75] gap.
         #expect(label?.midFrac == 9.375)
     }
@@ -250,7 +250,7 @@ struct EmbeddedTimelineBlocksTests {
                 endTime: "13:00")
         ]
         let label = TodayDashboard.embeddedFreeTimeLabel(nowFrac: 10.0, blocks: blocks)
-        #expect(label?.text == "wolne · 2h 30m")
+        #expect(label?.text == "free · 2h 30m")
     }
 
     @Test("Gap shorter than 30 minutes is suppressed")
@@ -292,14 +292,14 @@ struct EmbeddedTimelineBlocksTests {
     @Test("Free-time gap end is clamped to the window so a far block is bounded")
     func freeTimeGapClampedToWindow() {
         // Next block at 23.0 is outside the window; gapEnd clamps to 20.0.
-        // now = 19.0 → gap [19.0, 20.0] = 60 min = "wolne · 1h 0m".
+        // now = 19.0 → gap [19.0, 20.0] = 60 min = "free · 1h 0m".
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b", a: 23.0, b: 23.5, title: "Far", time: "23:00",
                 endTime: "23:30")
         ]
         let label = TodayDashboard.embeddedFreeTimeLabel(nowFrac: 19.0, blocks: blocks)
-        #expect(label?.text == "wolne · 1h 0m")
+        #expect(label?.text == "free · 1h 0m")
         #expect(label?.midFrac == 19.5)
     }
 

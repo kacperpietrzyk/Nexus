@@ -305,7 +305,7 @@ public struct TodayDashboard: View {
                         NexusButton(variant: .ghost, size: .sm, action: markInboxRead) {
                             HStack(spacing: 4) {
                                 Image(systemName: "envelope.open")
-                                Text("Oznacz")
+                                Text("Mark read")
                             }
                         }
                     }

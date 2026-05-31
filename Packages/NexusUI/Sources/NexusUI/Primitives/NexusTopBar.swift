@@ -65,7 +65,7 @@ public struct NexusTopBar<Trailing: View>: View {
                     .font(.system(size: 12))
                     .foregroundStyle(NexusColor.Text.tertiary)
 
-                Text("Szukaj lub uruchom...")
+                Text("Search or run...")
                     .font(NexusType.caption)
                     .foregroundStyle(NexusColor.Text.tertiary)
 
@@ -93,8 +93,8 @@ public struct NexusTopBar<Trailing: View>: View {
         }
         .buttonStyle(.plain)
         .nexusTopBarKeyboardShortcut()
-        .help("Szukaj lub uruchom")
-        .accessibilityLabel("Szukaj lub uruchom")
+        .help("Search or run")
+        .accessibilityLabel("Search or run")
     }
 }
 

@@ -101,7 +101,7 @@ public struct CapturePane: View {
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(NexusColor.Text.muted)
-                Text("SZYBKI ZAPIS")
+                Text("QUICK CAPTURE")
                     .font(Font.custom("GeistMono-SemiBold", size: 10))
                     .tracking(1.8)
                     .foregroundStyle(NexusColor.Text.muted)
@@ -134,7 +134,7 @@ public struct CapturePane: View {
                     .frame(height: 1)
                     .padding(.bottom, 16)
 
-                Text("ROZPOZNANO")
+                Text("RECOGNIZED")
                     .font(Font.custom("GeistMono-SemiBold", size: 9))
                     .tracking(1.8)
                     .foregroundStyle(NexusColor.Text.disabled)
