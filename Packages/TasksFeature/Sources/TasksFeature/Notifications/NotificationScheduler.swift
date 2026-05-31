@@ -16,15 +16,24 @@ public final class NotificationScheduler {
     private let delivery: any NotificationDelivering
     private let quietHoursProvider: @Sendable () -> QuietHours?
     private let calendar: Calendar
+    private let now: @Sendable () -> Date
+
+    /// How soon an overdue reminder fires after it is (re)scheduled. A
+    /// non-repeating `UNCalendarNotificationTrigger` whose matched date is in
+    /// the past never fires, so for an already-passed due date we fall back to
+    /// a short time-interval trigger instead of a dead request.
+    nonisolated private static let overdueReminderDelay: TimeInterval = 5
 
     public init(
         delivery: any NotificationDelivering,
         quietHours: @escaping @Sendable () -> QuietHours?,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.delivery = delivery
         self.quietHoursProvider = quietHours
         self.calendar = calendar
+        self.now = now
     }
 
     /// Adds a `UNNotificationRequest` for an open, non-deleted task with a
@@ -33,22 +42,16 @@ public final class NotificationScheduler {
     /// deferred to `QuietHours.nextActive(after:)`.
     public func schedule(_ task: TaskItem) async throws {
         guard task.status == .open, task.deletedAt == nil, let due = task.dueAt else { return }
-        let triggerDate = quietHoursProvider()?.nextActive(after: due, calendar: calendar) ?? due
 
         let content = UNMutableNotificationContent()
         content.title = task.title
         content.categoryIdentifier = NotificationCategory.taskReminder.rawValue
         content.userInfo = ["taskId": task.id.uuidString]
 
-        let comps = calendar.dateComponents(
-            [.year, .month, .day, .hour, .minute],
-            from: triggerDate
-        )
-        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
         let request = UNNotificationRequest(
             identifier: identifier(for: task.id),
             content: content,
-            trigger: trigger
+            trigger: trigger(firingAt: due)
         )
         try await delivery.add(request)
     }
@@ -73,21 +76,36 @@ public final class NotificationScheduler {
     public func scheduleSnooze(_ task: TaskItem, until: Date) async throws {
         await cancel(taskID: task.id)
         guard task.deletedAt == nil else { return }
-        let triggerDate = quietHoursProvider()?.nextActive(after: until, calendar: calendar) ?? until
 
         let content = UNMutableNotificationContent()
         content.title = task.title
         content.categoryIdentifier = NotificationCategory.taskReminder.rawValue
         content.userInfo = ["taskId": task.id.uuidString]
 
-        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
         let request = UNNotificationRequest(
             identifier: identifier(for: task.id),
             content: content,
-            trigger: trigger
+            trigger: trigger(firingAt: until)
         )
         try await delivery.add(request)
+    }
+
+    /// Builds the trigger for a requested fire date, applying quiet hours.
+    /// Future dates use a calendar trigger (as before). A date that has already
+    /// passed — e.g. an overdue task's `dueAt` — would make a non-repeating
+    /// calendar trigger dead, so it falls back to a short time-interval trigger
+    /// that fires soon, still deferring out of an active quiet window.
+    nonisolated private func trigger(firingAt requested: Date) -> UNNotificationTrigger {
+        let currentDate = now()
+        let target = quietHoursProvider()?.nextActive(after: requested, calendar: calendar) ?? requested
+        if target > currentDate {
+            let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: target)
+            return UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        }
+        let soon = currentDate.addingTimeInterval(Self.overdueReminderDelay)
+        let deferred = quietHoursProvider()?.nextActive(after: soon, calendar: calendar) ?? soon
+        let interval = max(Self.overdueReminderDelay, deferred.timeIntervalSince(currentDate))
+        return UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
     }
 
     private func identifier(for id: UUID) -> String { "task-\(id.uuidString)" }
