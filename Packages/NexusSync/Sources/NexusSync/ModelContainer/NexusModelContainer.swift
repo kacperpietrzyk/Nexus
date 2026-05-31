@@ -95,7 +95,7 @@ public enum NexusModelContainer {
             storeURL: url,
             cloudKitDatabase: cloudKitDatabase
         )
-        try backfillLocalOnlyBaselineRowsIfNeeded(storeURL: url)
+        try backfillLocalOnlyBaselineRowsIfNeeded(storeURL: url, extraModels: extraModels)
         return try makeContainer(
             for: configurationPlan.containerSchema,
             hasEffectiveExtraModels: configurationPlan.hasEffectiveExtraModels,
@@ -231,13 +231,14 @@ extension NexusModelContainer {
     /// local data visible after enabling that path in the host app.
     @discardableResult
     public static func migrateDefaultStoreToAppGroupIfNeeded(
-        groupContainerIdentifier: String = Self.appGroupIdentifier
+        groupContainerIdentifier: String = Self.appGroupIdentifier,
+        extraModels: [any PersistentModel.Type] = []
     ) throws -> StoreMigrationResult {
         guard let groupURL = groupStoreURL(for: groupContainerIdentifier) else {
             return .appGroupUnavailable
         }
         let migrated = try migrateStoreFamiliesIfNeeded(from: defaultStoreURL(), to: groupURL)
-        try backfillLocalOnlyBaselineRowsIfNeeded(storeURL: groupURL)
+        try backfillLocalOnlyBaselineRowsIfNeeded(storeURL: groupURL, extraModels: extraModels)
         return migrated.main
     }
 
@@ -395,21 +396,35 @@ extension NexusModelContainer {
         return foundUserDataTable ? false : storeFileSize(at: storeURL) > 0
     }
 
-    private static func backfillLocalOnlyBaselineRowsIfNeeded(storeURL: URL) throws {
+    private static func backfillLocalOnlyBaselineRowsIfNeeded(
+        storeURL: URL,
+        extraModels: [any PersistentModel.Type] = []
+    ) throws {
         try backfillLegacyConflictLogsIfNeeded(
             from: storeURL,
-            to: localOnlyStoreURL(for: storeURL)
+            to: localOnlyStoreURL(for: storeURL),
+            extraModels: extraModels
         )
     }
 
-    static func backfillLegacyConflictLogsIfNeeded(from sourceURL: URL, to localOnlyURL: URL) throws {
+    static func backfillLegacyConflictLogsIfNeeded(
+        from sourceURL: URL,
+        to localOnlyURL: URL,
+        extraModels: [any PersistentModel.Type] = []
+    ) throws {
         guard FileManager.default.fileExists(atPath: sourceURL.path),
             storeTableHasRows("ZCONFLICTLOG", at: sourceURL)
         else {
             return
         }
 
-        let legacySchema = Schema(versionedSchema: NexusSchemaV7.self)
+        // Open the source (synced) store with the SAME assembled schema production uses for it —
+        // including composition-time synced entities like Meeting (passed via extraModels). The
+        // old `Schema(versionedSchema: NexusSchemaV7.self)` omitted Meeting, which the synced
+        // store physically contains (ZMEETING), so SwiftData saw an entity "removed" on open and
+        // could throw or migrate destructively. With extraModels == [] this is identical to the
+        // previous schema, so callers that don't supply them are unchanged.
+        let legacySchema = NexusSchemaV7.schema(extraModels: extraModels)
         let legacyContainer = try ModelContainer(
             for: legacySchema,
             migrationPlan: NexusMigrationPlan.self,

@@ -243,6 +243,14 @@ struct NexusiOSApp: App {
         // handler, which only cancels), and BackgroundTasks documents these calls as thread-safe.
         nonisolated(unsafe) let task = task
         let work = _Concurrency.Task {
+            // Register the job here too. On a background-only launch the foreground
+            // TombstonePurgeLifecycleModifier `.task` never runs, so the scheduler's job map is
+            // empty and `runNow(.tombstonePurge)` silently no-ops (yet still reports success) —
+            // the purge never runs in the background as designed. `register` is keyed by JobID,
+            // so this is idempotent with the foreground registration.
+            await scheduler.register(
+                TombstonePurgeJob.make(container: container, linkableTypes: [TaskItem.self])
+            )
             await scheduler.runNow(.tombstonePurge)
             task.setTaskCompleted(success: true)
         }
@@ -379,7 +387,9 @@ struct NexusiOSApp: App {
 
     private static func makeModelContainer(environment: NexusEnvironment) -> ModelContainer {
         do {
-            try NexusModelContainer.migrateDefaultStoreToAppGroupIfNeeded()
+            try NexusModelContainer.migrateDefaultStoreToAppGroupIfNeeded(
+                extraModels: MeetingsComposition.extraModels
+            )
             return try NexusModelContainer.make(
                 environment: environment,
                 groupContainerIdentifier: NexusModelContainer.appGroupIdentifier,

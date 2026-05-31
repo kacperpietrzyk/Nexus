@@ -497,7 +497,9 @@ struct NexusMacApp: App {
 
     private static func makeModelContainer(environment: NexusEnvironment) -> ModelContainer {
         do {
-            try NexusModelContainer.migrateDefaultStoreToAppGroupIfNeeded()
+            try NexusModelContainer.migrateDefaultStoreToAppGroupIfNeeded(
+                extraModels: MeetingsComposition.extraModels
+            )
             return try NexusModelContainer.make(
                 environment: environment,
                 groupContainerIdentifier: NexusModelContainer.appGroupIdentifier,
