@@ -16,6 +16,9 @@ private struct RequestSnapshot: Sendable {
     let triggerDay: Int?
     let triggerHour: Int?
     let triggerMinute: Int?
+    /// Non-nil when the request uses a `UNTimeIntervalNotificationTrigger`
+    /// (the overdue "fire soon" fallback) instead of a calendar trigger.
+    let triggerInterval: TimeInterval?
 }
 
 /// Recording fake. The `NotificationDelivering` protocol exposes
@@ -49,13 +52,15 @@ private final class RecordingNotificationCenter: NotificationDelivering {
         state.withLock { state in
             state.addedRequests.map { request in
                 let trigger = request.trigger as? UNCalendarNotificationTrigger
+                let interval = request.trigger as? UNTimeIntervalNotificationTrigger
                 return RequestSnapshot(
                     identifier: request.identifier,
                     title: request.content.title,
                     categoryIdentifier: request.content.categoryIdentifier,
                     triggerDay: trigger?.dateComponents.day,
                     triggerHour: trigger?.dateComponents.hour,
-                    triggerMinute: trigger?.dateComponents.minute
+                    triggerMinute: trigger?.dateComponents.minute,
+                    triggerInterval: interval?.timeInterval
                 )
             }
         }
@@ -81,17 +86,26 @@ struct NotificationSchedulerTests {
         return c
     }
 
+    private func date(_ iso: String) -> Date {
+        ISO8601DateFormatter().date(from: iso)!
+    }
+
     @Test("schedule adds a request keyed task-<uuid>")
     func scheduleAddsRequest() async throws {
         let center = RecordingNotificationCenter()
+        // Fixed "now" well before the due date so the scheduler treats it as
+        // future (calendar-trigger path) deterministically, regardless of the
+        // wall clock the suite runs on.
+        let now = date("2026-05-01T08:00:00Z")
         let scheduler = NotificationScheduler(
             delivery: center,
             quietHours: { nil },
-            calendar: cal()
+            calendar: cal(),
+            now: { now }
         )
         let task = TaskItem(
             title: "Reply Magda",
-            dueAt: ISO8601DateFormatter().date(from: "2026-05-06T13:00:00Z")
+            dueAt: date("2026-05-06T13:00:00Z")
         )
         try await scheduler.schedule(task)
         let pending = center.snapshots()
@@ -117,12 +131,14 @@ struct NotificationSchedulerTests {
     func quietHoursDefersTrigger() async throws {
         let center = RecordingNotificationCenter()
         let quiet = QuietHours(startHour: 22, startMinute: 0, endHour: 7, endMinute: 0)
+        let now = date("2026-05-05T20:00:00Z")
         let scheduler = NotificationScheduler(
             delivery: center,
             quietHours: { quiet },
-            calendar: cal()
+            calendar: cal(),
+            now: { now }
         )
-        let inQuietHours = ISO8601DateFormatter().date(from: "2026-05-05T23:00:00Z")!
+        let inQuietHours = date("2026-05-05T23:00:00Z")
         let task = TaskItem(title: "Late reminder", dueAt: inQuietHours)
         try await scheduler.schedule(task)
         let pending = center.snapshots()
@@ -147,12 +163,14 @@ struct NotificationSchedulerTests {
     @Test("scheduleSnooze adds a request keyed task-<uuid> using the snooze target")
     func scheduleSnoozeUsesUntilDate() async throws {
         let center = RecordingNotificationCenter()
+        let now = date("2026-05-01T08:00:00Z")
         let scheduler = NotificationScheduler(
             delivery: center,
             quietHours: { nil },
-            calendar: cal()
+            calendar: cal(),
+            now: { now }
         )
-        let snoozeTarget = ISO8601DateFormatter().date(from: "2026-05-06T09:00:00Z")!
+        let snoozeTarget = date("2026-05-06T09:00:00Z")
         let task = TaskItem(title: "Snoozed task")
         // Mark as snoozed to confirm the method does not guard on .open.
         task.statusRaw = TaskStatus.snoozed.rawValue
@@ -163,5 +181,49 @@ struct NotificationSchedulerTests {
         #expect(pending[0].triggerDay == 6)
         #expect(pending[0].triggerHour == 9)
         #expect(pending[0].triggerMinute == 0)
+    }
+
+    @Test("schedule fires soon for an overdue task instead of a dead calendar trigger")
+    func overduePastDueFiresSoon() async throws {
+        let center = RecordingNotificationCenter()
+        let now = date("2026-05-10T12:00:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center,
+            quietHours: { nil },
+            calendar: cal(),
+            now: { now }
+        )
+        // Due an hour in the past relative to the injected now.
+        let task = TaskItem(title: "Overdue", dueAt: date("2026-05-10T11:00:00Z"))
+        try await scheduler.schedule(task)
+        let pending = center.snapshots()
+        #expect(pending.count == 1)
+        // A calendar trigger built from a past date would never fire; the
+        // overdue path uses a short time-interval trigger instead.
+        #expect(pending[0].triggerInterval != nil)
+        #expect((pending[0].triggerInterval ?? 0) > 0)
+        #expect((pending[0].triggerInterval ?? 0) <= 60)
+        #expect(pending[0].triggerHour == nil, "overdue request must not use a calendar trigger")
+    }
+
+    @Test("overdue task defers its soon-trigger out of an active quiet window")
+    func overdueDuringQuietHoursDefersToWindowEnd() async throws {
+        let center = RecordingNotificationCenter()
+        let quiet = QuietHours(startHour: 22, startMinute: 0, endHour: 7, endMinute: 0)
+        // now is inside the quiet window; the task is already overdue.
+        let now = date("2026-05-10T23:30:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center,
+            quietHours: { quiet },
+            calendar: cal(),
+            now: { now }
+        )
+        let task = TaskItem(title: "Overdue in quiet hours", dueAt: date("2026-05-10T20:00:00Z"))
+        try await scheduler.schedule(task)
+        let pending = center.snapshots()
+        #expect(pending.count == 1)
+        #expect(pending[0].triggerInterval != nil)
+        // Window ends at 07:00 next day → ~7.5h out, well beyond the 5s minimum.
+        #expect((pending[0].triggerInterval ?? 0) > 60)
     }
 }
