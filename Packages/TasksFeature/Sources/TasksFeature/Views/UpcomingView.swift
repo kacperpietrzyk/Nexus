@@ -58,9 +58,7 @@ public struct UpcomingView: View {
         .background(Color.clear)
         .task(id: days) { reload() }
         .onChange(of: now) { _, _ in reload() }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            reload()
-        }
+        .reloadOnStoreChange { reload() }
         .cascadeCompletionConfirmation($cascadePrompt) { prompt in
             confirmCascade(prompt)
         }

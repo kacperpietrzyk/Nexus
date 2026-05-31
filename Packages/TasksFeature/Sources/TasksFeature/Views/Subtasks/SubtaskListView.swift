@@ -156,9 +156,7 @@ public struct SubtaskListView: View {
             }
         }
         .task(id: parent.id) { reload() }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            reload()
-        }
+        .reloadOnStoreChange { reload() }
         .sheet(item: $parentPickerTarget) { item in
             ParentTaskPickerSheet(task: item) {
                 reload()
