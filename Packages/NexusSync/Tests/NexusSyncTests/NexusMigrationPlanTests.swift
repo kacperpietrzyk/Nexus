@@ -31,6 +31,33 @@ struct NexusMigrationPlanTests {
         #expect(descriptions.allSatisfy { $0.contains("lightweight") })
     }
 
+    /// Invariant guard, not a behavioural test. The production container is a
+    /// split (synced + local-only) configuration, and `makeContainer` drops
+    /// `NexusMigrationPlan` on that path — it relies on SwiftData lightweight
+    /// *inference* instead (see `makeContainer` and
+    /// `splitContainerInfersV6ToV7LightweightExpansionOnDisk`). That is correct
+    /// only while every stage is `.lightweight`. The moment a `.custom` stage is
+    /// added, it will silently NOT run for real users, because the plan never
+    /// reaches the split container — so this fails loudly to force the author to
+    /// also wire the plan into `makeContainer`'s split path and verify it with a
+    /// real on-disk migration before shipping.
+    @Test("every stage is lightweight — custom stages would not run in the production split container")
+    func everyStageIsLightweightOrTheSplitContainerMustBeRewired() {
+        let nonLightweight = NexusMigrationPlan.stages
+            .map { String(describing: $0) }
+            .filter { !$0.contains("lightweight") }
+        #expect(
+            nonLightweight.isEmpty,
+            """
+            A non-lightweight migration stage was added to NexusMigrationPlan, but the production \
+            split container (synced + local-only) drops the plan and infers lightweight migrations \
+            only. This custom stage will never execute for real users and can silently lose data. \
+            Wire NexusMigrationPlan into makeContainer's split path and prove the migration with an \
+            on-disk fixture before removing this guard. Offending stage(s): \(nonLightweight)
+            """
+        )
+    }
+
     @Test("opens fresh in-memory container on V7 schema")
     func opensFreshContainer() throws {
         // Fresh-V7: no old store on disk, V7 schema cold open.

@@ -129,6 +129,78 @@ import Testing
     #expect(conflicts.first { $0.id == conflictID }?.summary == "legacy conflict")
 }
 
+/// The legacy `ConflictLog` backfill is a one-time migration: the ZCONFLICTLOG
+/// table physically survives the split migration, so the cheap row probe stays
+/// true forever and (pre-fix) reopened the expensive synced container on every
+/// launch. A completion marker must make it run at most once per source store.
+/// Appending a fresh row after completion is artificial (production never writes
+/// ConflictLog to the synced store anymore) — it exists purely to prove the
+/// marker short-circuits the second pass.
+@Test func legacyConflictLogBackfillRunsOnlyOncePerSource() throws {
+    let storeURL = temporaryStoreURL(prefix: "nexus-backfill-once")
+    let localOnlyURL = NexusModelContainer.localOnlyStoreURL(for: storeURL)
+    defer { cleanupStores(at: [storeURL, localOnlyURL]) }
+
+    let suiteName = "nexus-backfill-once-\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let firstID = UUID()
+    try makeLegacyMonolithicV6Store(at: storeURL, conflictID: firstID, itemID: UUID(), summary: "first")
+
+    // First pass copies the legacy row and records completion.
+    try NexusModelContainer.backfillLegacyConflictLogsIfNeeded(
+        from: storeURL,
+        to: localOnlyURL,
+        defaults: defaults
+    )
+    let key = NexusModelContainer.legacyConflictLogBackfillCompletionKey(for: storeURL)
+    #expect(defaults.bool(forKey: key))
+    #expect(try copiedConflictLogIDs(at: localOnlyURL).contains(firstID))
+
+    // A new legacy row appears in the source after completion...
+    let secondID = UUID()
+    try appendConflictLog(to: storeURL, conflictID: secondID, summary: "second")
+
+    // ...but the marker short-circuits the second pass, so it is NOT copied
+    // (the expensive synced container is never reopened).
+    try NexusModelContainer.backfillLegacyConflictLogsIfNeeded(
+        from: storeURL,
+        to: localOnlyURL,
+        defaults: defaults
+    )
+    let finalIDs = try copiedConflictLogIDs(at: localOnlyURL)
+    #expect(finalIDs.contains(firstID))
+    #expect(
+        !finalIDs.contains(secondID),
+        "completion marker must prevent reopening the synced store after the one-time drain"
+    )
+}
+
+private func copiedConflictLogIDs(at localOnlyURL: URL) throws -> [UUID] {
+    let schema = Schema([ConflictLog.self], version: NexusSchemaV7.versionIdentifier)
+    let container = try ModelContainer(
+        for: schema,
+        configurations: [ModelConfiguration(schema: schema, url: localOnlyURL, cloudKitDatabase: .none)]
+    )
+    return try ModelContext(container).fetch(FetchDescriptor<ConflictLog>()).map(\.id)
+}
+
+private func appendConflictLog(to sourceURL: URL, conflictID: UUID, summary: String) throws {
+    // The backfill's reopen migrated the on-disk store to V7, so append on V7.
+    let schema = NexusSchemaV7.schema()
+    let container = try ModelContainer(
+        for: schema,
+        migrationPlan: NexusMigrationPlan.self,
+        configurations: [ModelConfiguration(schema: schema, url: sourceURL, cloudKitDatabase: .none)]
+    )
+    let context = ModelContext(container)
+    let conflict = ConflictLog(itemKind: .task, itemID: UUID(), resolution: .setMerge, summary: summary)
+    conflict.id = conflictID
+    context.insert(conflict)
+    try context.save()
+}
+
 /// Regression for the backfill reopening the synced store with a schema that OMITTED
 /// composition-time synced entities (Meeting / ZMEETING). The store physically contains those
 /// tables, so a Meeting-less reopen made SwiftData see an entity "removed" and risked a throw or
