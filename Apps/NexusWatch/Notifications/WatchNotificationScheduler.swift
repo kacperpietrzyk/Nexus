@@ -95,11 +95,22 @@ final class WatchNotificationScheduler {
         return content
     }
 
-    /// Drops every pending Watch reminder. Used before re-installing from a
-    /// fresh snapshot and as a hard reset.
+    /// Drops every pending Watch *task* reminder owned by this scheduler. Used before
+    /// re-installing from a fresh snapshot and as a hard reset.
+    ///
+    /// Only `task-<uuid>` identifiers are removed — NOT every pending request. Using
+    /// `removeAllPendingNotificationRequests()` here also wiped sibling requests such as
+    /// `WatchOverdueDigestScheduler`'s `digest-overdue`, which is scheduled moments earlier on
+    /// launch, silently erasing the morning overdue digest exactly when the Watch is the local
+    /// master (iPhone unreachable).
     func uninstallAll() async {
-        await delivery.removeAllPendingNotificationRequests()
+        let ownedIdentifiers = await delivery.pendingNotificationRequests()
+            .map(\.identifier)
+            .filter { $0.hasPrefix(Self.taskIdentifierPrefix) }
+        guard !ownedIdentifiers.isEmpty else { return }
+        await delivery.removePendingNotificationRequests(withIdentifiers: ownedIdentifiers)
     }
 
-    private func identifier(for id: UUID) -> String { "task-\(id.uuidString)" }
+    private static let taskIdentifierPrefix = "task-"
+    private func identifier(for id: UUID) -> String { "\(Self.taskIdentifierPrefix)\(id.uuidString)" }
 }
