@@ -1,6 +1,7 @@
 import Foundation
 import NexusAgentTools
 import NexusCore
+import NexusUI
 
 public struct AgentRememberTool: MutatingAgentTool {
     public let name = "agent.remember"
@@ -20,14 +21,36 @@ public struct AgentRememberTool: MutatingAgentTool {
     )
 
     private let storeRef: AgentMemoryStoreRef
+    private let isAutoSaveEnabled: @Sendable () -> Bool
 
-    public init(store: AgentMemoryStore) {
+    /// `isAutoSaveEnabled` defaults to reading the "Auto-save high-confidence
+    /// memory" Settings toggle from `UserDefaults.standard` (ON unless the user
+    /// turned it off). Injectable for tests. A closure, not a stored
+    /// `UserDefaults`, keeps the tool `Sendable`.
+    public init(
+        store: AgentMemoryStore,
+        isAutoSaveEnabled: @escaping @Sendable () -> Bool = {
+            UserDefaults.standard.object(forKey: NexusPreferences.Keys.agentMemoryAutoSaveEnabled)
+                as? Bool ?? true
+        }
+    ) {
         self.storeRef = AgentMemoryStoreRef(store)
+        self.isAutoSaveEnabled = isAutoSaveEnabled
     }
 
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let input = try AgentMemoryToolArguments.rememberInput(from: args)
+        // Honour the "Auto-save high-confidence memory" Settings toggle. When
+        // off, report back to the model that nothing was saved instead of
+        // persisting — returning (not throwing) so the turn continues.
+        guard isAutoSaveEnabled() else {
+            return .object([
+                "status": .string("skipped"),
+                "saved": .bool(false),
+                "reason": .string("Memory auto-save is turned off in Settings."),
+            ])
+        }
         let id = try storeRef.store.upsert(
             scope: input.scope,
             key: input.key,

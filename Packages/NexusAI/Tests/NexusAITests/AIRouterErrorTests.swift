@@ -39,6 +39,32 @@ import Testing
     }
 }
 
+@Test func aiRouterError_errorDescription_isUserFacingNotDebugFormat() {
+    // requestFailed surfaces the carried message verbatim.
+    #expect(
+        AIRouterError.requestFailed(.appleIntelligence, "lookup failed").errorDescription
+            == "lookup failed")
+    // Provider-keyed cases name the provider in a human form (not the rawValue).
+    let consent = try? #require(AIRouterError.consentRequired(.appleIntelligence).errorDescription)
+    #expect(consent?.contains("Apple Intelligence") == true)
+    #expect(consent?.contains("appleIntelligence") == false)
+    let quota = AIRouterError.quotaExceeded(.appleIntelligence).errorDescription
+    #expect(quota?.contains("Apple Intelligence") == true)
+    // Every case yields a non-empty message (so `localizedDescription` is never
+    // the generic "operation couldn't be completed" fallback).
+    let all: [AIRouterError] = [
+        .noProviderAvailable,
+        .consentRequired(.appleIntelligence),
+        .quotaExceeded(.appleIntelligence),
+        .requestFailed(.mlx, "x"),
+        .capabilityNotSupported(.longContext),
+        .providerNotImplemented(.whisperKit),
+    ]
+    for error in all {
+        #expect(error.errorDescription?.isEmpty == false)
+    }
+}
+
 @Test func aiRouterError_isEquatable() {
     #expect(AIRouterError.noProviderAvailable == AIRouterError.noProviderAvailable)
     #expect(

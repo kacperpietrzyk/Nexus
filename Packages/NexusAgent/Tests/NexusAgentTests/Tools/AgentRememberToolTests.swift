@@ -119,6 +119,27 @@ struct AgentRememberToolTests {
     }
 
     @Test
+    func rememberToolSkipsSaveWhenAutoSaveDisabled() async throws {
+        let harness = try ToolTestHarness.make()
+        let tool = AgentRememberTool(store: harness.store, isAutoSaveEnabled: { false })
+
+        let output = try await tool.call(
+            args: .object([
+                "scope": .string("global"),
+                "key": .string("prefers-pl"),
+                "content": .string("User prefers Polish responses"),
+            ]),
+            context: harness.agentContext
+        )
+
+        let object = try #require(output.objectValue)
+        #expect(object["saved"] == .bool(false))
+        #expect(object["status"] == .string("skipped"))
+        // Nothing was persisted.
+        #expect(try harness.store.find(scope: "global", key: "prefers-pl") == nil)
+    }
+
+    @Test
     func rememberToolRejectsMissingRequiredField() async throws {
         let harness = try ToolTestHarness.make()
         let tool = AgentRememberTool(store: harness.store)
