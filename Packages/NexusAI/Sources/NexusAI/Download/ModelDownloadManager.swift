@@ -416,6 +416,19 @@ public final class ModelDownloadManager {
 ///
 /// Not used by the unit tests (they inject a stub) — exercised by Task 28's
 /// `INTEGRATION=1` smoke and production.
+/// Errors surfaced by the live HuggingFace fetcher when a download completes
+/// the transfer but does not yield a loadable model.
+public enum ModelDownloadError: Error, LocalizedError {
+    case noWeightsLanded(hfPath: String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .noWeightsLanded(let hfPath):
+            return "Download finished but no model weights were found for \(hfPath). Please try again."
+        }
+    }
+}
+
 public struct LiveHFFetcher: ModelFileFetching {
     /// Globs covering MLX weights + config + tokenizer for the model families
     /// in `DefaultCatalog.json` (Qwen / Gemma safetensors, e5 embedders).
@@ -458,7 +471,33 @@ public struct LiveHFFetcher: ModelFileFetching {
         )
 
         try Self.replaceContents(of: destination, with: snapshotURL)
+        // A snapshot can "succeed" without landing usable weights — an empty or
+        // partial repo, or a match glob that pulled only sidecars. Marking such
+        // a folder `.downloaded` leaves a model that fails to load later, so
+        // require the weights to actually be present before returning.
+        try Self.validateWeightsLanded(in: destination, hfPath: hfPath)
         onProgress(totalBytes)
+    }
+
+    /// Throws `ModelDownloadError.noWeightsLanded` unless `folder` contains at
+    /// least one non-empty `*.safetensors` weight file. Catalog models (Qwen /
+    /// Gemma / e5) all ship safetensors weights, so their absence means the
+    /// snapshot did not materialize a loadable model.
+    static func validateWeightsLanded(in folder: URL, hfPath: String) throws {
+        let entries =
+            (try? FileManager.default.contentsOfDirectory(
+                at: folder,
+                includingPropertiesForKeys: [.fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )) ?? []
+        let hasWeights = entries.contains { url in
+            guard url.pathExtension == "safetensors" else { return false }
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            return size > 0
+        }
+        guard hasWeights else {
+            throw ModelDownloadError.noWeightsLanded(hfPath: hfPath)
+        }
     }
 
     /// Copies every entry from `source` into `destination`, replacing the
