@@ -407,14 +407,32 @@ extension NexusModelContainer {
         )
     }
 
+    /// `UserDefaults` key recording that the one-time legacy `ConflictLog`
+    /// backfill has drained a given source store. Keyed by the source path so
+    /// it stays stable for the (fixed) production store and isolated per store
+    /// in tests.
+    static func legacyConflictLogBackfillCompletionKey(for sourceURL: URL) -> String {
+        "nexus.sync.legacyConflictLogBackfill.completed.\(sourceURL.path)"
+    }
+
     static func backfillLegacyConflictLogsIfNeeded(
         from sourceURL: URL,
         to localOnlyURL: URL,
-        extraModels: [any PersistentModel.Type] = []
+        extraModels: [any PersistentModel.Type] = [],
+        defaults: UserDefaults = .standard
     ) throws {
+        let completionKey = legacyConflictLogBackfillCompletionKey(for: sourceURL)
+        // One-time migration: ConflictLog is no longer written to the synced
+        // store, so once drained there is nothing more to copy — ever.
+        guard !defaults.bool(forKey: completionKey) else { return }
+
         guard FileManager.default.fileExists(atPath: sourceURL.path),
             storeTableHasRows("ZCONFLICTLOG", at: sourceURL)
         else {
+            // No legacy synced store / no rows to drain. Leave UNMARKED: the
+            // probe is a cheap read-only SQLite check, and not marking here keeps
+            // the backfill correct if the store family later moves (e.g. the iOS
+            // App Group migration) and arrives carrying legacy rows.
             return
         }
 
@@ -438,7 +456,12 @@ extension NexusModelContainer {
         )
         let legacyContext = ModelContext(legacyContainer)
         let legacyLogs = try legacyContext.fetch(FetchDescriptor<ConflictLog>())
-        guard !legacyLogs.isEmpty else { return }
+        guard !legacyLogs.isEmpty else {
+            // Source opened and examined — nothing to copy. Record completion so
+            // the expensive synced container is never reopened for this backfill.
+            defaults.set(true, forKey: completionKey)
+            return
+        }
 
         let localOnlySchema = Schema([ConflictLog.self], version: NexusSchemaV7.versionIdentifier)
         let localOnlyContainer = try ModelContainer(
@@ -471,6 +494,13 @@ extension NexusModelContainer {
         if inserted {
             try localOnlyContext.save()
         }
+
+        // Source fully drained into the local-only store. Record completion so
+        // we never reopen the (expensive) synced container for this one-time
+        // backfill again: the legacy ZCONFLICTLOG table physically survives the
+        // split migration, so the cheap probe above would otherwise stay true
+        // forever and reopen the container on every launch.
+        defaults.set(true, forKey: completionKey)
     }
 
     private static var userDataTableNames: [String] {
