@@ -37,7 +37,9 @@ public struct TasksSearchTool: AgentTool {
 
         let descriptor = FetchDescriptor<TaskItem>()
         let tasks = try context.modelContext.context.fetch(descriptor)
-        let tasksByID = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+        // Synced TaskItem ids are not unique (CloudKit forbids @Attribute(.unique)); dedup
+        // keep-first instead of trapping on a duplicate id from a sync conflict.
+        let tasksByID = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
         let result = hits.compactMap { hit -> TaskDTO? in
             guard let task = tasksByID[hit.itemID], task.deletedAt == nil else { return nil }
             return TaskDTO(from: task)

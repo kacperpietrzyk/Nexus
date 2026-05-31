@@ -47,10 +47,13 @@ public actor MeetingActionItemsInboxSource: InboxSource {
                     task.deletedAt == nil && task.statusRaw == openStatus
                 }
             )
+            // Synced TaskItem ids are not unique (CloudKit forbids @Attribute(.unique)); a sync
+            // conflict can yield duplicate ids. Dedup keep-first instead of trapping on the dup.
             let tasksByID = Dictionary(
-                uniqueKeysWithValues: try taskRepository.context.fetch(taskDescriptor)
+                try taskRepository.context.fetch(taskDescriptor)
                     .filter { allTaskIDs.contains($0.id) }
-                    .map { ($0.id, $0) }
+                    .map { ($0.id, $0) },
+                uniquingKeysWith: { current, _ in current }
             )
 
             return meetings.flatMap { meeting -> [InboxItem] in

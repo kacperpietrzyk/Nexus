@@ -87,7 +87,10 @@ public struct TodayQuery: Sendable {
             task.deletedAt == nil && task.statusRaw == openStatus
         }
         let openTasks = try modelContext.fetch(FetchDescriptor<TaskItem>(predicate: openPredicate))
-        let openTaskByID = Dictionary(uniqueKeysWithValues: openTasks.map { ($0.id, $0) })
+        // Synced entities cannot use @Attribute(.unique) (CloudKit forbids it), so two open
+        // tasks can share an id after a sync conflict / re-import. uniqueKeysWithValues would
+        // trap on the duplicate; dedup keep-first instead (behavior-identical when ids unique).
+        let openTaskByID = Dictionary(openTasks.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
 
         var entries: [AwaitingEntry] = []
         for task in openTasks {

@@ -67,7 +67,9 @@ public struct ActionItemsTabView: View {
             return
         }
 
-        let tasksByID = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+        // Synced TaskItem ids are not unique (CloudKit forbids @Attribute(.unique)); a sync
+        // conflict can yield duplicate ids. Dedup keep-first instead of trapping on the dup.
+        let tasksByID = Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
         actionItems = ids.compactMap { tasksByID[$0] }
     }
 }

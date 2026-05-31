@@ -166,8 +166,10 @@ public struct AgentSearchSemanticTool: AgentTool, RagRetriever {
         let allMemories = try modelContext.context.fetch(FetchDescriptor<AgentMemoryEntry>())
             .filter { $0.deletedAt == nil }
         return LiveSearchItems(
-            tasks: Dictionary(uniqueKeysWithValues: allTasks.map { ($0.id, $0) }),
-            memories: Dictionary(uniqueKeysWithValues: allMemories.map { ($0.id, $0) }),
+            // Synced ids are not unique (CloudKit forbids @Attribute(.unique)); dedup keep-first
+            // instead of trapping on a duplicate id from a sync conflict.
+            tasks: Dictionary(allTasks.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current }),
+            memories: Dictionary(allMemories.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current }),
             allLiveIDs: Set(allTasks.map(\.id)).union(allMemories.map(\.id))
         )
     }
