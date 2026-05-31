@@ -453,3 +453,52 @@ struct TaskItemRepositoryTests {
         #expect(spawnIdsAfter == spawnIdsBefore)
     }
 }
+
+@Suite("TaskItemRepository reorder")
+struct TaskItemRepositoryReorderTests {
+    @MainActor
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([TaskItem.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        return ModelContext(container)
+    }
+
+    @MainActor
+    @Test("reorder assigns sequential orderIndex without bumping updatedAt")
+    func reorderAssignsSequentialIndices() throws {
+        let context = try makeContext()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let repo = TaskItemRepository(context: context, scheduler: RRuleScheduler(), now: { now })
+        let a = TaskItem(title: "a")
+        let b = TaskItem(title: "b")
+        let c = TaskItem(title: "c")
+        for task in [a, b, c] { try repo.insert(task) }
+        let createdStamp = a.updatedAt
+
+        try repo.reorder([c, a, b])
+
+        #expect(c.orderIndex == 1.0)
+        #expect(a.orderIndex == 2.0)
+        #expect(b.orderIndex == 3.0)
+        // orderIndex is display-only: reorder must not touch updatedAt.
+        #expect(a.updatedAt == createdStamp)
+    }
+
+    @MainActor
+    @Test("reorder is a no-op when every task already holds its target index")
+    func reorderNoOpWhenAlreadyOrdered() throws {
+        let context = try makeContext()
+        let repo = TaskItemRepository(context: context, scheduler: RRuleScheduler(), now: { .now })
+        let a = TaskItem(title: "a")
+        let b = TaskItem(title: "b")
+        for task in [a, b] { try repo.insert(task) }
+        try repo.reorder([a, b])
+        #expect(a.orderIndex == 1.0)
+        #expect(b.orderIndex == 2.0)
+        // Second identical reorder changes nothing (and takes the no-save path).
+        try repo.reorder([a, b])
+        #expect(a.orderIndex == 1.0)
+        #expect(b.orderIndex == 2.0)
+    }
+}

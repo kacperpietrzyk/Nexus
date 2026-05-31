@@ -109,6 +109,28 @@ public final class TaskItemRepository {
         Task { @MainActor in await pusher() }
     }
 
+    /// Persists an explicit manual ordering by assigning sequential
+    /// `orderIndex` values (1.0, 2.0, 3.0, …) to `orderedTasks` in array order,
+    /// in a single save. Unlike `update`, this does not bump `updatedAt`, touch
+    /// recurrence, or reschedule notifications — `orderIndex` only affects
+    /// display order — so a drag-to-reorder does not spam notification
+    /// rescheduling across the whole list. Mirrors `OrderRebalanceJob.renumber`.
+    /// No-op (no save) when every task already holds its target index.
+    public func reorder(_ orderedTasks: [TaskItem]) throws {
+        var didChange = false
+        for (index, task) in orderedTasks.enumerated() {
+            let target = Double(index + 1)
+            if task.orderIndex != target {
+                task.orderIndex = target
+                didChange = true
+            }
+        }
+        guard didChange else { return }
+        try context.save()
+        let pusher = snapshotPusher
+        Task { @MainActor in await pusher() }
+    }
+
     public func assign(_ task: TaskItem, toProject projectID: UUID?, section sectionID: UUID? = nil) throws {
         if let projectID {
             let descriptor = FetchDescriptor<Project>(

@@ -23,4 +23,33 @@ public enum OrderIndex {
             return (p + n) / 2.0
         }
     }
+
+    /// Ordering that respects a persisted manual `orderIndex` when present and
+    /// otherwise falls back to `dueAt`, then `createdAt`. Tasks with a manual
+    /// `orderIndex` sort ahead of un-ordered ones (so a drag-to-reorder sticks);
+    /// when no task has been reordered yet, this is exactly the previous
+    /// due-date order. Used for the Today bucket so a reorder persists across
+    /// reloads instead of being overwritten by a pure `dueAt` sort.
+    public static func manualThenDueOrder(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
+        switch (lhs.orderIndex, rhs.orderIndex) {
+        case (let left?, let right?) where left != right:
+            return left < right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        default:
+            break
+        }
+        switch (lhs.dueAt, rhs.dueAt) {
+        case (let left?, let right?) where left != right:
+            return left < right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        default:
+            return lhs.createdAt < rhs.createdAt
+        }
+    }
 }

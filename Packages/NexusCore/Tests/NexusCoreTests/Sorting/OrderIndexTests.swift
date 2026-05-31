@@ -34,3 +34,51 @@ struct OrderIndexTests {
         #expect(result > 3.0)
     }
 }
+
+@Suite("OrderIndex.manualThenDueOrder")
+@MainActor
+struct ManualThenDueOrderTests {
+
+    private func task(order: Double?, due: Date?, created: Date) -> TaskItem {
+        let item = TaskItem(title: "t", dueAt: due, orderIndex: order)
+        item.createdAt = created
+        return item
+    }
+
+    @Test("lower manual orderIndex sorts first")
+    func manualOrderWins() {
+        let base = Date(timeIntervalSince1970: 1_777_000_000)
+        let a = task(order: 1.0, due: base.addingTimeInterval(9999), created: base)
+        let b = task(order: 2.0, due: base, created: base)
+        #expect(OrderIndex.manualThenDueOrder(a, b))
+        #expect(!OrderIndex.manualThenDueOrder(b, a))
+    }
+
+    @Test("a manually-ordered task sorts ahead of an un-ordered one")
+    func orderedBeforeUnordered() {
+        let base = Date(timeIntervalSince1970: 1_777_000_000)
+        // The un-ordered task is due earlier, yet the ordered one still wins.
+        let ordered = task(order: 5.0, due: base.addingTimeInterval(9999), created: base)
+        let unordered = task(order: nil, due: base, created: base)
+        #expect(OrderIndex.manualThenDueOrder(ordered, unordered))
+        #expect(!OrderIndex.manualThenDueOrder(unordered, ordered))
+    }
+
+    @Test("with no manual order, earlier dueAt sorts first")
+    func fallsBackToDueDate() {
+        let base = Date(timeIntervalSince1970: 1_777_000_000)
+        let earlier = task(order: nil, due: base, created: base.addingTimeInterval(50))
+        let later = task(order: nil, due: base.addingTimeInterval(3600), created: base)
+        #expect(OrderIndex.manualThenDueOrder(earlier, later))
+        #expect(!OrderIndex.manualThenDueOrder(later, earlier))
+    }
+
+    @Test("with no manual order and no dueAt, earlier createdAt sorts first")
+    func fallsBackToCreatedAt() {
+        let base = Date(timeIntervalSince1970: 1_777_000_000)
+        let older = task(order: nil, due: nil, created: base)
+        let newer = task(order: nil, due: nil, created: base.addingTimeInterval(60))
+        #expect(OrderIndex.manualThenDueOrder(older, newer))
+        #expect(!OrderIndex.manualThenDueOrder(newer, older))
+    }
+}

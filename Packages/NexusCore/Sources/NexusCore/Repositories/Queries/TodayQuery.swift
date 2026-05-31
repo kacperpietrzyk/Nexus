@@ -50,7 +50,10 @@ public struct TodayQuery: Sendable {
                 }
                 return due >= startOfDay && due < startOfTomorrow
             },
-            sort: [SortDescriptor(\TaskItem.dueAt, order: .forward)]
+            sort: [SortDescriptor(\TaskItem.dueAt, order: .forward)],
+            // Respect a persisted manual reorder; falls back to the dueAt sort
+            // above until the user actually drags a row.
+            comparator: OrderIndex.manualThenDueOrder
         )
     }
 
