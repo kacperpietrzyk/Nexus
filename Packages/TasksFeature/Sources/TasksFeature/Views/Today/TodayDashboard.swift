@@ -168,7 +168,7 @@ public struct TodayDashboard: View {
     @State private var heroService: HeroBriefService?
     @State private var reloadGeneration = 0
     // Internal (not `private`): bound from the `+Standalone` extension file.
-    @State var taskFilter: TaskFilter = .upcoming
+    @State var taskFilter: TaskFilter = .all  // .upcoming hides overdue/today/undated → empty Tasks view
 
     public init(
         selection: Binding<TodayNavSelection>? = nil,
