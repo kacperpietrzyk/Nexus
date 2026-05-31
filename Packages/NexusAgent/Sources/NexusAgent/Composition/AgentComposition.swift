@@ -110,7 +110,13 @@ public struct AgentComposition {
             runtime: runtime,
             threadStore: stores.threadStore,
             legacy: legacyBrief,
-            isEnabled: { UserDefaults.standard.bool(forKey: NexusPreferences.Keys.agentEnabled) }
+            // Default ON when unset, matching the @AppStorage master switch (= true) and
+            // VacationModeGate. Plain `.bool(forKey:)` returns false for an unset key, which
+            // silently disabled the AI brief on every fresh install. (Cloud-consent/quota is
+            // enforced separately by the provider, so defaulting this feature flag ON is safe.)
+            isEnabled: {
+                UserDefaults.standard.object(forKey: NexusPreferences.Keys.agentEnabled) as? Bool ?? true
+            }
         )
         let scheduleRunner = AgentScheduleRunner(
             runtime: runtime,
