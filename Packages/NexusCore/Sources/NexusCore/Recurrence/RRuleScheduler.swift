@@ -40,12 +40,33 @@ public struct RRuleScheduler: Sendable {
         }
 
         let targetWeekdays = Set(rule.byWeekday.map(Self.calendarWeekday(for:)))
-        let maxDays = max(1, rule.interval * 7)
+        let interval = max(1, rule.interval)
+        // Anchor "active" weeks on `after`'s week: a matching weekday only fires when its week is
+        // an exact multiple of `interval` weeks away from `after`'s week. For interval == 1 every
+        // week is active, so this is the original "first matching weekday" behavior. For interval
+        // > 1 it stops bi-weekly/N-weekly BYDAY rules from collapsing to plain weekly. Scan far
+        // enough to reach the next active week's last target day.
+        let afterWeekStart = calendar.dateInterval(of: .weekOfYear, for: after)?.start
+        let maxDays = interval * 7 + 7
         for offset in 1...maxDays {
             guard let candidate = calendar.date(byAdding: .day, value: offset, to: after) else {
                 continue
             }
-            if targetWeekdays.contains(calendar.component(.weekday, from: candidate)) {
+            guard targetWeekdays.contains(calendar.component(.weekday, from: candidate)) else {
+                continue
+            }
+            guard interval > 1 else { return candidate }
+            guard let afterWeekStart,
+                let candidateWeekStart = calendar.dateInterval(of: .weekOfYear, for: candidate)?.start,
+                let daysBetween = calendar.dateComponents(
+                    [.day],
+                    from: afterWeekStart,
+                    to: candidateWeekStart
+                ).day
+            else {
+                return candidate
+            }
+            if (daysBetween / 7) % interval == 0 {
                 return candidate
             }
         }
