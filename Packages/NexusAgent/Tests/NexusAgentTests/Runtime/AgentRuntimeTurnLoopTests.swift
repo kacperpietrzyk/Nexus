@@ -203,6 +203,41 @@ struct AgentRuntimeTurnLoopTests {
     }
 
     @Test
+    func toolDispatchErrorIsFedBackToModelInsteadOfAbortingTurn() async throws {
+        let toolCall = #"{"type":"tool_call","name":"boom","input":{}}"#
+        let finalText = "That tool failed, but here is what I can do instead."
+        let harness = try RuntimeHarness.make(
+            tools: [FailingTool()],
+            scripts: [.text(toolCall), .text(finalText)]
+        )
+        let threadID = try harness.threadStore.create(title: "tool-error")
+
+        let response = try await harness.runtime.runTurn(
+            AgentTurnRequest(threadID: threadID, userMessage: "go", scope: "global")
+        )
+
+        // The turn is NOT aborted on the tool failure: the model gets a second
+        // turn (after the error is fed back) and produces a final answer.
+        #expect(response.haltReason == .completed)
+        #expect(response.finalAssistantContent == finalText)
+        #expect(response.toolCallsExecuted == 1)
+        #expect(harness.provider.callCount == 2)
+
+        // The failure is persisted as a `.tool` transcript carrying the error
+        // (no audit log, since the dispatch threw before one was written).
+        let stored = try harness.messageStore.slidingWindow(threadID: threadID, last: 10)
+        #expect(stored.map(\.role) == [.user, .tool, .agent])
+        let toolMessage = try #require(stored.first { $0.role == .tool })
+        let data = try #require(toolMessage.toolCallJSON)
+        let transcript = try JSONDecoder().decode(AgentToolTranscript.self, from: data)
+        #expect(transcript.error != nil)
+        #expect(transcript.auditLogID == nil)
+
+        let logs = try harness.modelContext.fetch(FetchDescriptor<AgentAuditLog>())
+        #expect(logs.isEmpty)
+    }
+
+    @Test
     func malformedToolCallEnvelopeReturnsProviderErrorWithoutDispatch() async throws {
         let harness = try RuntimeHarness.make(
             tools: [EchoTool()],
@@ -461,5 +496,17 @@ private struct EchoTool: AgentTool {
     @MainActor
     func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         args
+    }
+}
+
+private struct FailingTool: AgentTool {
+    struct Boom: Error {}
+    let name = "boom"
+    let description = "Always fails."
+    let inputSchema: JSONSchema = .object(properties: [:], required: [])
+
+    @MainActor
+    func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        throw Boom()
     }
 }
