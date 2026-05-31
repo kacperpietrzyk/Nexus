@@ -48,6 +48,14 @@ public struct ManageModelsSection: View {
     /// the entire Form subtree and collapsed any expanded rows.
     @State private var snapshots: [String: ModelManifestLocalState] = [:]
 
+    /// Live, `@Observable` progress handles for in-flight downloads, keyed by
+    /// manifest ID. Seeded when a download starts (and on appear, by re-attaching
+    /// to any transfer already running in `downloadManager`) and cleared when the
+    /// transfer reaches a terminal state. Passing the handle to the row is what
+    /// makes the percent move — the `UserDefaults` snapshot only holds the final
+    /// status.
+    @State private var activeProgress: [String: ModelDownloadProgress] = [:]
+
     public init(
         localStateStore: ModelManifestLocalState.Store,
         downloadManager: ModelDownloadManager,
@@ -80,6 +88,7 @@ public struct ManageModelsSection: View {
                         manifest: manifest,
                         localState: snapshots[manifest.id]
                             ?? localStateStore.load(manifestID: manifest.id),
+                        progress: activeProgress[manifest.id],
                         onAssignChat: {
                             assign(manifest, keyPath: \.assignedAsChat)
                             if let hook = onChatReassigned {
@@ -94,7 +103,8 @@ public struct ManageModelsSection: View {
                         },
                         onDownload: { Task { await download(manifest) } },
                         onDelete: { delete(manifest) },
-                        onReDownload: { Task { await reDownload(manifest) } }
+                        onReDownload: { Task { await reDownload(manifest) } },
+                        onDownloadFinished: { downloadFinished(manifest) }
                     )
                 }
             } header: {
@@ -128,7 +138,10 @@ public struct ManageModelsSection: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
-        .onAppear { reloadSnapshots() }
+        .onAppear {
+            reloadSnapshots()
+            reattachInflightProgress()
+        }
         .onChange(of: manifests.map(\.id)) { reloadSnapshots() }
         .navigationTitle("Manage Models")
     }
@@ -195,12 +208,47 @@ public struct ManageModelsSection: View {
     }
 
     private func download(_ manifest: ModelManifest) async {
-        _ = try? await downloadManager.startDownload(
-            manifestID: manifest.id,
-            hfPath: manifest.hfPath,
-            totalBytes: Int64(manifest.sizeGB * 1_073_741_824),
-            purpose: manifest.purpose
-        )
+        do {
+            let progress = try await downloadManager.startDownload(
+                manifestID: manifest.id,
+                hfPath: manifest.hfPath,
+                totalBytes: Int64(manifest.sizeGB * 1_073_741_824),
+                purpose: manifest.purpose
+            )
+            // Hold the live handle so the row renders a moving percent and so the
+            // terminal-state callback can fire; `startDownload` flipped the store
+            // to `.downloading`, which `reloadSnapshots` picks up.
+            activeProgress[manifest.id] = progress
+            reloadSnapshots()
+        } catch {
+            // `startDownload` rarely throws synchronously (the real transfer runs
+            // detached and records its own failure on the store), but if it does,
+            // persist the reason so the row surfaces it instead of swallowing it.
+            var state = localStateStore.load(manifestID: manifest.id)
+            state.status = .error
+            state.downloadError = error.localizedDescription
+            localStateStore.save(manifestID: manifest.id, state: state)
+            reloadSnapshots()
+        }
+    }
+
+    /// Re-attaches `activeProgress` to any transfer already running in the shared
+    /// `downloadManager` (e.g. one kicked off by the Welcome flow, or still going
+    /// after the screen was dismissed and reopened) so the row shows live percent
+    /// rather than a stale spinner.
+    private func reattachInflightProgress() {
+        for manifest in manifests where activeProgress[manifest.id] == nil {
+            if let progress = downloadManager.progress(for: manifest.id) {
+                activeProgress[manifest.id] = progress
+            }
+        }
+    }
+
+    /// Called by a row when its download reaches a terminal state: refresh the
+    /// snapshot (so the row flips to Assign/Delete or shows the error) and drop
+    /// the now-finished progress handle.
+    private func downloadFinished(_ manifest: ModelManifest) {
+        activeProgress[manifest.id] = nil
         reloadSnapshots()
     }
 

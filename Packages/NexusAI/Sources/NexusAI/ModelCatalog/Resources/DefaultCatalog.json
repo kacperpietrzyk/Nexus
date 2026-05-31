@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "lastUpdated": "2026-05-30",
+  "lastUpdated": "2026-05-31",
   "chat": [
-    { "id": "qwen2.5-32b-instruct-4bit", "hfPath": "mlx-community/Qwen2.5-32B-Instruct-4bit", "family": "qwen2.5", "displayName": "Qwen 2.5 32B", "sizeGB": 18.4, "recommendedRAMGB": 64, "contextLength": 32768, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es", "it", "pt", "zh", "ja"] },
-    { "id": "qwen2.5-14b-instruct-4bit", "hfPath": "mlx-community/Qwen2.5-14B-Instruct-4bit", "family": "qwen2.5", "displayName": "Qwen 2.5 14B", "sizeGB": 8.3, "recommendedRAMGB": 32, "contextLength": 32768, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es", "it", "pt", "zh", "ja"] },
-    { "id": "qwen2.5-7b-instruct-4bit", "hfPath": "mlx-community/Qwen2.5-7B-Instruct-4bit", "family": "qwen2.5", "displayName": "Qwen 2.5 7B", "sizeGB": 4.3, "recommendedRAMGB": 16, "contextLength": 32768, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es", "it", "pt", "zh", "ja"] },
+    { "id": "qwen3.5-27b-4bit", "hfPath": "mlx-community/Qwen3.5-27B-4bit", "family": "qwen3.5", "displayName": "Qwen 3.5 27B", "sizeGB": 16.1, "recommendedRAMGB": 32, "contextLength": 32768, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es", "it", "pt", "zh", "ja"] },
+    { "id": "qwen3.5-9b-4bit", "hfPath": "mlx-community/Qwen3.5-9B-4bit", "family": "qwen3.5", "displayName": "Qwen 3.5 9B", "sizeGB": 6.0, "recommendedRAMGB": 16, "contextLength": 32768, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es", "it", "pt", "zh", "ja"] },
+    { "id": "qwen3.5-4b-4bit", "hfPath": "mlx-community/Qwen3.5-4B-4bit", "family": "qwen3.5", "displayName": "Qwen 3.5 4B", "sizeGB": 3.1, "recommendedRAMGB": 8, "contextLength": 32768, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es", "it", "pt", "zh", "ja"] },
     { "id": "gemma-4-e4b-it-4bit", "hfPath": "mlx-community/gemma-4-e4b-it-4bit", "family": "gemma4", "displayName": "Gemma 4 E4B (mobile-optimized)", "sizeGB": 5.2, "recommendedRAMGB": 8, "contextLength": 8192, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es"] }
   ],
   "embedders": [
