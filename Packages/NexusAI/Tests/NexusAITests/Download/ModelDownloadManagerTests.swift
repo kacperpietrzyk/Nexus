@@ -308,3 +308,43 @@ struct ThrowingFetcher: ModelFileFetching {
         throw FetchFailure()
     }
 }
+
+@Suite("LiveHFFetcher weight validation")
+struct LiveHFFetcherWeightValidationTests {
+    private func tempDir(_ name: String) throws -> URL {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appending(path: "nexus-weights-\(name)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    @Test("passes when a non-empty safetensors file is present")
+    func passesWithWeights() throws {
+        let dir = try tempDir("ok")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Data(count: 16).write(to: dir.appending(path: "model.safetensors"))
+        // Should not throw.
+        try LiveHFFetcher.validateWeightsLanded(in: dir, hfPath: "org/model")
+    }
+
+    @Test("throws when only sidecars/config landed (no weights)")
+    func throwsWithoutWeights() throws {
+        let dir = try tempDir("sidecars")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Data("{}".utf8).write(to: dir.appending(path: "config.json"))
+        try Data("vocab".utf8).write(to: dir.appending(path: "tokenizer.json"))
+        #expect(throws: ModelDownloadError.self) {
+            try LiveHFFetcher.validateWeightsLanded(in: dir, hfPath: "org/model")
+        }
+    }
+
+    @Test("throws when the safetensors file is empty")
+    func throwsWithEmptyWeights() throws {
+        let dir = try tempDir("empty")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Data().write(to: dir.appending(path: "model.safetensors"))
+        #expect(throws: ModelDownloadError.self) {
+            try LiveHFFetcher.validateWeightsLanded(in: dir, hfPath: "org/model")
+        }
+    }
+}
