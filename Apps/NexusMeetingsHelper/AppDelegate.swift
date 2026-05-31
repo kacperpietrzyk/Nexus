@@ -39,18 +39,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func presentDetectionToast(_ event: MeetingDetectionEvent, composition: HelperComposition) {
         composition.statusBar.update(state: .detection)
         var window: DetectionNotificationWindow?
+        // `[weak window]` is essential: the panel retains its hosting
+        // controller → `DetectionNotificationView` → these closures, so a strong
+        // capture of `window` (the panel) would form a retain cycle and leak a
+        // window + view per detected meeting.
         let view = DetectionNotificationView(
             appName: event.bundleID,
             meetingTitle: event.suggestedTitle,
-            onStart: { [weak self, weak composition] in
+            onStart: { [weak self, weak composition, weak window] in
                 window?.orderOut(nil)
                 guard let composition else { return }
                 self?.startRecording(event: event, composition: composition)
             },
-            onDismiss: { [weak self] in
+            onDismiss: { [weak self, weak composition, weak window] in
                 window?.orderOut(nil)
                 self?.detectionWindow = nil
-                composition.statusBar.update(state: .idle)
+                composition?.statusBar.update(state: .idle)
             }
         )
         let panel = DetectionNotificationWindow(view: view)
@@ -89,9 +93,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
         var panel: RecordingPanelWindow?
         let state = RecordingPanelState(title: title)
+        // `[weak panel]` for the same reason as the detection toast: the panel
+        // retains these closures via its hosting view, so a strong capture would
+        // leak the recording panel.
         let view = RecordingPanelView(
             state: state,
-            onStop: { [weak self, weak composition] in
+            onStop: { [weak self, weak composition, weak panel] in
                 guard let composition else { return }
                 composition.stopRecording(meetingID: handle.meetingID) { error in
                     if let error {
@@ -108,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onPause: {
                 NSSound.beep()
             },
-            onMinimize: {
+            onMinimize: { [weak panel] in
                 panel?.orderOut(nil)
             }
         )
@@ -130,7 +137,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             while !Task.isCancelled {
                 guard let state, let composition else { return }
                 let snapshot = composition.currentRecordingState()
-                guard snapshot.isRecording else { return }
+                guard snapshot.isRecording else {
+                    // Recording stopped by a path other than the panel's Stop
+                    // button (e.g. the capture service ended it). The panel's
+                    // onStop sets `.processing`; mirror that here so the status
+                    // bar doesn't stay stuck on `.recording`.
+                    composition.statusBar.update(state: .processing)
+                    return
+                }
                 state.apply(snapshot)
                 composition.statusBar.update(state: .recording(elapsedSec: snapshot.elapsedSec))
                 try? await Task.sleep(nanoseconds: 500_000_000)
