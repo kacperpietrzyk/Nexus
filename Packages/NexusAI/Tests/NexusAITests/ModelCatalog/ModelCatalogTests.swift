@@ -13,11 +13,20 @@ import Testing
     #expect(catalog.chat.count >= 4)
     #expect(catalog.embedders.count >= 1)
 
-    let qwen14b = catalog.chat.first { $0.id == "qwen2.5-14b-instruct-4bit" }
-    #expect(qwen14b != nil)
-    #expect(qwen14b?.sizeGB == 8.3)
-    #expect(qwen14b?.recommendedRAMGB == 32)
-    #expect(qwen14b?.supportsTools == true)
+    let qwen9b = catalog.chat.first { $0.id == "qwen3.5-9b-4bit" }
+    #expect(qwen9b != nil)
+    #expect(qwen9b?.hfPath == "mlx-community/Qwen3.5-9B-4bit")
+    #expect(qwen9b?.family == "qwen3.5")
+    #expect(qwen9b?.sizeGB == 6.0)
+    #expect(qwen9b?.recommendedRAMGB == 16)
+    #expect(qwen9b?.supportsTools == true)
+
+    // Regression guard: the fictional `Qwen3.5-*-Instruct-4bit` repos (HTTP 401)
+    // that PR #15 wrongly "fixed" by downgrading the whole family to Qwen2.5 must
+    // not return. The real Qwen3.5 repos drop the `-Instruct` suffix and use the
+    // 4B/9B/27B size lineup; Qwen2.5 must be fully gone from the catalog.
+    #expect(!catalog.chat.contains { $0.family == "qwen2.5" })
+    #expect(!catalog.chat.contains { $0.hfPath.contains("Instruct") })
 }
 
 @MainActor
@@ -29,7 +38,7 @@ import Testing
     try ModelCatalog.bootstrap.seed(into: ctx)
     let manifests = try ctx.fetch(FetchDescriptor<ModelManifest>())
     #expect(manifests.count >= 5)  // 4 chat + 1 embedder
-    #expect(manifests.contains { $0.id == "qwen2.5-32b-instruct-4bit" })
+    #expect(manifests.contains { $0.id == "qwen3.5-27b-4bit" })
     #expect(manifests.contains { $0.id == "gemma-4-e4b-it-4bit" })
     #expect(manifests.contains { $0.id == "multilingual-e5-large" })
 }
