@@ -92,9 +92,13 @@ public struct TasksCreateIdempotentTool: AgentTool {
 
     @MainActor
     private func existingTask(externalSourceID: String, context: AgentContext) throws -> TaskItem? {
+        // Only dedup against LIVE tasks: a soft-deleted tombstone keeps its externalSourceID, so
+        // matching it would silently mutate a dead row (the task stays invisible) instead of
+        // re-creating it. Excluding deletedAt != nil makes a re-import of a deleted task come back
+        // as a fresh task rather than overriding the user's delete.
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate<TaskItem> { task in
-                task.externalSourceID == externalSourceID
+                task.externalSourceID == externalSourceID && task.deletedAt == nil
             }
         )
         return try context.modelContext.context.fetch(descriptor).first

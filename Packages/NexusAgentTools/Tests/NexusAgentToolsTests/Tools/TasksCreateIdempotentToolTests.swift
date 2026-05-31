@@ -157,8 +157,8 @@ struct TasksCreateIdempotentToolTests {
     }
 
     @MainActor
-    @Test("soft-deleted external source rerun updates without duplicate")
-    func softDeletedExternalSourceUpdatesWithoutDuplicate() async throws {
+    @Test("soft-deleted external source rerun creates a fresh task, leaving the tombstone intact")
+    func softDeletedExternalSourceRerunCreatesFresh() async throws {
         let fixture = try await InMemoryAgentContext.make()
 
         _ = try await callIdempotent(
@@ -182,13 +182,17 @@ struct TasksCreateIdempotentToolTests {
             context: fixture.context
         )
 
+        // "Create fresh" semantics: the dedup lookup ignores the soft-deleted tombstone, so a
+        // re-import after delete yields a new LIVE task instead of silently mutating the dead row
+        // (which previously left the task permanently invisible).
         let allRows = try fixture.repo.context.fetch(FetchDescriptor<TaskItem>())
-        let matches = try await searchTasks(query: "new-token", context: fixture.context)
-        #expect(allRows.count == 1)
-        #expect(!response.wasCreated)
-        #expect(response.task.state == "deleted")
-        #expect(allRows.first?.title == "Updated deleted title")
-        #expect(matches.isEmpty)
+        let live = allRows.filter { $0.deletedAt == nil }
+        let tombstones = allRows.filter { $0.deletedAt != nil }
+        #expect(allRows.count == 2)
+        #expect(response.wasCreated)
+        #expect(response.task.state == "open")
+        #expect(live.map(\.title) == ["Updated deleted title"])
+        #expect(tombstones.map(\.title) == ["Original title"])
     }
 
     @MainActor
