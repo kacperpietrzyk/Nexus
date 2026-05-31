@@ -121,6 +121,11 @@ public final class MeetingRepository {
             context.delete(meeting)
         }
         if let storage = try MeetingAudioStorageRepository(context: context).find(meetingID: id) {
+            // Remove the on-disk audio folder before dropping the storage row. Deleting only the
+            // row orphans me.wav/others.wav/metadata.json forever, since AudioRetentionPruner
+            // reaches recordings via MeetingAudioStorage rows and this one is now gone. Matches
+            // the pruner's disposal; best-effort so a file error never blocks the DB delete.
+            try? FileManager.default.removeItem(at: storage.folderURL)
             context.delete(storage)
         }
         try context.save()
