@@ -13,7 +13,8 @@ public struct DesignSystemShowcase: View {
 private struct ShowcaseState: View {
     @State private var navSelection = "today"
     @State private var tabSelection = "open"
-    @State private var checked = true
+    @State private var checkedOn = true
+    @State private var checkedOff = false
 
     var body: some View {
         ScrollView {
@@ -30,8 +31,13 @@ private struct ShowcaseState: View {
                 timeRowSection
                 avatarCheckboxSection
                 buttonSection
+                cardSection
                 badgeSection
                 chipSection
+                countKbdSection
+                dotSection
+                toastSection
+                quickActionsSection
                 sharedViewsSection
             }
             .padding(32)
@@ -46,9 +52,9 @@ private struct ShowcaseState: View {
             Text("Nexus Design System")
                 .nexusType(.display)
                 .foregroundStyle(NexusColor.Text.primary)
-            Text("v\(NexusUI.version) / coss-azure")
+            Text("v\(NexusUI.version) / Linear — Midnight Command Center")
                 .nexusType(.eyebrow)
-                .foregroundStyle(NexusColor.Text.primary)
+                .foregroundStyle(NexusColor.Text.tertiary)
         }
     }
 
@@ -165,7 +171,11 @@ private struct ShowcaseState: View {
             HStack(spacing: 18) {
                 NexusAvatar(name: "Kacper Pietrzyk", size: 30)
                 NexusAvatar(name: "Nexus", size: 30)
-                NexusCheckbox(isChecked: $checked, accessibilityLabel: "Done")
+                Divider().frame(height: 22)
+                NexusCheckbox(isChecked: $checkedOn, accessibilityLabel: "Done")
+                Text("checked").nexusType(.caption).foregroundStyle(NexusColor.Text.tertiary)
+                NexusCheckbox(isChecked: $checkedOff, accessibilityLabel: "Pending")
+                Text("unchecked").nexusType(.caption).foregroundStyle(NexusColor.Text.tertiary)
             }
         }
     }
@@ -192,6 +202,33 @@ private struct ShowcaseState: View {
         }
     }
 
+    private var cardSection: some View {
+        section("Card") {
+            HStack(alignment: .top, spacing: 14) {
+                NexusCard {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Default · elev1")
+                            .nexusType(.h3)
+                            .foregroundStyle(NexusColor.Text.primary)
+                        Text("Graphite panel surface.")
+                            .nexusType(.bodySmall)
+                            .foregroundStyle(NexusColor.Text.tertiary)
+                    }
+                }
+                NexusCard(.elev2) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Elevated · elev2")
+                            .nexusType(.h3)
+                            .foregroundStyle(NexusColor.Text.primary)
+                        Text("Raised slate surface.")
+                            .nexusType(.bodySmall)
+                            .foregroundStyle(NexusColor.Text.tertiary)
+                    }
+                }
+            }
+        }
+    }
+
     private var badgeSection: some View {
         section("Badge") {
             HStack(spacing: 10) {
@@ -209,6 +246,60 @@ private struct ShowcaseState: View {
                     NexusChip("\(tone)", tone: tone)
                 }
             }
+        }
+    }
+
+    private var countKbdSection: some View {
+        section("Count + Kbd") {
+            HStack(spacing: 24) {
+                HStack(spacing: 10) {
+                    NexusCount(value: 3)
+                    NexusCount(value: 12)
+                    NexusCount(value: 128)
+                }
+
+                Divider().frame(height: 22)
+
+                HStack(spacing: 12) {
+                    NexusKbd("⌘")
+                    NexusKbd.combo(["⌘", "K"])
+                    NexusKbd.combo(["⌘", "⇧", "N"])
+                }
+            }
+        }
+    }
+
+    private var dotSection: some View {
+        section("DotIndicator") {
+            HStack(spacing: 18) {
+                ForEach(NexusDotTone.allCases, id: \.self) { tone in
+                    VStack(spacing: 8) {
+                        NexusDotIndicator(tone)
+                        Text(String(describing: tone))
+                            .nexusType(.caption)
+                            .foregroundStyle(NexusColor.Text.tertiary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var toastSection: some View {
+        section("Toast") {
+            VStack(alignment: .leading, spacing: 12) {
+                NexusToast(icon: "checkmark.circle", message: "Task saved")
+                NexusToast(icon: "arrow.uturn.backward", message: "Marked done", undo: true)
+            }
+        }
+    }
+
+    private var quickActionsSection: some View {
+        section("RowQuickActions") {
+            NexusRowQuickActions(actions: [
+                NexusRowQuickAction(icon: "checkmark", accessibilityLabel: "Complete") {},
+                NexusRowQuickAction(icon: "clock", accessibilityLabel: "Snooze") {},
+                NexusRowQuickAction(icon: "trash", accessibilityLabel: "Delete") {},
+            ])
         }
     }
 

@@ -57,55 +57,52 @@ public struct NexusChip: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, 11)
+        .padding(.horizontal, 6)
         .padding(.vertical, 4)
         .foregroundStyle(textColor)
-        .background(backgroundColor, in: Capsule(style: .continuous))
+        .background(backgroundColor, in: chipShape)
         .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(borderColor, lineWidth: 0.5)
+            chipShape
+                .strokeBorder(borderColor, lineWidth: 1)
         )
+    }
+
+    /// Linear tag/badge — flat 4 px corner (`NexusRadius.badge`), not a pill.
+    private var chipShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: NexusRadius.badge, style: .continuous)
     }
 
     internal var textColor: Color {
         switch tone {
-        case .neutral: return NexusColor.Text.tertiary
-        // Accent audit (spec §3): the strongest neutral chip — ink emphasis,
-        // no hue. `.accent` survives as an enum case (call-sites + MP-6) but
-        // renders achromatically here.
+        // `.accent` is the single active/selected chip — Porcelain ink paired
+        // with the lime rim below. Lime stays on the rim only (economy rule).
         case .accent: return NexusColor.Text.primary
-        // .rose ≡ .negative post-MP-6.3 (both Text.primary); cases preserved —
-        // §11 public-API byte-freeze, do not dedup.
-        case .rose: return NexusColor.Text.primary
-        case .positive: return NexusColor.Text.secondary
-        case .negative: return NexusColor.Text.primary
-        case .warning: return NexusColor.Text.secondary
+        // All other tones share the neutral Light Steel ink — Linear keeps
+        // metadata chips achromatic. Cases preserved (§11 public-API freeze).
+        case .neutral, .rose, .positive, .negative, .warning:
+            return NexusColor.Text.secondary
         }
     }
 
     internal var backgroundColor: Color {
         switch tone {
-        case .neutral: return Color.white.opacity(0.055)
-        case .accent: return Color.white.opacity(0.10)
-        // .rose ≡ .negative post-MP-6.3 (both Text.primary); cases preserved —
-        // §11 public-API byte-freeze, do not dedup.
-        case .rose: return NexusColor.Text.primary.opacity(0.12)
-        case .positive: return NexusColor.Text.secondary.opacity(0.14)
-        case .negative: return NexusColor.Text.primary.opacity(0.14)
-        case .warning: return NexusColor.Text.secondary.opacity(0.14)
+        // Active/selected reads via the lime rim, so keep a flat charcoal fill
+        // a half-step up from the resting chip for a contained lift.
+        case .accent: return NexusColor.Background.controlHover
+        // Resting metadata chips: flat control fill (#1C1D1F). No translucency.
+        case .neutral, .rose, .positive, .negative, .warning:
+            return NexusColor.Background.control
         }
     }
 
     internal var borderColor: Color {
         switch tone {
-        case .neutral: return NexusColor.Line.hairline
-        case .accent: return Color.white.opacity(0.16)
-        // .rose ≡ .negative post-MP-6.3 (both Text.primary); cases preserved —
-        // §11 public-API byte-freeze, do not dedup.
-        case .rose: return NexusColor.Text.primary.opacity(0.35)
-        case .positive: return NexusColor.Text.secondary.opacity(0.40)
-        case .negative: return NexusColor.Text.primary.opacity(0.40)
-        case .warning: return NexusColor.Text.secondary.opacity(0.40)
+        // The one place lime is allowed on this primitive: a subtle rim marking
+        // the single active/selected state. Never on neutral chrome.
+        case .accent: return NexusColor.Accent.lime.opacity(0.45)
+        // Neutral hairline rim for every resting chip.
+        case .neutral, .rose, .positive, .negative, .warning:
+            return NexusColor.Line.hairline
         }
     }
 }

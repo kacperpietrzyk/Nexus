@@ -28,10 +28,17 @@ public struct NexusEditor: View {
                     .foregroundStyle(NexusColor.Text.primary)
                     .nexusTextSelectionEnabled()
             }
-            .padding(24)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(NexusColor.Background.base)
+        .background(NexusColor.Background.control)
+        .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)
+                .strokeBorder(NexusColor.Line.strong, lineWidth: 1)
+        )
+        .nexusShadow(NexusShadow.s1)
     }
 }
 

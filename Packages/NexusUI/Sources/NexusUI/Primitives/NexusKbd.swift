@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Keyboard shortcut indicator styled after coss `.cs-kbd` caps.
+/// Keyboard shortcut indicator — flat Linear key cap.
 public struct NexusKbd: View {
     internal static let minimumSize: CGFloat = 18
     internal static let bottomBorderHeight: CGFloat = 2
-    internal static let cornerRadius: CGFloat = 4
+    internal static let cornerRadius: CGFloat = NexusRadius.badge
 
     public let key: String
 
@@ -14,24 +14,14 @@ public struct NexusKbd: View {
 
     public var body: some View {
         Text(key)
-            .font(.custom("GeistMono-Regular", size: 10.5))
-            .foregroundStyle(NexusColor.Text.secondary)
+            .font(NexusType.metaMono)
+            .foregroundStyle(NexusColor.Text.tertiary)
             .frame(minWidth: Self.minimumSize, minHeight: Self.minimumSize)
             .padding(.horizontal, 5)
-            .background(
-                LinearGradient(
-                    colors: [NexusColor.Background.controlHover, NexusColor.Background.raised],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                in: roundedShape
-            )
+            .background(NexusColor.Background.controlHover, in: roundedShape)
             .overlay {
                 roundedShape
                     .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
-            }
-            .overlay(alignment: .bottom) {
-                bottomBorder
             }
     }
 
@@ -46,14 +36,6 @@ public struct NexusKbd: View {
 
     private var roundedShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-    }
-
-    private var bottomBorder: some View {
-        Rectangle()
-            .fill(NexusColor.Line.regular)
-            .frame(height: Self.bottomBorderHeight)
-            .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
-            .allowsHitTesting(false)
     }
 }
 

@@ -6,10 +6,10 @@ import Testing
 @Suite("NexusCheckbox v4")
 struct NexusCheckboxTests {
     @MainActor
-    @Test("Constants match canvas checkbox geometry")
+    @Test("Constants match Linear checkbox geometry")
     func constants() {
         #expect(NexusCheckbox.side == 16)
-        #expect(NexusCheckbox.cornerRadius == 5)
+        #expect(NexusCheckbox.cornerRadius == NexusRadius.badge)
     }
 
     @MainActor
@@ -41,8 +41,9 @@ struct NexusCheckboxTests {
 
         #expect(model.isChecked)
         #expect(checkbox.isChecked)
-        // Checked state uses a faint white rim; unchecked uses Line.strong.
-        #expect(checkbox.borderColor.resolvedRGBA == Color.white.opacity(0.16).resolvedRGBA)
+        // Checked is the single completed indicator — lime rim flush with the
+        // lime fill. Unchecked uses the neutral Gunmetal (Line.strong) rim.
+        #expect(checkbox.borderColor.resolvedRGBA == NexusColor.Accent.lime.resolvedRGBA)
     }
 }
 

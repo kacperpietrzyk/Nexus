@@ -5,7 +5,11 @@ public enum NexusCardElevation: Sendable, Equatable {
     case elev2
 }
 
-/// Card container backed by the v4 glass elevation scale.
+/// Flat Linear card container.
+///
+/// Layered `Background.*` surface + a contained `s1` drop shadow + a 1px
+/// `Line.hairline` rim — no translucent glass, no glow. `elev1` sits on the
+/// graphite panel surface; `elev2` is the raised slate surface.
 public struct NexusCard<Content: View>: View {
 
     public let elevation: NexusCardElevation
@@ -14,7 +18,7 @@ public struct NexusCard<Content: View>: View {
 
     public init(
         _ elevation: NexusCardElevation = .elev1,
-        padding: CGFloat = 24,
+        padding: CGFloat = 12,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.elevation = elevation
@@ -27,15 +31,19 @@ public struct NexusCard<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .nexusGlass(glassVariant, cornerRadius: NexusRadius.r3)
-            .nexusGlassRim(cornerRadius: NexusRadius.r3)
-            .nexusShadow(NexusShadow.glass)
+            .background(surfaceFill, in: cardShape)
+            .overlay(cardShape.strokeBorder(NexusColor.Line.hairline, lineWidth: 1))
+            .nexusShadow(NexusShadow.s1)
     }
 
-    internal var glassVariant: NexusGlassVariant {
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)
+    }
+
+    internal var surfaceFill: Color {
         switch elevation {
-        case .elev1: return .subtle
-        case .elev2: return .regular
+        case .elev1: return NexusColor.Background.panel
+        case .elev2: return NexusColor.Background.raised
         }
     }
 }
@@ -57,7 +65,7 @@ public struct NexusCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Hero / morning brief").nexusType(.h2).foregroundStyle(
                 NexusColor.Text.primary)
-            Text("Regular glass elevation").nexusType(.body).foregroundStyle(
+            Text("Raised slate elevation").nexusType(.body).foregroundStyle(
                 NexusColor.Text.tertiary)
         }
     }

@@ -53,29 +53,25 @@ public enum NexusGlassVariant: CaseIterable, Sendable {
     var isElevatedSurface: Bool { self == .elevated }
 }
 
-/// Glass material modifier — the v4 substrate behind primary surfaces,
-/// reconciled to the LabKit `LabGlass` look in the MP-0 migration.
+/// Flat surface modifier — the Linear "Midnight Command Center" substrate
+/// behind primary surfaces. Retargeted from translucent glass to a flat
+/// layered fill: an elevated `Background.raised` surface, a 1px neutral
+/// `Line.regular` rim, and a subtle contained `NexusShadow.s1` drop. No
+/// `.ultraThinMaterial` blur, no specular highlight, no glow — Linear is flat.
 ///
-/// On macOS 26+ the substrate is native `.glassEffect(.regular,)`; below 26
-/// (or under `accessibilityReduceTransparency`) it collapses to an opaque-ish
-/// fill. In **all** branches a 1pt LabKit rim gradient and the LabKit
-/// elevation shadow are applied — chrome always carries the rim + shadow, even
-/// under reduced transparency (LabGlass discipline + spec §5 accessibility
-/// invariant, which requires the Reduce-Transparency branch to remain).
-///
-/// The 3-variant `NexusGlassVariant` axis maps onto LabGlass's binary
-/// `elevated`: `.elevated → elevated:true`, `.subtle`/`.regular →
-/// elevated:false` (see `NexusGlassVariant.isElevatedSurface`).
+/// The `NexusGlassVariant` axis and its per-variant tint / border / shadow
+/// constants are retained (and still asserted by the frozen-API tests) but the
+/// body no longer reads them: every variant renders the same flat elevated
+/// surface so chrome reads uniformly across all call sites.
 ///
 /// Generic over the clip `Shape` (NOT `InsettableShape`) so cards
 /// (`RoundedRectangle`) and pills (`Capsule`) share the same modifier and the
-/// public API stays frozen. Because the constraint is `Shape`, the rim uses
-/// `shape.stroke(_:lineWidth:)` rather than LabGlass's
-/// `strokeBorder` (`strokeBorder` requires `InsettableShape`); the 1pt visual
-/// delta from centred-vs-inset stroking is negligible and preserving `Shape`
-/// keeps the frozen public surface intact. Use the shorthand
-/// `.nexusGlass(.regular)` for rounded-rectangle cards or
-/// `.nexusGlass(.regular, in: Capsule())` for capsule-shaped surfaces.
+/// public API stays frozen. The rim uses `shape.stroke(_:lineWidth:)` rather
+/// than `strokeBorder` (which requires `InsettableShape`); the 1pt visual delta
+/// from centred-vs-inset stroking is negligible and preserving `Shape` keeps
+/// the frozen public surface intact. Use the shorthand `.nexusGlass(.regular)`
+/// for rounded-rectangle cards or `.nexusGlass(.regular, in: Capsule())` for
+/// capsule-shaped surfaces.
 public struct NexusGlassMaterial<S: Shape>: ViewModifier {
 
     public let variant: NexusGlassVariant
@@ -86,47 +82,22 @@ public struct NexusGlassMaterial<S: Shape>: ViewModifier {
         self.shape = shape
     }
 
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
     public func body(content: Content) -> some View {
-        let elevated = variant.isElevatedSurface
-
-        return substrate(content)
-            // Preserve the pre-migration contract: `content` (not just the
-            // substrate) is clipped to the arbitrary `Shape`. LabGlass clips
-            // only the substrate via `in: shape`; production keeps the
-            // explicit clip so existing arbitrary-`Shape` clipping behaviour
-            // for all 9 call sites is unchanged. Shadow is applied last
-            // (after the clip), as in LabGlass.
+        // Linear "Midnight Command Center" is FLAT: an elevated `Background.*`
+        // surface, a 1px neutral `Line` rim, and a subtle contained shadow —
+        // no `.ultraThinMaterial` blur, no specular gradient, no glow. The
+        // 3-variant axis collapses to a single elevated fill so chrome reads
+        // uniformly flat across all call sites; the variant-specific tint /
+        // shadow constants below are retained only as frozen-API guards.
+        content
+            .background(NexusColor.Background.raised, in: shape)
+            // Clip `content` (not just the fill) to the shape — preserves the
+            // pre-migration contract for all arbitrary-`Shape` call sites so
+            // edge-to-edge content doesn't bleed past the rounded surface.
+            // Shadow is applied last (outside the clip).
             .clipShape(shape)
-            .overlay(
-                shape.stroke(
-                    LinearGradient(
-                        colors: Self.rimGradientColors,
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: Self.rimLineWidth
-                )
-            )
-            .shadow(
-                color: .black.opacity(Self.shadowOpacity(elevated: elevated)),
-                radius: Self.shadowRadius(elevated: elevated),
-                y: Self.shadowY(elevated: elevated)
-            )
-    }
-
-    @ViewBuilder
-    private func substrate(_ content: Content) -> some View {
-        if reduceTransparency {
-            // spec §5 accessibility invariant: collapse to an opaque v4
-            // surface. LabGlass has no such branch; production must keep it.
-            content.background(variant.opaqueFallback, in: shape)
-        } else if #available(macOS 26, *) {
-            content.glassEffect(.regular, in: shape)
-        } else {
-            content.background(NexusColor.Glass.surface1, in: shape)
-        }
+            .overlay(shape.stroke(NexusColor.Line.regular, lineWidth: 1))
+            .nexusShadow(NexusShadow.s1)
     }
 
     // MARK: - LabKit-exact look constants (single source of truth)

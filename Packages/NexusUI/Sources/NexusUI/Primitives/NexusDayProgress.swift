@@ -36,11 +36,11 @@ public struct NexusDayProgress: View {
 
                 Text(doneCaption)
                     .font(NexusType.mono)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .foregroundStyle(NexusColor.Text.tertiary)
 
                 Text(focusedCaption)
                     .font(NexusType.mono)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .foregroundStyle(NexusColor.Text.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -67,7 +67,7 @@ public struct NexusDayProgress: View {
                 .frame(height: 6)
 
             Capsule()
-                .fill(NexusColor.Text.primary)
+                .fill(NexusColor.Accent.lime)
                 .frame(width: max(0, width * progress), height: 6)
 
             ForEach(Array(tickFractions.enumerated()), id: \.offset) { _, fraction in
@@ -78,7 +78,7 @@ public struct NexusDayProgress: View {
             }
 
             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(NexusColor.Text.primary)
+                .fill(NexusColor.Accent.lime)
                 .frame(width: 11, height: 20)
                 .overlay(
                     RoundedRectangle(cornerRadius: 3, style: .continuous)

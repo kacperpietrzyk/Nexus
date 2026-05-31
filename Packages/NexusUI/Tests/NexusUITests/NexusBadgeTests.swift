@@ -30,11 +30,14 @@ struct NexusBadgeTests {
     @MainActor
     @Test("All tones build and map to expected text colours")
     func tonesBuild() {
+        // Linear badges are flat neutral status labels — every tone renders the
+        // same Storm Cloud (Text.tertiary) ink. Lime is reserved for primary
+        // actions / active selection and never appears on badge chrome.
         let expected: [(NexusBadgeTone, Color)] = [
-            (.acc, NexusColor.Text.primary),
-            (.pos, NexusColor.Text.secondary),
-            (.neg, NexusColor.Text.primary),
-            (.warn, NexusColor.Text.secondary),
+            (.acc, NexusColor.Text.tertiary),
+            (.pos, NexusColor.Text.tertiary),
+            (.neg, NexusColor.Text.tertiary),
+            (.warn, NexusColor.Text.tertiary),
             (.info, NexusColor.Text.tertiary),
             (.muted, NexusColor.Text.tertiary),
         ]
@@ -95,13 +98,13 @@ struct NexusBadgeTests {
     }
 
     @MainActor
-    @Test("Compact metrics match canvas .cs-badge padding (0 7px)")
+    @Test("Compact metrics match Linear badge padding (0 6px)")
     func compactMetrics() {
         let badge = NexusBadge("Today", tone: .muted, size: .compact)
 
         #expect(badge.size == .compact)
         #expect(badge.minHeight == 18)
-        #expect(badge.horizontalPadding == 7)
+        #expect(badge.horizontalPadding == 6)
         #expect(badge.verticalPadding == 0)
     }
 }

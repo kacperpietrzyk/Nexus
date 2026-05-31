@@ -26,13 +26,13 @@ import Testing
 }
 
 @MainActor
-@Test func card_elev1_usesSubtleGlass() {
+@Test func card_elev1_usesFlatPanelSurface() {
     let card = NexusCard<EmptyView>(.elev1) { EmptyView() }
-    #expect(card.glassVariant == .subtle)
+    #expect(card.surfaceFill.resolvedRGBA == NexusColor.Background.panel.resolvedRGBA)
 }
 
 @MainActor
-@Test func card_elev2_usesRegularGlass() {
+@Test func card_elev2_usesFlatRaisedSurface() {
     let card = NexusCard<EmptyView>(.elev2) { EmptyView() }
-    #expect(card.glassVariant == .regular)
+    #expect(card.surfaceFill.resolvedRGBA == NexusColor.Background.raised.resolvedRGBA)
 }

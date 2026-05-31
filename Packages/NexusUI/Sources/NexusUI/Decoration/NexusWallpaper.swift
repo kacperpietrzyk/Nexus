@@ -2,12 +2,14 @@ import SwiftUI
 
 /// Ambient wallpaper rendered behind every NexusUI surface.
 ///
-/// Composition (back-to-front), adopting the LabKit `LabBackground` stack:
-///   1. Vertical linear gradient from `Background.panel` (top) to `Background.base`
-///      (bottom-biased end point), both achromatic.
-///   2. Three soft white radial glows (top-left, mid-right, bottom-center).
+/// Retargeted for Linear "Midnight Command Center": a single flat
+/// `Background.base` (#08090A) fill — no blue glow, no large gradient. Linear
+/// depth comes from layered `Background.*` surfaces and contained shadows, not
+/// from an ambient wallpaper.
 ///
-/// Reduce Transparency collapses to the opaque achromatic base color only.
+/// The legacy gradient / glow constants (`linearTopColor`, `glows`, …) are
+/// retained as frozen-API guards asserted by `NexusWallpaperTests`; the body no
+/// longer reads them.
 public struct NexusWallpaper: View {
 
     /// One soft white radial glow in the LabBackground stack.
@@ -44,33 +46,10 @@ public struct NexusWallpaper: View {
 
     public init() {}
 
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
     public var body: some View {
-        if reduceTransparency {
-            NexusWallpaper.baseColor
-                .ignoresSafeArea()
-        } else {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        NexusWallpaper.linearTopColor,
-                        NexusWallpaper.linearBottomColor,
-                    ],
-                    startPoint: NexusWallpaper.linearStartPoint,
-                    endPoint: NexusWallpaper.linearEndPoint
-                )
-
-                ForEach(Array(NexusWallpaper.glows.enumerated()), id: \.offset) { _, glow in
-                    RadialGradient(
-                        colors: [Color.white.opacity(glow.whiteOpacity), .clear],
-                        center: glow.center,
-                        startRadius: NexusWallpaper.glowStartRadius,
-                        endRadius: glow.endRadius
-                    )
-                }
-            }
+        // Linear is flat: a single Pitch Black (#08090A) ground. No gradient,
+        // no radial glows — depth lives in the layered surfaces above.
+        NexusWallpaper.baseColor
             .ignoresSafeArea()
-        }
     }
 }

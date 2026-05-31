@@ -19,12 +19,14 @@ struct NexusDotIndicatorTests {
     @MainActor
     @Test("All tones resolve expected colors")
     func colors() {
+        // Lime marks the single active/accent dot; status tones carry semantic
+        // meaning (success/danger/info); warn + muted stay neutral.
         let expected: [(NexusDotTone, Color)] = [
-            (.acc, NexusColor.Text.primary),
-            (.pos, NexusColor.Text.secondary),
-            (.neg, NexusColor.Text.primary),
+            (.acc, NexusColor.Accent.lime),
+            (.pos, NexusColor.Status.success),
+            (.neg, NexusColor.Status.danger),
             (.warn, NexusColor.Text.secondary),
-            (.info, NexusColor.Text.tertiary),
+            (.info, NexusColor.Status.info),
             (.muted, NexusColor.Text.muted),
         ]
 
@@ -37,17 +39,12 @@ struct NexusDotIndicatorTests {
     }
 
     @MainActor
-    @Test("Only accent tone gets a soft ring")
+    @Test("Linear dots carry no ring (flat fill, no glow)")
     func ring() {
         for tone in NexusDotTone.allCases {
             let dot = NexusDotIndicator(tone)
 
-            if tone == .acc {
-                #expect(dot.ringColor != nil)
-                #expect(dot.ringColor!.resolvedRGBA == NexusColor.Glass.surface3.resolvedRGBA)
-            } else {
-                #expect(dot.ringColor == nil)
-            }
+            #expect(dot.ringColor == nil)
         }
     }
 }

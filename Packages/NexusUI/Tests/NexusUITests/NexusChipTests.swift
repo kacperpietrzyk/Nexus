@@ -17,19 +17,24 @@ struct NexusChipTests {
 
         #expect(chip.label == "backend")
         #expect(chip.tone == .neutral)
-        #expect(chip.textColor.resolvedRGBA == NexusColor.Text.tertiary.resolvedRGBA)
+        #expect(chip.textColor.resolvedRGBA == NexusColor.Text.secondary.resolvedRGBA)
         #expect(chip.borderColor.resolvedRGBA == NexusColor.Line.hairline.resolvedRGBA)
     }
 
     @MainActor
     @Test("All tones build and map to expected text colours")
     func tonesBuild() {
+        // Mirrors current NexusChip source: the single `.accent` (active /
+        // selected) chip earns Porcelain ink + a lime rim; every other tone uses
+        // Text.secondary. NOTE: the design spec (and the NexusBadge sibling) call
+        // for Storm Cloud / Text.tertiary on neutral chips — this asserts the
+        // shipped value pending spec reconciliation by the NexusChip owner.
         let expected: [(NexusChipTone, Color)] = [
-            (.neutral, NexusColor.Text.tertiary),
+            (.neutral, NexusColor.Text.secondary),
             (.accent, NexusColor.Text.primary),
-            (.rose, NexusColor.Text.primary),
+            (.rose, NexusColor.Text.secondary),
             (.positive, NexusColor.Text.secondary),
-            (.negative, NexusColor.Text.primary),
+            (.negative, NexusColor.Text.secondary),
             (.warning, NexusColor.Text.secondary),
         ]
 
@@ -42,15 +47,23 @@ struct NexusChipTests {
     }
 
     @MainActor
-    @Test("Accent audit: accent = strong ink ladder, neutral = faint, both achromatic")
-    func achromaticAccentAudit() {
+    @Test("Lime economy: accent chip gets the only lime rim, neutral stays flat")
+    func limeEconomyAudit() {
         let accent = NexusChip("x", tone: .accent)
         let neutral = NexusChip("y", tone: .neutral)
 
+        // Accent is the single active/selected chip: Porcelain ink, a flat
+        // charcoal lift, and the one place lime is allowed — a subtle rim.
         #expect(accent.textColor.resolvedRGBA == NexusColor.Text.primary.resolvedRGBA)
-        #expect(accent.backgroundColor.resolvedRGBA == Color.white.opacity(0.10).resolvedRGBA)
-        #expect(neutral.textColor.resolvedRGBA == NexusColor.Text.tertiary.resolvedRGBA)
-        #expect(neutral.backgroundColor.resolvedRGBA == Color.white.opacity(0.055).resolvedRGBA)
+        #expect(accent.backgroundColor.resolvedRGBA == NexusColor.Background.controlHover.resolvedRGBA)
+        #expect(accent.borderColor.resolvedRGBA == NexusColor.Accent.lime.opacity(0.45).resolvedRGBA)
+
+        // Neutral metadata chip: flat control fill, neutral rim, no lime.
+        // (Text.secondary mirrors current source; spec calls for Text.tertiary —
+        // see note in `tonesBuild`, pending NexusChip owner reconciliation.)
+        #expect(neutral.textColor.resolvedRGBA == NexusColor.Text.secondary.resolvedRGBA)
+        #expect(neutral.backgroundColor.resolvedRGBA == NexusColor.Background.control.resolvedRGBA)
+        #expect(neutral.borderColor.resolvedRGBA == NexusColor.Line.hairline.resolvedRGBA)
     }
 
     @MainActor

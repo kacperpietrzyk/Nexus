@@ -53,17 +53,18 @@ public struct CommandPalette: View {
 
     public var body: some View {
         ZStack {
-            Color.black.opacity(0.5)
-                .background(.ultraThinMaterial)
+            NexusColor.Background.base.opacity(0.6)
                 .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
 
             paletteContent
                 .frame(width: 600)
-                .nexusGlass(.elevated, cornerRadius: NexusRadius.r4)
-                .nexusGlassRim(cornerRadius: NexusRadius.r4)
+                .background(
+                    NexusColor.Background.raised,
+                    in: RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+                )
                 .overlay {
-                    RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous)
+                    RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
                         .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
                 }
                 .nexusShadow(NexusShadow.pop)
@@ -119,6 +120,26 @@ public struct CommandPalette: View {
             action.perform()
             onDismiss()
         } label: {
+            PaletteRowLabel(action: action)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Single result row. Highlights on hover with the Linear selected-row
+/// treatment: `Background.controlHover` fill plus a leading lime marker.
+private struct PaletteRowLabel: View {
+    let action: PaletteAction
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(NexusColor.Accent.lime)
+                .frame(width: 2)
+                .opacity(isHovering ? 1 : 0)
+
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(action.title)
@@ -135,12 +156,13 @@ public struct CommandPalette: View {
                     NexusKbd.combo(action.shortcut)
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 18)
             .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isHovering ? NexusColor.Background.controlHover : .clear)
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
     }
 }
 

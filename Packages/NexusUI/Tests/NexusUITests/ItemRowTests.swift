@@ -49,6 +49,13 @@ import Testing
 }
 
 @MainActor
+@Test func itemRow_selectedBackground_isControlHover() {
+    let row = ItemRow(item: TaskItem(title: "x"), isSelected: true)
+    #expect(row.isSelected)
+    #expect(row.rowBackgroundColor.resolvedRGBA == NexusColor.Background.controlHover.resolvedRGBA)
+}
+
+@MainActor
 @Test func itemRow_iconName_coversAllKinds() {
     #expect(ItemRow.iconName(for: .note) == "doc.text")
     #expect(ItemRow.iconName(for: .task) == "checkmark.circle")

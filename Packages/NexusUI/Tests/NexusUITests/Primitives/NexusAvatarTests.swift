@@ -20,8 +20,8 @@ struct NexusAvatarTests {
         let avatar = NexusAvatar(name: "Maya Chen", size: 28)
 
         #expect(avatar.size == 28)
-        #expect(avatar.textColor.resolvedRGBA == NexusColor.Text.primary.resolvedRGBA)
-        #expect(avatar.backgroundColor.resolvedRGBA == NexusColor.Text.muted.resolvedRGBA)
+        #expect(avatar.textColor.resolvedRGBA == NexusColor.Text.secondary.resolvedRGBA)
+        #expect(avatar.backgroundColor.resolvedRGBA == NexusColor.Background.controlHover.resolvedRGBA)
         _ = avatar.body
     }
 }

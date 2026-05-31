@@ -59,11 +59,16 @@ public struct NexusBadge: View {
         .padding(.vertical, verticalPadding)
         .frame(minHeight: minHeight)
         .foregroundStyle(textColor)
-        .background(backgroundColor, in: Capsule(style: .continuous))
+        .background(backgroundColor, in: badgeShape)
         .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(borderColor, lineWidth: 0.5)
+            badgeShape
+                .strokeBorder(borderColor, lineWidth: 1)
         )
+    }
+
+    /// Linear badge — flat 4 px corner (`NexusRadius.badge`), not a pill.
+    private var badgeShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: NexusRadius.badge, style: .continuous)
     }
 
     internal var minHeight: CGFloat {
@@ -75,7 +80,7 @@ public struct NexusBadge: View {
 
     internal var horizontalPadding: CGFloat {
         switch size {
-        case .compact: return 7
+        case .compact: return 6
         case .control: return 16
         }
     }
@@ -94,42 +99,29 @@ public struct NexusBadge: View {
         }
     }
 
+    // Linear badges are flat status labels, not primary actions, so every tone
+    // renders the same neutral way: Charcoal Grey (`controlHover`) fill, Storm
+    // Cloud (`Text.tertiary`) ink, hairline rim, 4 px corner. Lime is reserved
+    // for primary actions / active selection and never appears on this chrome.
+    // Cases are preserved (§11 public-API byte-freeze) — only the values change.
     internal var textColor: Color {
         switch tone {
-        case .acc: return NexusColor.Text.primary
-        // .pos ≡ .warn post-MP-6.3 (both Text.secondary); cases preserved —
-        // §11 public-API byte-freeze, do not dedup.
-        case .pos: return NexusColor.Text.secondary
-        case .neg: return NexusColor.Text.primary
-        case .warn: return NexusColor.Text.secondary
-        case .info: return NexusColor.Text.tertiary
-        case .muted: return NexusColor.Text.tertiary
+        case .acc, .pos, .neg, .warn, .info, .muted:
+            return NexusColor.Text.tertiary
         }
     }
 
     internal var backgroundColor: Color {
         switch tone {
-        case .acc: return Color.white.opacity(0.06)
-        // .pos ≡ .warn post-MP-6.3 (both Text.secondary); cases preserved —
-        // §11 public-API byte-freeze, do not dedup.
-        case .pos: return NexusColor.Text.secondary.opacity(0.14)
-        case .neg: return NexusColor.Text.primary.opacity(0.14)
-        case .warn: return NexusColor.Text.secondary.opacity(0.14)
-        case .info: return NexusColor.Text.tertiary.opacity(0.14)
-        case .muted: return .clear
+        case .acc, .pos, .neg, .warn, .info, .muted:
+            return NexusColor.Background.controlHover
         }
     }
 
     internal var borderColor: Color {
         switch tone {
-        case .acc: return Color.white.opacity(0.16)
-        // .pos ≡ .warn post-MP-6.3 (both Text.secondary); cases preserved —
-        // §11 public-API byte-freeze, do not dedup.
-        case .pos: return NexusColor.Text.secondary.opacity(0.40)
-        case .neg: return NexusColor.Text.primary.opacity(0.40)
-        case .warn: return NexusColor.Text.secondary.opacity(0.40)
-        case .info: return NexusColor.Text.tertiary.opacity(0.40)
-        case .muted: return NexusColor.Line.hairline
+        case .acc, .pos, .neg, .warn, .info, .muted:
+            return NexusColor.Line.hairline
         }
     }
 }

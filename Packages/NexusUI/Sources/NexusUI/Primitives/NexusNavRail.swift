@@ -111,9 +111,10 @@ public struct NexusNavRail<ID: Hashable, Avatar: View>: View {
         .padding(.vertical, 12)
         .frame(width: Self.railWidth)
         .frame(maxHeight: .infinity)
+        .background(NexusColor.Background.panel)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(Color.white.opacity(0.07))
+                .fill(NexusColor.Line.hairline)
                 .frame(width: 1)
         }
     }
@@ -130,8 +131,8 @@ public struct NexusNavRail<ID: Hashable, Avatar: View>: View {
             .foregroundStyle(NexusColor.Text.primary)
             .frame(width: Self.logoSize, height: Self.logoSize)
             .background(
-                Color.white.opacity(0.06),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                NexusColor.Background.raised,
+                in: RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)
             )
             .accessibilityLabel(logoTitle)
     }
@@ -144,19 +145,32 @@ public struct NexusNavRail<ID: Hashable, Avatar: View>: View {
         } label: {
             ZStack(alignment: .topTrailing) {
                 ZStack {
-                    if isActive {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.white.opacity(0.105))
-                            .matchedGeometryEffect(id: "nexusRailSelection", in: pillNamespace)
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-                    } else if hoveredID == item.id {
-                        // Hover preview at the SAME 34×34 / r8 footprint the
-                        // active pill uses, so hovering shows where selection
-                        // would land. No matchedGeometryEffect — only the
-                        // active pill slides; this is a plain fade. Audit C2.
-                        RoundedRectangle(cornerRadius: 8)
+                    if hoveredID == item.id, !isActive {
+                        // Hover preview at the SAME 34×34 footprint the glyph
+                        // occupies, so hovering shows where selection would
+                        // land. Neutral only (never lime), tag radius to match
+                        // the tight Linear item shape. No matchedGeometryEffect
+                        // — only the active lime bar slides; this is a plain
+                        // fade. Audit C2.
+                        RoundedRectangle(cornerRadius: NexusRadius.tag)
                             .fill(NexusColor.Text.primary.opacity(0.04))
+                    }
+                    if isActive {
+                        // Linear active indicator: a single leading neon-lime
+                        // bar — the ONE lime element on this component (lime
+                        // economy). It carries the `matchedGeometryEffect`
+                        // (id unchanged) so it GLIDES vertically between active
+                        // items, including across a `NexusShell`
+                        // re-specialization when an external `selectionNamespace`
+                        // is injected (the C3 contract the param exists for).
+                        // Leading-aligned inside the centered glyph footprint so
+                        // it does not disturb the 34×34 metrics or the 54pt hit
+                        // band below.
+                        Capsule()
+                            .fill(NexusColor.Accent.lime)
+                            .frame(width: 2.5, height: 18)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .matchedGeometryEffect(id: "nexusRailSelection", in: pillNamespace)
                     }
                     Image(systemName: item.systemImage)
                         .font(.system(size: 14, weight: isActive ? .semibold : .regular))
@@ -199,7 +213,10 @@ public struct NexusNavRail<ID: Hashable, Avatar: View>: View {
             .foregroundStyle(NexusColor.Text.tertiary)
             .padding(.horizontal, 3.5)
             .padding(.vertical, 1)
-            .background(Color.white.opacity(0.09), in: Capsule())
+            .background(
+                NexusColor.Line.strong,
+                in: RoundedRectangle(cornerRadius: NexusRadius.badge, style: .continuous)
+            )
             .offset(x: 5, y: -1)
             .accessibilityLabel("\(count)")
     }

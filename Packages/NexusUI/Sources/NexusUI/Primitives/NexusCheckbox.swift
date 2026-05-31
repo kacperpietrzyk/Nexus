@@ -34,46 +34,29 @@ public struct NexusCheckbox: View {
             if isChecked {
                 Image(systemName: "checkmark")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NexusColor.Accent.limeInk)
                     .accessibilityHidden(true)
             }
         }
         .frame(width: Self.side, height: Self.side)
-        .shadow(color: shadowColor, radius: shadowRadius, y: shadowY)
     }
 
+    // Unchecked: transparent square. Checked: flat neon-lime fill (the single
+    // completed indicator — lime is reserved for exactly this active state).
     private var fillStyle: AnyShapeStyle {
-        if isChecked {
-            return AnyShapeStyle(
-                LinearGradient(
-                    colors: [NexusColor.Text.primary, NexusColor.Text.primary],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-        }
-
-        return AnyShapeStyle(Color.white.opacity(0.05))
+        isChecked
+            ? AnyShapeStyle(NexusColor.Accent.lime)
+            : AnyShapeStyle(Color.clear)
     }
 
+    // Unchecked: 1px Gunmetal rim. Checked: lime rim flush with the fill (no
+    // contrasting chrome — Linear surfaces are flat, not glassy).
     internal var borderColor: Color {
-        isChecked ? Color.white.opacity(0.16) : NexusColor.Line.strong
-    }
-
-    internal var shadowColor: Color {
-        isChecked ? NexusColor.Text.primary.opacity(0.45) : .black.opacity(0.30)
-    }
-
-    internal var shadowRadius: CGFloat {
-        isChecked ? 3 : 1
-    }
-
-    internal var shadowY: CGFloat {
-        isChecked ? 0 : 1
+        isChecked ? NexusColor.Accent.lime : NexusColor.Line.strong
     }
 
     internal static let side: CGFloat = 16
-    internal static let cornerRadius: CGFloat = 5
+    internal static let cornerRadius: CGFloat = NexusRadius.badge
 }
 
 #Preview {
