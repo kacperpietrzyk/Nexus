@@ -219,11 +219,13 @@ public struct ModelRowExpandable: View {
                 }
             }
         }
-        .onChange(of: progress?.state) { _, newState in
+        .onChange(of: progress?.state, initial: true) { _, newState in
             // A finished transfer (success or failure) is reflected in the
             // `UserDefaults`-backed snapshot by the download worker; tell the
             // parent to reload so the row flips to Assign/Delete (or shows the
-            // error) instead of spinning forever.
+            // error) instead of spinning forever. `initial: true` covers a
+            // transfer that already completed before the row first observed it
+            // (only terminal states act; pending/active fall through).
             switch newState {
             case .completed, .failed, .cancelled:
                 onDownloadFinished()
