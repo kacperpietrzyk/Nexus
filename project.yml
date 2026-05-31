@@ -118,6 +118,15 @@ targets:
         INFOPLIST_FILE: Apps/NexusMac/Info.plist
         CODE_SIGN_ENTITLEMENTS: Apps/NexusMac/NexusMac.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        # APNs environment for CloudKit silent-push delivery. Release (TestFlight/
+        # App Store) MUST use production or the mirror's change pushes never arrive;
+        # local Debug builds use the sandbox. Consumed via $(APS_ENVIRONMENT) in the
+        # entitlements file.
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
     postBuildScripts:
       - name: Copy nexus-mcp sidecar binary into app bundle
         script: |
@@ -182,6 +191,12 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
+      configs:
+        # See NexusMac: Release must use production APNs for CloudKit push.
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
     dependencies:
       - package: NexusCore
       - package: NexusSync
