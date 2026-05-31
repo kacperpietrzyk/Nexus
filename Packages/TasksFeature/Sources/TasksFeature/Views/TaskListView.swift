@@ -400,21 +400,17 @@ public struct TaskListView: View {
 
     @MainActor
     private func moveToday(from offsets: IndexSet, to destination: Int) {
-        guard let repository, let movingIndex = offsets.first else { return }
-        let movingTask = today[movingIndex]
-        let prevIndex = destination - 1
-        let nextIndex = destination
-        let prev: Double? =
-            (prevIndex >= 0 && prevIndex < today.count && prevIndex != movingIndex)
-            ? today[prevIndex].orderIndex
-            : nil
-        let next: Double? =
-            (nextIndex < today.count && nextIndex != movingIndex)
-            ? today[nextIndex].orderIndex
-            : nil
-        let newOrderIndex = OrderIndex.midpoint(prev: prev, next: next)
+        guard let repository else { return }
+        // Renumber the whole visible Today order so the reorder persists and is
+        // reflected by `TodayQuery.today`'s manual-order comparator. A single
+        // midpoint write isn't enough here: un-reordered rows have a nil
+        // `orderIndex`, so the moved row had no neighbours to bound it and the
+        // change never showed. `reorder` assigns sequential indices in one save
+        // without the per-task notification churn of `update`.
+        var reordered = today
+        reordered.move(fromOffsets: offsets, toOffset: destination)
         do {
-            try repository.update(movingTask) { $0.orderIndex = newOrderIndex }
+            try repository.reorder(reordered)
             reload()
         } catch {
             self.error = String(describing: error)

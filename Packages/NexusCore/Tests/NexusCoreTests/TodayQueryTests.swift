@@ -41,6 +41,30 @@ struct TodayQueryTests {
     }
 
     @MainActor
+    @Test("today bucket honors a persisted manual order over dueAt")
+    func todayHonorsManualOrder() throws {
+        let context = try makeContext()
+        let now = date(2026, 5, 4, hour: 14)
+        // Three tasks all due today, in ascending dueAt order by construction.
+        let first = TaskItem(title: "first", dueAt: date(2026, 5, 4, hour: 9))
+        let second = TaskItem(title: "second", dueAt: date(2026, 5, 4, hour: 12))
+        let third = TaskItem(title: "third", dueAt: date(2026, 5, 4, hour: 15))
+        for task in [first, second, third] { context.insert(task) }
+        try context.save()
+
+        let query = TodayQuery(calendar: .gregorianUTC)
+        // Before any reorder: dueAt order.
+        #expect(try query.today(now: now).apply(in: context).map(\.title) == ["first", "second", "third"])
+
+        // Persist a manual order that contradicts dueAt (reverse).
+        try TaskItemRepository(context: context, scheduler: RRuleScheduler(), now: { now })
+            .reorder([third, second, first])
+
+        // The query now reflects the manual order, not dueAt.
+        #expect(try query.today(now: now).apply(in: context).map(\.title) == ["third", "second", "first"])
+    }
+
+    @MainActor
     @Test("buckets exclude done snoozed and tombstoned")
     func excludesNonOpen() throws {
         let context = try makeContext()
