@@ -278,14 +278,20 @@ public final class ModelDownloadManager {
             await Self.finalizeDownloadedModel(job: job)
             await MainActor.run { progress.markCompleted() }
         } catch is CancellationError {
-            // Post-`fetch` early-return path (`Task.checkCancellation()`).
+            // The common cancel path on swift-transformers 1.3.3: a mid-file
+            // cancel makes the awaited `HubClient.downloadFile` throw
+            // `CancellationError`, which propagates out of `HubApi.snapshot`
+            // (its `withTaskCancellationHandler` `onCancel` only runs progress
+            // cleanup, it does not throw). Our explicit `Task.checkCancellation()`
+            // after `snapshot`/`fetch` also lands here.
             await Self.recordCancelled(job: job)
         } catch {
-            // The live HTTP phase does NOT throw `CancellationError` on
-            // cancel: swift-transformers' `Downloader.cancel()` broadcasts
-            // `.failed(URLError(.cancelled))` (Downloader.swift:382) which
-            // `HubApi.snapshot` rethrows verbatim (HubApi.swift:595-596).
-            // Classify a user cancel as cancellation (→ `.available` +
+            // Belt-and-suspenders for any non-`CancellationError` thrown while
+            // the wrapping `Task` is cancelled. The only cancel trigger is
+            // `Task.cancel()` (see `cancel(manifestID:)`), so `Task.isCancelled`
+            // is the reliable signal regardless of how the transfer stack
+            // surfaces the abort (`URLError(.cancelled)`, a `HubClientError`,
+            // etc.). Classify a user cancel as cancellation (→ `.available` +
             // `markCancelled()`), never as a hard download failure.
             if Task.isCancelled || (error as? URLError)?.code == .cancelled {
                 await Self.recordCancelled(job: job)
@@ -397,22 +403,28 @@ public final class ModelDownloadManager {
     var inflightCount: Int { inflight.count }
 }
 
-/// Real HuggingFace fetcher backed by swift-transformers 1.1.9 `Hub`.
+/// Real HuggingFace fetcher backed by swift-transformers 1.3.3 `Hub`.
 ///
 /// Wraps `HubApi.snapshot(from:revision:matching:progressHandler:)`
-/// (`swift-transformers/Sources/Hub/HubApi.swift:614`). That call already
-/// performs resumable HTTP `Range` downloads with per-file `.metadata`
-/// sidecars and progress tracking (`Hub/Downloader.swift:18,180,250`), so the
-/// `startingAtByte` offset is informational only — `Hub` resumes any partial
-/// files automatically on the next call.
+/// (`swift-transformers/Sources/Hub/HubApi.swift`). As of 1.2.0 the legacy
+/// `Hub/Downloader.swift` was removed and the transfer now runs through
+/// swift-huggingface's `HubClient.downloadFile`, with per-file `.metadata`
+/// sidecars and `Progress` tracking. `snapshot` resumes at *file* granularity,
+/// not within a file: a fully-downloaded file whose `.metadata` commit hash
+/// still matches is skipped on the next call, but an interrupted file is
+/// re-downloaded from scratch (its `.incomplete` blob is discarded before each
+/// attempt and `.metadata` is only written after the file completes). The
+/// `startingAtByte` offset is therefore informational only — we do not drive
+/// per-file resume.
 ///
 /// `HubApi` lands a snapshot at `<downloadBase>/models/<hfPath>`
-/// (`HubApi.localRepoLocation`, `HubApi.swift:378`). We point `downloadBase`
-/// at a stable cache folder next to the model store so the resume sidecars
-/// survive across launches, then **copy** the snapshot contents into the
-/// manager's per-manifest `destination` folder so the Task 10/13 loaders see
-/// a flat model directory of safetensors + config + tokenizer. Copy (not
-/// move) is deliberate — see ``replaceContents(of:with:)``.
+/// (`HubApi.localRepoLocation`). We point `downloadBase` at a stable cache
+/// folder next to the model store so the per-file `.metadata` sidecars survive
+/// across launches (so completed files are not re-fetched), then **copy** the
+/// snapshot contents into the manager's
+/// per-manifest `destination` folder so the Task 10/13 loaders see a flat
+/// model directory of safetensors + config + tokenizer. Copy (not move) is
+/// deliberate — see ``replaceContents(of:with:)``.
 ///
 /// Not used by the unit tests (they inject a stub) — exercised by Task 28's
 /// `INTEGRATION=1` smoke and production.
@@ -461,14 +473,23 @@ public struct LiveHFFetcher: ModelFileFetching {
             revision: "main",
             matching: Self.modelGlobs,
             progressHandler: { progress in
-                // HubApi weights `Progress` by file COUNT (one parent unit
-                // per file, HubApi.swift:663-665), not bytes — so this byte
-                // figure is a coarse approximation. It is corrected by trailing
+                // HubApi weights `Progress` by file COUNT: one parent unit per
+                // file, each subdivided 0–100 by the per-file download fraction
+                // (see `HubApi.snapshot`), not by bytes — so this byte figure is
+                // a coarse approximation. It is corrected by the trailing
                 // `onProgress(totalBytes)` below and clamped by
                 // `ModelDownloadProgress.percent` (min(100, …)).
                 onProgress(Int64(progress.fractionCompleted * Double(totalBytes)))
             }
         )
+
+        // swift-transformers 1.3.3 `snapshot` returns a *partial* tree normally
+        // (no throw) when cancelled between files — it only checks
+        // `Task.isCancelled` after each file and early-returns. Bail before we
+        // copy that partial snapshot or run weight validation on it, so a user
+        // cancel surfaces cleanly as `CancellationError` (→ `recordCancelled`)
+        // rather than as a coincidental `noWeightsLanded` error.
+        try Task.checkCancellation()
 
         try Self.replaceContents(of: destination, with: snapshotURL)
         // A snapshot can "succeed" without landing usable weights — an empty or
