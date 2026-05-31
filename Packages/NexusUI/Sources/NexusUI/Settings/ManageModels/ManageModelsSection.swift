@@ -113,6 +113,21 @@ public struct ManageModelsSection: View {
                     .foregroundStyle(NexusColor.Text.muted)
             }
         }
+        // Match the sibling settings destinations (`AgentSettingsView`,
+        // `MeetingsSettingsSection`). Without `.formStyle(.grouped)` a macOS
+        // `Form` falls back to the two-column style, which mislaid this screen's
+        // custom-header sections: the Storage bar overlapped the "MODELS" header
+        // and the list, content gravitated to the bottom of the window with a
+        // large void on top, and it scrolled under the title bar. The grouped
+        // style stacks the Storage / Models / Behavior sections cleanly and
+        // scrolls normally. `.scrollContentBackground(.hidden)` + clear
+        // background let the shared Settings wallpaper show through, as the
+        // siblings do. Harmless on iOS (the same screen ships there via a
+        // `.sheet`): grouped is the default-equivalent there and the background
+        // modifiers are benign.
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
         .onAppear { reloadSnapshots() }
         .onChange(of: manifests.map(\.id)) { reloadSnapshots() }
         .navigationTitle("Manage Models")
