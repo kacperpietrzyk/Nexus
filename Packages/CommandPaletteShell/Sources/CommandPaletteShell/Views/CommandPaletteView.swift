@@ -42,11 +42,11 @@ public struct CommandPaletteView: View {
         .nexusGlass(.regular, in: RoundedRectangle(cornerRadius: 18))
         .nexusOverlayEnter()
         .padding(.bottom, 120)
-        .task { await reload() }
+        .task { await reload(for: query) }
         .onAppear { inputFocused = true }
-        .onChange(of: query) { _, _ in
+        .onChange(of: query) { _, newQuery in
             selectedIndex = 0
-            Task { await reload() }
+            Task { await reload(for: newQuery) }
         }
         .onKeyPress(.escape) {
             onDismiss()
@@ -277,11 +277,14 @@ public struct CommandPaletteView: View {
     }
 
     @MainActor
-    private func reload() async {
-        let matchingCommands = await registry.search(query)
+    private func reload(for targetQuery: String) async {
+        let matchingCommands = await registry.search(targetQuery)
         let matchingAvailability = await registry.availabilitySnapshot(
             for: matchingCommands.map(\.id)
         )
+        // Drop a result whose query is no longer current: an older, slower
+        // search must not clobber the results of a newer one (stale-result race).
+        guard targetQuery == query else { return }
         commands = matchingCommands
         availabilityByID = matchingAvailability
         if selectedIndex >= commands.count {
@@ -316,7 +319,7 @@ public struct CommandPaletteView: View {
                 try await registry.execute(id: command.id)
                 onDismiss()
             } catch CommandRegistryError.disabledCommand {
-                await reload()
+                await reload(for: query)
             } catch {
                 onDismiss()
             }
