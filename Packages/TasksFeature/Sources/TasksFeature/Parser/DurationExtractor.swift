@@ -11,22 +11,37 @@ public enum DurationExtractor {
         }
     }
 
-    public static func extract(from input: String, locale: Locale, startAt: Date? = nil) -> Match? {
+    /// `calendar` must be the SAME calendar (and time zone) used to build `startAt`; the
+    /// "until <time>" path reconstructs the end instant from `startAt`'s wall-clock components,
+    /// so a mismatched time zone shifts (or drops) the duration. Defaults to iso8601/GMT to keep
+    /// existing direct callers/tests stable; the parser pipeline passes its own `ParserCalendar`.
+    public static func extract(
+        from input: String,
+        locale: Locale,
+        startAt: Date? = nil,
+        calendar: Calendar = DurationExtractor.gmtCalendar
+    ) -> Match? {
         switch locale.language.languageCode?.identifier {
         case "pl":
-            return PolishMatcher.extract(from: input, startAt: startAt)
+            return PolishMatcher.extract(from: input, startAt: startAt, calendar: calendar)
         default:
-            return EnglishMatcher.extract(from: input, startAt: startAt)
+            return EnglishMatcher.extract(from: input, startAt: startAt, calendar: calendar)
         }
     }
+
+    public static let gmtCalendar: Calendar = {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = .gmt
+        return calendar
+    }()
 }
 
 private enum PolishMatcher {
     private static let maximumDuration: TimeInterval = 366 * 24 * 3600
     private static let numericStartBoundary = #"(?<![\p{L}\p{N}+\-.,])"#
 
-    static func extract(from input: String, startAt: Date?) -> DurationExtractor.Match? {
-        if let startAt, let match = untilTime(in: input, startAt: startAt) {
+    static func extract(from input: String, startAt: Date?, calendar: Calendar) -> DurationExtractor.Match? {
+        if let startAt, let match = untilTime(in: input, startAt: startAt, calendar: calendar) {
             return match
         }
         if let match = numericHoursAndHalf(in: input) {
@@ -59,7 +74,7 @@ private enum PolishMatcher {
         return nil
     }
 
-    private static func untilTime(in input: String, startAt: Date) -> DurationExtractor.Match? {
+    private static func untilTime(in input: String, startAt: Date, calendar: Calendar) -> DurationExtractor.Match? {
         guard
             let match = firstRegexMatch(
                 in: input,
@@ -70,8 +85,6 @@ private enum PolishMatcher {
         else { return nil }
 
         let minute = match.text(at: 2, in: input).flatMap(Int.init) ?? 0
-        var calendar = Calendar(identifier: .iso8601)
-        calendar.timeZone = .gmt
         var components = calendar.dateComponents([.year, .month, .day], from: startAt)
         components.hour = hour
         components.minute = minute
@@ -251,8 +264,8 @@ private enum EnglishMatcher {
     private static let phraseStartBoundary = #"(?<![\p{L}\p{N}])"#
     private static let optionalForPrefix = #"(?:for\s+)?"#
 
-    static func extract(from input: String, startAt: Date?) -> DurationExtractor.Match? {
-        if let startAt, let match = untilTime(in: input, startAt: startAt) {
+    static func extract(from input: String, startAt: Date?, calendar: Calendar) -> DurationExtractor.Match? {
+        if let startAt, let match = untilTime(in: input, startAt: startAt, calendar: calendar) {
             return match
         }
         if let match = halfHour(in: input) {
@@ -285,7 +298,7 @@ private enum EnglishMatcher {
         return nil
     }
 
-    private static func untilTime(in input: String, startAt: Date) -> DurationExtractor.Match? {
+    private static func untilTime(in input: String, startAt: Date, calendar: Calendar) -> DurationExtractor.Match? {
         guard
             let match = firstRegexMatch(
                 in: input,
@@ -309,8 +322,6 @@ private enum EnglishMatcher {
         }
         let minute = match.text(at: 2, in: input).flatMap(Int.init) ?? 0
 
-        var calendar = Calendar(identifier: .iso8601)
-        calendar.timeZone = .gmt
         var components = calendar.dateComponents([.year, .month, .day], from: startAt)
         components.hour = hour
         components.minute = minute
