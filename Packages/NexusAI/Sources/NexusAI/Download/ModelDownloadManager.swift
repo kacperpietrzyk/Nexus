@@ -212,6 +212,14 @@ public final class ModelDownloadManager {
         return progress
     }
 
+    /// The live ``ModelDownloadProgress`` for an in-flight download of
+    /// `manifestID`, or `nil` when none is running. Lets a view that appears
+    /// (or reappears) mid-transfer re-attach to the already-running download
+    /// and render its moving percent instead of a stale button.
+    public func progress(for manifestID: String) -> ModelDownloadProgress? {
+        inflightProgress[manifestID]
+    }
+
     /// Immutable bundle of one download's request + collaborators, passed to
     /// the detached worker as a single `Sendable` value.
     private struct DownloadJob: Sendable {

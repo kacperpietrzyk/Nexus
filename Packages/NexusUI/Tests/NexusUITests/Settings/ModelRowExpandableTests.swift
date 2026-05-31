@@ -127,7 +127,8 @@ struct ModelRowExpandableTests {
         #expect(!availableChat.actions.contains(.assignEmbedder))
         #expect(availableChat.actions == [.download])
         #expect(!downloadingEmbedder.actions.contains(.assignEmbedder))
-        #expect(downloadingEmbedder.actions == [.download])
+        // A live download renders progress, not a button — no actions at all.
+        #expect(downloadingEmbedder.actions == [])
     }
 
     @Test("available status yields a single download action")
@@ -140,8 +141,8 @@ struct ModelRowExpandableTests {
         #expect(state.actions == [.download])
     }
 
-    @Test("non-downloaded statuses (downloading / error) fall back to download")
-    func nonDownloadedStatusesFallBackToDownload() {
+    @Test("downloading shows progress (no button); error offers retry download")
+    func downloadingShowsProgressErrorRetries() {
         let downloading = ModelRowExpandable.rowState(
             manifest: makeManifest(),
             localState: ModelManifestLocalState(status: .downloading)
@@ -151,8 +152,28 @@ struct ModelRowExpandableTests {
             localState: ModelManifestLocalState(status: .error)
         )
 
-        #expect(downloading.actions == [.download])
+        // In-flight: a progress indicator replaces the button, so a second tap
+        // can't spawn a racing worker.
+        #expect(downloading.actions == [])
+        #expect(downloading.showsProgress == true)
+        // Failed: retry is offered (the reason is surfaced separately).
         #expect(errored.actions == [.download])
+        #expect(errored.showsProgress == false)
+    }
+
+    @Test("available and downloaded never show the progress indicator")
+    func nonDownloadingHidesProgress() {
+        let available = ModelRowExpandable.rowState(
+            manifest: makeManifest(),
+            localState: ModelManifestLocalState(status: .available)
+        )
+        let downloaded = ModelRowExpandable.rowState(
+            manifest: makeManifest(),
+            localState: ModelManifestLocalState(status: .downloaded)
+        )
+
+        #expect(available.showsProgress == false)
+        #expect(downloaded.showsProgress == false)
     }
 
     @Test("nil systemPromptOverride labels as default")

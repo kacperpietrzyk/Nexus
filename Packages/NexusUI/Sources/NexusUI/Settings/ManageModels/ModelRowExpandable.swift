@@ -23,6 +23,12 @@ public struct ModelRowExpandable: View {
     @Bindable public var manifest: ModelManifest
     public let localState: ModelManifestLocalState
 
+    /// The live, `@Observable` progress for an in-flight download of THIS model,
+    /// or `nil` when none is running. Observing it here is what gives the row a
+    /// moving percent — the `UserDefaults`-backed `localState` snapshot only
+    /// records the final status, never intermediate bytes.
+    public let progress: ModelDownloadProgress?
+
     @State private var expanded = false
 
     // Invoked by the parent's assignment affordance (Task 27), not by this row's own controls.
@@ -31,23 +37,31 @@ public struct ModelRowExpandable: View {
     private let onDownload: () -> Void
     private let onDelete: () -> Void
     private let onReDownload: () -> Void
+    /// Fired when `progress` reaches a terminal state (completed / failed /
+    /// cancelled) so the parent can reload its `localState` snapshots — without
+    /// this the row would stay on the spinner until the screen reappears.
+    private let onDownloadFinished: () -> Void
 
     public init(
         manifest: ModelManifest,
         localState: ModelManifestLocalState,
+        progress: ModelDownloadProgress? = nil,
         onAssignChat: @escaping () -> Void = {},
         onAssignEmbedder: @escaping () -> Void = {},
         onDownload: @escaping () -> Void = {},
         onDelete: @escaping () -> Void = {},
-        onReDownload: @escaping () -> Void = {}
+        onReDownload: @escaping () -> Void = {},
+        onDownloadFinished: @escaping () -> Void = {}
     ) {
         self.manifest = manifest
         self.localState = localState
+        self.progress = progress
         self.onAssignChat = onAssignChat
         self.onAssignEmbedder = onAssignEmbedder
         self.onDownload = onDownload
         self.onDelete = onDelete
         self.onReDownload = onReDownload
+        self.onDownloadFinished = onDownloadFinished
     }
 
     // MARK: - Tested contract
@@ -78,6 +92,13 @@ public struct ModelRowExpandable: View {
 
         /// Conditional actions for the current download status.
         public let actions: [Action]
+
+        /// Whether the row renders a live download-progress indicator in place of
+        /// any action button. True only while `status == .downloading`, so the
+        /// "Download" button is replaced by progress (and never sits there inert
+        /// next to an in-flight transfer — the old behaviour that made a tapped
+        /// download look like nothing happened).
+        public let showsProgress: Bool
 
         /// Max-tokens slider seed, clamped so it never exceeds the model's
         /// context window (a 2048-context model must not seed 4096).
@@ -116,7 +137,13 @@ public struct ModelRowExpandable: View {
                 actions.append(.assignEmbedder)
             }
             actions.append(contentsOf: [.reDownload, .delete])
+        } else if localState.status == .downloading {
+            // A live transfer renders a progress indicator instead of any
+            // button — no `.download` here, so a second tap can't spawn a
+            // racing worker and the row visibly reflects the in-flight state.
         } else {
+            // `.available` and `.error` both offer Download (retry from error;
+            // the error reason is surfaced separately above the action row).
             actions.append(.download)
         }
 
@@ -125,6 +152,7 @@ public struct ModelRowExpandable: View {
             systemPromptLabel: manifest.systemPromptOverride == nil ? "default" : "custom",
             tags: tags,
             actions: actions,
+            showsProgress: localState.status == .downloading,
             maxTokensDefault: min(maxTokensFallback, max(manifest.contextLength, 256)),
             maxTokensUpperBound: max(manifest.contextLength, 256)
         )
@@ -159,7 +187,11 @@ public struct ModelRowExpandable: View {
                         .textSelection(.enabled)
                 }
 
-                actionRow(state: state)
+                if state.showsProgress {
+                    downloadProgressView()
+                } else {
+                    actionRow(state: state)
+                }
             }
             .padding(.top, 4)
         } label: {
@@ -169,11 +201,69 @@ public struct ModelRowExpandable: View {
                     ModelRowTagChip(text: tag)
                 }
                 Spacer()
-                Text(String(format: "%.1f GB", manifest.sizeGB))
+                if state.showsProgress {
+                    // Collapsed-row feedback: a moving percent (or an indeterminate
+                    // spinner before the first byte sample) so an in-flight download
+                    // is visible without expanding the row.
+                    ProgressView().controlSize(.small)
+                    if let progress {
+                        Text("\(Int(progress.percent))%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                } else {
+                    Text(String(format: "%.1f GB", manifest.sizeGB))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .onChange(of: progress?.state) { _, newState in
+            // A finished transfer (success or failure) is reflected in the
+            // `UserDefaults`-backed snapshot by the download worker; tell the
+            // parent to reload so the row flips to Assign/Delete (or shows the
+            // error) instead of spinning forever.
+            switch newState {
+            case .completed, .failed, .cancelled:
+                onDownloadFinished()
+            default:
+                break
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func downloadProgressView() -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let progress {
+                ProgressView(value: progress.percent, total: 100)
+                HStack {
+                    Text("\(Int(progress.percent))%").monospacedDigit()
+                    Spacer()
+                    Text(Self.progressDetail(progress: progress, sizeGB: manifest.sizeGB))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+                // Status is `.downloading` but we have no live progress handle
+                // (e.g. the screen reappeared mid-transfer): show an
+                // indeterminate bar rather than a stale button.
+                ProgressView().progressViewStyle(.linear)
+                Text("Downloading…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// "1.2 / 5.2 GB" style detail, falling back to the catalog size when the
+    /// total byte count is unknown.
+    static func progressDetail(progress: ModelDownloadProgress, sizeGB: Double) -> String {
+        let gb = 1_073_741_824.0
+        let done = Double(progress.transferredBytes) / gb
+        let total = progress.totalBytes > 0 ? Double(progress.totalBytes) / gb : sizeGB
+        return String(format: "%.1f / %.1f GB", done, total)
     }
 
     // MARK: - Subviews
