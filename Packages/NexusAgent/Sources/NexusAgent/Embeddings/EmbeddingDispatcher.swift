@@ -261,13 +261,24 @@ public actor EmbeddingDispatcher {
             }
 
             if let existing, existing.textHash == result.textHash {
+                // Unchanged text: the DB already holds this embedding; only
+                // rehydrate the (possibly rebuilt-empty) index. No DB write.
                 try index.upsert(id: input.itemID, vector: existing.vector)
             } else {
-                try index.upsert(id: input.itemID, vector: result.vector)
+                // Persist to the DB (source of truth) FIRST, then mirror into the
+                // vector index — and only if the DB write actually happened. The
+                // old order (index first) left two hazards: a crash between the
+                // two stores left the index holding a vector the DB lacked, and
+                // stale work updated the index even when its persist was rejected
+                // by the token guard below. DB-first means a crash leaves the
+                // index behind (safe — it gets re-embedded), never ahead.
                 guard isCurrent(itemID: input.itemID, token: token) else {
                     return
                 }
-                _ = try await persistence.saveIfCurrent(input: input, result: result, token: token)
+                let persisted = try await persistence.saveIfCurrent(
+                    input: input, result: result, token: token)
+                guard persisted else { return }
+                try index.upsert(id: input.itemID, vector: result.vector)
             }
         } catch {
             logger.warning("embed failed for \(input.itemID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")

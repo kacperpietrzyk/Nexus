@@ -10,8 +10,25 @@ import Foundation
 actor XPCClient {
     private var connection: NSXPCConnection?
     private var isConnected = false
+    /// In-flight connect, so concurrent callers share one attempt. Actors are
+    /// reentrant across `await`, so without this two callers could both pass the
+    /// `isConnected` check (which is only set true *after* the ping await) and
+    /// each build a second `NSXPCConnection`, leaking the first.
+    private var connectTask: Task<Void, Error>?
 
     func connect() async throws {
+        if isConnected { return }
+        if let connectTask {
+            try await connectTask.value
+            return
+        }
+        let task = Task { try await performConnect() }
+        connectTask = task
+        defer { connectTask = nil }
+        try await task.value
+    }
+
+    private func performConnect() async throws {
         if isConnected { return }
 
         let connection = NSXPCConnection(machServiceName: machServiceName(), options: [])
