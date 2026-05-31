@@ -103,20 +103,40 @@ public enum NexusModelContainer {
         )
     }
 
+    /// Baseline entities that live in the local-only (NON-CloudKit) configuration.
+    ///
+    /// - `ConflictLog` is a device-local sync-diagnostics log — never mirrored.
+    /// - `ModelManifest` is STATIC catalog data loaded from a bundled
+    ///   `DefaultCatalog.json`. It carries ZERO per-device user state (download
+    ///   status / assignment / on-disk paths live in `ModelManifestLocalState`,
+    ///   which is UserDefaults-backed, not in this SwiftData entity). Syncing it
+    ///   via CloudKit was both POINTLESS and the cause of cross-device catalog
+    ///   duplication: each device/reinstall re-seeds its own copy and — because
+    ///   CloudKit forbids `@Attribute(.unique)` — CloudKit merges them into
+    ///   duplicate rows. Making it local-only ends that duplication at the root.
+    ///   NOTE: `ModelDownloadEvent` (telemetry) stays synced for now (out of
+    ///   scope here); it references `ModelManifest` only by a `String` id and has
+    ///   no `@Relationship`, so this split is unblocked.
+    static let localOnlyBaseline: [any PersistentModel.Type] = [
+        ConflictLog.self,
+        ModelManifest.self,
+    ]
+
     static func modelPartitions(
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
     ) -> ModelPartitions {
         let allModels = NexusSchemaV7.assembledModels(extraModels: extraModels + localOnlyExtraModels)
+        let localOnlyBaselineIDs = Set(localOnlyBaseline.map(ObjectIdentifier.init))
         let baselineSyncedIdentifiers = Set(
             NexusSchemaV7.models
-                .filter { ObjectIdentifier($0) != ObjectIdentifier(ConflictLog.self) }
+                .filter { !localOnlyBaselineIDs.contains(ObjectIdentifier($0)) }
                 .map(ObjectIdentifier.init)
         )
         let effectiveLocalOnlyExtras = localOnlyExtraModels.filter { model in
             !baselineSyncedIdentifiers.contains(ObjectIdentifier(model))
         }
-        let localOnlyModels = deduplicatedModels([ConflictLog.self] + effectiveLocalOnlyExtras)
+        let localOnlyModels = deduplicatedModels(localOnlyBaseline + effectiveLocalOnlyExtras)
         let localOnlyIdentifiers = Set(localOnlyModels.map(ObjectIdentifier.init))
         let syncedModels = allModels.filter { model in
             !localOnlyIdentifiers.contains(ObjectIdentifier(model))
