@@ -87,14 +87,24 @@ extension AgentRuntime {
                 input: toolCall.input,
                 threadID: request.threadID
             )
+        } catch is CancellationError {
+            // A cancelled turn must propagate, not be fed back as a tool result.
+            throw CancellationError()
         } catch {
-            return .return(
-                AgentTurnResponse(
-                    finalAssistantContent: nil,
-                    haltReason: .providerError(String(describing: error)),
-                    toolCallsExecuted: toolCallsExecuted
-                )
+            // Feed the tool failure back to the model as a tool result instead
+            // of aborting the whole turn, so it can recover — retry with fixed
+            // arguments, pick a different tool, or explain to the user. The
+            // outer `while toolCallsExecuted < maxIterations` loop bounds this,
+            // so a persistently failing tool still terminates.
+            toolCallsExecuted += 1
+            try appendToolErrorTranscript(
+                call: toolCall,
+                error: error,
+                request: request,
+                window: window,
+                aiResponse: aiResponse
             )
+            return .continueLoop
         }
 
         toolCallsExecuted += 1
@@ -131,6 +141,36 @@ extension AgentRuntime {
             result: result.output,
             auditLogID: result.auditLogID
         )
+        try appendToolMessage(
+            transcript, request: request, window: window, aiResponse: aiResponse)
+    }
+
+    /// Records a failed tool dispatch as a `.tool` transcript carrying the error,
+    /// so the next loop iteration feeds it back to the model rather than ending
+    /// the turn.
+    func appendToolErrorTranscript(
+        call: AgentToolCallEnvelope,
+        error: Error,
+        request: AgentTurnRequest,
+        window: AgentContextWindow,
+        aiResponse: AIResponse
+    ) throws {
+        let transcript = AgentToolTranscript(
+            call: call,
+            result: .null,
+            auditLogID: nil,
+            error: String(describing: error)
+        )
+        try appendToolMessage(
+            transcript, request: request, window: window, aiResponse: aiResponse)
+    }
+
+    private func appendToolMessage(
+        _ transcript: AgentToolTranscript,
+        request: AgentTurnRequest,
+        window: AgentContextWindow,
+        aiResponse: AIResponse
+    ) throws {
         let transcriptJSON = try encoder.encode(transcript)
         try messageStore.append(
             threadID: request.threadID,

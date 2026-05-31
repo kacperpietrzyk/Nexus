@@ -474,5 +474,18 @@ struct AgentToolCallEnvelope: Codable, Equatable, Sendable {
 struct AgentToolTranscript: Codable, Equatable, Sendable {
     let call: AgentToolCallEnvelope
     let result: JSONValue
-    let auditLogID: UUID
+    /// Nil when the dispatch failed before an audit-log entry was written
+    /// (the `error` case below).
+    let auditLogID: UUID?
+    /// Set when the tool dispatch threw: the failure is recorded as a tool
+    /// result and fed back to the model (instead of aborting the turn) so it
+    /// can recover. Nil on the success path.
+    let error: String?
+
+    init(call: AgentToolCallEnvelope, result: JSONValue, auditLogID: UUID?, error: String? = nil) {
+        self.call = call
+        self.result = result
+        self.auditLogID = auditLogID
+        self.error = error
+    }
 }
