@@ -38,6 +38,21 @@ public final class AppleIntelligenceProvider: AIProvider {
 
     public var isAvailableOnThisPlatform: Bool { true }
 
+    /// Stays available for `.embed`/`.transcribe` routing (NaturalLanguage embeddings work even
+    /// when Foundation Models generation is off), but only reports ready for `.generate`/
+    /// `.longContext` when Foundation Models is actually available. Without this, the router would
+    /// always pick this provider for `.generate` (it is `isAvailableOnThisPlatform == true` and
+    /// first in the provider list) and then dead-end at invoke on a device without Apple
+    /// Intelligence, never falling back to a loaded MLX chat model.
+    public func isReady(for capability: AICapability) -> Bool {
+        switch capability {
+        case .generate, .longContext:
+            return isFoundationModelAvailable()
+        case .embed, .transcribe:
+            return true
+        }
+    }
+
     /// Convenience flag for callers (router composition root, settings UI, tests)
     /// to check Apple Intelligence readiness without importing `FoundationModels`.
     public static var isModelAvailable: Bool {

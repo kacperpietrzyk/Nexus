@@ -40,6 +40,40 @@ private func makeRouter(
     #expect(response.providerUsed == .appleIntelligence)
 }
 
+@Test func onDeviceGenerate_skipsProviderNotReadyForGenerate_picksReadyFallback() async throws {
+    // Apple Intelligence present (so `.embed` still routes) but NOT ready to `.generate`
+    // (Foundation Models disabled). A loaded MLX-like on-device provider IS ready to generate.
+    let apple = FakeAIProvider(
+        id: .appleIntelligence,
+        capabilities: [.generate, .embed],
+        sendsDataExternally: false,
+        requiresNetwork: false,
+        unreadyCapabilities: [.generate]
+    )
+    let mlx = FakeAIProvider(
+        id: .mlx,
+        capabilities: [.generate],
+        sendsDataExternally: false,
+        requiresNetwork: false
+    )
+    let router = AIRouter(
+        providers: [apple, mlx],
+        consent: InMemoryConsentStore(),
+        quota: InMemoryQuotaTracker(),
+        secrets: InMemorySecretStore()
+    )
+
+    // `.generate` must skip the not-ready Apple provider and pick the loaded MLX model —
+    // before the fix the router picked Apple (first + isAvailableOnThisPlatform) and dead-ended.
+    let gen = try await router.route(AIRequest(prompt: "hi", capability: .generate))
+    #expect(gen.providerUsed == .mlx)
+    #expect(apple.generateCallCount == 0)
+
+    // `.embed` still routes to Apple Intelligence (NaturalLanguage embeddings stay available).
+    let emb = try await router.route(AIRequest(prompt: "hi", capability: .embed))
+    #expect(emb.providerUsed == .appleIntelligence)
+}
+
 @Test func imageAttachmentsHaveNoLocalOnlyProvider() async {
     let router = makeRouter()
 

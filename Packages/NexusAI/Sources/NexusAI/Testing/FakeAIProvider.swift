@@ -15,6 +15,9 @@ public final class FakeAIProvider: AIProvider, @unchecked Sendable {
     public let requiresNetwork: Bool
     public let isAvailableOnThisPlatform: Bool
     public let supportsImageAttachments: Bool
+    /// Capabilities this fake is NOT ready to serve (simulates e.g. Apple Intelligence
+    /// generation being unavailable while embeddings still route). Empty = ready for all.
+    public let unreadyCapabilities: Set<AICapability>
 
     /// What `generate/transcribe/embed` returns. Defaults to a canned response
     /// stamping `providerUsed = self.id` so routing assertions are trivial.
@@ -36,6 +39,7 @@ public final class FakeAIProvider: AIProvider, @unchecked Sendable {
         requiresNetwork: Bool = false,
         isAvailableOnThisPlatform: Bool = true,
         supportsImageAttachments: Bool = false,
+        unreadyCapabilities: Set<AICapability> = [],
         responseText: String = "fake response",
         tokensUsed: TokenUsage = .init(prompt: 1, completion: 1),
         costEstimateUSD: Double = 0.0,
@@ -47,10 +51,15 @@ public final class FakeAIProvider: AIProvider, @unchecked Sendable {
         self.requiresNetwork = requiresNetwork
         self.isAvailableOnThisPlatform = isAvailableOnThisPlatform
         self.supportsImageAttachments = supportsImageAttachments
+        self.unreadyCapabilities = unreadyCapabilities
         self.responseText = responseText
         self.tokensUsed = tokensUsed
         self.costEstimateUSD = costEstimateUSD
         self.errorToThrow = errorToThrow
+    }
+
+    public func isReady(for capability: AICapability) -> Bool {
+        !unreadyCapabilities.contains(capability)
     }
 
     public func generate(_ request: AIRequest) async throws -> AIResponse {

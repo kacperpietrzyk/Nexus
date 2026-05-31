@@ -33,8 +33,21 @@ public protocol AIProvider: Sendable {
     func generate(_ request: AIRequest) async throws -> AIResponse
     func transcribe(_ request: AIRequest) async throws -> AIResponse
     func embed(_ request: AIRequest) async throws -> AIResponse
+
+    /// Whether this provider can actually serve `capability` right now. Distinct from the
+    /// coarse `isAvailableOnThisPlatform` gate: a provider may be present for one capability yet
+    /// unable to serve another (e.g. `AppleIntelligenceProvider` always serves `.embed` via
+    /// NaturalLanguage but can only `.generate` when Foundation Models is enabled). The router
+    /// skips on-device providers that are not ready for the requested capability, so a loaded
+    /// fallback (e.g. MLX) is chosen instead of dead-ending at invoke time. Must be a protocol
+    /// requirement (not just an extension) so per-provider overrides dispatch dynamically.
+    func isReady(for capability: AICapability) -> Bool
 }
 
 extension AIProvider {
     public var supportsImageAttachments: Bool { false }
+
+    /// Default: ready for any capability it advertises. Providers whose readiness varies by
+    /// capability (e.g. Apple Intelligence generation) override this.
+    public func isReady(for capability: AICapability) -> Bool { true }
 }

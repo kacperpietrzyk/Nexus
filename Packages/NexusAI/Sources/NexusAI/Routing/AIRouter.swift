@@ -82,8 +82,12 @@ public actor AIRouter {
             }
         }
 
-        // Step 4: prefer on-device first.
-        let onDevice = candidates.filter { !$0.requiresNetwork }
+        // Step 4: prefer on-device first — but only an on-device provider that is actually ready
+        // to serve this capability. AppleIntelligence reports `isAvailableOnThisPlatform == true`
+        // unconditionally (so `.embed` always routes), yet can only `.generate` when Foundation
+        // Models is enabled; picking it blindly here would dead-end at invoke on devices without
+        // Apple Intelligence instead of falling through to a loaded MLX model (or cloud).
+        let onDevice = candidates.filter { !$0.requiresNetwork && $0.isReady(for: request.capability) }
         if let pick = onDevice.first {
             return pick
         }
