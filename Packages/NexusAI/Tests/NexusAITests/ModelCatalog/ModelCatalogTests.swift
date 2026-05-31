@@ -43,6 +43,47 @@ import Testing
     #expect(manifests.contains { $0.id == "multilingual-e5-large" })
 }
 
+/// Upgrade path: when an app update swaps the model lineup (Qwen2.5 → Qwen3.5),
+/// re-seeding must REMOVE catalog rows that are no longer in `DefaultCatalog.json`,
+/// not just insert the new ones. Without pruning, a user who seeded the old
+/// lineup would see both sets stacked in Manage Models (the stale Qwen2.5 rows
+/// even point at real, downloadable repos, so they wouldn't visibly error — they
+/// would just sit there as phantom extras). `makeInMemory()` is a fresh store, so
+/// this seeds a stale row by hand to stand in for the prior version's state.
+@MainActor
+@Test func bootstrapSeedPrunesEntriesAbsentFromCatalog() throws {
+    let container = try NexusModelContainer.makeInMemory()
+    let ctx = ModelContext(container)
+    ctx.insert(
+        ModelManifest(
+            id: "qwen2.5-7b-instruct-4bit",
+            hfPath: "mlx-community/Qwen2.5-7B-Instruct-4bit",
+            family: "qwen2.5",
+            displayName: "Qwen 2.5 7B",
+            sizeGB: 4.3,
+            recommendedRAMGB: 16,
+            contextLength: 32_768,
+            supportsTools: true,
+            supportsVision: false,
+            supportedLocales: ["en"],
+            purpose: "chat"
+        )
+    )
+    try ctx.save()
+
+    try ModelCatalog.bootstrap.seed(into: ctx)
+
+    let manifests = try ctx.fetch(FetchDescriptor<ModelManifest>())
+    let ids = Set(manifests.map(\.id))
+    #expect(
+        !ids.contains("qwen2.5-7b-instruct-4bit"),
+        "A row absent from DefaultCatalog.json must be pruned on re-seed.")
+    #expect(
+        manifests.filter { $0.purpose == "chat" }.count == 4,
+        "Exactly the 3 Qwen3.5 + Gemma chat entries should remain.")
+    #expect(ids.contains("qwen3.5-9b-4bit"))
+}
+
 @MainActor
 @Test func bootstrapSeedIsIdempotent() throws {
     let container = try NexusModelContainer.makeInMemory()

@@ -74,11 +74,22 @@ public enum ModelCatalog {
     // swiftlint:disable type_name
     /// Namespace for idempotent catalog seeding into a SwiftData context.
     public enum bootstrap {  // lowercase intentional: mirrors Swift stdlib namespace style
-        /// Inserts any catalog entry whose `id` is not already present in the store.
+        /// Reconciles the store with the bundled catalog: inserts entries whose
+        /// `id` is new and removes rows whose `id` is no longer in the catalog.
         ///
         /// Uses a `Set<String>` membership check instead of `@Attribute(.unique)`,
         /// which is incompatible with CloudKit (established Phase 1a convention).
-        /// Safe to call multiple times — existing rows are never touched.
+        /// Idempotent — re-seeding the same catalog is a no-op.
+        ///
+        /// **Pruning** is what makes an app update that swaps the model lineup
+        /// (e.g. Qwen2.5 → Qwen3.5) clean: without it the old IDs would linger
+        /// next to the new ones and show as phantom extras in Manage Models.
+        /// `ModelManifest` is local-only and carries no per-device state (download
+        /// status / assignment live in the `UserDefaults`-backed
+        /// ``ModelManifestLocalState``, keyed by id), so deleting a row only
+        /// removes it from the catalog list — it does not touch any in-flight or
+        /// downloaded state, and a stale `UserDefaults`/on-disk remnant of a
+        /// removed model is inert.
         ///
         /// `@MainActor`: `ModelContext` is `@MainActor`-isolated under Swift 6
         /// strict concurrency; the seed mutates it, so the call site (Task 14
@@ -88,6 +99,12 @@ public enum ModelCatalog {
             let catalog = try ModelCatalog.loadDefault()
             let existing = try context.fetch(FetchDescriptor<ModelManifest>())
             let existingIDs = Set(existing.map(\.id))
+            let catalogIDs = Set(catalog.chat.map(\.id)).union(catalog.embedders.map(\.id))
+
+            // Prune rows the catalog no longer defines (lineup swap on update).
+            for manifest in existing where !catalogIDs.contains(manifest.id) {
+                context.delete(manifest)
+            }
 
             func upsert(_ entries: [Entry], purpose: String) {
                 for entry in entries where !existingIDs.contains(entry.id) {
