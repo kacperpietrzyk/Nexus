@@ -46,6 +46,7 @@ public struct CapturePane: View {
     @State private var state: CapturePaneState?
     @State private var isSaving = false
     @State private var saveFeedbackVisible = false
+    @State private var saveError: String?
     @FocusState private var inputFocused: Bool
 
     public init(
@@ -76,6 +77,18 @@ public struct CapturePane: View {
             cancel()
             return .handled
         }
+        .alert("Couldn’t save", isPresented: isShowingSaveError) {
+            Button("OK", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
+        }
+    }
+
+    private var isShowingSaveError: Binding<Bool> {
+        Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )
     }
 
     /// Mac panel chrome transcribed from oracle `CapturePreview` onto the §1-host-frozen
@@ -280,13 +293,20 @@ public struct CapturePane: View {
         guard let state, let repository, state.lastResult != nil, !isSaving else { return }
         isSaving = true
         _Concurrency.Task { @MainActor in
-            await state.commit { task in
-                try? repository.insert(task)
+            do {
+                try await state.commit { task in
+                    try repository.insert(task)
+                }
+                saveFeedbackVisible = true
+                try? await _Concurrency.Task.sleep(for: .milliseconds(180))
+                onSaved?()
+                dismiss()
+            } catch {
+                // Persist failed — keep the sheet open with the user's text
+                // intact (CapturePaneState.commit did not reset on throw) and
+                // surface the failure instead of showing a false "Saved".
+                saveError = "Couldn’t save the task. Please try again."
             }
-            saveFeedbackVisible = true
-            try? await _Concurrency.Task.sleep(for: .milliseconds(180))
-            onSaved?()
-            dismiss()
             isSaving = false
             saveFeedbackVisible = false
         }

@@ -82,8 +82,15 @@ public struct PencilCaptureView: View {
                 tags: parsed.tags,
                 recurrenceRule: parsed.recurrence
             )
-            try? repository.insert(task)
-            dismiss()
+            do {
+                try repository.insert(task)
+                state?.error = nil
+                dismiss()
+            } catch {
+                // Keep the recognized text and canvas; surface the failure via
+                // the existing error row instead of dismissing on a lost save.
+                state?.error = "Couldn’t save the task. Please try again."
+            }
         }
     }
 
