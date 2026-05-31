@@ -31,6 +31,20 @@ struct RRuleSchedulerTests {
         #expect(scheduler.next(after: date(2026, 5, 5), rule: rule) == date(2026, 5, 6))
     }
 
+    @Test("weekly BYDAY respects INTERVAL (bi-weekly does not collapse to weekly)")
+    func weeklyByDayInterval() {
+        let scheduler = RRuleScheduler(calendar: .gregorianUTC)
+        // 2026-01-05 is a Monday. Every-other-Monday after it is 2026-01-19, not 2026-01-12.
+        let biweekly = RRule(frequency: .weekly, interval: 2, byWeekday: [.monday])
+        #expect(scheduler.next(after: date(2026, 1, 5), rule: biweekly) == date(2026, 1, 19))
+
+        // Multi-day BYDAY within the same active week still advances within that week...
+        let biweeklyMWF = RRule(frequency: .weekly, interval: 2, byWeekday: [.monday, .wednesday, .friday])
+        #expect(scheduler.next(after: date(2026, 1, 5), rule: biweeklyMWF) == date(2026, 1, 7))
+        // ...but after the last day of an active week it skips the inactive week.
+        #expect(scheduler.next(after: date(2026, 1, 9), rule: biweeklyMWF) == date(2026, 1, 19))
+    }
+
     @Test("monthly BYMONTHDAY handles same month, last day, leap, and clamp")
     func monthly() {
         let scheduler = RRuleScheduler(calendar: .gregorianUTC)

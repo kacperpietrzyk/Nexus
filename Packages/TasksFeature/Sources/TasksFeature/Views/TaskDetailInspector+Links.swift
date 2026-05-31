@@ -477,7 +477,9 @@ extension TaskDetailInspector {
             sortBy: [SortDescriptor(\TaskItem.title, order: .forward)]
         )
         let tasks = try modelContext.fetch(descriptor)
-        let taskByID = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+        // Synced TaskItem ids are not unique (CloudKit forbids @Attribute(.unique)); dedup
+        // keep-first instead of trapping on a duplicate id from a sync conflict.
+        let taskByID = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
         return ids.compactMap { taskByID[$0] }
     }
 

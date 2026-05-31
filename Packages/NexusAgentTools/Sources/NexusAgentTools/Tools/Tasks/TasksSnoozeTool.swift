@@ -20,9 +20,14 @@ public struct TasksSnoozeTool: AgentTool {
         let task = try TasksMutationToolSupport.liveTask(id: id, context: context)
 
         if args["until"] == nil || args["until"] == .null {
-            try context.taskRepository.repository.update(task) { task in
-                task.snoozedUntil = nil
-                task.statusRaw = TaskStatus.open.rawValue
+            // Unsnooze only applies to a snoozed task. Flipping unconditionally would resurrect a
+            // DONE task to .open while leaving lastCompletedAt and the spawned recurrence
+            // occurrence intact (that cleanup lives in repository.reopen), so guard the state.
+            if task.status == .snoozed {
+                try context.taskRepository.repository.update(task) { task in
+                    task.snoozedUntil = nil
+                    task.statusRaw = TaskStatus.open.rawValue
+                }
             }
         } else {
             let untilValue = args["until"]

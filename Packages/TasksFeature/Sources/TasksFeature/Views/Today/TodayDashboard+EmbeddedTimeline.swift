@@ -252,9 +252,9 @@ extension TodayDashboard {
         let mins = minutes % 60
         let text: String
         if hours > 0 {
-            text = "wolne · \(hours)h \(mins)m"
+            text = "free · \(hours)h \(mins)m"
         } else {
-            text = "wolne · \(mins)m"
+            text = "free · \(mins)m"
         }
         return (text, (gapStart + gapEnd) / 2)
     }

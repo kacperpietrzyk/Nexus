@@ -65,6 +65,43 @@ struct DurationExtractorENTests {
         #expect(consumedText(in: input, by: match) == input)
     }
 
+    @Test("DurationExtractor EN until-time uses the caller's calendar time zone, not GMT")
+    func untilTimeRespectsCallerTimeZone() throws {
+        var warsaw = Calendar(identifier: .iso8601)
+        warsaw.timeZone = TimeZone(identifier: "Europe/Warsaw")!  // UTC+2 in May (CEST)
+        var comps = DateComponents()
+        comps.year = 2026
+        comps.month = 5
+        comps.day = 4
+        comps.hour = 14
+        comps.minute = 0
+        let localStartAt = warsaw.date(from: comps)!  // 14:00 local == 12:00Z
+
+        // With the caller's own calendar, 14:00 -> 16:00 local is exactly 2h.
+        let local = try #require(
+            DurationExtractor.extract(
+                from: "until 16:00",
+                locale: Locale(identifier: "en"),
+                startAt: localStartAt,
+                calendar: warsaw
+            )
+        )
+        #expect(Int(local.duration) == 2 * 3600)
+
+        // The old hardcoded-GMT reconstruction yields a wrong 4h for the same instant — the
+        // mismatch this calendar parameter fixes. Guard that the calendar genuinely changes it.
+        let gmt = try #require(
+            DurationExtractor.extract(
+                from: "until 16:00",
+                locale: Locale(identifier: "en"),
+                startAt: localStartAt,
+                calendar: DurationExtractor.gmtCalendar
+            )
+        )
+        #expect(Int(gmt.duration) == 4 * 3600)
+        #expect(local.duration != gmt.duration)
+    }
+
     @Test("DurationExtractor EN does not parse until-time without startAt anchor")
     func noAnchorReturnsNilForUntilTime() {
         let match = DurationExtractor.extract(from: "until 16:00", locale: Locale(identifier: "en"), startAt: nil)

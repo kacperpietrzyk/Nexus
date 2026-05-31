@@ -129,6 +129,52 @@ import Testing
     #expect(conflicts.first { $0.id == conflictID }?.summary == "legacy conflict")
 }
 
+/// Regression for the backfill reopening the synced store with a schema that OMITTED
+/// composition-time synced entities (Meeting / ZMEETING). The store physically contains those
+/// tables, so a Meeting-less reopen made SwiftData see an entity "removed" and risked a throw or
+/// destructive migration on the launch path. `StubSyncedExtra` stands in for Meeting (NexusSync
+/// cannot import NexusMeetings). The existing backfill test seeds NO extra entity, so it never
+/// exercised this path.
+@MainActor
+@Test func backfillReopensSourceWithExtraSyncedEntityPresent() throws {
+    let storeURL = temporaryStoreURL(prefix: "nexus-backfill-extra-synced")
+    let localOnlyURL = NexusModelContainer.localOnlyStoreURL(for: storeURL)
+    defer { cleanupStores(at: [storeURL, localOnlyURL]) }
+
+    let conflictID = UUID()
+    try seedSyncedStoreWithExtraEntity(at: storeURL, conflictID: conflictID)
+
+    // Must open the source with a schema INCLUDING the extra entity, copy the ConflictLog into
+    // the local-only store, and neither crash nor drop the extra entity's rows.
+    try NexusModelContainer.backfillLegacyConflictLogsIfNeeded(
+        from: storeURL,
+        to: localOnlyURL,
+        extraModels: [StubSyncedExtra.self]
+    )
+
+    let localOnlySchema = Schema([ConflictLog.self], version: NexusSchemaV7.versionIdentifier)
+    let localOnlyContainer = try ModelContainer(
+        for: localOnlySchema,
+        configurations: [
+            ModelConfiguration(schema: localOnlySchema, url: localOnlyURL, cloudKitDatabase: .none)
+        ]
+    )
+    let copied = try ModelContext(localOnlyContainer).fetch(FetchDescriptor<ConflictLog>())
+    #expect(copied.map(\.id).contains(conflictID))
+
+    // The extra entity's rows survive in the source (no destructive migration on reopen).
+    let sourceSchema = NexusSchemaV7.schema(extraModels: [StubSyncedExtra.self])
+    let sourceContainer = try ModelContainer(
+        for: sourceSchema,
+        migrationPlan: NexusMigrationPlan.self,
+        configurations: [
+            ModelConfiguration(schema: sourceSchema, url: storeURL, cloudKitDatabase: .none)
+        ]
+    )
+    let survivors = try ModelContext(sourceContainer).fetch(FetchDescriptor<StubSyncedExtra>())
+    #expect(survivors.count == 1)
+}
+
 /// Exercises the production migration path for V6 -> V7. The real app always
 /// opens via `NexusModelContainer.make(...)`, which splits synced + local-only
 /// into two `ModelConfiguration`s. That makes `makeContainer`'s
@@ -246,7 +292,42 @@ private func writeStoreFamilyMarker(_ marker: String, to url: URL) throws {
     try "\(marker)-shm".write(to: url.storeSidecarURL(suffix: "-shm"), atomically: true, encoding: .utf8)
 }
 
+/// Stand-in for a composition-time synced entity (e.g. `Meeting`) that NexusSync cannot import.
+@Model
+final class StubSyncedExtra {
+    var stubID: UUID
+    var label: String
+    init(stubID: UUID = UUID(), label: String) {
+        self.stubID = stubID
+        self.label = label
+    }
+}
+
+/// Seeds a synced store that holds BOTH a legacy `ConflictLog` row and a composition-time synced
+/// extra entity (`StubSyncedExtra`), mirroring a real synced store with `Meeting` present.
 @MainActor
+private func seedSyncedStoreWithExtraEntity(at url: URL, conflictID: UUID) throws {
+    let schema = NexusSchemaV7.schema(extraModels: [StubSyncedExtra.self])
+    let container = try ModelContainer(
+        for: schema,
+        migrationPlan: NexusMigrationPlan.self,
+        configurations: [
+            ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+        ]
+    )
+    let context = ModelContext(container)
+    let conflict = ConflictLog(
+        itemKind: .task,
+        itemID: UUID(),
+        resolution: .setMerge,
+        summary: "extra-present conflict"
+    )
+    conflict.id = conflictID
+    context.insert(conflict)
+    context.insert(StubSyncedExtra(label: "keep me"))
+    try context.save()
+}
+
 private func makeLegacyMonolithicV6Store(
     at url: URL,
     conflictID: UUID,

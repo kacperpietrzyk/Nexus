@@ -33,7 +33,7 @@ public actor CompositeNLParser: NLParser {
             pass1.dueAt == nil && pass1.deadlineAt == nil && pass1.recurrence == nil && pass1.confidence < confidenceCutoff
 
         guard needsFM else {
-            return enrichDurationIfNeeded(pass1, input: workingInput, locale: effectiveLocale)
+            return enrichDurationIfNeeded(pass1, input: workingInput, locale: effectiveLocale, calendar: calendar)
         }
 
         let pass2 = withDeadline(
@@ -43,16 +43,16 @@ public actor CompositeNLParser: NLParser {
         // FM successfully added structure → use it. Otherwise, fall back to
         // handcoded result so a failed FM round-trip never *removes* data.
         if pass2.dueAt != nil || pass2.deadlineAt != nil || pass2.recurrence != nil || pass2.priority != nil || !pass2.tags.isEmpty {
-            return enrichDurationIfNeeded(pass2, input: workingInput, locale: effectiveLocale)
+            return enrichDurationIfNeeded(pass2, input: workingInput, locale: effectiveLocale, calendar: calendar)
         }
-        return enrichDurationIfNeeded(pass1, input: workingInput, locale: effectiveLocale)
+        return enrichDurationIfNeeded(pass1, input: workingInput, locale: effectiveLocale, calendar: calendar)
     }
 
-    private func enrichDurationIfNeeded(_ result: ParseResult, input: String, locale: Locale) -> ParseResult {
+    private func enrichDurationIfNeeded(_ result: ParseResult, input: String, locale: Locale, calendar: Calendar) -> ParseResult {
         guard
             result.endAt == nil,
             let startAt = result.startAt,
-            let duration = DurationExtractor.extract(from: input, locale: locale, startAt: startAt)
+            let duration = DurationExtractor.extract(from: input, locale: locale, startAt: startAt, calendar: calendar)
         else { return result }
 
         var enriched = result

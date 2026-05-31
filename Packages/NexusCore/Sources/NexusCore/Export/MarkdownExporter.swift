@@ -72,11 +72,33 @@ public enum MarkdownExporter {
                 outgoingLinks: outgoing,
                 body: body(for: item)
             )
-            let path = folder.appendingPathComponent(doc.filename)
+            let path = folder.appendingPathComponent(
+                uniqueFilename(for: doc, used: &counters.usedFilenames)
+            )
             try doc.render().write(to: path, atomically: true, encoding: .utf8)
             counters.itemsExported += 1
             counters.linksAttached += outgoing.count
         }
+    }
+
+    /// `MarkdownDocument.filename` is `<id>.md`. Synced entities cannot enforce id uniqueness
+    /// (CloudKit forbids `@Attribute(.unique)`), so two non-deleted Linkables can share a UUID;
+    /// a plain `<id>.md` write would atomically overwrite the first with the second, silently
+    /// losing data from the anti-lock-in export. Disambiguate on collision so every item lands
+    /// in its own file. The first item with a given id keeps the plain `<id>.md` name.
+    private static func uniqueFilename(for doc: MarkdownDocument, used: inout Set<String>) -> String {
+        var candidate = doc.filename
+        if used.contains(candidate) {
+            let base = "\(doc.id.uuidString)-\(doc.kind.rawValue)"
+            candidate = "\(base).md"
+            var suffix = 2
+            while used.contains(candidate) {
+                candidate = "\(base)-\(suffix).md"
+                suffix += 1
+            }
+        }
+        used.insert(candidate)
+        return candidate
     }
 
     private static func body<L: Linkable>(for item: L) -> String {
@@ -89,5 +111,6 @@ public enum MarkdownExporter {
     private struct ExportCounters {
         var itemsExported = 0
         var linksAttached = 0
+        var usedFilenames: Set<String> = []
     }
 }

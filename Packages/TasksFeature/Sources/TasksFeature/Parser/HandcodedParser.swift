@@ -74,7 +74,7 @@ public struct HandcodedParser: NLParser {
         calendar: Calendar
     ) -> (match: DurationExtractor.Match, startAt: Date)? {
         if let startAt = result.startAt {
-            if let match = DurationExtractor.extract(from: input, locale: locale, startAt: startAt) {
+            if let match = DurationExtractor.extract(from: input, locale: locale, startAt: startAt, calendar: calendar) {
                 return (match, startAt)
             }
         }
@@ -86,7 +86,7 @@ public struct HandcodedParser: NLParser {
                 baseDate: result.dueAt ?? calendar.startOfDay(for: now),
                 calendar: calendar
             ),
-            let match = DurationExtractor.extract(from: input, locale: locale, startAt: fallbackStartAt)
+            let match = DurationExtractor.extract(from: input, locale: locale, startAt: fallbackStartAt, calendar: calendar)
         else { return nil }
 
         return (match, fallbackStartAt)
