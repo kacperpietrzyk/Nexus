@@ -3,12 +3,10 @@ import SwiftUI
 public struct NexusAvatar: View {
     public let name: String
     public let size: CGFloat
-    public let hue: Double
 
-    public init(name: String, size: CGFloat = 22, hue: Double? = nil) {
+    public init(name: String, size: CGFloat = 22) {
         self.name = name
         self.size = size
-        self.hue = hue ?? Self.deriveHue(from: name)
     }
 
     public var body: some View {
@@ -29,15 +27,6 @@ public struct NexusAvatar: View {
         return value.isEmpty ? "?" : value
     }
 
-    internal static func deriveHue(from name: String) -> Double {
-        var hash: UInt32 = 2_166_136_261
-        for byte in name.utf8 {
-            hash ^= UInt32(byte)
-            hash = hash &* 16_777_619
-        }
-        return Double(hash % 360)
-    }
-
     private var fontSize: CGFloat {
         max(9, size * 0.42)
     }
@@ -55,7 +44,7 @@ public struct NexusAvatar: View {
     HStack(spacing: 12) {
         NexusAvatar(name: "Maya Chen", size: 18)
         NexusAvatar(name: "Jules Park")
-        NexusAvatar(name: "Nexus", size: 28, hue: 240)
+        NexusAvatar(name: "Nexus", size: 28)
     }
     .padding(40)
     .background(NexusColor.Background.base)

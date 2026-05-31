@@ -164,7 +164,7 @@ private struct ShowcaseState: View {
         section("Avatar + Checkbox") {
             HStack(spacing: 18) {
                 NexusAvatar(name: "Kacper Pietrzyk", size: 30)
-                NexusAvatar(name: "Nexus", size: 30, hue: 205)
+                NexusAvatar(name: "Nexus", size: 30)
                 NexusCheckbox(isChecked: $checked, accessibilityLabel: "Done")
             }
         }

@@ -36,16 +36,22 @@ public struct AudioTabView: View {
             } else {
                 playerRow(
                     title: "Me (mic)",
-                    player: $mePlayer,
-                    errorMessage: $mePlaybackError,
-                    url: meURL,
+                    track: TrackPlayback(
+                        player: $mePlayer,
+                        other: $othersPlayer,
+                        errorMessage: $mePlaybackError,
+                        url: meURL
+                    ),
                     tick: playbackTick
                 )
                 playerRow(
                     title: "Others (system)",
-                    player: $othersPlayer,
-                    errorMessage: $othersPlaybackError,
-                    url: othersURL,
+                    track: TrackPlayback(
+                        player: $othersPlayer,
+                        other: $mePlayer,
+                        errorMessage: $othersPlaybackError,
+                        url: othersURL
+                    ),
                     tick: playbackTick
                 )
             }
@@ -66,11 +72,19 @@ public struct AudioTabView: View {
         }
     }
 
+    /// Bundles the bindings + source URL for one audio track so `playerRow`
+    /// stays within the parameter-count budget and `play` can stop the `other`
+    /// track for exclusive playback.
+    private struct TrackPlayback {
+        let player: Binding<AVAudioPlayer?>
+        let other: Binding<AVAudioPlayer?>
+        let errorMessage: Binding<String?>
+        let url: URL
+    }
+
     private func playerRow(
         title: String,
-        player: Binding<AVAudioPlayer?>,
-        errorMessage: Binding<String?>,
-        url: URL,
+        track: TrackPlayback,
         tick: Int
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -79,13 +93,13 @@ public struct AudioTabView: View {
                     .font(.headline)
 
                 Button {
-                    play(player: player, errorMessage: errorMessage, url: url)
+                    play(track)
                 } label: {
-                    Image(systemName: player.wrappedValue?.isPlaying == true ? "pause.fill" : "play.fill")
+                    Image(systemName: track.player.wrappedValue?.isPlaying == true ? "pause.fill" : "play.fill")
                 }
                 .buttonStyle(.borderless)
 
-                if let currentPlayer = player.wrappedValue {
+                if let currentPlayer = track.player.wrappedValue {
                     Text(
                         "\(format(time: currentPlayer.currentTime, tick: tick)) / \(format(time: currentPlayer.duration))"
                     )
@@ -96,7 +110,7 @@ public struct AudioTabView: View {
                 Spacer()
             }
 
-            if let error = errorMessage.wrappedValue {
+            if let error = track.errorMessage.wrappedValue {
                 Text(error)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.red)
@@ -104,8 +118,16 @@ public struct AudioTabView: View {
         }
     }
 
-    private func play(player: Binding<AVAudioPlayer?>, errorMessage: Binding<String?>, url: URL) {
+    private func play(_ track: TrackPlayback) {
+        let player = track.player
+        let errorMessage = track.errorMessage
+        let url = track.url
         errorMessage.wrappedValue = nil
+
+        // Exclusive playback: interacting with one track stops the other so the
+        // two recordings never play over each other.
+        track.other.wrappedValue?.stop()
+        track.other.wrappedValue = nil
 
         if let currentPlayer = player.wrappedValue, currentPlayer.url == url {
             if currentPlayer.isPlaying {

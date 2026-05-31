@@ -34,6 +34,7 @@ struct ContentView: View {
 
     @State private var selectedTab: NexusTab = .today
     @State private var selectedTask: TaskItem?
+    @State private var inboxUnreadCount = 0
     @State private var capturePresented = false
     @State private var captureMode: CapturePane.Mode = .task
     @State private var customSnoozeTask: TaskItem?
@@ -167,10 +168,12 @@ struct ContentView: View {
             InboxTab(
                 onOpenItem: { openInboxItem($0) },
                 onOpenCapture: { openCapture(mode: .task) },
-                onOpenCommandPalette: { commandPalettePresented = true }
+                onOpenCommandPalette: { commandPalettePresented = true },
+                onUnreadCountChanged: { inboxUnreadCount = $0 }
             )
             .tag(NexusTab.inbox)
             .tabItem { Label("Inbox", systemImage: "tray") }
+            .badge(inboxUnreadCount)
             TasksTab(
                 onOpenTask: { selectedTask = $0 },
                 onOpenCapture: { openCapture(mode: .task) },
@@ -481,6 +484,7 @@ extension ContentView {
                 onOpenItem: { openInboxItem($0) },
                 onOpenCapture: { openCapture(mode: .task) },
                 onOpenCommandPalette: { commandPalettePresented = true },
+                onUnreadCountChanged: { inboxUnreadCount = $0 },
                 showsToolbarActions: false
             )
         case .tasks:
