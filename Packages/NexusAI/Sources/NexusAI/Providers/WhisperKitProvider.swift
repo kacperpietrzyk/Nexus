@@ -121,17 +121,35 @@ public final class WhisperKitProvider: AIProvider {
             .appending(path: "WhisperKit", directoryHint: .isDirectory)
     }
 
-    /// The downloaded variant folder, or `nil` if no model has been downloaded
-    /// yet. Persisted by ``WhisperKitModelDownloadCoordinator`` so a freshly
-    /// constructed provider reflects the real on-disk state.
+    /// The downloaded variant folder, or `nil` if no usable model is on disk.
+    ///
+    /// Prefers the path ``WhisperKitModelDownloadCoordinator`` persists on a
+    /// successful download. That key is written ONLY by a download the app itself
+    /// performed, so a model already present on disk — from a prior install, a
+    /// migration, or a cleared key — would leave the key nil and make availability
+    /// wrongly read `false` (the macOS "Not available on this device" report).
+    /// When the key is absent we therefore probe WhisperKit's conventional on-disk
+    /// layout and adopt an already-present model instead of giving up.
     public static func defaultLocalModelFolder() -> URL? {
-        guard
-            let path = UserDefaults.standard.string(forKey: modelFolderDefaultsKey),
-            !path.isEmpty
-        else {
-            return nil
+        if let path = UserDefaults.standard.string(forKey: modelFolderDefaultsKey), !path.isEmpty {
+            return URL(fileURLWithPath: path)
         }
-        return URL(fileURLWithPath: path)
+        if let conventional = conventionalVariantFolder(), isUsableLocalModelFolder(conventional) {
+            return conventional
+        }
+        return nil
+    }
+
+    /// WhisperKit's on-disk layout for a downloaded variant, mirroring what
+    /// `WhisperKit.download(variant:downloadBase:)` produces in
+    /// ``WhisperKitModelDownloadCoordinator``:
+    /// `<defaultDownloadBase>/models/argmaxinc/whisperkit-coreml/<modelVariant>`.
+    static func conventionalVariantFolder() -> URL? {
+        defaultDownloadBase()?
+            .appending(path: "models", directoryHint: .isDirectory)
+            .appending(path: "argmaxinc", directoryHint: .isDirectory)
+            .appending(path: "whisperkit-coreml", directoryHint: .isDirectory)
+            .appending(path: modelVariant, directoryHint: .isDirectory)
     }
 
     /// Whether a usable WhisperKit model has been downloaded. Shared by the
