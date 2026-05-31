@@ -39,40 +39,140 @@ enum CloudKitSchemaSeeder {
         }
     }
 
+    /// Inserts one fully-populated marker of every CloudKit-synced model.
+    ///
+    /// CloudKit only creates a schema field when a NON-NIL value is exported, so a
+    /// minimal init (e.g. `TaskItem(id:title:)`) leaves all optionals nil and they
+    /// never materialize — producing a field-incomplete Production schema that makes
+    /// `NSPersistentCloudKitContainer` fail to initialize ("Never successfully
+    /// initialized", CKError partialFailure) and kills ALL sync. Each per-model
+    /// factory below therefore sets every optional to a sentinel; non-optional fields
+    /// already materialize from their defaults. Markers are also `deletedAt`-tagged so
+    /// the app's `deletedAt == nil` queries hide them during the brief seed window.
     private static func seed(context: ModelContext) {
-        context.insert(TaskItem(id: markerTaskID, title: marker))
-        context.insert(Project(id: markerProjectID, name: marker))
-        context.insert(Section(projectID: markerProjectID, name: marker))
-        if let filter = try? SavedFilter(name: marker, definition: .unsorted) {
+        let date = Date.now
+        let data = Data([0x01])
+        context.insert(markerTask(date: date, data: data))
+        context.insert(markerProject(date: date))
+        context.insert(markerSection(date: date))
+        if let filter = markerSavedFilter(date: date) {
             context.insert(filter)
         }
-        context.insert(Link(from: (.task, markerTaskID), to: (.project, markerProjectID), linkKind: .mentions))
-        context.insert(QuotaLog(providerRaw: marker, day: .now, promptTokens: 0, completionTokens: 0))
-        context.insert(
-            ModelManifest(
-                id: marker,
-                hfPath: marker,
-                family: marker,
-                displayName: marker,
-                sizeGB: 0,
-                recommendedRAMGB: 0,
-                contextLength: 0,
-                supportsTools: false,
-                supportsVision: false,
-                supportedLocales: [],
-                purpose: "chat"
-            )
-        )
-        context.insert(ModelDownloadEvent(modelManifestID: marker, kind: marker, occurredAt: .now))
-        context.insert(DebugItem(title: marker))
-        context.insert(Meeting(title: marker, startedAt: .now, detectionSource: .manual))
-
+        context.insert(markerLink())
+        context.insert(QuotaLog(providerRaw: marker, day: date, promptTokens: 0, completionTokens: 0))
+        context.insert(markerManifest())
+        context.insert(markerDownloadEvent(date: date))
+        context.insert(markerDebugItem(date: date))
+        context.insert(markerMeeting(date: date, data: data))
         do {
             try context.save()
-            NSLog("[CKSEED] inserted one of each synced model — wait for CloudKit export, then check the Console (Development).")
+            NSLog(
+                "[CKSEED] inserted one fully-populated record of each synced model — "
+                    + "wait for CloudKit export, then check the Console (Development).")
         } catch {
             NSLog("[CKSEED] save failed: \(error)")
         }
+    }
+
+    /// `date` must be RECENT, not epoch: the launch-time `TombstonePurgeJob`
+    /// (30-day retention, scoped to `TaskItem`) hard-deletes any TaskItem whose
+    /// `deletedAt` is older than 30 days BEFORE CloudKit can export it — which
+    /// silently drops every TaskItem-only field (`deletedAt`, `parentTaskID`,
+    /// `projectID`, …) from the materialized schema. A `.now` tombstone is inside
+    /// the retention window, so the marker survives long enough to export.
+    private static func markerTask(date: Date, data: Data) -> TaskItem {
+        let task = TaskItem(id: markerTaskID, title: marker)
+        task.body = marker
+        task.deletedAt = date
+        task.dueAt = date
+        task.startAt = date
+        task.endAt = date
+        task.snoozedUntil = date
+        task.recurrenceRule = marker
+        task.recurrenceParentId = markerTaskID
+        task.lastCompletedAt = date
+        task.parentTaskID = markerTaskID
+        task.deadlineAt = date
+        task.projectID = markerProjectID
+        task.sectionID = markerProjectID
+        task.orderIndex = 0
+        task.externalSourceID = marker
+        task.externalSourceMetadata = data
+        return task
+    }
+
+    private static func markerProject(date: Date) -> Project {
+        let project = Project(id: markerProjectID, name: marker)
+        project.parentProjectID = markerProjectID
+        project.archivedAt = date
+        project.deletedAt = date
+        return project
+    }
+
+    private static func markerSection(date: Date) -> Section {
+        let section = Section(projectID: markerProjectID, name: marker)
+        section.deletedAt = date
+        return section
+    }
+
+    private static func markerSavedFilter(date: Date) -> SavedFilter? {
+        guard let filter = try? SavedFilter(name: marker, definition: .unsorted) else { return nil }
+        filter.deletedAt = date
+        return filter
+    }
+
+    private static func markerLink() -> Link {
+        let link = Link(from: (.task, markerTaskID), to: (.project, markerProjectID), linkKind: .mentions)
+        link.order = 0
+        return link
+    }
+
+    private static func markerManifest() -> ModelManifest {
+        let manifest = ModelManifest(
+            id: marker,
+            hfPath: marker,
+            family: marker,
+            displayName: marker,
+            sizeGB: 0,
+            recommendedRAMGB: 0,
+            contextLength: 0,
+            supportsTools: false,
+            supportsVision: false,
+            supportedLocales: [marker],
+            purpose: "chat"
+        )
+        manifest.temperatureOverride = 0
+        manifest.maxTokensOverride = 0
+        manifest.idleTimeoutSecondsOverride = 0
+        manifest.systemPromptOverride = marker
+        return manifest
+    }
+
+    private static func markerDownloadEvent(date: Date) -> ModelDownloadEvent {
+        let event = ModelDownloadEvent(modelManifestID: marker, kind: marker, occurredAt: date)
+        event.bytesTransferred = 0
+        event.durationSeconds = 0
+        event.errorMessage = marker
+        return event
+    }
+
+    private static func markerDebugItem(date: Date) -> DebugItem {
+        let debug = DebugItem(title: marker)
+        debug.deletedAt = date
+        return debug
+    }
+
+    private static func markerMeeting(date: Date, data: Data) -> Meeting {
+        let meeting = Meeting(title: marker, startedAt: date, detectionSource: .manual)
+        meeting.endedAt = date
+        meeting.appBundleID = marker
+        meeting.calendarEventID = marker
+        meeting.processedAt = date
+        meeting.participantsJSON = data
+        meeting.languageCode = marker
+        meeting.deletedAt = date
+        meeting.externalSourceID = marker
+        return meeting
     }
 
     private static func unseed(context: ModelContext) {
