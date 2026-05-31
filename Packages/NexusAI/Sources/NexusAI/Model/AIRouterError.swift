@@ -28,3 +28,26 @@ public enum AIRouterError: Error, Equatable, Sendable {
     /// `FakeAIProvider`. Production code reaching this is a bug in the composition root.
     case providerNotImplemented(ProviderID)
 }
+
+extension AIRouterError: LocalizedError {
+    /// Human-facing message. Without this, surfaces that show
+    /// `error.localizedDescription` (e.g. the agent turn's error banner) print
+    /// the generic "operation couldn't be completed" string instead of
+    /// something the user can act on.
+    public var errorDescription: String? {
+        switch self {
+        case .noProviderAvailable:
+            return "No AI model is available right now. Check Settings or try again later."
+        case .consentRequired(let provider):
+            return "Using \(provider.displayName) needs your permission. Enable it in Settings."
+        case .quotaExceeded(let provider):
+            return "You've reached today's \(provider.displayName) usage limit. Try again tomorrow."
+        case .requestFailed(_, let message):
+            return message
+        case .capabilityNotSupported:
+            return "This request isn't supported by the available AI models right now."
+        case .providerNotImplemented(let provider):
+            return "\(provider.displayName) isn't available yet."
+        }
+    }
+}

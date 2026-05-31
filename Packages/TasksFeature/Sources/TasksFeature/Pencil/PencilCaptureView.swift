@@ -113,7 +113,9 @@ private struct PencilCanvas: UIViewRepresentable {
     let canvas: PKCanvasView
 
     func makeUIView(context: Context) -> PKCanvasView {
-        canvas.drawingPolicy = .pencilOnly
+        // Allow finger input too (not just Apple Pencil) so the capture works on
+        // devices without a Pencil and for users who prefer touch.
+        canvas.drawingPolicy = .anyInput
         return canvas
     }
 

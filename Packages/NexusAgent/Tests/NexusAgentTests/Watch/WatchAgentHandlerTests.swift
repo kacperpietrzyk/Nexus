@@ -79,7 +79,12 @@ struct WatchAgentHandlerTests {
         )
         let handler = fixture.makeHandler()
 
-        await #expect(throws: WatchAgentHandlerError.providerError("noProviderAvailable")) {
+        // AIRouterError now conforms to LocalizedError, so the surfaced message
+        // is the user-facing copy rather than the debug `String(describing:)`.
+        await #expect(
+            throws: WatchAgentHandlerError.providerError(
+                "No AI model is available right now. Check Settings or try again later.")
+        ) {
             _ = try await handler.handle(prompt: "status")
         }
         #expect(fixture.notificationCenter.snapshots().isEmpty)

@@ -277,10 +277,16 @@ public final class AgentRuntime {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            // Prefer a `LocalizedError` message (AIRouterError now conforms, so
+            // routing failures read as real sentences) but fall back to
+            // `String(describing:)` for plain errors — `localizedDescription`
+            // would otherwise turn those into the generic "operation couldn't be
+            // completed" string.
+            let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             throw AgentRuntimeProviderError.response(
                 AgentTurnResponse(
                     finalAssistantContent: nil,
-                    haltReason: .providerError(String(describing: error)),
+                    haltReason: .providerError(message),
                     toolCallsExecuted: toolCallsExecuted
                 )
             )
