@@ -88,11 +88,13 @@ private struct QuickActionButton: View {
                 )
         }
         .buttonStyle(NexusPressableButtonStyle())
+        #if !os(watchOS)
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
                 isHovered = hovering
             }
         }
+        #endif
         .accessibilityLabel(quickAction.accessibilityLabel ?? quickAction.icon)
     }
 }

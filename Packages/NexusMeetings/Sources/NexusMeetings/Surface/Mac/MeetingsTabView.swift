@@ -53,14 +53,14 @@ private struct MeetingsEmptyDetailState: View {
                 .font(.system(size: 38, weight: .light))
                 .foregroundStyle(NexusColor.Text.muted)
             Text("Select a meeting")
-                .font(Font.custom("Geist-SemiBold", size: 25))
+                .font(Font.custom("Inter-SemiBold", size: 25))
                 .foregroundStyle(NexusColor.Text.secondary)
             Text(
                 hasVisibleMeetings
                     ? "Select a meeting from the list to view its notes and transcript."
                     : "Recordings and imports will appear on the left."
             )
-            .font(Font.custom("Geist-Regular", size: 14))
+            .font(NexusType.body)
             .foregroundStyle(NexusColor.Text.tertiary)
             .multilineTextAlignment(.center)
             .lineSpacing(4)

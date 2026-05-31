@@ -50,12 +50,12 @@ enum CaptureChipModel {
                     .foregroundStyle(NexusColor.Text.tertiary)
             }
             Text(label)
-                .font(Font.custom("GeistMono-Medium", size: 11))
+                .font(Font.custom("IBMPlexMono-Medium", size: 11))
                 .foregroundStyle(NexusColor.Text.secondary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(NexusColor.Glass.surface2, in: Capsule())
+        .background(NexusColor.Background.control, in: Capsule())
     }
 
     static func formatDate(_ result: ParseResult, now: Date) -> String {

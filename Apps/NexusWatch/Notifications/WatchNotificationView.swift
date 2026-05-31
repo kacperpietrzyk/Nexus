@@ -32,7 +32,7 @@ struct WatchNotificationView: View {
 
     private var relativeDueText: String {
         let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "pl_PL")
+        formatter.locale = Locale(identifier: "en_US")
         return formatter.localizedString(for: dueAt, relativeTo: Date())
     }
 }

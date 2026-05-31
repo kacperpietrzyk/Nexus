@@ -162,7 +162,9 @@ private struct PaletteRowLabel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(isHovering ? NexusColor.Background.controlHover : .clear)
         .contentShape(Rectangle())
+        #if !os(watchOS)
         .onHover { isHovering = $0 }
+        #endif
     }
 }
 

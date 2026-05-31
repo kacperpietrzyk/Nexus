@@ -517,8 +517,8 @@ public struct TodayDashboard: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(24)
-                .nexusGlass(.regular, cornerRadius: 20)
-                .nexusGlassRim(cornerRadius: 20)
+                .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(NexusColor.Line.regular, lineWidth: 1))
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 24)

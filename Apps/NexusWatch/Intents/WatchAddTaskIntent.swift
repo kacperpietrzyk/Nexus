@@ -36,8 +36,7 @@ struct WatchTaskShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: AskNexusIntent(),
             phrases: [
-                "Ask Nexus in \(.applicationName)",
-                "Zapytaj Nexusa w \(.applicationName)",
+                "Ask Nexus in \(.applicationName)"
             ],
             shortTitle: "Ask Nexus",
             systemImageName: "sparkles"

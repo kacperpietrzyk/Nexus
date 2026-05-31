@@ -48,7 +48,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            NexusWallpaper()
+            NexusColor.Background.base.ignoresSafeArea()
             rootContent
         }
         .sheet(item: $customSnoozeTask) { task in
@@ -204,20 +204,8 @@ struct ContentView: View {
             .tag(NexusTab.settings)
             .tabItem { Label("Settings", systemImage: "gearshape") }
         }
-        // MP-5.1d §3-audit-only-surface: no IOSPalettePreview oracle ever
-        // existed (Lab was the visual oracle, deleted in MP-6), so the
-        // structure here is frozen — this is a
-        // burn-only edit with no oracle transcription. §2 value-identical
-        // zero-pixel rename: NexusColor.Accent.solid is 0xF2F2F4 and
-        // NexusColor.Text.primary is 0xF2F2F4 — hex-EQUAL, so this is a
-        // canonical rename to the achromatic token, not a value-changing burn;
-        // the rendered pixels are unchanged. The TabView .tint inks the
-        // selected tab item, so the brightest ink (Text.primary) preserves
-        // selected-vs-unselected legibility through contrast (state via
-        // contrast, not hue); a dimmer ink would weaken selection legibility,
-        // so no lock mandates a value-changing target. .tint is re-pointed,
-        // never dropped — the selection tint must remain.
-        .tint(NexusColor.Text.primary)
+        // Linear spec: active tab indicator = Accent.lime (single primary accent).
+        .tint(NexusColor.Accent.lime)
         .onAppear {
             resolveUnavailableTab()
         }
@@ -322,6 +310,10 @@ extension ContentView {
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Lime is reserved for the nav rail's active indicator (set explicitly per
+        // row below). Keep the shell tint neutral so it doesn't leak lime onto
+        // incidental detail controls; Text.primary also suppresses the system blue
+        // accent that an unset tint would fall back to.
         .tint(NexusColor.Text.primary)
         .preferredColorScheme(.dark)
         .onAppear {
@@ -342,8 +334,7 @@ extension ContentView {
         .padding(.horizontal, 14)
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.thinMaterial)
-        .scrollContentBackground(.hidden)
+        .background(NexusColor.Background.panel)
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(NexusColor.Line.hairline)
@@ -434,23 +425,31 @@ extension ContentView {
         Button {
             selectedTab = item.tab
         } label: {
-            HStack(spacing: 9) {
-                Image(systemName: item.systemImage)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(
-                        selectedTab == item.tab ? NexusColor.Text.primary : NexusColor.Text.tertiary
-                    )
-                    .frame(width: 20)
+            HStack(spacing: 0) {
+                // Lime left-bar indicator for active item (Linear nav rail idiom).
+                Rectangle()
+                    .fill(selectedTab == item.tab ? NexusColor.Accent.lime : Color.clear)
+                    .frame(width: 2)
+                    .cornerRadius(1)
 
-                Text(item.title)
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(
-                        selectedTab == item.tab ? NexusColor.Text.primary : NexusColor.Text.secondary
-                    )
+                HStack(spacing: 9) {
+                    Image(systemName: item.systemImage)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(
+                            selectedTab == item.tab ? NexusColor.Accent.lime : NexusColor.Text.tertiary
+                        )
+                        .frame(width: 20)
 
-                Spacer(minLength: 8)
+                    Text(item.title)
+                        .nexusType(.bodySmall)
+                        .foregroundStyle(
+                            selectedTab == item.tab ? NexusColor.Text.primary : NexusColor.Text.secondary
+                        )
+
+                    Spacer(minLength: 8)
+                }
+                .padding(.horizontal, 10)
             }
-            .padding(.horizontal, 10)
             .frame(height: 36)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {

@@ -48,7 +48,7 @@ struct SettingsTab: View {
                 .safeAreaInset(edge: .top) {
                     settingsHeader
                 }
-                .toolbarBackground(.thinMaterial, for: .navigationBar)
+                .toolbarBackground(NexusColor.Background.base, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
@@ -76,7 +76,7 @@ struct SettingsTab: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(NexusColor.Text.secondary)
                         .frame(width: 30, height: 30)
-                        .background(NexusColor.Glass.surface2, in: RoundedRectangle(cornerRadius: 9))
+                        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: NexusRadius.r1))
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Productivity Stats")
@@ -95,9 +95,9 @@ struct SettingsTab: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: NexusRadius.r3))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14)
+                    RoundedRectangle(cornerRadius: NexusRadius.r3)
                         .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
                 }
             }
@@ -106,6 +106,6 @@ struct SettingsTab: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 10)
-        .background(.thinMaterial)
+        .background(NexusColor.Background.panel)
     }
 }

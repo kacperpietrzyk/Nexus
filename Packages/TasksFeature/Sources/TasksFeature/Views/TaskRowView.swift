@@ -156,7 +156,7 @@ private struct RowBody: View {
             ZStack {
                 rowBackground
                 RoundedRectangle(cornerRadius: NexusRadius.r2)
-                    .fill(isHovering ? NexusColor.Glass.surface1 : Color.clear)
+                    .fill(isHovering ? NexusColor.Background.controlHover : Color.clear)
             }
         )
         .overlay(alignment: .bottom) {
@@ -263,10 +263,10 @@ private struct RowBody: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(NexusColor.Text.tertiary)
                 .frame(width: 30, height: 30)
-                .background(NexusColor.Glass.surface1.opacity(0.55), in: Circle())
+                .background(NexusColor.Background.control, in: Circle())
                 .overlay {
                     Circle()
-                        .strokeBorder(NexusColor.Line.hairline.opacity(0.7), lineWidth: 1)
+                        .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
                 }
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -301,7 +301,7 @@ private struct RowBody: View {
         #if os(macOS)
         .clear
         #else
-        NexusColor.Glass.surface1
+        NexusColor.Background.control
         #endif
     }
 

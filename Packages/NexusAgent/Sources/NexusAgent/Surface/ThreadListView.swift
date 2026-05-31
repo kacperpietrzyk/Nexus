@@ -60,10 +60,9 @@ public struct ThreadListView: View {
     }
 
     private func rowBackground(for thread: AgentThread) -> Color {
-        // §2 value-identical zero-pixel rename: Accent.soft ≡ Glass.surface2
-        // (both white.opacity(0.06)) — the achromatic-translucent-fill class,
-        // never a §3 de-hue. Else-branch already achromatic, untouched.
-        thread.id == currentThreadID ? NexusColor.Glass.surface2 : NexusColor.Background.panel
+        // Linear flat surface: selected row uses Background.raised for subtle
+        // elevation contrast over the panel background; unselected stays panel.
+        thread.id == currentThreadID ? NexusColor.Background.raised : NexusColor.Background.panel
     }
 }
 
@@ -95,14 +94,11 @@ private struct ThreadRow: View {
     }
 
     private var selectedIndicator: some View {
-        // §2 value-identical zero-pixel rename: Accent.solid ≡ Text.primary
-        // (both 0xF2F2F4). A selection indicator correctly carries the
-        // most-salient ink (state-via-contrast vs the unselected Line.regular);
-        // a selection indicator's emphasis IS its function, distinct from a
-        // decorative identity glyph, so the identity-glyph-is-not-Emphasis §3
-        // override does not fire — the hex-equal §2 path stands.
+        // Linear active-selection: lime indicator bar (the single primary-action
+        // accent for this surface). Hidden when unselected; Line.regular fill
+        // is moot at opacity 0 but kept for zero-cost intent clarity.
         Capsule()
-            .fill(isSelected ? NexusColor.Text.primary : NexusColor.Line.regular)
+            .fill(isSelected ? NexusColor.Accent.lime : NexusColor.Line.regular)
             .frame(width: 4, height: 28)
             .opacity(isSelected ? 1 : 0)
             .accessibilityHidden(true)

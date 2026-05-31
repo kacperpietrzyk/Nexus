@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import NexusUI
 import SwiftData
 import SwiftUI
 
@@ -205,7 +206,7 @@ private struct RenameSpeakerSheet: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NexusColor.Status.danger)
             }
 
             HStack {

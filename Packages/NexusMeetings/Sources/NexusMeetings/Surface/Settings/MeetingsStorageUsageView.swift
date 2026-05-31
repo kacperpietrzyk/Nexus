@@ -1,4 +1,5 @@
 import Foundation
+import NexusUI
 import SwiftUI
 
 public struct MeetingsStorageUsageView: View {
@@ -22,7 +23,7 @@ public struct MeetingsStorageUsageView: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NexusColor.Status.danger)
             }
 
             ForEach(rows) { row in

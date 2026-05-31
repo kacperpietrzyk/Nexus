@@ -16,7 +16,7 @@ struct AskNexusInputView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Zapytaj Nexusa")
+                Text("Ask Nexus")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(NexusColor.Text.primary)
                     .lineLimit(1)
@@ -45,14 +45,13 @@ struct AskNexusInputView: View {
                 } label: {
                     Label(buttonTitle, systemImage: buttonSystemImage)
                         .font(.system(size: 16, weight: .semibold))
+                        // limeInk for contrast on lime fill.
+                        .foregroundStyle(NexusColor.Accent.limeInk)
                         .frame(maxWidth: .infinity, minHeight: 38)
                 }
                 .buttonStyle(.borderedProminent)
-                // §2 value-identical zero-pixel rename: Accent.solid and
-                // Text.primary are both 0xF2F2F4 (5.1d `.tint` precedent —
-                // re-point the tint value, the `.tint` modifier itself is
-                // frozen watchOS chrome).
-                .tint(NexusColor.Text.primary)
+                // Lime: single primary action on this surface (send to iPhone).
+                .tint(NexusColor.Accent.lime)
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || phase == .sending)
             }
             .padding(.horizontal, 6)
@@ -74,13 +73,9 @@ struct AskNexusInputView: View {
         case .idle, .sending:
             return nil
         case .sent(let message):
-            // §2 value-identical zero-pixel rename: Semantic.positive and
-            // Text.secondary are both 0xC7C8CE.
-            return (message, NexusColor.Text.secondary)
+            return (message, NexusColor.Status.success)
         case .failed(let message):
-            // §2 value-identical zero-pixel rename: Semantic.negative and
-            // Text.primary are both 0xF2F2F4 (canonical §5 error-row anchor).
-            return (message, NexusColor.Text.primary)
+            return (message, NexusColor.Status.danger)
         }
     }
 

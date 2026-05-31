@@ -29,6 +29,9 @@ struct WatchTaskDetailSheet: View {
                 } label: {
                     Label(buttonTitle, systemImage: buttonIcon)
                         .font(.system(size: 16, weight: .semibold))
+                        // limeInk for contrast when lime fill is active (Done action).
+                        // Neutral label is fine when Undo uses Text.secondary tint.
+                        .foregroundStyle(buttonLabelColor)
                         .frame(maxWidth: .infinity, minHeight: 38)
                 }
                 .buttonStyle(.borderedProminent)
@@ -41,8 +44,6 @@ struct WatchTaskDetailSheet: View {
                     } icon: {
                         Image(systemName: "calendar")
                     }
-                    // §2 value-identical zero-pixel rename: Accent.solid and
-                    // Text.primary are both 0xF2F2F4.
                     .foregroundStyle(NexusColor.Text.primary)
                 }
 
@@ -72,12 +73,18 @@ struct WatchTaskDetailSheet: View {
 
     private var buttonTint: Color {
         task.statusRaw == TaskStatus.done.rawValue
-            // §2 value-identical zero-pixel rename: Accent.solid and
-            // Text.primary are both 0xF2F2F4.
+            // Undo (reopen) is a secondary action — neutral text tint.
+            ? NexusColor.Text.secondary
+            // Done is the single primary action on this surface — lime.
+            : NexusColor.Accent.lime
+    }
+
+    private var buttonLabelColor: Color {
+        // limeInk (pitch black) on lime fill for legible contrast.
+        // Neutral text for secondary Undo action.
+        task.statusRaw == TaskStatus.done.rawValue
             ? NexusColor.Text.primary
-            // §2 value-identical zero-pixel rename: Semantic.positive and
-            // Text.secondary are both 0xC7C8CE.
-            : NexusColor.Text.secondary
+            : NexusColor.Accent.limeInk
     }
 
     private func priorityIcon(for priority: TaskPriority) -> String {

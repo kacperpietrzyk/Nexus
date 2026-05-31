@@ -1,3 +1,4 @@
+import NexusUI
 import SwiftUI
 
 @MainActor
@@ -38,7 +39,7 @@ public struct CirclebackImportSheet: View {
                     }
                 }
             } else if let errorText {
-                Text(errorText).foregroundStyle(.red)
+                Text(errorText).foregroundStyle(NexusColor.Status.danger)
             }
             HStack {
                 if running {

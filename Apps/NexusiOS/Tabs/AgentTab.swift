@@ -22,7 +22,7 @@ struct AgentTab: View {
             )
             .foregroundStyle(NexusColor.Text.secondary)
             .navigationTitle("Agent")
-            .toolbarBackground(.thinMaterial, for: .navigationBar)
+            .toolbarBackground(NexusColor.Background.base, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
         }
     }
@@ -51,7 +51,7 @@ private struct AgentTabContent: View {
             AgentChatView(viewModel: viewModel)
                 .navigationTitle("Agent")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(.thinMaterial, for: .navigationBar)
+                .toolbarBackground(NexusColor.Background.base, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
         }
     }
@@ -70,7 +70,7 @@ private struct AgentTabContent: View {
                 .navigationTitle("Agent")
                 .navigationBarTitleDisplayMode(.inline)
         }
-        .toolbarBackground(.thinMaterial, for: .navigationBar)
+        .toolbarBackground(NexusColor.Background.base, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
     }
 }

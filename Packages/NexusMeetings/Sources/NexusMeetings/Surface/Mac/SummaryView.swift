@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import NexusUI
 import SwiftData
 import SwiftUI
 
@@ -62,7 +63,7 @@ public struct SummaryView: View {
             if let saveError {
                 Text(saveError)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NexusColor.Status.danger)
             }
 
             if viewModel.editing {

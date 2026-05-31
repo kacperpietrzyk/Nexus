@@ -20,7 +20,7 @@ public struct WelcomeFlowView: View {
 
     public var body: some View {
         ZStack(alignment: .topTrailing) {
-            NexusWallpaper()
+            NexusColor.Background.base
                 .ignoresSafeArea()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -124,19 +124,15 @@ public struct WelcomeFlowView: View {
     }
 
     private var pageDots: some View {
-        // MP-4.2 §1: oracle `Lab/WelcomePreview.swift card(_:)`
-        // page-dots — `Capsule().fill(i == step ? ink : dim).frame(
-        // width: i == step ? 16 : 5, height: 5)` in `HStack(spacing:6)`.
-        // Shape (Circle→Capsule) + active-dimension change, NOT an accent
-        // burn — the dots were already achromatic. §2 1:1 hex map:
-        // `LabPalette.ink (0xF2F2F4) → Text.primary`, `LabPalette.dim
-        // (0x44454E) → Text.disabled`.
+        // Linear redesign: active dot = Accent.lime (single primary-action
+        // accent per lime-economy rule). Inactive = Text.disabled (neutral).
+        // Shape (Capsule) + active-dimension change carried forward from MP-4.2.
         HStack(spacing: 6) {
             ForEach(0..<flow.totalScreenCount, id: \.self) { index in
                 Capsule()
                     .fill(
                         index == flow.currentScreen
-                            ? NexusColor.Text.primary
+                            ? NexusColor.Accent.lime
                             : NexusColor.Text.disabled
                     )
                     .frame(width: index == flow.currentScreen ? 16 : 5, height: 5)

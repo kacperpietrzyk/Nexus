@@ -63,7 +63,6 @@ final class CaptureWindowController: NSWindowController {
                 .environment(\.taskParser, parser)
                 .environment(\.taskRepository, repository)
                 .nexusGlass(.elevated, cornerRadius: NexusRadius.r4)
-                .nexusGlassRim(cornerRadius: NexusRadius.r4)
                 .nexusShadow(NexusShadow.glass)
             )
         )

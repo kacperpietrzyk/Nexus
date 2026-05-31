@@ -23,7 +23,7 @@ struct TodayTab: View {
             )
             .navigationTitle("Today")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.thinMaterial, for: .navigationBar)
+            .toolbarBackground(NexusColor.Background.base, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .preferredColorScheme(.dark)

@@ -19,8 +19,8 @@ import SwiftUI
 /// glyph is a bare `sparkles` (no circle, no background). The example
 /// chips mirror `LabExampleChip` (`LabKit.swift:522-534`); their oracle
 /// glass `labGlass(Capsule(), elevated: false)` maps to
-/// `.nexusGlass(.regular, in: Capsule())` — the same labGlass→nexusGlass
-/// convention the §1a pinned-capsule and prior MP-3.x slices use.
+/// `Background.control` fill + `Line.hairline` stroke — flat Linear idiom,
+/// replacing the prior `.nexusGlass(.regular, in: Capsule())` glass call.
 public struct AgentEmptyStateView: View {
     public typealias OnPick = (String) -> Void
 
@@ -42,7 +42,7 @@ public struct AgentEmptyStateView: View {
                 .accessibilityHidden(true)
 
             Text("Ask Nexus")
-                .font(Font.custom("Geist-SemiBold", size: 17))
+                .font(Font.custom("Inter-SemiBold", size: 17))
                 .foregroundStyle(NexusColor.Text.secondary)
                 .multilineTextAlignment(.center)
 
@@ -50,7 +50,7 @@ public struct AgentEmptyStateView: View {
                 "Works on your tasks, notes, meetings, "
                     + "and calendar — locally, with undo for every action."
             )
-            .font(Font.custom("Geist-Regular", size: 12.5))
+            .font(Font.custom("Inter-Regular", size: 12.5))
             .foregroundStyle(NexusColor.Text.muted)
             .multilineTextAlignment(.center)
             .lineSpacing(3)
@@ -84,12 +84,13 @@ public struct AgentEmptyStateView: View {
                     .font(.system(size: 9))
                     .foregroundStyle(NexusColor.Text.disabled)
                 Text(text)
-                    .font(Font.custom("Geist-Regular", size: 12))
+                    .font(NexusType.meta)
                     .foregroundStyle(NexusColor.Text.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .nexusGlass(.regular, in: Capsule())
+            .background(NexusColor.Background.control, in: Capsule())
+            .overlay(Capsule().strokeBorder(NexusColor.Line.hairline, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(text)

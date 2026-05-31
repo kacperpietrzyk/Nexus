@@ -795,8 +795,8 @@ public struct NexusSettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             // §3 emphasis row: hue removed; the `bell.slash.fill` glyph
             // shape already carries the negative semantic, and the
-            // heavier Geist weight + `Text.primary` ink step (§2
-            // LabPalette.ink) restore the lost salience without color.
+            // heavier font weight + `Text.primary` ink step restore the
+            // lost salience without color.
             Label("Notifications disabled", systemImage: "bell.slash.fill")
                 .foregroundStyle(NexusColor.Text.primary)
                 .font(.subheadline.weight(.bold))
@@ -849,15 +849,12 @@ public struct NexusSettingsView: View {
 }
 // swiftlint:enable type_body_length
 
+@MainActor
 @ViewBuilder
 func nexusSettingsSectionHeader(_ title: String) -> some View {
-    // Oracle `SettingsPreview.group(_:)`: `GeistMono-SemiBold` 10 /
-    // tracking 1.8 / §2 `faint` → `NexusColor.Text.muted`. §8 raw
-    // `Font.custom` reuse is the locked stopgap when the oracle weight
-    // is not a `NexusType` token (MP-2/MP-3 precedent).
-    Text(title.uppercased())
-        .font(Font.custom("GeistMono-SemiBold", size: 10))
-        .tracking(1.8)
+    // Eyebrow token: Inter-SemiBold 10 / tracking 1.8 / uppercase / Text.muted.
+    Text(title)
+        .nexusType(NexusType.Metrics.eyebrow)
         .foregroundStyle(NexusColor.Text.muted)
 }
 
