@@ -225,9 +225,7 @@ public struct TodayDashboard: View {
         .modifier(DashboardFrame(chrome: chrome))
         .task { await reloadScheduleData() }
         .task(id: calendarEventsEnabled) { await reloadScheduleData() }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            _Concurrency.Task { await reloadScheduleData() }
-        }
+        .reloadOnStoreChange { _Concurrency.Task { await reloadScheduleData() } }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             _Concurrency.Task { await reloadScheduleData() }

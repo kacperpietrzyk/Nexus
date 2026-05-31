@@ -49,9 +49,7 @@ public struct TaskListView: View {
         .background(NexusColor.Background.base)
         .task(id: filter) { reload() }
         .onChange(of: now) { _, _ in reload() }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            reload()
-        }
+        .reloadOnStoreChange { reload() }
         .sheet(item: $parentPickerTarget) { item in
             ParentTaskPickerSheet(task: item) {
                 reload()

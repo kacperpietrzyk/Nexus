@@ -33,9 +33,7 @@ public struct ProductivityDashboardView: View {
         .scrollContentBackground(.hidden)
         .background(Color.clear)
         .task { await reload() }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            _Concurrency.Task { await reload() }
-        }
+        .reloadOnStoreChange { _Concurrency.Task { await reload() } }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             _Concurrency.Task { await reload() }
