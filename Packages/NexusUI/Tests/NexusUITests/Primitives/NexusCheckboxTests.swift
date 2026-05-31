@@ -41,7 +41,8 @@ struct NexusCheckboxTests {
 
         #expect(model.isChecked)
         #expect(checkbox.isChecked)
-        #expect(checkbox.borderColor.resolvedRGBA == NexusColor.Line.strong.resolvedRGBA)
+        // Checked state uses a faint white rim; unchecked uses Line.strong.
+        #expect(checkbox.borderColor.resolvedRGBA == Color.white.opacity(0.16).resolvedRGBA)
     }
 }
 

@@ -22,16 +22,16 @@ struct NexusWallpaperTests {
 
     @Test("Base linear gradient colors are the achromatic LabBackground stops")
     func baseLinearGradientColorsMatchLabBackground() {
-        // Audit #14: the former cool-biased stops (panel 0x0D0E11 / base
-        // 0x090A0C — B > R,G) are now true neutral grays panel 0x0E0E0E /
-        // base 0x0A0A0A, genuinely r == g == b (Rec.601 luma of the old).
+        // Linear "Midnight Command Center": the gradient stops track the
+        // Background ladder — top = Graphite panel 0x0F1011, bottom = Pitch
+        // Black base 0x08090A (a near-neutral, very slightly cool dark grey).
         assertColor(
             NexusWallpaper.linearTopColor,
-            r: Double(0x0E) / 255, g: Double(0x0E) / 255, b: Double(0x0E) / 255, a: 1.0
+            r: Double(0x0F) / 255, g: Double(0x10) / 255, b: Double(0x11) / 255, a: 1.0
         )
         assertColor(
             NexusWallpaper.linearBottomColor,
-            r: Double(0x0A) / 255, g: Double(0x0A) / 255, b: Double(0x0A) / 255, a: 1.0
+            r: Double(0x08) / 255, g: Double(0x09) / 255, b: Double(0x0A) / 255, a: 1.0
         )
     }
 
