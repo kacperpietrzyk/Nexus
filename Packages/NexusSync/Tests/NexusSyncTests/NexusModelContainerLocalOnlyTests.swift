@@ -8,9 +8,29 @@ import Testing
 @Test func modelPartitionsKeepConflictLogLocalOnlyByDefault() {
     let partitions = NexusModelContainer.modelPartitions()
 
-    #expect(modelNames(partitions.localOnlyModels) == ["ConflictLog"])
+    #expect(modelNames(partitions.localOnlyModels) == ["ConflictLog", "ModelManifest"])
     #expect(!modelNames(partitions.syncedModels).contains("ConflictLog"))
     #expect(modelNames(partitions.containerModels).contains("ConflictLog"))
+}
+
+/// `ModelManifest` is static, device-local catalog data (no synced user state),
+/// so it joins `ConflictLog` in the local-only baseline. This is the fix for the
+/// cross-device CloudKit catalog duplication: it must NOT appear in the synced
+/// partition, while genuinely synced entities (`TaskItem`, `Meeting`) and the
+/// still-synced telemetry entity (`ModelDownloadEvent`) stay synced.
+/// `StubSyncedExtra` stands in for a composition-time synced entity (e.g.
+/// `Meeting`), which NexusSync cannot import.
+@Test func modelPartitionsKeepModelManifestLocalOnly() {
+    let partitions = NexusModelContainer.modelPartitions(extraModels: [StubSyncedExtra.self])
+
+    #expect(modelNames(partitions.localOnlyModels).contains("ModelManifest"))
+    #expect(!modelNames(partitions.syncedModels).contains("ModelManifest"))
+    #expect(modelNames(partitions.localOnlyModels).contains("ConflictLog"))
+    #expect(!modelNames(partitions.syncedModels).contains("ConflictLog"))
+    #expect(modelNames(partitions.syncedModels).contains("TaskItem"))
+    #expect(modelNames(partitions.syncedModels).contains("StubSyncedExtra"))
+    #expect(modelNames(partitions.syncedModels).contains("ModelDownloadEvent"))
+    #expect(modelNames(partitions.containerModels).contains("ModelManifest"))
 }
 
 @Test func modelPartitionsIgnoreBaselineSyncedModelsInLocalOnlyExtras() {
@@ -20,7 +40,7 @@ import Testing
         ConflictLog.self,
     ])
 
-    #expect(modelNames(partitions.localOnlyModels) == ["ConflictLog"])
+    #expect(modelNames(partitions.localOnlyModels) == ["ConflictLog", "ModelManifest"])
     #expect(modelNames(partitions.syncedModels).contains("TaskItem"))
     #expect(modelNames(partitions.syncedModels).contains("Link"))
 }
@@ -46,8 +66,10 @@ import Testing
     #expect(isNoCloudKitDatabase(localOnlyConfiguration.cloudKitDatabase))
     #expect(entityNames(in: syncedConfiguration.schema).contains("TaskItem"))
     #expect(!entityNames(in: syncedConfiguration.schema).contains("ConflictLog"))
-    #expect(entityNames(in: localOnlyConfiguration.schema) == ["ConflictLog"])
+    #expect(!entityNames(in: syncedConfiguration.schema).contains("ModelManifest"))
+    #expect(entityNames(in: localOnlyConfiguration.schema) == ["ConflictLog", "ModelManifest"])
     #expect(entityNames(in: plan.containerSchema).contains("ConflictLog"))
+    #expect(entityNames(in: plan.containerSchema).contains("ModelManifest"))
     #expect(entityNames(in: plan.containerSchema).contains("TaskItem"))
 }
 
@@ -320,6 +342,52 @@ private func appendConflictLog(to sourceURL: URL, conflictID: UUID, summary: Str
     #expect(try context.fetch(FetchDescriptor<ModelDownloadEvent>()).count == 1)
 }
 
+/// Guards the "remove an entity from the synced schema while the on-disk store
+/// still has its table" risk introduced by moving `ModelManifest` to local-only.
+///
+/// Before this fix, `ModelManifest` rows physically lived in the MAIN (synced)
+/// store: the synced configuration's schema declared it. Seed that "before"
+/// state by writing BOTH a `TaskItem` and a `ModelManifest` into the main store
+/// URL via the monolithic `NexusSchemaV7.schema()` (exactly the pre-move synced
+/// layout), then reopen through the production `make(...)` split. The new synced
+/// schema no longer declares `ModelManifest`, yet `ZMODELMANIFEST` is physically
+/// present on disk — that is the dropped-entity open we are guarding.
+///
+/// The reopen must be NON-DESTRUCTIVE: the `TaskItem` (the real data-loss risk)
+/// stays readable and the open does not throw. The seeded `ModelManifest` rows
+/// are deliberately NOT expected to reappear via the fresh local-only store —
+/// they are stranded (orphaned) in the main store's table, which is correct: the
+/// catalog re-seeds from `DefaultCatalog.json`, and abandoning the old synced
+/// rows is the duplication fix working. We only assert `ModelManifest` is
+/// reachable/queryable through the local-only configuration (no throw). This
+/// mirrors the long-standing ZCONFLICTLOG-orphan precedent in this suite.
+@MainActor
+@Test func splitContainerKeepsTaskItemWhenModelManifestLeavesSyncedSchema() throws {
+    let storeURL = temporaryStoreURL(prefix: "nexus-model-manifest-leaves-synced")
+    defer { cleanupStores(at: [storeURL, NexusModelContainer.localOnlyStoreURL(for: storeURL)]) }
+
+    let seededTaskID = UUID()
+    try seedMonolithicStoreWithTaskAndModelManifest(at: storeURL, taskID: seededTaskID)
+
+    // Reopen through the production split path. The synced config's schema now
+    // omits ModelManifest even though ZMODELMANIFEST exists on disk.
+    let container = try NexusModelContainer.make(
+        environment: LocalOnlySplitTestEnvironment(),
+        fileURL: storeURL
+    )
+    let context = ModelContext(container)
+
+    // The synced TaskItem survives the dropped-entity open (no data loss).
+    let tasks = try context.fetch(FetchDescriptor<TaskItem>())
+    #expect(tasks.map(\.id).contains(seededTaskID))
+    #expect(tasks.first { $0.id == seededTaskID }?.title == "kept across model-manifest move")
+
+    // ModelManifest is reachable via the (fresh, local-only) configuration — the
+    // open did not throw. The old synced rows are intentionally orphaned, so the
+    // local-only store starts empty and re-seeds from the bundled catalog.
+    #expect(try context.fetch(FetchDescriptor<ModelManifest>()).isEmpty)
+}
+
 private struct LocalOnlySplitTestEnvironment: NexusEnvironmentProviding {
     let cloudKitEnabled = false
     let cloudKitContainerIdentifier = "iCloud.com.kacperpietrzyk.Nexus"
@@ -397,6 +465,41 @@ private func seedSyncedStoreWithExtraEntity(at url: URL, conflictID: UUID) throw
     conflict.id = conflictID
     context.insert(conflict)
     context.insert(StubSyncedExtra(label: "keep me"))
+    try context.save()
+}
+
+/// Seeds the pre-move synced layout: a single monolithic V7 store on the MAIN
+/// URL holding BOTH a `TaskItem` and a `ModelManifest`, mirroring a synced store
+/// from before `ModelManifest` was moved to the local-only configuration.
+@MainActor
+private func seedMonolithicStoreWithTaskAndModelManifest(at url: URL, taskID: UUID) throws {
+    let schema = NexusSchemaV7.schema()
+    let container = try ModelContainer(
+        for: schema,
+        migrationPlan: NexusMigrationPlan.self,
+        configurations: [
+            ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+        ]
+    )
+    let context = ModelContext(container)
+    let task = TaskItem(title: "kept across model-manifest move")
+    task.id = taskID
+    context.insert(task)
+    context.insert(
+        ModelManifest(
+            id: "qwen3.5-4b-instruct-4bit",
+            hfPath: "mlx-community/Qwen3.5-4B-Instruct-4bit",
+            family: "qwen3.5",
+            displayName: "Qwen 3.5 4B",
+            sizeGB: 3.2,
+            recommendedRAMGB: 16,
+            contextLength: 16_384,
+            supportsTools: true,
+            supportsVision: false,
+            supportedLocales: ["en", "pl"],
+            purpose: "chat"
+        )
+    )
     try context.save()
 }
 
