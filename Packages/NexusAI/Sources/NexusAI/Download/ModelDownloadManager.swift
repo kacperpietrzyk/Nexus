@@ -279,10 +279,11 @@ public final class ModelDownloadManager {
             await MainActor.run { progress.markCompleted() }
         } catch is CancellationError {
             // The common cancel path on swift-transformers 1.3.3: a mid-file
-            // cancel propagates `CancellationError` out of `HubApi.snapshot`
-            // (via `withTaskCancellationHandler`/`HubClient.downloadFile`), and
-            // our explicit `Task.checkCancellation()` after `snapshot`/`fetch`
-            // also lands here.
+            // cancel makes the awaited `HubClient.downloadFile` throw
+            // `CancellationError`, which propagates out of `HubApi.snapshot`
+            // (its `withTaskCancellationHandler` `onCancel` only runs progress
+            // cleanup, it does not throw). Our explicit `Task.checkCancellation()`
+            // after `snapshot`/`fetch` also lands here.
             await Self.recordCancelled(job: job)
         } catch {
             // Belt-and-suspenders for any non-`CancellationError` thrown while
@@ -407,15 +408,20 @@ public final class ModelDownloadManager {
 /// Wraps `HubApi.snapshot(from:revision:matching:progressHandler:)`
 /// (`swift-transformers/Sources/Hub/HubApi.swift`). As of 1.2.0 the legacy
 /// `Hub/Downloader.swift` was removed and the transfer now runs through
-/// swift-huggingface's `HubClient.downloadFile`, but `snapshot` still performs
-/// resumable downloads with per-file `.metadata` sidecars and `Progress`
-/// tracking, so the `startingAtByte` offset stays informational only — `Hub`
-/// resumes any partial files automatically on the next call.
+/// swift-huggingface's `HubClient.downloadFile`, with per-file `.metadata`
+/// sidecars and `Progress` tracking. `snapshot` resumes at *file* granularity,
+/// not within a file: a fully-downloaded file whose `.metadata` commit hash
+/// still matches is skipped on the next call, but an interrupted file is
+/// re-downloaded from scratch (its `.incomplete` blob is discarded before each
+/// attempt and `.metadata` is only written after the file completes). The
+/// `startingAtByte` offset is therefore informational only — we do not drive
+/// per-file resume.
 ///
 /// `HubApi` lands a snapshot at `<downloadBase>/models/<hfPath>`
 /// (`HubApi.localRepoLocation`). We point `downloadBase` at a stable cache
-/// folder next to the model store so the resume sidecars survive across
-/// launches, then **copy** the snapshot contents into the manager's
+/// folder next to the model store so the per-file `.metadata` sidecars survive
+/// across launches (so completed files are not re-fetched), then **copy** the
+/// snapshot contents into the manager's
 /// per-manifest `destination` folder so the Task 10/13 loaders see a flat
 /// model directory of safetensors + config + tokenizer. Copy (not move) is
 /// deliberate — see ``replaceContents(of:with:)``.
