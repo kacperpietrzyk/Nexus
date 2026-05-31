@@ -273,6 +273,15 @@ targets:
         INFOPLIST_FILE: Apps/NexusWatch/Info.plist
         CODE_SIGN_ENTITLEMENTS: Apps/NexusWatch/NexusWatch.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        # The Watch app opens its own CloudKit-backed NexusModelContainer, so it
+        # needs production APNs on Release for silent-push sync (see NexusMac/iOS).
+        # watchOS uses the bare `aps-environment` key (like iOS, NOT the macOS
+        # `com.apple.developer.aps-environment`).
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
     dependencies:
       - package: NexusCore
       - package: NexusSync
