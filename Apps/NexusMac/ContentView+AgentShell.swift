@@ -133,7 +133,15 @@ struct AgentBottomInput: View {
     var body: some View {
         AgentInputBar(
             onSendWithAttachments: { text, attachments, contextPrefix in
-                await viewModel.send(
+                // Mirror the iOS compact composer: with no thread selected,
+                // `viewModel.send` would hit its `guard let threadID` and
+                // silently no-op (no "Thinking…", nothing persisted). On a
+                // fresh launch the Mac shell has no thread, so the bottom
+                // input must create one before the first send.
+                if viewModel.currentThreadID == nil {
+                    viewModel.createThread(title: text)
+                }
+                return await viewModel.send(
                     userMessage: text,
                     attachments: attachments,
                     contextPrefix: contextPrefix
