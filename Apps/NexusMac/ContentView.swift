@@ -553,7 +553,8 @@ struct ContentView: View {
 /// deleted in MP-6), re-toned through the MP-2.2 §2
 /// achromatic LabPalette→NexusColor map:
 /// `ink→Text.primary`, `read→Text.secondary`, `faint→Text.muted`,
-/// `dim→Text.disabled`, `block→Background.raised`. Not a primitive — a thin
+/// `dim→Text.disabled`, active fill→`Background.control` (the chrome
+/// selection tier, r1 corners). Not a primitive — a thin
 /// token composition, same status as the private `NexusCommandBar`.
 /// Inter-Medium 12 / IBMPlexMono-Medium 10 are below the `NexusType` scale
 /// (which starts at 11 pt caption), so raw `Font.custom` against the
@@ -581,8 +582,8 @@ private struct InboxFilterTab: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(isActive ? NexusColor.Background.raised : Color.clear)
+                RoundedRectangle(cornerRadius: NexusRadius.r1)
+                    .fill(isActive ? NexusColor.Background.control : Color.clear)
             )
             .contentShape(Rectangle())
         }
