@@ -391,7 +391,9 @@ public struct TodayDashboard: View {
             TaskListView(filter: taskFilter, onSelect: onOpenTask)
                 .frame(maxWidth: 1280, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
+                // Route gutter = the app-wide chrome gutter (18), matching Today +
+                // Inbox so the list left-aligns with the breadcrumb/search (was 28).
+                .padding(.horizontal, 18)
         case .productivity:
             ProductivityDashboardView()
         case .settings:
