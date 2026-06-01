@@ -50,14 +50,15 @@ extension TodayDashboard {
         .padding(18)
         .frame(width: 320)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        // Match the Inbox reader pane's container exactly (one right-pane idiom):
+        // r3 corner + Background.raised + Line.regular + s1 contained shadow. Was
+        // r18 + an off-system raw `.black.opacity(0.42)` r22 diffuse glow.
+        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
                 .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
         }
-        // Tokenized contained panel shadow (was a raw `.black.opacity(0.42)`
-        // r22 diffuse glow — off-system; the Linear set is contained drops).
-        .nexusShadow(NexusShadow.s2)
+        .nexusShadow(NexusShadow.s1)
     }
 
     /// A single timeline block in fractional-hour coordinates, clamped to the

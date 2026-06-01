@@ -118,6 +118,9 @@ struct InboxListPanel: View {
                 // NexusTopBar filter tabs above (was 26 — list hung 8pt right).
                 .padding(.leading, 18)
                 .padding(.trailing, 12)
+                // Top gap so the first section header isn't glued to the topbar
+                // (matches the reader pane's top inset / the Today list's 24).
+                .padding(.top, 22)
                 .padding(.bottom, 24)
             }
         }

@@ -276,9 +276,11 @@ public struct TodayDashboard: View {
                 // new backend the §5 invariants + `no_canvas_emulation_without_backend`
                 // forbid). Tracked into MP-2.2 / MP-6.5; rail is `DayTimeline`-only.
                 embeddedTimelineRail
-                    // Match the topbar/New-Task right gutter (18) so the rail's
-                    // right edge lines up vertically with the chrome above it.
-                    .padding(.trailing, 18)
+                    // Inset card matching the Inbox reader-pane margins (the
+                    // reference right-pane idiom); was full-bleed / "stretched".
+                    .padding(.top, 22)
+                    .padding(.bottom, 18)
+                    .padding(.trailing, 26)
             }
         }
     }
@@ -391,8 +393,7 @@ public struct TodayDashboard: View {
             TaskListView(filter: taskFilter, onSelect: onOpenTask)
                 .frame(maxWidth: 1280, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                // Route gutter = the app-wide chrome gutter (18), matching Today +
-                // Inbox so the list left-aligns with the breadcrumb/search (was 28).
+                // Route gutter = chrome gutter (18); matches Today + Inbox (was 28).
                 .padding(.horizontal, 18)
         case .productivity:
             ProductivityDashboardView()
