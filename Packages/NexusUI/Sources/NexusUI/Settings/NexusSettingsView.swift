@@ -99,14 +99,14 @@ public struct NexusSettingsView: View {
     #if os(macOS)
     private var macSettingsScroll: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 34) {
+            VStack(alignment: .leading, spacing: NexusSpacing.s7) {
                 macSettingsContent
             }
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 20)
-            .padding(.top, 34)
-            .padding(.bottom, 48)
+            .padding(.horizontal, NexusSpacing.s5)
+            .padding(.top, NexusSpacing.s7)
+            .padding(.bottom, NexusSpacing.s8)
         }
         .scrollContentBackground(.hidden)
         .onAppear {
@@ -128,7 +128,7 @@ public struct NexusSettingsView: View {
         macProvidersSection
         macVoiceSection
         macNavigationSection(
-            title: "Modele",
+            title: "Models",
             label: "Manage Models",
             systemImage: "cpu",
             destination: manageModelsContent,
@@ -162,7 +162,7 @@ public struct NexusSettingsView: View {
     private var macGeneralSection: some View {
         macSettingsSection("General") {
             VStack(spacing: 0) {
-                macSettingsRow("Theme") {
+                NexusSettingsRow("Theme") {
                     Picker("Theme", selection: $theme) {
                         ForEach(NexusTheme.allCases, id: \.rawValue) { value in
                             Text(label(for: value)).tag(value.rawValue)
@@ -172,15 +172,15 @@ public struct NexusSettingsView: View {
                     .pickerStyle(.menu)
                     .frame(width: 142)
                 }
-                macDivider()
+                NexusSettingsDivider()
                 macHelperText("Light mode arrives once the base tokens stabilize.")
-                macDivider()
-                macSettingsRow("Show advanced features") {
+                NexusSettingsDivider()
+                NexusSettingsRow("Show advanced features") {
                     Toggle("", isOn: $advancedEnabled)
                         .labelsHidden()
                         .toggleStyle(.switch)
                 }
-                macDivider()
+                NexusSettingsDivider()
                 macHelperText("Reveals external access and advanced cloud-provider settings.")
             }
         }
@@ -209,14 +209,6 @@ public struct NexusSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous)
-                    .fill(NexusColor.Background.raised.opacity(0.42))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous)
-                    .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
-            )
         }
     }
 
@@ -233,21 +225,21 @@ public struct NexusSettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
-                        macDivider()
+                        NexusSettingsDivider()
                     }
-                    macSettingsRow("Quiet hours from") {
+                    NexusSettingsRow("Quiet hours from") {
                         DatePicker("", selection: config.start, displayedComponents: .hourAndMinute)
                             .labelsHidden()
                             .frame(width: 102)
                     }
-                    macDivider()
-                    macSettingsRow("Quiet hours until") {
+                    NexusSettingsDivider()
+                    NexusSettingsRow("Quiet hours until") {
                         DatePicker("", selection: config.end, displayedComponents: .hourAndMinute)
                             .labelsHidden()
                             .frame(width: 102)
                     }
-                    macDivider()
-                    macSettingsRow("Show Calendar events in Today") {
+                    NexusSettingsDivider()
+                    NexusSettingsRow("Show Calendar events in Today") {
                         Toggle("", isOn: $calendarEventsInTodayEnabled)
                             .labelsHidden()
                             .toggleStyle(.switch)
@@ -255,12 +247,12 @@ public struct NexusSettingsView: View {
                                 handleCalendarToggleChange(newValue)
                             }
                     }
-                    macDivider()
+                    NexusSettingsDivider()
                     if calendarPermission.status == .denied || calendarPermission.status == .restricted {
                         macCalendarDeniedRow
-                        macDivider()
+                        NexusSettingsDivider()
                     }
-                    macSettingsRow("Calendar permissions") {
+                    NexusSettingsRow("Calendar permissions") {
                         HStack(spacing: 12) {
                             calendarPermissionStatusLabel
                                 .font(NexusType.bodySmall.weight(.medium))
@@ -301,7 +293,7 @@ public struct NexusSettingsView: View {
                     subtitle: "Local generation",
                     state: liveData?.appleIntelligenceAvailability ?? .unavailable(reason: .modelNotAvailable)
                 )
-                macDivider()
+                NexusSettingsDivider()
                 macProviderRow(
                     title: "Embeddings",
                     subtitle: "NLEmbedding semantic index",
@@ -319,8 +311,8 @@ public struct NexusSettingsView: View {
                     subtitle: "WhisperKit local speech-to-text",
                     state: liveData?.whisperKitAvailability ?? .unavailable(reason: .modelNotAvailable)
                 )
-                macDivider()
-                macSettingsRow("Preload transcription model at launch") {
+                NexusSettingsDivider()
+                NexusSettingsRow("Preload transcription model at launch") {
                     WhisperKitPreloadToggle()
                         .labelsHidden()
                         .toggleStyle(.switch)
@@ -383,9 +375,9 @@ public struct NexusSettingsView: View {
         macSettingsSection("About") {
             VStack(spacing: 0) {
                 macReadOnlyRow("Nexus", value: bundleShortVersion)
-                macDivider()
+                NexusSettingsDivider()
                 macReadOnlyRow("Build", value: bundleVersion)
-                macDivider()
+                NexusSettingsDivider()
                 macReadOnlyRow("Core", value: NexusCore.version)
             }
         }
@@ -414,7 +406,7 @@ public struct NexusSettingsView: View {
     }
 
     private func macReadOnlyRow(_ title: String, value: String) -> some View {
-        macSettingsRow(title) {
+        NexusSettingsRow(title) {
             Text(value)
                 .font(NexusType.bodySmall.weight(.medium))
                 .foregroundStyle(NexusColor.Text.secondary)
@@ -424,11 +416,11 @@ public struct NexusSettingsView: View {
     private func macSettingsSection<Content: View>(
         _ title: String,
         footer: String? = nil,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            nexusSettingsSectionHeader(title)
-            macSettingsCard {
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader(title)
+            NexusSettingsCard {
                 content()
             }
             if let footer {
@@ -440,37 +432,6 @@ public struct NexusSettingsView: View {
         }
     }
 
-    private func macSettingsCard<Content: View>(
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous)
-                    .fill(NexusColor.Background.raised.opacity(0.48))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous)
-                    .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.16), radius: 18, x: 0, y: 10)
-    }
-
-    private func macSettingsRow<Accessory: View>(
-        _ title: String,
-        @ViewBuilder accessory: () -> Accessory
-    ) -> some View {
-        HStack(alignment: .center, spacing: 16) {
-            Text(title)
-                .font(NexusType.bodySmall.weight(.medium))
-                .foregroundStyle(NexusColor.Text.primary)
-            Spacer(minLength: 16)
-            accessory()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 13)
-    }
-
     private func macHelperText(_ text: String) -> some View {
         Text(text)
             .font(NexusType.caption)
@@ -478,13 +439,6 @@ public struct NexusSettingsView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func macDivider() -> some View {
-        Rectangle()
-            .fill(NexusColor.Line.hairline)
-            .frame(height: 1)
-            .padding(.horizontal, 16)
     }
 
     private func handleCalendarToggleChange(_ newValue: Bool) {
