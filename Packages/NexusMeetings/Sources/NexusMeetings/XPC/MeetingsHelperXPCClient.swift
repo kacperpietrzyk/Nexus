@@ -2,7 +2,7 @@ import Foundation
 
 #if os(macOS)
 public final class MeetingsHelperXPCClient: @unchecked Sendable {
-    public static let machServiceName = "com.kacperpietrzyk.nexus.meetings-helper"
+    public static let machServiceName = "group.com.kacperpietrzyk.Nexus.meetings-helper"
 
     private let lock = NSLock()
     private var connection: NSXPCConnection?
