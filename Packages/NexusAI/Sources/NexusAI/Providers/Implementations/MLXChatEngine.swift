@@ -83,6 +83,11 @@ public protocol MLXChatGenerating: Sendable {
 public enum MLXChatEngineError: Error, Sendable {
     /// A tool spec's `parametersJSONSchema` was not a JSON object.
     case invalidToolParametersSchema(toolName: String)
+    /// The app is not foreground-active, so GPU work is refused (issue #51).
+    /// A *catchable* Swift error raised BEFORE any Metal command buffer is
+    /// submitted — the alternative is MLX's uncatchable C++ `throw` →
+    /// `std::terminate` when the OS rejects a background submission.
+    case backgrounded
 }
 
 // MARK: - Engine actor
@@ -150,6 +155,13 @@ public actor MLXChatEngine {
         tools: [MLXToolSpec],
         params: MLXGenerateParameters
     ) async throws -> AsyncThrowingStream<MLXChunk, Error> {
+        // Issue #51: refuse to dispatch GPU work in the background BEFORE taking
+        // the busy token or loading weights — loading quantized weights itself
+        // triggers `MLX.eval`, which submits the command buffer the OS rejects.
+        // `nil` lifecycle (stub tests / non-graph construction) = no gate.
+        if let lifecycle, !lifecycle.isForegroundActive {
+            throw MLXChatEngineError.backgrounded
+        }
         await enter()
         // Refresh the idle clock now that the caller holds the busy token and is
         // genuinely about to use the engine. Fired after enter() so a caller that is
@@ -195,6 +207,12 @@ public actor MLXChatEngine {
     /// path (success OR throw) — a leaked busy token would deadlock the next
     /// `generate`/`preload` in `enter()` forever.
     public func preload() async throws {
+        // Issue #51: the background-launch crash repro — a detached preload that
+        // loads weights (→ `MLX.eval`) while the scene is not yet `.active`.
+        // Gate before `enter()` so the busy token is never taken when refused.
+        if let lifecycle, !lifecycle.isForegroundActive {
+            throw MLXChatEngineError.backgrounded
+        }
         await enter()
         do {
             _ = try await loadIfNeeded(params: .default)
