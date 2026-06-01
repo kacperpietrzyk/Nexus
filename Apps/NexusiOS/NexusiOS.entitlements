@@ -18,5 +18,14 @@
     <array>
         <string>group.com.kacperpietrzyk.Nexus</string>
     </array>
+    <!-- On-device MLX chat/embedder models are multi-GB; without the increased
+         memory limit iOS jetsams the app ("Terminated due to memory issue")
+         while downloading/validating or loading a model. This raises the
+         per-app memory ceiling on supported devices so the catalog's 3–6 GB
+         models can be handled. (Models that still exceed the device's RAM —
+         e.g. the 16 GB Qwen 27B — remain out of reach and are a separate
+         catalog-sizing concern.) -->
+    <key>com.apple.developer.kernel.increased-memory-limit</key>
+    <true/>
 </dict>
 </plist>

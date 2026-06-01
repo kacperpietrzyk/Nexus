@@ -47,3 +47,8 @@ Config/Signing.local.xcconfig
 .codex/
 .agents/
 skills-lock.json
+DESIGN.md
+RESEARCH_linear_notion_vs_nexus.md
+theme.css
+tokens.json
+variables.css

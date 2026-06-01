@@ -348,3 +348,83 @@ struct LiveHFFetcherWeightValidationTests {
         }
     }
 }
+
+@Suite("LiveHFFetcher staging (move, not copy)")
+struct LiveHFFetcherStagingTests {
+    private let fileManager = FileManager.default
+
+    private func tempDir(_ name: String) throws -> URL {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appending(path: "nexus-staging-\(name)-\(UUID().uuidString)")
+        try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    @Test("moves weight files into destination, excludes .cache, and removes source")
+    func movesAndReclaims() throws {
+        let root = try tempDir("move")
+        defer { try? fileManager.removeItem(at: root) }
+        let source = root.appending(path: "source")
+        let destination = root.appending(path: "dest")
+        try fileManager.createDirectory(at: source, withIntermediateDirectories: true)
+
+        try Data(count: 2048).write(to: source.appending(path: "model.safetensors"))
+        try Data("{}".utf8).write(to: source.appending(path: "config.json"))
+        // Hub's hidden sidecar tree must NOT be staged into the model folder.
+        let cacheDir = source.appending(path: ".cache")
+        try fileManager.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        try Data("etag".utf8).write(to: cacheDir.appending(path: "sidecar.metadata"))
+
+        try LiveHFFetcher.replaceContents(of: destination, with: source)
+
+        // Weights landed flat in the destination…
+        #expect(fileManager.fileExists(atPath: destination.appending(path: "model.safetensors").path))
+        #expect(fileManager.fileExists(atPath: destination.appending(path: "config.json").path))
+        // …`.cache` was excluded from the model folder…
+        #expect(!fileManager.fileExists(atPath: destination.appending(path: ".cache").path))
+        // …and the whole source cache repo was reclaimed (no ~2x duplicate).
+        #expect(!fileManager.fileExists(atPath: source.path))
+    }
+
+    @Test("directorySize sums regular files recursively, 0 for a missing dir")
+    func directorySizeSums() throws {
+        let dir = try tempDir("size")
+        defer { try? fileManager.removeItem(at: dir) }
+        try Data(count: 1000).write(to: dir.appending(path: "a.bin"))
+        let nested = dir.appending(path: "nested")
+        try fileManager.createDirectory(at: nested, withIntermediateDirectories: true)
+        try Data(count: 500).write(to: nested.appending(path: "b.bin"))
+
+        #expect(LiveHFFetcher.directorySize(at: dir) == 1500)
+        #expect(LiveHFFetcher.directorySize(at: dir.appending(path: "does-not-exist")) == 0)
+    }
+
+    @Test("inFlightDownloadBytes sums only recent CFNetworkDownload temp blobs")
+    func inFlightDownloadBytesSumsScratchBlobs() throws {
+        let dir = try tempDir("inflight")
+        defer { try? fileManager.removeItem(at: dir) }
+        let cutoff = Date()
+        // Two in-flight CFNetwork download scratch files + one unrelated temp file,
+        // all written after the cutoff.
+        try Data(count: 800).write(to: dir.appending(path: "CFNetworkDownload_aaa.tmp"))
+        try Data(count: 200).write(to: dir.appending(path: "CFNetworkDownload_bbb.tmp"))
+        try Data(count: 999).write(to: dir.appending(path: "unrelated.tmp"))
+
+        #expect(LiveHFFetcher.inFlightDownloadBytes(in: dir, modifiedSince: cutoff) == 1000)
+    }
+
+    @Test("inFlightDownloadBytes ignores a STALE blob from before the cutoff")
+    func inFlightDownloadBytesIgnoresStaleBlob() throws {
+        let dir = try tempDir("inflight-stale")
+        defer { try? fileManager.removeItem(at: dir) }
+        // A large scratch blob left by a prior killed run, back-dated well before
+        // the cutoff — must NOT be counted (else it masks a real re-download).
+        let stale = dir.appending(path: "CFNetworkDownload_stale.tmp")
+        try Data(count: 5_000_000).write(to: stale)
+        try fileManager.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 1_000_000)], ofItemAtPath: stale.path)
+
+        let cutoff = Date(timeIntervalSince1970: 2_000_000)
+        #expect(LiveHFFetcher.inFlightDownloadBytes(in: dir, modifiedSince: cutoff) == 0)
+    }
+}
