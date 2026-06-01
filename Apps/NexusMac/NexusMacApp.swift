@@ -209,6 +209,14 @@ struct NexusMacApp: App {
                 // sheets) where `NexusWallpaper` is not painted; wallpaper-bearing
                 // dashboard ignores safe area and covers this anyway.
                 .containerBackground(NexusColor.Background.base, for: .window)
+                // Achromatic control tint for the WHOLE main window — mirrors the
+                // Settings scene (line ~413). Without it, native Toggle / Picker /
+                // segmented / DatePicker controls in the main window (the task
+                // inspector, the Capture + Snooze sheets) fall back to system blue,
+                // which clashes with the Linear dark theme. `Text.primary` keeps
+                // active states achromatic-white; lime stays reserved for primary
+                // actions (NexusButton paints its own lime, unaffected by tint).
+                .tint(NexusColor.Text.primary)
                 .background {
                     ExportFolderPicker(isPresented: $exportPickerPresented) { folder in
                         _Concurrency.Task {

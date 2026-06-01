@@ -66,6 +66,13 @@ public struct TaskDetailInspector: View {
             .scrollContentBackground(.hidden)
         }
         .background(NexusColor.Background.base)
+        // The `.inspector()` overlay is a separate presentation context that did
+        // NOT inherit the app-root `.tint` (NexusMacApp), so its system controls
+        // (segmented Priority picker, All-day / Deadline / Pin toggles, the
+        // DatePickers) fell back to system blue — jarring against the Linear
+        // dark theme. Re-assert the app's achromatic control tint here; active
+        // states read white (lime stays reserved for primary actions).
+        .tint(NexusColor.Text.primary)
         .navigationTitle(task.title.isEmpty ? "Task" : task.title)
         .task { loadLinkState() }
         .onChange(of: task.id) { _, _ in
