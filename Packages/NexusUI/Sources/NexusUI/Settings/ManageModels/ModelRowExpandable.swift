@@ -206,7 +206,7 @@ public struct ModelRowExpandable: View {
                     // spinner before the first byte sample) so an in-flight download
                     // is visible without expanding the row.
                     ProgressView().controlSize(.small)
-                    if let progress {
+                    if let progress, progress.state != .finalizing {
                         Text("\(Int(progress.percent))%")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -239,14 +239,25 @@ public struct ModelRowExpandable: View {
     private func downloadProgressView() -> some View {
         VStack(alignment: .leading, spacing: 4) {
             if let progress {
-                ProgressView(value: progress.percent, total: 100)
-                HStack {
-                    Text("\(Int(progress.percent))%").monospacedDigit()
-                    Spacer()
-                    Text(Self.progressDetail(progress: progress, sizeGB: manifest.sizeGB))
+                if progress.state == .finalizing {
+                    // Bytes are all on disk; the worker is staging weights into
+                    // the model folder. Show an indeterminate "Finalizing…"
+                    // instead of a frozen percent so the (brief) staging step
+                    // never reads as a hung download.
+                    ProgressView().progressViewStyle(.linear)
+                    Text("Finalizing…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ProgressView(value: progress.percent, total: 100)
+                    HStack {
+                        Text("\(Int(progress.percent))%").monospacedDigit()
+                        Spacer()
+                        Text(Self.progressDetail(progress: progress, sizeGB: manifest.sizeGB))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             } else {
                 // Status is `.downloading` but we have no live progress handle
                 // (e.g. the screen reappeared mid-transfer): show an

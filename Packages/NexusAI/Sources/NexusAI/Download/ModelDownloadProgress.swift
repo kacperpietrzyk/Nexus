@@ -5,7 +5,7 @@ import Observation
 @MainActor
 public final class ModelDownloadProgress {
     public enum State: String, Sendable, Equatable {
-        case pending, active, paused, completed, failed, cancelled
+        case pending, active, paused, finalizing, completed, failed, cancelled
     }
 
     public let manifestID: String
@@ -55,6 +55,17 @@ public final class ModelDownloadProgress {
     }
 
     public func markPaused() { state = .paused }
+
+    /// The bytes are all on disk; the worker is now staging weights into the
+    /// model folder (a near-instant move). Surfacing this as a distinct,
+    /// non-terminal state lets the UI render an indeterminate "Finalizing…"
+    /// instead of a frozen percent during the (brief) staging window — the gap
+    /// that made a *working* download look hung on a slow device. No-ops once a
+    /// terminal state is reached so a late callback cannot un-finish a download.
+    public func markFinalizing() {
+        guard state == .pending || state == .active || state == .paused else { return }
+        state = .finalizing
+    }
 
     public func markCancelled() { state = .cancelled }
 
