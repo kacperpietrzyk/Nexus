@@ -277,7 +277,10 @@ extension TodayDashboard {
         // a dead centre void between the column and the timeline rail. Rows +
         // sections breathe; the empty/achievement state keeps its own 420 cap.
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 26)
+        // Content gutter = the app-wide chrome gutter (18), so the section
+        // headers + rows left-align with the NexusTopBar breadcrumb above them
+        // (was 26 — content hung 8pt right of the breadcrumb).
+        .padding(.horizontal, 18)
         .padding(.vertical, 24)
     }
 

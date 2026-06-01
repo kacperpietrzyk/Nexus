@@ -1,3 +1,4 @@
+import CommandPaletteShell
 import NexusUI
 import SwiftUI
 import TasksFeature
@@ -7,6 +8,40 @@ import TasksFeature
 // the length budget. Both are plain computed views composed back into
 // `dashboardBody` via `.overlay`.
 extension ContentView {
+
+    /// The ⌘K command palette overlay. Extracted out of `ContentView` (file-length
+    /// budget) alongside the other overlay surfaces. A blurred + dimmed scrim
+    /// (tap-to-dismiss) under the `CommandPaletteView`, plus the same Escape fix
+    /// the capture overlay uses.
+    @ViewBuilder
+    var commandPaletteOverlay: some View {
+        if commandPalettePresented {
+            ZStack {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .ignoresSafeArea()
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { commandPalettePresented = false }
+
+                CommandPaletteView { commandPalettePresented = false }
+
+                // Escape dismisses the palette. It must sit as a direct ZStack
+                // sibling (NOT a nested `.overlay`, which failed to register the
+                // key-equivalent): the focused search field's field editor swallows
+                // Escape, so CommandPaletteView's own `.onKeyPress(.escape)` never
+                // fires. A `.cancelAction` key-equivalent fires via
+                // `performKeyEquivalent:` first. Kept in the tree at `.opacity(0)`
+                // (NOT `.hidden()`, which drops the key-equivalent registration).
+                Button("Dismiss palette") { commandPalettePresented = false }
+                    .keyboardShortcut(.cancelAction)
+                    .opacity(0)
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
 
     /// SUB-A floating peek. Gated on the UNCHANGED `inspectorBinding` /
     /// `InspectorVisibility.shouldShowInspector(...)` predicate (so §1
@@ -54,21 +89,37 @@ extension ContentView {
     @ViewBuilder
     var captureOverlay: some View {
         if capturePresented {
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { capturePresented = false }
-                .overlay {
-                    NexusCard(.elev2, padding: 0) {
-                        CapturePane(
-                            mode: captureMode,
-                            onSaved: { capturePresented = false },
-                            onCancelled: { capturePresented = false }
-                        )
-                    }
-                    .fixedSize()
-                    .nexusShadow(NexusShadow.pop)
+            ZStack {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { capturePresented = false }
+
+                NexusCard(.elev2, padding: 0) {
+                    CapturePane(
+                        mode: captureMode,
+                        onSaved: { capturePresented = false },
+                        onCancelled: { capturePresented = false }
+                    )
                 }
+                .fixedSize()
+                .nexusShadow(NexusShadow.pop)
+
+                // Escape dismisses the in-window capture overlay. This `.cancelAction`
+                // key-equivalent fires via `performKeyEquivalent:` BEFORE the focused
+                // input's field editor swallows Escape — which is why CapturePane's
+                // own `.onKeyPress(.escape)` never fired here. Without it, Escape
+                // bubbled to the `.hiddenTitleBar` main window and closed it, and
+                // because `applicationShouldTerminateAfterLastWindowClosed` is true
+                // that quit the whole app. Kept in the layout at `.opacity(0)` (NOT
+                // `.hidden()`, which drops it from the tree so the key-equivalent
+                // never registers) and behind the scrim, so it has no visible chrome.
+                Button("Dismiss capture") { capturePresented = false }
+                    .keyboardShortcut(.cancelAction)
+                    .opacity(0)
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+            }
         }
     }
 }

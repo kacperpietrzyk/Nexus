@@ -114,7 +114,9 @@ struct InboxListPanel: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 26)
+                // Leading gutter = the app-wide chrome gutter (18), matching the
+                // NexusTopBar filter tabs above (was 26 — list hung 8pt right).
+                .padding(.leading, 18)
                 .padding(.trailing, 12)
                 .padding(.bottom, 24)
             }

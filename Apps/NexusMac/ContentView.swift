@@ -20,7 +20,9 @@ struct ContentView: View {
     // Internal: read from the `ContentView+CaptureAndPeek` extension.
     @State var selectedTask: TaskItem?
     @State private var customSnoozeTask: TaskItem?
-    @State private var commandPalettePresented = false
+    // Not `private`: read by `commandPaletteOverlay` in the ContentView+CaptureAndPeek
+    // extension (sibling file), mirroring `capturePresented`.
+    @State var commandPalettePresented = false
     // Internal (not private): read by `captureOverlay` in the sibling extension.
     @State var capturePresented = false
     @State var captureMode: CapturePane.Mode = .task
@@ -83,22 +85,7 @@ struct ContentView: View {
             CustomSnoozeSheet(task: task)
         }
         .onOpenURL { url in handleOpenURL(url) }
-        .overlay {
-            if commandPalettePresented {
-                ZStack {
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                        .ignoresSafeArea()
-                    Color.black.opacity(0.5)
-                        .ignoresSafeArea()
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { commandPalettePresented = false }
-                .overlay {
-                    CommandPaletteView { commandPalettePresented = false }
-                }
-            }
-        }
+        .overlay { commandPaletteOverlay }
         .overlay { captureOverlay }
         .task {
             await bootstrapNavigation()

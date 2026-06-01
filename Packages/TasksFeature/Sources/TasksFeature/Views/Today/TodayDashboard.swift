@@ -276,7 +276,9 @@ public struct TodayDashboard: View {
                 // new backend the §5 invariants + `no_canvas_emulation_without_backend`
                 // forbid). Tracked into MP-2.2 / MP-6.5; rail is `DayTimeline`-only.
                 embeddedTimelineRail
-                    .padding(.trailing, 26)
+                    // Match the topbar/New-Task right gutter (18) so the rail's
+                    // right edge lines up vertically with the chrome above it.
+                    .padding(.trailing, 18)
             }
         }
     }

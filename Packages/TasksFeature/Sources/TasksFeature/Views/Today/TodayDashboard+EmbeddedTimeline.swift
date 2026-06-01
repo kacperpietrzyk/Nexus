@@ -34,15 +34,19 @@ extension TodayDashboard {
     /// derived from the dashboard's already-loaded `scheduleTasks` +
     /// `todaysEvents` — no new data source.
     var embeddedTimelineRail: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            EmbeddedDayTimeline(
-                blocks: Self.embeddedTimelineBlocks(
-                    tasks: scheduleTasks,
-                    events: todaysEvents
-                )
+        // The rail FILLS the full height of the content area: the day grid
+        // (9–20) spans top→bottom so blocks/now-line sit at their true
+        // wall-clock position and the rail never reads as a short strip
+        // floating in a 2/3-empty column. `EmbeddedDayTimeline` flexes to fill
+        // (its Canvas/empty-state use `maxHeight: .infinity`); no trailing
+        // `Spacer` is needed and none should be re-added — it would re-collapse
+        // the grid back to `canvasH` at the top.
+        EmbeddedDayTimeline(
+            blocks: Self.embeddedTimelineBlocks(
+                tasks: scheduleTasks,
+                events: todaysEvents
             )
-            Spacer(minLength: 0)
-        }
+        )
         .padding(18)
         .frame(width: 320)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -51,7 +55,9 @@ extension TodayDashboard {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.42), radius: 22, x: -10, y: 10)
+        // Tokenized contained panel shadow (was a raw `.black.opacity(0.42)`
+        // r22 diffuse glow — off-system; the Linear set is contained drops).
+        .nexusShadow(NexusShadow.s2)
     }
 
     /// A single timeline block in fractional-hour coordinates, clamped to the
@@ -476,7 +482,11 @@ private struct EmbeddedDayTimeline: View {
                             )
                         }
                     }
-                    .frame(height: canvasH)
+                    // Fill the rail's full height (was a fixed `canvasH`): the
+                    // `y(_:_:)` mapping is already height-relative, so the 9–20
+                    // grid, blocks and now-line stretch to the column instead of
+                    // bunching into a 300pt strip with dead space below.
+                    .frame(minHeight: canvasH, maxHeight: .infinity)
                     // A `Canvas` is fully opaque to VoiceOver — replace its
                     // accessibility subtree with one real element per block
                     // (chronologically interleaved with the now-line element).
@@ -510,7 +520,10 @@ private struct EmbeddedDayTimeline: View {
     /// "wolne · …" free-time text are `Text.disabled`). Kept at `canvasH`
     /// so the glass card does not change height between empty and populated.
     private var railEmptyState: some View {
-        ZStack(alignment: .top) {
+        ZStack {
+            // Faint hour grid spread across the FULL rail height — the same 9–20
+            // rhythm a populated rail shows, so the empty rail reads as "a clear
+            // day", not an unfinished strip.
             VStack(spacing: 0) {
                 ForEach(0..<6, id: \.self) { _ in
                     Rectangle()
@@ -520,8 +533,11 @@ private struct EmbeddedDayTimeline: View {
                 }
             }
             .padding(.leading, gutter)
+            .frame(maxHeight: .infinity)
             .accessibilityHidden(true)
 
+            // Placeholder copy CENTERED in the full height (was pinned ~84pt
+            // from the top, which floated awkwardly once the rail fills).
             VStack(spacing: 9) {
                 Image(systemName: "calendar")
                     .font(.system(size: 19, weight: .regular))
@@ -534,11 +550,10 @@ private struct EmbeddedDayTimeline: View {
                     .foregroundStyle(NexusColor.Text.muted)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .padding(.top, 84)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: canvasH)
+        .frame(minHeight: canvasH, maxHeight: .infinity)
     }
 
     // Canvas-only sub-token fonts. NexusType's token sizes (eyebrow 10 /
