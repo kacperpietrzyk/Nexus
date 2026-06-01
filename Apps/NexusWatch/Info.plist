@@ -19,9 +19,9 @@
 	<key>CFBundleVersion</key>
 	<string>13</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Nexus używa mikrofonu do dyktowania zadań na zegarku.</string>
+	<string>Nexus uses the microphone to dictate tasks on your watch.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Nexus używa rozpoznawania mowy do dyktowania zadań na zegarku.</string>
+	<string>Nexus uses speech recognition to dictate tasks on your watch.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>com.kacperpietrzyk.nexus.askNexus</string>
