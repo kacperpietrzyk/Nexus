@@ -31,6 +31,8 @@ public struct TaskDetailInspector: View {
     @State var blockSearchCandidates: [TaskItem] = []
     @State var parentTaskPicker = TaskParentPickerState()
     @State var subtaskActionError: String?
+    @State var parentPickerPresented = false
+    @State var blockPickerPresented = false
 
     public init(task: TaskItem, onClose: (() -> Void)? = nil, layout: Layout = .column) {
         self._task = Bindable(task)
@@ -64,9 +66,8 @@ public struct TaskDetailInspector: View {
             .navigationTitle(task.title.isEmpty ? "Task" : task.title)
             .task { loadLinkState() }
             .onChange(of: task.id) { _, _ in
-                // View identity is reused across selection swaps (no `.id(task.id)`)
-                // so `init` won't re-run — resync derived state, else an edit writes
-                // the previous task's all-day/recurrence onto the new one.
+                // View identity is reused across selection swaps; resync derived
+                // state else an edit writes the previous task's fields onto the new.
                 resyncDerivedState()
                 loadLinkState()
             }

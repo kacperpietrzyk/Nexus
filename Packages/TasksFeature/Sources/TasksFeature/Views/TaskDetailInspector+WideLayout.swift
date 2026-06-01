@@ -43,10 +43,10 @@ extension TaskDetailInspector {
     /// vertical scroll). Wallpaper is a `.background` (does not drive sizing), so
     /// the host can size the modal to the content height.
     ///
-    /// `linksCard` (the relationship browser — parent/subtask/blocks, which lists
-    /// every candidate task inline) is intentionally OMITTED here: it is what made
-    /// the dialog tall and scroll-heavy. It remains in the `.column` layout. A
-    /// compact link affordance for the modal is a follow-up.
+    /// The full inline `linksCard` (which eagerly lists up to 8 parent/block
+    /// candidates inline) stays on the `.column` layout; the modal uses the
+    /// compact `linksCompactCard` (current relationships only; add-pickers in
+    /// popovers) so it never grows the dialog.
     var wideBody: some View {
         // NO ScrollView: a plain HStack has an intrinsic height, so the host
         // modal sizes to the content (a short dialog, no phantom scrollbar). A
@@ -67,7 +67,12 @@ extension TaskDetailInspector {
                     recurrenceCard
                 }
             }
-            notesCard
+            // Notes + Links share a bottom row (side by side) so the dialog stays
+            // short — stacking both full-width pushed the content past the window.
+            HStack(alignment: .top, spacing: 16) {
+                notesCard
+                linksCompactCard
+            }
         }
         .padding(20)
         .background(NexusWallpaper())
