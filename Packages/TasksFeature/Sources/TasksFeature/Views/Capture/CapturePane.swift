@@ -176,7 +176,12 @@ public struct CapturePane: View {
             // .padding(.bottom, 22), providing rhythm; when lastResult == nil the chips block
             // is absent and inputField.padding(.bottom, 20) supplies the spacing instead.
             HStack(spacing: 9) {
-                NexusButton(variant: .primary, size: .sm, action: commit) {
+                // Save IS the primary action of this surface, so it gets the
+                // lime `.primary` fill WHEN enabled. When disabled it switches
+                // to the neutral `.outline` control variant rather than dimming
+                // lime by opacity — a dimmed lime fill reads as muddy olive,
+                // which is what the old `.opacity(0.55)` produced.
+                NexusButton(variant: canSave ? .primary : .outline, size: .sm, action: commit) {
                     HStack(spacing: 6) {
                         Image(systemName: saveFeedbackVisible ? "checkmark" : "return")
                             .accessibilityHidden(true)
@@ -184,7 +189,6 @@ public struct CapturePane: View {
                     }
                 }
                 .disabled(!canSave)
-                .opacity(canSave ? 1 : 0.55)
                 Spacer()
             }
         }
@@ -223,13 +227,12 @@ public struct CapturePane: View {
                     .accessibilityLabel("Cancel capture")
                 }
                 Spacer()
-                NexusButton(variant: .primary, size: .lg, action: commit) {
+                NexusButton(variant: canSave ? .primary : .outline, size: .lg, action: commit) {
                     Label(saveFeedbackVisible ? "Saved" : "Save", systemImage: saveFeedbackVisible ? "checkmark" : "plus")
                 }
                 .frame(minHeight: 44)
                 .accessibilityLabel(saveFeedbackVisible ? "Saved" : "Save task")
                 .disabled(!canSave)
-                .opacity(canSave ? 1 : 0.55)
             }
         }
         .padding(20)

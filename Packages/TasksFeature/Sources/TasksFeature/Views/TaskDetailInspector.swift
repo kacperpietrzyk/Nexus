@@ -4,10 +4,8 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
-/// Card-based editor for a single task. Auto-saves on field commit via
-/// `TaskItemRepository.update`. Recurrence picker emits curated RRULE
-/// strings; "Custom" path leaves the existing rule untouched and surfaces
-/// a text field for direct editing.
+/// Card-based editor for a single task. Auto-saves on field commit; recurrence
+/// picker emits curated RRULE strings ("Custom" surfaces a direct-edit field).
 public struct TaskDetailInspector: View {
 
     @Environment(\.modelContext) var modelContext
@@ -66,21 +64,17 @@ public struct TaskDetailInspector: View {
             .scrollContentBackground(.hidden)
         }
         .background(NexusColor.Background.base)
-        // The `.inspector()` overlay is a separate presentation context that did
-        // NOT inherit the app-root `.tint` (NexusMacApp), so its system controls
-        // (segmented Priority picker, All-day / Deadline / Pin toggles, the
-        // DatePickers) fell back to system blue — jarring against the Linear
-        // dark theme. Re-assert the app's achromatic control tint here; active
-        // states read white (lime stays reserved for primary actions).
+        // This panel hosts in a detached overlay (Mac peek) / sheet that does
+        // NOT inherit the app-root `.tint`, so its native controls (segmented
+        // Priority picker, toggles, DatePickers) would fall back to system blue.
+        // Re-assert the achromatic control tint here (lime stays for actions).
         .tint(NexusColor.Text.primary)
         .navigationTitle(task.title.isEmpty ? "Task" : task.title)
         .task { loadLinkState() }
         .onChange(of: task.id) { _, _ in
-            // The inspector view identity is reused when the selection switches
-            // to another task (the Mac host returns it without an `.id(task.id)`),
-            // so `init` does not re-run. Resync the derived editor state from the
-            // new task — otherwise an edit would write the previous task's
-            // all-day/recurrence values onto the newly selected one.
+            // View identity is reused across selection swaps (no `.id(task.id)`)
+            // so `init` won't re-run — resync derived state, else an edit writes
+            // the previous task's all-day/recurrence onto the new one.
             resyncDerivedState()
             loadLinkState()
         }
@@ -125,23 +119,17 @@ public struct TaskDetailInspector: View {
                 priorityStatusChip
                 lifecycleChip
                 if let dueChipLabel {
+                    // Lime economy: future due = neutral; only OVERDUE is loud (`.rose`).
                     NexusChip(
                         dueChipLabel,
                         systemImage: isOverdue ? "exclamationmark.triangle.fill" : "calendar",
-                        tone: isOverdue ? .rose : .accent
+                        tone: isOverdue ? .rose : .neutral
                     )
                 }
                 Spacer(minLength: 0)
             }
 
-            Picker("Priority", selection: priorityBinding) {
-                Text("None").tag(TaskPriority.none)
-                Text("Low").tag(TaskPriority.low)
-                Text("Medium").tag(TaskPriority.medium)
-                Text("High").tag(TaskPriority.high)
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: task.priorityRaw) { _, _ in save() }
+            priorityPicker
 
             Toggle("Pin as focus", isOn: $task.pinnedAsFocus)
                 .onChange(of: task.pinnedAsFocus) { _, _ in save() }
@@ -288,10 +276,11 @@ public struct TaskDetailInspector: View {
     }
 
     private var priorityStatusChip: some View {
+        // Lime economy: priority is metadata → neutral; High keeps its glyph.
         NexusChip(
             priorityLabel(for: task.priority),
             systemImage: task.priority == .high ? "exclamationmark" : nil,
-            tone: task.priority == .high ? .accent : .neutral
+            tone: .neutral
         )
     }
 
@@ -304,7 +293,8 @@ public struct TaskDetailInspector: View {
             case .open:
                 NexusChip("Open")
             case .done:
-                NexusChip("Done", systemImage: "checkmark.circle.fill", tone: .accent)
+                // Lime economy: done-state is metadata → neutral; glyph reads "done".
+                NexusChip("Done", systemImage: "checkmark.circle.fill", tone: .neutral)
             case .snoozed:
                 NexusChip("Snoozed", systemImage: "clock")
             }
@@ -462,6 +452,25 @@ public struct TaskDetailInspector: View {
 }
 
 extension TaskDetailInspector {
+    /// Eyebrow over a full-width segmented control: a leading picker label
+    /// hyphenated "Priority" → "Priori-ty" in the ~360 panel.
+    fileprivate var priorityPicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("PRIORITY")
+                .font(NexusType.eyebrow)
+                .foregroundStyle(NexusColor.Text.tertiary)
+            Picker("Priority", selection: priorityBinding) {
+                Text("None").tag(TaskPriority.none)
+                Text("Low").tag(TaskPriority.low)
+                Text("Medium").tag(TaskPriority.medium)
+                Text("High").tag(TaskPriority.high)
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .onChange(of: task.priorityRaw) { _, _ in save() }
+        }
+    }
+
     fileprivate var deadlineCard: some View {
         inspectorCard("Deadline") {
             Toggle("Deadline", isOn: deadlineEnabledBinding)

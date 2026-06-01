@@ -17,9 +17,13 @@ struct ContentView: View {
     @Environment(\.meetingNavigationRouter) private var meetingNavigationRouter
 
     @State private var selection: TodayNavSelection = .today
-    @State private var selectedTask: TaskItem?
+    // Internal: read from the `ContentView+CaptureAndPeek` extension.
+    @State var selectedTask: TaskItem?
     @State private var customSnoozeTask: TaskItem?
     @State private var commandPalettePresented = false
+    // Internal (not private): read by `captureOverlay` in the sibling extension.
+    @State var capturePresented = false
+    @State var captureMode: CapturePane.Mode = .task
     @State private var inboxUnreadCount = 0
     // §1a control mode (Inbox): the filter-tab control was relocated from
     // the Inbox list-panel header into the shell's top-bar band, so its
@@ -70,10 +74,11 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .containerBackground(NexusColor.Background.base, for: .window)
-        .inspector(isPresented: inspectorBinding) {
-            inspectorContent
-                .inspectorColumnWidth(min: 320, ideal: 360, max: 460)
-        }
+        // SUB-A: list stays FULL-WIDTH; the detail panel FLOATS over the right
+        // edge as a Linear-style peek (see `taskPeek`). Gated on the UNCHANGED
+        // `inspectorBinding` predicate (§1 "inspector ⊥ Agent" + its test hold).
+        .overlay(alignment: .trailing) { taskPeek }
+        .animation(NexusMotion.standard, value: inspectorBinding.wrappedValue)
         .sheet(item: $customSnoozeTask) { task in
             CustomSnoozeSheet(task: task)
         }
@@ -94,6 +99,7 @@ struct ContentView: View {
                 }
             }
         }
+        .overlay { captureOverlay }
         .task {
             await bootstrapNavigation()
             await reloadInboxCount()
@@ -103,6 +109,10 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .nexusOpenCommandPalette)) { _ in
             commandPalettePresented = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .nexusOpenCapture)) { notification in
+            captureMode = notification.object as? CapturePane.Mode ?? .task
+            capturePresented = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .nexusGoToToday)) { _ in
             navigate(to: .today)
@@ -453,13 +463,11 @@ struct ContentView: View {
         return try? modelContext.fetch(descriptor).first
     }
 
-    private var inspectorBinding: Binding<Bool> {
-        // Defense-in-depth for the §1 "inspector ⊥ Agent" invariant: the
-        // `.onChange(of: selection)` chokepoint clears `selectedTask` on every
-        // transition into `.agent`, but the inspector-visibility decision is
-        // also routed through the pure `InspectorVisibility.shouldShowInspector`
-        // predicate so the invariant holds locally even if state ever lags a
-        // frame, and so it is unit-testable without driving SwiftUI.
+    // Internal: read by `taskPeek` in the `ContentView+CaptureAndPeek` extension.
+    // Defense-in-depth for the §1 "inspector ⊥ Agent" invariant — routes the
+    // visibility decision through the pure `InspectorVisibility` predicate so it
+    // holds even if state lags a frame and is unit-testable without SwiftUI.
+    var inspectorBinding: Binding<Bool> {
         Binding(
             get: {
                 InspectorVisibility.shouldShowInspector(
@@ -469,15 +477,6 @@ struct ContentView: View {
             },
             set: { if !$0 { selectedTask = nil } }
         )
-    }
-
-    @ViewBuilder
-    private var inspectorContent: some View {
-        if let task = selectedTask {
-            TaskDetailInspector(task: task, onClose: { selectedTask = nil })
-        } else {
-            Color.clear
-        }
     }
 
     private func bootstrapNavigation() async {
