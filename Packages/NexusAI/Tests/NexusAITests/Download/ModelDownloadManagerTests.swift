@@ -399,15 +399,32 @@ struct LiveHFFetcherStagingTests {
         #expect(LiveHFFetcher.directorySize(at: dir.appending(path: "does-not-exist")) == 0)
     }
 
-    @Test("inFlightDownloadBytes sums only CFNetworkDownload temp blobs")
+    @Test("inFlightDownloadBytes sums only recent CFNetworkDownload temp blobs")
     func inFlightDownloadBytesSumsScratchBlobs() throws {
         let dir = try tempDir("inflight")
         defer { try? fileManager.removeItem(at: dir) }
-        // Two in-flight CFNetwork download scratch files + one unrelated temp file.
+        let cutoff = Date()
+        // Two in-flight CFNetwork download scratch files + one unrelated temp file,
+        // all written after the cutoff.
         try Data(count: 800).write(to: dir.appending(path: "CFNetworkDownload_aaa.tmp"))
         try Data(count: 200).write(to: dir.appending(path: "CFNetworkDownload_bbb.tmp"))
         try Data(count: 999).write(to: dir.appending(path: "unrelated.tmp"))
 
-        #expect(LiveHFFetcher.inFlightDownloadBytes(in: dir) == 1000)
+        #expect(LiveHFFetcher.inFlightDownloadBytes(in: dir, modifiedSince: cutoff) == 1000)
+    }
+
+    @Test("inFlightDownloadBytes ignores a STALE blob from before the cutoff")
+    func inFlightDownloadBytesIgnoresStaleBlob() throws {
+        let dir = try tempDir("inflight-stale")
+        defer { try? fileManager.removeItem(at: dir) }
+        // A large scratch blob left by a prior killed run, back-dated well before
+        // the cutoff — must NOT be counted (else it masks a real re-download).
+        let stale = dir.appending(path: "CFNetworkDownload_stale.tmp")
+        try Data(count: 5_000_000).write(to: stale)
+        try fileManager.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 1_000_000)], ofItemAtPath: stale.path)
+
+        let cutoff = Date(timeIntervalSince1970: 2_000_000)
+        #expect(LiveHFFetcher.inFlightDownloadBytes(in: dir, modifiedSince: cutoff) == 0)
     }
 }

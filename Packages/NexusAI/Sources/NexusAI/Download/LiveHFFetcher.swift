@@ -98,6 +98,12 @@ public struct LiveHFFetcher: ModelFileFetching {
         _ = byteOffset  // Resume is handled internally by Hub's per-file sidecars.
 
         Self.logger.info("LiveHFFetcher.fetch START hf=\(hfPath, privacy: .public)")
+        // Cutoff for the in-flight temp-blob heuristic below: only scratch files
+        // created/modified at or after this fetch begins count toward progress, so
+        // a stale `CFNetworkDownload_*.tmp` left by a prior killed run cannot make
+        // the bar read 100% instantly (which would also MASK a real re-download).
+        // A small grace absorbs clock/filesystem-timestamp granularity.
+        let fetchStartedAt = Date().addingTimeInterval(-2)
         let cacheBase = destination.deletingLastPathComponent().appending(path: ".hf-cache")
         try FileManager.default.createDirectory(
             at: cacheBase, withIntermediateDirectories: true)
@@ -123,7 +129,8 @@ public struct LiveHFFetcher: ModelFileFetching {
         let progressPoller = Task.detached(priority: .utility) {
             while !Task.isCancelled {
                 let bytes =
-                    Self.directorySize(at: pollDir) + Self.inFlightDownloadBytes(in: tempDir)
+                    Self.directorySize(at: pollDir)
+                    + Self.inFlightDownloadBytes(in: tempDir, modifiedSince: fetchStartedAt)
                 if bytes > 0 {
                     onProgress(totalBytes > 0 ? min(bytes, totalBytes) : bytes)
                 }
@@ -247,24 +254,32 @@ public struct LiveHFFetcher: ModelFileFetching {
         try? fileManager.removeItem(at: source)
     }
 
-    /// Sum of the in-flight `CFNetworkDownload_*.tmp` blobs in `tempDir` — the
-    /// scratch files swift-huggingface's URLSession download task grows while a
-    /// file transfers, before moving the finished file into the Hub cache repo.
-    /// Counting them lets the progress bar climb during the transfer instead of
-    /// jumping 0→100 only when the file lands in the repo. Best-effort: a
-    /// concurrent unrelated download would also be counted, but the value is
-    /// clamped to `totalBytes` by the caller, so the worst case is a bar that
-    /// briefly reads full — never a wrong final state.
-    static func inFlightDownloadBytes(in tempDir: URL) -> Int64 {
+    /// Sum of the in-flight `CFNetworkDownload_*.tmp` blobs in `tempDir` that were
+    /// modified at or after `cutoff` — the scratch files swift-huggingface's
+    /// URLSession download task grows while a file transfers, before moving the
+    /// finished file into the Hub cache repo. Counting them lets the progress bar
+    /// climb during the transfer instead of jumping 0→100 only when the file
+    /// lands in the repo.
+    ///
+    /// The `cutoff` (this fetch's start) is load-bearing: a STALE blob left by a
+    /// prior killed download would otherwise be counted, making the bar read
+    /// 100% instantly AND masking a genuine re-download in progress. Best-effort:
+    /// a concurrent unrelated download started in the same window would also be
+    /// counted, but the value is clamped to `totalBytes` by the caller, so the
+    /// worst case is a bar that briefly reads full — never a wrong final state.
+    static func inFlightDownloadBytes(in tempDir: URL, modifiedSince cutoff: Date) -> Int64 {
         let entries =
             (try? FileManager.default.contentsOfDirectory(
                 at: tempDir,
-                includingPropertiesForKeys: [.fileSizeKey],
+                includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
                 options: [.skipsHiddenFiles]
             )) ?? []
         return entries.reduce(into: Int64(0)) { sum, url in
             guard url.lastPathComponent.hasPrefix("CFNetworkDownload") else { return }
-            sum += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+            let values = try? url.resourceValues(
+                forKeys: [.fileSizeKey, .contentModificationDateKey])
+            guard let modified = values?.contentModificationDate, modified >= cutoff else { return }
+            sum += Int64(values?.fileSize ?? 0)
         }
     }
 
