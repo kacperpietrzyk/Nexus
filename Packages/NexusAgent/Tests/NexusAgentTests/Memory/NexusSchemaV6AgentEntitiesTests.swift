@@ -6,19 +6,25 @@ import Testing
 @testable import NexusAgent
 @testable import NexusSync
 
-private let agentPersistentModels: [any PersistentModel.Type] = [
-    AgentThread.self,
-    AgentMessage.self,
-    AgentMemoryEntry.self,
-    AgentAuditLog.self,
-    AgentSchedule.self,
-    ItemEmbedding.self,
-]
+// The PRODUCTION list the apps must hand to `NexusModelContainer`. Guarding it
+// here is the regression seal: the original defect was the apps registering NONE
+// of these, so the container had no agent tables and every turn silently failed
+// to persist. All six are LOCAL-ONLY (see `AgentComposition.localOnlyExtraModels`).
+private let agentPersistentModels = AgentComposition.localOnlyExtraModels
 
-private let localOnlyAgentModels: [any PersistentModel.Type] = [
-    AgentAuditLog.self,
-    ItemEmbedding.self,
-]
+@Test func agentLocalOnlyExtraModelsListsEveryAgentEntity() {
+    let names = Set(AgentComposition.localOnlyExtraModels.map { String(describing: $0) })
+    #expect(
+        names == [
+            "AgentThread",
+            "AgentMessage",
+            "AgentMemoryEntry",
+            "AgentAuditLog",
+            "AgentSchedule",
+            "ItemEmbedding",
+        ]
+    )
+}
 
 @Test func v6AssembledModelsIncludeAgentEntities() {
     let modelTypes = NexusSchemaV6.assembledModels(extraModels: agentPersistentModels)
@@ -45,29 +51,31 @@ private let localOnlyAgentModels: [any PersistentModel.Type] = [
     #expect(modelTypes.suffix(2) == ["AgentThread", "AgentMessage"])
 }
 
-@Test func v6AgentLocalOnlyPartitionKeepsAuditAndEmbeddingsOutOfSyncedModels() {
+// Production places ALL agent entities in the LOCAL-ONLY (non-CloudKit)
+// partition — never the synced one — keeping the CloudKit/synced configuration
+// byte-identical. These assert that placement WITHOUT instantiating a
+// container (a second on-disk SwiftData container in the same test process
+// trips CoreData's global entity→store mapping).
+@Test func v6AgentModelsAreAllLocalOnlyNeverSynced() {
     let partitions = NexusModelContainer.modelPartitions(
-        extraModels: agentPersistentModels,
-        localOnlyExtraModels: localOnlyAgentModels
+        localOnlyExtraModels: agentPersistentModels
     )
     let syncedModels = modelNames(partitions.syncedModels)
     let localOnlyModels = modelNames(partitions.localOnlyModels)
 
-    #expect(localOnlyModels == ["ConflictLog", "AgentAuditLog", "ItemEmbedding"])
-    #expect(syncedModels.contains("AgentThread"))
-    #expect(syncedModels.contains("AgentMessage"))
-    #expect(syncedModels.contains("AgentMemoryEntry"))
-    #expect(syncedModels.contains("AgentSchedule"))
-    #expect(!syncedModels.contains("ConflictLog"))
-    #expect(!syncedModels.contains("AgentAuditLog"))
-    #expect(!syncedModels.contains("ItemEmbedding"))
+    for agentModel in agentPersistentModels.map({ String(describing: $0) }) {
+        #expect(localOnlyModels.contains(agentModel))
+        #expect(!syncedModels.contains(agentModel))
+    }
+    // Baseline synced entities are untouched by the agent registration.
+    #expect(syncedModels.contains("TaskItem"))
+    #expect(syncedModels.contains("Project"))
 }
 
-@Test func v6AgentCloudConfigurationPlanKeepsOnlyAuditAndEmbeddingsLocalOnly() throws {
+@Test func v6AgentCloudConfigurationPlanKeepsEveryAgentEntityLocalOnly() throws {
     let storeURL = tempStoreURL(prefix: "nexus-agent-local-only-config")
     let plan = NexusModelContainer.makeConfigurationPlan(
-        extraModels: agentPersistentModels,
-        localOnlyExtraModels: localOnlyAgentModels,
+        localOnlyExtraModels: agentPersistentModels,
         isStoredInMemoryOnly: false,
         storeURL: storeURL,
         cloudKitDatabase: .private("iCloud.com.kacperpietrzyk.Nexus")
@@ -81,18 +89,21 @@ private let localOnlyAgentModels: [any PersistentModel.Type] = [
     let syncedEntities = entityNames(in: syncedConfiguration.schema)
     let localOnlyEntities = entityNames(in: localOnlyConfiguration.schema)
 
-    #expect(syncedEntities.contains("AgentThread"))
-    #expect(syncedEntities.contains("AgentMessage"))
-    #expect(syncedEntities.contains("AgentMemoryEntry"))
-    #expect(syncedEntities.contains("AgentSchedule"))
-    #expect(!syncedEntities.contains("AgentAuditLog"))
-    #expect(!syncedEntities.contains("ItemEmbedding"))
-    #expect(localOnlyEntities.contains("ConflictLog"))
-    #expect(localOnlyEntities.contains("AgentAuditLog"))
-    #expect(localOnlyEntities.contains("ItemEmbedding"))
+    for agentModel in agentPersistentModels.map({ String(describing: $0) }) {
+        #expect(localOnlyEntities.contains(agentModel))
+        #expect(!syncedEntities.contains(agentModel))
+    }
     #expect(isNoCloudKitDatabase(localOnlyConfiguration.cloudKitDatabase))
 }
 
+// The container-instantiating persistence checks below register the agent
+// models via `extraModels` (the synced/primary config). This is deliberate and
+// matches `AgentTestSupport`'s single-config registration: the same `@Model`
+// class placed in DIFFERENT configurations across containers in one test
+// process trips CoreData's global entity→store mapping ("Can't assign an
+// object to a store that does not contain the object's entity"). Placement in
+// the LOCAL-ONLY partition is verified above without instantiating a container;
+// here we only assert the entities persist once registered.
 @Test func v6AssembledInMemoryContainerPersistsAgentEntity() throws {
     let container = try NexusModelContainer.makeInMemory(extraModels: agentPersistentModels)
     let context = ModelContext(container)
