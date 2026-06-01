@@ -206,7 +206,7 @@ struct InboxPanelRow: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 7)
+                RoundedRectangle(cornerRadius: NexusRadius.r1)
                     .fill(
                         isSelected
                             ? NexusColor.Background.controlHover

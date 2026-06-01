@@ -51,14 +51,14 @@ public struct MeetingsListView: View {
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
                 .fill(NexusColor.Background.panel)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
                 .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.36), radius: 18, x: -6, y: 8)
+        .nexusShadow(NexusShadow.s2)
         .onAppear {
             viewModel.reload()
             publishItemsState()
