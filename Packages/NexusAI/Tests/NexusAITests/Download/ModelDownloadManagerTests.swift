@@ -398,4 +398,16 @@ struct LiveHFFetcherStagingTests {
         #expect(LiveHFFetcher.directorySize(at: dir) == 1500)
         #expect(LiveHFFetcher.directorySize(at: dir.appending(path: "does-not-exist")) == 0)
     }
+
+    @Test("inFlightDownloadBytes sums only CFNetworkDownload temp blobs")
+    func inFlightDownloadBytesSumsScratchBlobs() throws {
+        let dir = try tempDir("inflight")
+        defer { try? fileManager.removeItem(at: dir) }
+        // Two in-flight CFNetwork download scratch files + one unrelated temp file.
+        try Data(count: 800).write(to: dir.appending(path: "CFNetworkDownload_aaa.tmp"))
+        try Data(count: 200).write(to: dir.appending(path: "CFNetworkDownload_bbb.tmp"))
+        try Data(count: 999).write(to: dir.appending(path: "unrelated.tmp"))
+
+        #expect(LiveHFFetcher.inFlightDownloadBytes(in: dir) == 1000)
+    }
 }

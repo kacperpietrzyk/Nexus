@@ -112,15 +112,20 @@ public struct LiveHFFetcher: ModelFileFetching {
         // slow link (an iPhone over wifi/cellular) the bar reads as "stuck near
         // 0%" for many minutes even though bytes are flowing, which is exactly
         // the "download hangs" report this fixes. Instead of the file-count
-        // fraction, drive progress from the REAL on-disk size of the Hub cache
-        // repo (the growing `.incomplete` blob plus any completed files), so the
-        // percent tracks actual bytes regardless of file weighting.
+        // fraction, drive progress from the REAL bytes on disk: swift-huggingface
+        // streams each file to a `CFNetworkDownload_*.tmp` in the process temp
+        // dir, then moves the completed file into the Hub cache repo — so summing
+        // the in-flight temp blob plus the cache repo tracks actual bytes
+        // throughout (the temp blob grows during transfer; once it lands in the
+        // repo the temp drains and the repo size takes over).
         let pollDir = cacheBase.appending(path: "models").appending(path: hfPath)
+        let tempDir = FileManager.default.temporaryDirectory
         let progressPoller = Task.detached(priority: .utility) {
             while !Task.isCancelled {
-                let onDisk = Self.directorySize(at: pollDir)
-                if onDisk > 0 {
-                    onProgress(totalBytes > 0 ? min(onDisk, totalBytes) : onDisk)
+                let bytes =
+                    Self.directorySize(at: pollDir) + Self.inFlightDownloadBytes(in: tempDir)
+                if bytes > 0 {
+                    onProgress(totalBytes > 0 ? min(bytes, totalBytes) : bytes)
                 }
                 try? await Task.sleep(nanoseconds: 700_000_000)
             }
@@ -242,11 +247,32 @@ public struct LiveHFFetcher: ModelFileFetching {
         try? fileManager.removeItem(at: source)
     }
 
+    /// Sum of the in-flight `CFNetworkDownload_*.tmp` blobs in `tempDir` — the
+    /// scratch files swift-huggingface's URLSession download task grows while a
+    /// file transfers, before moving the finished file into the Hub cache repo.
+    /// Counting them lets the progress bar climb during the transfer instead of
+    /// jumping 0→100 only when the file lands in the repo. Best-effort: a
+    /// concurrent unrelated download would also be counted, but the value is
+    /// clamped to `totalBytes` by the caller, so the worst case is a bar that
+    /// briefly reads full — never a wrong final state.
+    static func inFlightDownloadBytes(in tempDir: URL) -> Int64 {
+        let entries =
+            (try? FileManager.default.contentsOfDirectory(
+                at: tempDir,
+                includingPropertiesForKeys: [.fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )) ?? []
+        return entries.reduce(into: Int64(0)) { sum, url in
+            guard url.lastPathComponent.hasPrefix("CFNetworkDownload") else { return }
+            sum += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+        }
+    }
+
     /// Total on-disk byte size of all regular files under `url` (recursive).
-    /// Drives byte-accurate download progress from the live Hub cache repo so
-    /// the bar tracks real bytes even while a single multi-GB file downloads
-    /// (HubApi's own progress is file-count weighted and barely moves there).
-    /// Returns 0 when the directory does not exist yet.
+    /// Together with ``inFlightDownloadBytes(in:)`` drives byte-accurate download
+    /// progress (HubApi's own progress is file-count weighted and barely moves
+    /// while one multi-GB file downloads). Returns 0 when the directory does not
+    /// exist yet.
     static func directorySize(at url: URL) -> Int64 {
         guard
             let enumerator = FileManager.default.enumerator(
