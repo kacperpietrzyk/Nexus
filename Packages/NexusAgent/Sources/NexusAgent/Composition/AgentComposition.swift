@@ -12,6 +12,42 @@ public enum AgentPlatform: String, Sendable {
 
 @MainActor
 public struct AgentComposition {
+    /// The agent's SwiftData `@Model` entities, for the composition root to
+    /// register with `NexusModelContainer` (NexusSync cannot import NexusAgent —
+    /// that would be a package cycle — so, exactly like `MeetingsComposition`,
+    /// the model list must be handed in from the app).
+    ///
+    /// **These are LOCAL-ONLY (never CloudKit-synced).** Two reasons:
+    /// 1. `CloudKitSchemaSeeder` already documents "agent models are not part of
+    ///    the synced schema" — agent threads/messages are device-local working
+    ///    state, not iCloud-mirrored user content.
+    /// 2. The app ships on a PRODUCTION CloudKit environment (TestFlight), where
+    ///    SwiftData does NOT auto-create new record types — a synced schema needs
+    ///    a manual dev→prod CloudKit deploy. Registering these local-only keeps
+    ///    the synced/CloudKit configuration byte-identical, so the user's real
+    ///    tasks/projects/meetings are untouched.
+    ///
+    /// Cross-device agent history (moving these to the synced config) is a
+    /// separate product decision, deliberately not bundled here.
+    ///
+    /// Regression context: before this list was wired into the apps, the agent's
+    /// stores ran against a container whose schema lacked these entities, so every
+    /// `insert`/`fetch` silently no-op'd — threads/messages never persisted and
+    /// every turn ended `.rejected` (input reverted, no message bubble) on both
+    /// platforms.
+    ///
+    /// `nonisolated` so the composition root (and tests) can read the list
+    /// without hopping to the MainActor — it is immutable metatype data with no
+    /// actor state, mirroring the non-isolated `MeetingsComposition.extraModels`.
+    nonisolated public static let localOnlyExtraModels: [any PersistentModel.Type] = [
+        AgentThread.self,
+        AgentMessage.self,
+        AgentMemoryEntry.self,
+        AgentAuditLog.self,
+        AgentSchedule.self,
+        ItemEmbedding.self,
+    ]
+
     public let runtime: AgentRuntime
     public let chatViewModel: AgentChatViewModel
     public let settingsContext: AgentSettingsContext

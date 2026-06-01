@@ -399,7 +399,11 @@ struct NexusiOSApp: App {
                 environment: environment,
                 groupContainerIdentifier: NexusModelContainer.appGroupIdentifier,
                 extraModels: MeetingsComposition.extraModels,
+                // Agent entities are local-only — see `AgentComposition.localOnlyExtraModels`.
+                // Without them the container has no AgentThread/AgentMessage tables and every
+                // agent turn silently fails to persist.
                 localOnlyExtraModels: MeetingsComposition.localOnlyExtraModels
+                    + AgentComposition.localOnlyExtraModels
             )
         } catch {
             fatalError("Failed to make NexusModelContainer: \(error)")
