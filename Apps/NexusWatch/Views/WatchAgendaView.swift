@@ -58,10 +58,10 @@ struct WatchAgendaView: View {
                                 .font(.system(size: 30, weight: .semibold))
                                 .foregroundStyle(NexusColor.Text.secondary)
                             Text("No tasks")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(NexusType.h3)
                                 .foregroundStyle(NexusColor.Text.primary)
                             Text("Add by dictation or ask Nexus.")
-                                .font(.system(size: 13))
+                                .font(NexusType.bodySmall)
                                 .foregroundStyle(NexusColor.Text.tertiary)
                                 .multilineTextAlignment(.center)
                                 .lineLimit(2)
@@ -127,11 +127,13 @@ struct WatchAgendaView: View {
                             if let task = task(forID: undo.taskID) {
                                 try? await actions?.reopen(task)
                             }
-                            pendingUndo = nil
+                            withAnimation(NexusMotion.standard) {
+                                pendingUndo = nil
+                            }
                         }
                     } label: {
                         Text("Undo: \(undo.title)")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(NexusType.caption)
                             .foregroundStyle(NexusColor.Text.primary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -145,8 +147,10 @@ struct WatchAgendaView: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 4)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
+            .animation(NexusMotion.standard, value: pendingUndo)
             .sheet(item: $selected) { task in
                 WatchTaskDetailSheet(task: task)
                     .environment(\.watchTaskActions, actions)
@@ -191,11 +195,15 @@ struct WatchAgendaView: View {
 
     private func handleMarkedDone(_ task: TaskItem, now: Date) {
         let stamp = now.addingTimeInterval(5)
-        pendingUndo = PendingUndo(taskID: task.id, title: task.title, expiresAt: stamp)
+        withAnimation(NexusMotion.standard) {
+            pendingUndo = PendingUndo(taskID: task.id, title: task.title, expiresAt: stamp)
+        }
         Task { @MainActor in
             try? await _Concurrency.Task.sleep(for: .seconds(5))
             if pendingUndo?.expiresAt == stamp {
-                pendingUndo = nil
+                withAnimation(NexusMotion.standard) {
+                    pendingUndo = nil
+                }
             }
         }
     }
@@ -223,19 +231,19 @@ private struct WatchAgendaSummary: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(NexusType.h3)
                         .foregroundStyle(NexusColor.Text.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(NexusType.meta)
                         .foregroundStyle(NexusColor.Text.tertiary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 6)
                 if overdueCount > 0 {
                     Text("\(overdueCount)")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .font(NexusType.h2)
                         .foregroundStyle(NexusColor.Text.primary)
                         .accessibilityLabel("\(overdueCount) overdue")
                 }
@@ -247,7 +255,10 @@ private struct WatchAgendaSummary: View {
             )
         }
         .padding(10)
-        .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(
+            NexusColor.Background.control,
+            in: RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+        )
     }
 
     private var title: String {
@@ -287,7 +298,7 @@ private struct WatchQuickActions: View {
                     .labelStyle(.iconOnly)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(NexusColor.Accent.limeInk)
-                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .frame(maxWidth: .infinity, minHeight: 38)
             }
             .buttonStyle(.borderedProminent)
             .tint(NexusColor.Accent.lime)
@@ -297,7 +308,7 @@ private struct WatchQuickActions: View {
                 Label("Ask", systemImage: "sparkles")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 16, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .frame(maxWidth: .infinity, minHeight: 38)
             }
             .buttonStyle(.bordered)
             .tint(NexusColor.Text.secondary)

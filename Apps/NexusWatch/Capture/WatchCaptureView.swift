@@ -10,25 +10,32 @@ struct WatchCaptureView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("New task")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(NexusType.h3)
                     .foregroundStyle(NexusColor.Text.primary)
                     .lineLimit(1)
 
                 Text("Dictate briefly. iPhone will parse the date and project.")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(NexusType.meta)
                     .foregroundStyle(NexusColor.Text.tertiary)
                     .lineLimit(2)
 
                 TextField("...", text: $state.input, axis: .vertical)
-                    .font(.system(size: 16))
+                    .font(NexusType.body)
                     .lineLimit(4, reservesSpace: true)
                     .focused($inputFocused)
                     .padding(10)
-                    .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: 12))
+                    .background(
+                        NexusColor.Background.control,
+                        in: RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+                            .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                    )
 
                 if case .error(let message) = state.phase {
                     Text(message)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(NexusType.meta)
                         .foregroundStyle(NexusColor.Status.danger)
                 }
 
@@ -41,7 +48,7 @@ struct WatchCaptureView: View {
                     }
                 } label: {
                     Label("Save", systemImage: "checkmark.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(NexusType.h3)
                         // limeInk for contrast on lime fill.
                         .foregroundStyle(NexusColor.Accent.limeInk)
                         .frame(maxWidth: .infinity, minHeight: 38)
