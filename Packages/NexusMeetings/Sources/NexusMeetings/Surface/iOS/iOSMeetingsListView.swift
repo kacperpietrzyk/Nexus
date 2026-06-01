@@ -1,3 +1,4 @@
+import NexusUI
 import SwiftData
 import SwiftUI
 
@@ -25,26 +26,27 @@ struct IOSMeetingsListContentView: View {
     }
 
     var body: some View {
-        List {
+        Group {
             if meetings.isEmpty {
-                ContentUnavailableView(
-                    "No meetings",
-                    systemImage: "person.wave.2",
-                    description: Text("Recorded meetings will appear here.")
-                )
+                IOSMeetingsListEmptyState()
             } else {
-                ForEach(meetings, id: \.id) { meeting in
-                    NavigationLink {
-                        iOSMeetingDetailView(
-                            meetingID: meeting.id,
-                            composition: composition
-                        )
-                    } label: {
-                        IOSMeetingRow(meeting: meeting)
+                List {
+                    ForEach(meetings, id: \.id) { meeting in
+                        NavigationLink {
+                            iOSMeetingDetailView(
+                                meetingID: meeting.id,
+                                composition: composition
+                            )
+                        } label: {
+                            IOSMeetingRow(meeting: meeting)
+                        }
+                        .listRowBackground(NexusColor.Background.base)
                     }
                 }
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(NexusColor.Background.base)
         .navigationTitle("Meetings")
         .refreshable {
             reload()
@@ -67,24 +69,53 @@ private struct IOSMeetingRow: View {
     let meeting: Meeting
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(meeting.title)
-                .font(.headline)
-                .lineLimit(2)
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: "person.wave.2")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(NexusColor.Text.muted)
+                .frame(width: 16)
+                .padding(.top, 2)
 
-            HStack(spacing: 8) {
-                Text(meeting.startedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(meeting.title)
+                    .font(Font.custom("Inter-Medium", size: 13))
+                    .foregroundStyle(NexusColor.Text.secondary)
+                    .lineLimit(2)
 
-                if !meeting.actionItemIDs.isEmpty {
-                    Label("\(meeting.actionItemIDs.count)", systemImage: "checklist")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Text(meeting.startedAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(NexusType.metaMono)
+                        .monospacedDigit()
+                        .foregroundStyle(NexusColor.Text.disabled)
+
+                    if !meeting.actionItemIDs.isEmpty {
+                        Label("\(meeting.actionItemIDs.count)", systemImage: "checklist")
+                            .font(NexusType.meta)
+                            .foregroundStyle(NexusColor.Text.muted)
+                    }
                 }
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+private struct IOSMeetingsListEmptyState: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.wave.2")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(NexusColor.Text.muted)
+            Text("No meetings")
+                .font(NexusType.h3)
+                .foregroundStyle(NexusColor.Text.secondary)
+            Text("Recorded meetings will appear here.")
+                .font(NexusType.meta)
+                .foregroundStyle(NexusColor.Text.muted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 260)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 #endif

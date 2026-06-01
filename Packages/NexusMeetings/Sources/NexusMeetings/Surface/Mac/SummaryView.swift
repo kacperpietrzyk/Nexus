@@ -149,6 +149,18 @@ private struct MeetingSummaryMarkdown: View {
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        case .numbered(let index, let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(index).")
+                    .font(NexusType.body)
+                    .monospacedDigit()
+                    .foregroundStyle(NexusColor.Text.muted)
+                Text(inline(text))
+                    .font(NexusType.body)
+                    .foregroundStyle(NexusColor.Text.secondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         case .paragraph(let text):
             Text(inline(text))
                 .font(NexusType.body)
@@ -165,6 +177,7 @@ private struct MeetingSummaryMarkdown: View {
     private enum Block {
         case heading(String)
         case bullet(String)
+        case numbered(index: Int, text: String)
         case paragraph(String)
     }
 
@@ -176,6 +189,12 @@ private struct MeetingSummaryMarkdown: View {
             }
             if let bullet = line.range(of: "^[-*]\\s+", options: .regularExpression) {
                 return .bullet(String(line[bullet.upperBound...]))
+            }
+            if let marker = line.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
+                let digits = line[marker.lowerBound..<line.index(before: marker.upperBound)]
+                    .prefix { $0.isNumber }
+                let index = Int(digits) ?? 0
+                return .numbered(index: index, text: String(line[marker.upperBound...]))
             }
             return .paragraph(line)
         }
