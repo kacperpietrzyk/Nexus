@@ -272,7 +272,10 @@ extension TodayDashboard {
                 }
             }
         }
-        .frame(maxWidth: 620, alignment: .leading)
+        // Fill the freed content area (left-aligned with the chrome) up to the
+        // DAY rail instead of capping at a narrow 620 measure — the old cap left
+        // a dead centre void between the column and the timeline rail. Rows +
+        // sections breathe; the empty/achievement state keeps its own 420 cap.
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 26)
         .padding(.vertical, 24)
