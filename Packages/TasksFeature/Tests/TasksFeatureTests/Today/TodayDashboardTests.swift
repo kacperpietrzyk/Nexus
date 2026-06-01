@@ -74,9 +74,12 @@ struct TodayDashboardTests {
         // single global right rail on routes with no right column of their
         // own, but Inbox (InboxReaderPane) and Meetings (meeting detail)
         // already own a right pane, so mounting the 320pt rail there double-
-        // railed. Lock every corner so a future hand cannot regress it.
+        // railed. Linear redesign: `.tasks` now joins the false group too —
+        // the DAY timeline is always empty on Tasks and crushed the list, so
+        // the redesign frees the column (capped reading measure applied at
+        // the `.tasks` route case instead). Lock every corner.
         #expect(TodayDashboardContentRoute.today.showsEmbeddedTimelineRail == true)
-        #expect(TodayDashboardContentRoute.tasks.showsEmbeddedTimelineRail == true)
+        #expect(TodayDashboardContentRoute.tasks.showsEmbeddedTimelineRail == false)
         #expect(TodayDashboardContentRoute.productivity.showsEmbeddedTimelineRail == true)
         #expect(TodayDashboardContentRoute.settings.showsEmbeddedTimelineRail == true)
         #expect(TodayDashboardContentRoute.inbox.showsEmbeddedTimelineRail == false)

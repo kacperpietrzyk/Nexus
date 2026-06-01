@@ -77,10 +77,14 @@ public struct NexusChip: View {
         // `.accent` is the single active/selected chip — Porcelain ink paired
         // with the lime rim below. Lime stays on the rim only (economy rule).
         case .accent: return NexusColor.Text.primary
-        // All other tones share the neutral Light Steel ink — Linear keeps
-        // metadata chips achromatic. Cases preserved (§11 public-API freeze).
-        case .neutral, .rose, .positive, .negative, .warning:
-            return NexusColor.Text.secondary
+        // Neutral chrome (tags, P2/P3, future-due) recedes to Storm Cloud ink so
+        // the loud semantic tones below carry the hierarchy.
+        case .neutral: return NexusColor.Text.tertiary
+        // Restrained semantic ink — tinted text only; the fill/rim below stay
+        // faint so no chip ever reads as a saturated block. `.warning` shares
+        // the danger family (amber is forbidden — lime-adjacent).
+        case .rose, .negative, .warning: return NexusColor.Status.danger
+        case .positive: return NexusColor.Status.success
         }
     }
 
@@ -90,8 +94,13 @@ public struct NexusChip: View {
         // a half-step up from the resting chip for a contained lift.
         case .accent: return NexusColor.Background.controlHover
         // Resting metadata chips: flat control fill (#1C1D1F). No translucency.
-        case .neutral, .rose, .positive, .negative, .warning:
-            return NexusColor.Background.control
+        case .neutral: return NexusColor.Background.control
+        // Very faint tinted wash — restrained, never a saturated fill.
+        case .rose, .negative: return NexusColor.Status.danger.opacity(0.10)
+        // Amber is forbidden (lime-adjacent) — soft caution is the faintest red,
+        // not amber. Lowest-intensity red in the danger family.
+        case .warning: return NexusColor.Status.danger.opacity(0.06)
+        case .positive: return NexusColor.Status.success.opacity(0.10)
         }
     }
 
@@ -101,8 +110,11 @@ public struct NexusChip: View {
         // the single active/selected state. Never on neutral chrome.
         case .accent: return NexusColor.Accent.lime.opacity(0.45)
         // Neutral hairline rim for every resting chip.
-        case .neutral, .rose, .positive, .negative, .warning:
-            return NexusColor.Line.hairline
+        case .neutral: return NexusColor.Line.hairline
+        // Subtle tinted rim, paired with the faint wash above.
+        case .rose, .negative: return NexusColor.Status.danger.opacity(0.30)
+        case .warning: return NexusColor.Status.danger.opacity(0.22)
+        case .positive: return NexusColor.Status.success.opacity(0.30)
         }
     }
 }
