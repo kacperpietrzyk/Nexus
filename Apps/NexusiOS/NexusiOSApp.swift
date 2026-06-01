@@ -67,7 +67,12 @@ struct NexusiOSApp: App {
         self.aiGraph = graph
         self.aiRouter = graph.router
         Self.preloadWhisperKitIfRequested(router: self.aiRouter)
-        Self.preloadMLXIfRequested(router: self.aiRouter, lifecycle: graph.mlxLifecycle)
+        // Issue #51: MLX preload is NOT fired here. Loading weights submits a
+        // Metal command buffer, and at `init` the scene is not yet `.active`;
+        // a background submission is rejected by the OS and crashes the process
+        // via MLX's uncatchable C++ `throw`. The warmup is now driven by
+        // `MLXForegroundLifecycleModifier` on scenePhase `.active`, once the
+        // foreground gate is open.
         self.taskParser = TasksComposition.makeParser(router: self.aiRouter)
         let notifScheduler = TasksComposition.makeNotificationScheduler()
         self.notificationScheduler = notifScheduler
@@ -134,7 +139,7 @@ struct NexusiOSApp: App {
     /// availability/load cycle). Mirrors the Mac path exactly — see
     /// `NexusMacApp.preloadMLXIfRequested` for the chat-toggle /
     /// embedder-no-toggle / first-launch-guard rationale.
-    private static func preloadMLXIfRequested(
+    fileprivate static func preloadMLXIfRequested(
         router: AIRouter,
         lifecycle: MLXLifecycleController
     ) {
@@ -529,6 +534,12 @@ private struct NexusiOSRootView: View {
                     agentComposition: agentComposition
                 )
             )
+            .modifier(
+                MLXForegroundLifecycleModifier(
+                    aiRouter: aiRouter,
+                    mlxLifecycle: mlxLifecycle
+                )
+            )
             .modifier(NotificationPermissionLifecycleModifier(permissionState: $permissionState))
             .modifier(
                 WatchRelayLifecycleModifier(
@@ -599,6 +610,52 @@ private struct TombstonePurgeLifecycleModifier: ViewModifier {
                 await scheduler.runDue()
                 NexusiOSApp.scheduleNextBGTask()
             }
+    }
+}
+
+/// Issue #51: drives the MLX foreground gate + warmup off scenePhase.
+///
+/// MLX (Metal) GPU command buffers submitted while the app is not
+/// foreground-active are rejected by the OS and crash the process via MLX's
+/// uncatchable C++ `throw` → `std::terminate`. The gate
+/// (`MLXLifecycleController.setForegroundActive`) lets the engines refuse GPU
+/// dispatch with a catchable Swift error whenever the scene is not `.active`,
+/// and the warmup that used to run at `init` is deferred here to the first
+/// `.active` transition so it never fires during a background launch.
+private struct MLXForegroundLifecycleModifier: ViewModifier {
+    @Environment(\.scenePhase) private var scenePhase
+
+    let aiRouter: AIRouter
+    let mlxLifecycle: MLXLifecycleController
+
+    func body(content: Content) -> some View {
+        content
+            // `.task` covers the launch value — `.onChange` does NOT fire for
+            // the initial scenePhase on a cold launch (mirrors
+            // `AgentLifecycleModifier`).
+            .task {
+                if scenePhase == .active {
+                    activateMLX()
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    activateMLX()
+                } else {
+                    // `.inactive` / `.background`: close the gate so any in-flight
+                    // route/preload/embed refuses to submit GPU work.
+                    mlxLifecycle.setForegroundActive(false)
+                }
+            }
+    }
+
+    /// Open the gate FIRST, then warm — the detached preload tasks call into the
+    /// engines, which check `isForegroundActive` and would otherwise no-op.
+    /// Both the gate write and `preloadMLXIfRequested` are idempotent, so
+    /// repeated `.active` transitions are safe.
+    private func activateMLX() {
+        mlxLifecycle.setForegroundActive(true)
+        NexusiOSApp.preloadMLXIfRequested(router: aiRouter, lifecycle: mlxLifecycle)
     }
 }
 

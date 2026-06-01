@@ -45,6 +45,22 @@ public final class MLXLifecycleController: Sendable {
         /// Cleared back to `nil` if the device heats up again before the
         /// window expires, resetting the countdown.
         var thermalNominalSince: Date?
+        /// Whether the app is currently foreground-active. When `false`, every
+        /// MLX GPU entry point (chat preload/generate, embedder preload/embed)
+        /// MUST refuse to dispatch: Metal command buffers submitted while the
+        /// app is not foreground are rejected by the OS
+        /// (`kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted`),
+        /// and MLX surfaces that as an uncatchable C++ `throw` →
+        /// `std::terminate` → SIGABRT on its internal serial queue (issue #51).
+        /// Prevention at dispatch time is the only fix. Defaults `true` on
+        /// macOS (no background-GPU restriction) and `false` elsewhere (the
+        /// scene is not active at launch; the scenePhase observer opens the
+        /// gate once the app is genuinely `.active`).
+        ///
+        /// The struct default is overwritten by `init` from the
+        /// `initiallyForeground` parameter; it exists only so `State()` is
+        /// default-constructible for the `Mutex(State())` stored initializer.
+        var foregroundActive = true
     }
 
     private let state = Mutex(State())
@@ -73,6 +89,11 @@ public final class MLXLifecycleController: Sendable {
         embedderIdleTimeout: Duration = .seconds(3600),
         thermalRecoveryWindow: Duration = .seconds(300),
         nowProvider: @escaping @Sendable () -> Date = { Date() },
+        /// Initial foreground-gate state. Defaults to the platform default
+        /// (``defaultInitialForeground()``: `true` on macOS, `false`
+        /// elsewhere). Tests override it to exercise the gate on the macOS
+        /// host without a real scene.
+        initiallyForeground: Bool = MLXLifecycleController.defaultInitialForeground(),
         /// Pass `false` in tests to drive the idle sweep deterministically via
         /// ``tickIdleSweep()`` instead of relying on wall-clock timing.
         startSweep: Bool = true
@@ -83,6 +104,7 @@ public final class MLXLifecycleController: Sendable {
         self.embedderIdleTimeout = embedderIdleTimeout
         self.thermalRecoveryWindow = thermalRecoveryWindow
         self.nowProvider = nowProvider
+        self.state.withLock { $0.foregroundActive = initiallyForeground }
 
         if startSweep {
             let task = Task { [weak self] in
@@ -134,6 +156,18 @@ public final class MLXLifecycleController: Sendable {
         return .seconds(120)
         #else
         return .seconds(600)
+        #endif
+    }
+
+    /// Platform default for the foreground gate (issue #51). macOS has no
+    /// background-GPU restriction, so the gate starts open; every other
+    /// platform starts closed (the scene is not `.active` at launch) and is
+    /// opened by the app's scenePhase observer via ``setForegroundActive(_:)``.
+    public static func defaultInitialForeground() -> Bool {
+        #if os(macOS)
+        return true
+        #else
+        return false
         #endif
     }
 
@@ -216,6 +250,25 @@ public final class MLXLifecycleController: Sendable {
             $0.chat = .empty
             $0.embedder = .empty
         }
+    }
+
+    // MARK: - Foreground gate (issue #51)
+
+    /// Whether MLX GPU work may be dispatched right now.
+    ///
+    /// Synchronous, zero-suspension accessor backed by the `Mutex<State>` —
+    /// callable from the engine GPU entry points on any thread/actor without an
+    /// actor hop. When `false`, the engines refuse to submit Metal command
+    /// buffers (which the OS rejects in the background, crashing the process via
+    /// MLX's uncatchable C++ `throw`).
+    public var isForegroundActive: Bool {
+        state.withLock { $0.foregroundActive }
+    }
+
+    /// Opens or closes the foreground gate. Driven by the app's scenePhase
+    /// observer: `true` on `.active`, `false` on `.inactive`/`.background`.
+    public func setForegroundActive(_ active: Bool) {
+        state.withLock { $0.foregroundActive = active }
     }
 
     // MARK: - Thermal backpressure

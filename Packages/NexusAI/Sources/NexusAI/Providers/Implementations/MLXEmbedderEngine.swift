@@ -16,6 +16,16 @@ public protocol MLXEmbedderGenerating: Sendable {
     func unload() async
 }
 
+// MARK: - Errors
+
+public enum MLXEmbedderEngineError: Error, Sendable {
+    /// The app is not foreground-active, so GPU work is refused (issue #51).
+    /// A *catchable* Swift error raised BEFORE any Metal command buffer is
+    /// submitted — the alternative is MLX's uncatchable C++ `throw` →
+    /// `std::terminate` when the OS rejects a background submission.
+    case backgrounded
+}
+
 // MARK: - Engine actor
 
 /// Caches a single loaded embedder across calls, mirroring `MLXChatEngine`'s
@@ -77,6 +87,13 @@ public actor MLXEmbedderEngine {
     }
 
     public func embed(text: String) async throws -> [Float] {
+        // Issue #51: refuse GPU work in the background BEFORE touching the idle
+        // clock or loading weights (the load + the `perform` closure both submit
+        // Metal command buffers the OS rejects when not foreground-active).
+        // `nil` lifecycle (stub tests) = no gate.
+        if let lifecycle, !lifecycle.isForegroundActive {
+            throw MLXEmbedderEngineError.backgrounded
+        }
         // Refresh the idle clock so active search/retrieval use is not swept
         // mid-operation. No-op when the slot is empty (Task-15 guard on touchEmbedder).
         lifecycle?.touchEmbedder()
@@ -88,6 +105,11 @@ public actor MLXEmbedderEngine {
     /// The single-flight `loadIfNeeded` already fires `markEmbedderLoaded()` on
     /// the winning path, so a bare load is the whole warmup.
     public func preload() async throws {
+        // Issue #51: gate the launch-time embedder warmup (loads weights →
+        // `MLX.eval`) behind the foreground state. `nil` lifecycle = no gate.
+        if let lifecycle, !lifecycle.isForegroundActive {
+            throw MLXEmbedderEngineError.backgrounded
+        }
         _ = try await loadIfNeeded()
     }
 
