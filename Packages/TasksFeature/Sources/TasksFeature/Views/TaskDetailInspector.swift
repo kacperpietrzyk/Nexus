@@ -11,8 +11,15 @@ public struct TaskDetailInspector: View {
     @Environment(\.modelContext) var modelContext
     @Environment(\.taskRepository) var repository
 
+    /// Field arrangement. `.column` is the single-column scroll (iOS sheet /
+    /// pushed view — the default). `.wide` is a 2-column, content-hugging layout
+    /// for the Mac centered modal, so the dialog is short and needs little/no
+    /// scrolling instead of a tall single-column stack.
+    public enum Layout { case column, wide }
+
     @Bindable public var task: TaskItem
     public let onClose: (() -> Void)?
+    public let layout: Layout
 
     @State private var allDay: Bool
     @State private var recurrenceChoice: RecurrenceChoice
@@ -25,9 +32,10 @@ public struct TaskDetailInspector: View {
     @State var parentTaskPicker = TaskParentPickerState()
     @State var subtaskActionError: String?
 
-    public init(task: TaskItem, onClose: (() -> Void)? = nil) {
+    public init(task: TaskItem, onClose: (() -> Void)? = nil, layout: Layout = .column) {
         self._task = Bindable(task)
         self.onClose = onClose
+        self.layout = layout
         self._allDay = State(initialValue: task.startAt == nil)
         self._recurrenceChoice = State(
             initialValue: RecurrenceChoice.from(rrule: task.recurrenceRule)
@@ -46,45 +54,29 @@ public struct TaskDetailInspector: View {
     }
 
     public var body: some View {
-        ZStack {
-            NexusWallpaper()
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    headerCard
-                    aiAssistCard
-                    scheduleCard
-                    deadlineCard
-                    recurrenceCard
-                    linksCard
-                    notesCard
-                }
-                .padding(20)
+        layoutBody
+            .background(NexusColor.Background.base)
+            // This panel hosts in a detached overlay (Mac modal) / sheet that does
+            // NOT inherit the app-root `.tint`, so its native controls (segmented
+            // Priority picker, toggles, DatePickers) would fall back to system blue.
+            // Re-assert the achromatic control tint here (lime stays for actions).
+            .tint(NexusColor.Text.primary)
+            .navigationTitle(task.title.isEmpty ? "Task" : task.title)
+            .task { loadLinkState() }
+            .onChange(of: task.id) { _, _ in
+                // View identity is reused across selection swaps (no `.id(task.id)`)
+                // so `init` won't re-run — resync derived state, else an edit writes
+                // the previous task's all-day/recurrence onto the new one.
+                resyncDerivedState()
+                loadLinkState()
             }
-            .scrollContentBackground(.hidden)
-        }
-        .background(NexusColor.Background.base)
-        // This panel hosts in a detached overlay (Mac peek) / sheet that does
-        // NOT inherit the app-root `.tint`, so its native controls (segmented
-        // Priority picker, toggles, DatePickers) would fall back to system blue.
-        // Re-assert the achromatic control tint here (lime stays for actions).
-        .tint(NexusColor.Text.primary)
-        .navigationTitle(task.title.isEmpty ? "Task" : task.title)
-        .task { loadLinkState() }
-        .onChange(of: task.id) { _, _ in
-            // View identity is reused across selection swaps (no `.id(task.id)`)
-            // so `init` won't re-run — resync derived state, else an edit writes
-            // the previous task's all-day/recurrence onto the new one.
-            resyncDerivedState()
-            loadLinkState()
-        }
-        .onKeyPress(.escape) {
-            onClose?()
-            return onClose == nil ? .ignored : .handled
-        }
+            .onKeyPress(.escape) {
+                onClose?()
+                return onClose == nil ? .ignored : .handled
+            }
     }
 
-    private var headerCard: some View {
+    var headerCard: some View {
         inspectorCard("Task") {
             HStack(alignment: .top, spacing: 8) {
                 TextField("Title", text: $task.title, axis: .vertical)
@@ -138,13 +130,13 @@ public struct TaskDetailInspector: View {
         }
     }
 
-    private var aiAssistCard: some View {
+    var aiAssistCard: some View {
         inspectorCard("AI Assist") {
             TaskAssistButtonGroup(task: task)
         }
     }
 
-    private var scheduleCard: some View {
+    var scheduleCard: some View {
         inspectorCard("Schedule") {
             Toggle("All-day", isOn: $allDay)
                 .onChange(of: allDay) { _, isAllDay in
@@ -207,7 +199,7 @@ public struct TaskDetailInspector: View {
         }
     }
 
-    private var recurrenceCard: some View {
+    var recurrenceCard: some View {
         inspectorCard("Recurrence") {
             Picker("Repeat", selection: $recurrenceChoice) {
                 ForEach(RecurrenceChoice.allCases) { choice in
@@ -240,7 +232,7 @@ public struct TaskDetailInspector: View {
         }
     }
 
-    private var notesCard: some View {
+    var notesCard: some View {
         inspectorCard("Notes") {
             TextEditor(text: $task.body)
                 .font(NexusType.body)
@@ -471,7 +463,7 @@ extension TaskDetailInspector {
         }
     }
 
-    fileprivate var deadlineCard: some View {
+    var deadlineCard: some View {
         inspectorCard("Deadline") {
             Toggle("Deadline", isOn: deadlineEnabledBinding)
 

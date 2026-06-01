@@ -43,37 +43,53 @@ extension ContentView {
         }
     }
 
-    /// SUB-A floating peek. Gated on the UNCHANGED `inspectorBinding` /
+    /// Task detail as a CENTERED MODAL (replaces the old trailing ~360 peek,
+    /// which was too narrow for the inspector's rich content — title, priority,
+    /// AI assist, schedule, deadline, recurrence, tags, notes). A dimmed scrim
+    /// (tap to dismiss) focuses a ~580-wide height-capped dialog over the list.
+    ///
+    /// Gated on the UNCHANGED `inspectorBinding` /
     /// `InspectorVisibility.shouldShowInspector(...)` predicate (so §1
-    /// "inspector ⊥ Agent" still holds and its test is untouched). A fixed
-    /// ~360-wide raised panel floats over the content's trailing edge with a
-    /// small inset; the list behind stays fully interactive (no scrim). The
-    /// `pop` shadow separates it. Slides in from trailing. `.tint(Text.primary)`
-    /// keeps the inspector's native segmented Priority picker / DatePickers /
-    /// Steppers / toggles achromatic — the main-window tint does NOT reach a
-    /// detached overlay any more than it reached the old `.inspector`. Esc and
-    /// the inner close button both clear `selectedTask`.
+    /// "inspector ⊥ Agent" still holds and its test is untouched). The hosted
+    /// `TaskDetailInspector` is reused verbatim (all field logic + auto-save) and
+    /// is shared with iOS, so its single-column internals are NOT reshaped here —
+    /// only the container changes. It paints its own base background + wallpaper,
+    /// clipped to the dialog's rounded rect, and scrolls internally past the cap.
+    /// `.tint(Text.primary)` keeps its native segmented Priority picker /
+    /// DatePickers / toggles achromatic. Escape closes via the inspector's own
+    /// `.cancelAction` close button (no duplicate key-equivalent here); the scrim
+    /// tap and the × both clear `selectedTask`.
     @ViewBuilder
-    var taskPeek: some View {
+    var taskModal: some View {
         if inspectorBinding.wrappedValue, let task = selectedTask {
-            TaskDetailInspector(task: task, onClose: { selectedTask = nil })
-                .frame(width: 360)
-                .frame(maxHeight: .infinity)
-                .background(NexusColor.Background.panel)
-                .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
-                        .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
-                )
-                .nexusShadow(NexusShadow.pop)
-                .tint(NexusColor.Text.primary)
-                .padding(.trailing, 9)
-                .padding(.bottom, 9)
-                // Top inset clears the shell's ~52pt top-bar band (18/11 padding
-                // + content) so the peek does NOT cover the trailing "New Task"
-                // button / breadcrumbs while a task is selected.
-                .padding(.top, 60)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+            GeometryReader { geo in
+                ZStack {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture { selectedTask = nil }
+
+                    TaskDetailInspector(task: task, onClose: { selectedTask = nil }, layout: .wide)
+                        .frame(width: 720)
+                        // Hug the content height when short, cap + scroll when tall:
+                        // `fixedSize` lets the wide ScrollView adopt its content
+                        // height (so a simple task is a short dialog, not a tall
+                        // stretched one), and `maxHeight` clamps it to the window so
+                        // a link-heavy task scrolls inside the cap instead of
+                        // overflowing past the title.
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxHeight: max(240, geo.size.height - 80))
+                        .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+                                .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                        )
+                        .nexusShadow(NexusShadow.pop)
+                        .tint(NexusColor.Text.primary)
+                        .transition(.scale(scale: 0.97).combined(with: .opacity))
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+            }
         }
     }
 

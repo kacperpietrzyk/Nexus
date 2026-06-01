@@ -76,10 +76,11 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .containerBackground(NexusColor.Background.base, for: .window)
-        // SUB-A: list stays FULL-WIDTH; the detail panel FLOATS over the right
-        // edge as a Linear-style peek (see `taskPeek`). Gated on the UNCHANGED
-        // `inspectorBinding` predicate (§1 "inspector ⊥ Agent" + its test hold).
-        .overlay(alignment: .trailing) { taskPeek }
+        // List stays FULL-WIDTH; task detail opens as a CENTERED MODAL over a
+        // dimmed scrim (see `taskModal`) — the old trailing peek was too narrow
+        // for the inspector's content. Gated on the UNCHANGED `inspectorBinding`
+        // predicate (§1 "inspector ⊥ Agent" + its test hold).
+        .overlay { taskModal }
         .animation(NexusMotion.standard, value: inspectorBinding.wrappedValue)
         .sheet(item: $customSnoozeTask) { task in
             CustomSnoozeSheet(task: task)
@@ -450,7 +451,7 @@ struct ContentView: View {
         return try? modelContext.fetch(descriptor).first
     }
 
-    // Internal: read by `taskPeek` in the `ContentView+CaptureAndPeek` extension.
+    // Internal: read by `taskModal` in the `ContentView+CaptureAndPeek` extension.
     // Defense-in-depth for the §1 "inspector ⊥ Agent" invariant — routes the
     // visibility decision through the pure `InspectorVisibility` predicate so it
     // holds even if state lags a frame and is unit-testable without SwiftUI.
