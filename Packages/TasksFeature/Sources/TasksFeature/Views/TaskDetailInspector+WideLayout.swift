@@ -48,22 +48,23 @@ extension TaskDetailInspector {
     /// the dialog tall and scroll-heavy. It remains in the `.column` layout. A
     /// compact link affordance for the modal is a follow-up.
     var wideBody: some View {
-        ScrollView {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 16) {
-                    headerCard
-                    scheduleCard
-                    deadlineCard
-                }
-                VStack(alignment: .leading, spacing: 16) {
-                    aiAssistCard
-                    recurrenceCard
-                    notesCard
-                }
+        // NO ScrollView: a plain HStack has an intrinsic height, so the host
+        // modal sizes to the content (a short dialog, no phantom scrollbar). A
+        // ScrollView would instead fill the host frame and show a scroll
+        // indicator over empty space.
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) {
+                headerCard
+                scheduleCard
+                deadlineCard
             }
-            .padding(20)
+            VStack(alignment: .leading, spacing: 16) {
+                aiAssistCard
+                recurrenceCard
+                notesCard
+            }
         }
-        .scrollContentBackground(.hidden)
+        .padding(20)
         .background(NexusWallpaper())
     }
 }

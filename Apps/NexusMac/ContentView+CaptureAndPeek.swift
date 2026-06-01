@@ -62,33 +62,28 @@ extension ContentView {
     @ViewBuilder
     var taskModal: some View {
         if inspectorBinding.wrappedValue, let task = selectedTask {
-            GeometryReader { geo in
-                ZStack {
-                    Color.black.opacity(0.5)
-                        .ignoresSafeArea()
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedTask = nil }
+            ZStack {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectedTask = nil }
 
-                    TaskDetailInspector(task: task, onClose: { selectedTask = nil }, layout: .wide)
-                        .frame(width: 720)
-                        // Hug the content height when short, cap + scroll when tall:
-                        // `fixedSize` lets the wide ScrollView adopt its content
-                        // height (so a simple task is a short dialog, not a tall
-                        // stretched one), and `maxHeight` clamps it to the window so
-                        // a link-heavy task scrolls inside the cap instead of
-                        // overflowing past the title.
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxHeight: max(240, geo.size.height - 80))
-                        .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
-                                .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
-                        )
-                        .nexusShadow(NexusShadow.pop)
-                        .tint(NexusColor.Text.primary)
-                        .transition(.scale(scale: 0.97).combined(with: .opacity))
-                }
-                .frame(width: geo.size.width, height: geo.size.height)
+                // The wide inspector has an intrinsic (content) height, so the
+                // dialog sizes to its content — short task → short modal, no
+                // phantom scrollbar. `maxHeight` only CAPS (it never stretches an
+                // intrinsically-sized view), keeping a very tall task off the
+                // window edges.
+                TaskDetailInspector(task: task, onClose: { selectedTask = nil }, layout: .wide)
+                    .frame(width: 720)
+                    .frame(maxHeight: 760)
+                    .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+                            .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                    )
+                    .nexusShadow(NexusShadow.pop)
+                    .tint(NexusColor.Text.primary)
+                    .transition(.scale(scale: 0.97).combined(with: .opacity))
             }
         }
     }
