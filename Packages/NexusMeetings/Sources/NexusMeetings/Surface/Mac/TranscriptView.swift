@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import NexusUI
 import SwiftData
 import SwiftUI
 
@@ -143,28 +144,39 @@ private struct TranscriptSegmentRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(Self.timestamp(from: segment.startMs))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(NexusType.metaMono)
+                    .monospacedDigit()
+                    .foregroundStyle(NexusColor.Text.disabled)
 
                 if isReadOnly {
                     Text(displayName)
-                        .font(.subheadline.weight(.semibold))
+                        .font(Font.custom("Inter-Medium", size: 12))
+                        .foregroundStyle(NexusColor.Text.secondary)
                 } else {
                     Menu {
                         Button("Rename…", action: onRename)
                     } label: {
-                        Text(displayName)
-                            .font(.subheadline.weight(.semibold))
+                        HStack(spacing: 4) {
+                            Text(displayName)
+                                .font(Font.custom("Inter-Medium", size: 12))
+                                .foregroundStyle(NexusColor.Text.secondary)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 7, weight: .semibold))
+                                .foregroundStyle(NexusColor.Text.muted)
+                        }
                     }
                     #if os(macOS)
                     .menuStyle(.borderlessButton)
                     #endif
+                    .fixedSize()
                 }
             }
 
             Text(segment.text)
-                .font(.body)
+                .font(NexusType.bodySmall)
+                .foregroundStyle(NexusColor.Text.secondary)
                 .textSelection(.enabled)
+                .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -205,7 +217,7 @@ private struct RenameSpeakerSheet: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NexusColor.Status.danger)
             }
 
             HStack {

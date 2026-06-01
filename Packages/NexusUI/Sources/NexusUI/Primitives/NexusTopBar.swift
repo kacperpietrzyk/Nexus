@@ -23,8 +23,8 @@ public struct NexusTopBar<Trailing: View>: View {
     }
 
     public var body: some View {
-        // LabKit `LabTopBar`: a glass capsule pill (no fixed height, no
-        // bottom hairline — the glass rim is the edge). Layout of
+        // Linear top bar: a flat `Background.panel` chrome strip with a single
+        // 1px `Line.hairline` bottom rim — no glass, no capsule. Layout of
         // crumbs/search/cmdK/trailing is unchanged.
         HStack(spacing: 14) {
             breadcrumbs
@@ -39,7 +39,12 @@ public struct NexusTopBar<Trailing: View>: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 11)
-        .nexusGlass(.regular, in: Capsule())
+        .background(NexusColor.Background.panel)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(NexusColor.Line.hairline)
+                .frame(height: 1)
+        }
     }
 
     private var breadcrumbs: some View {
@@ -51,8 +56,10 @@ public struct NexusTopBar<Trailing: View>: View {
                         .foregroundStyle(NexusColor.Text.muted)
                 }
 
+                // The active (last) crumb is the page title — Porcelain ink,
+                // h3 weight; ancestors recede to Storm Cloud body.
                 Text(crumb)
-                    .font(index == crumbs.count - 1 ? NexusType.body.weight(.semibold) : NexusType.body)
+                    .font(index == crumbs.count - 1 ? NexusType.h3 : NexusType.body)
                     .foregroundStyle(index == crumbs.count - 1 ? NexusColor.Text.primary : NexusColor.Text.secondary)
             }
         }
@@ -72,22 +79,26 @@ public struct NexusTopBar<Trailing: View>: View {
                 Spacer(minLength: 8)
 
                 // LabKit `LabCommandBar` ⌘K chip idiom.
+                // ⌘K chip: Gunmetal (`Line.strong`) fill, mono ink, 4px radius.
                 Text("⌘K")
                     .font(NexusType.mono)
                     .foregroundStyle(NexusColor.Text.tertiary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(
-                        Color.white.opacity(0.08),
-                        in: RoundedRectangle(cornerRadius: 4)
+                        NexusColor.Line.strong,
+                        in: RoundedRectangle(cornerRadius: NexusRadius.badge)
                     )
             }
             .padding(.horizontal, 12)
             .frame(height: Self.searchHeight)
             .frame(minWidth: Self.searchMinWidth)
-            .background(Color.white.opacity(0.065), in: Capsule())
+            .background(
+                NexusColor.Background.control,
+                in: RoundedRectangle(cornerRadius: NexusRadius.r1)
+            )
             .overlay {
-                Capsule()
+                RoundedRectangle(cornerRadius: NexusRadius.r1)
                     .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
             }
         }

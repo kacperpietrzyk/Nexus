@@ -275,11 +275,11 @@ public struct AgentChatView: View {
                         .foregroundStyle(NexusColor.Text.muted)
                         .frame(width: 12, height: 12)
 
-                    // Oracle `eyebrow(_:)`: `GeistMono-SemiBold` 10 / tracking
+                    // Oracle `eyebrow(_:)`: mono SemiBold 10 / tracking
                     // 1.8 / §2 `faint` → `Text.muted`, optically lifted here
                     // so the rail remains discoverable over the dark wallpaper.
                     Text("RECENT TOOLS")
-                        .font(Font.custom("GeistMono-SemiBold", size: 10))
+                        .font(Font.custom("IBMPlexMono-SemiBold", size: 10))
                         .tracking(1.8)
                         .foregroundStyle(NexusColor.Text.tertiary)
                 }
@@ -289,12 +289,12 @@ public struct AgentChatView: View {
                         toolRow(row)
                     }
                 } else {
-                    // Oracle empty branch: `Geist-Regular` 12 / §2 `dim` →
-                    // `Text.disabled`. Fires when there is no thread OR no
+                    // Oracle empty branch: meta 12 / §2 `dim` →
+                    // `Text.muted`. Fires when there is no thread OR no
                     // §10-reachable tool call yet (both fall here — a thread
                     // with no tool messages must not render a blank body).
                     Text("No activity")
-                        .font(Font.custom("Geist-Regular", size: 12))
+                        .font(NexusType.meta)
                         .foregroundStyle(NexusColor.Text.muted)
                 }
             }
@@ -344,11 +344,11 @@ public struct AgentChatView: View {
     /// One rail row — the oracle `tool(_:_:_:)` layout minus the §10-OMITTED
     /// `detail` (and its fake `"·"` separator), name + age only. §2:
     /// `soft → Text.tertiary` for the name, `dim → Text.disabled` for the
-    /// age; both `GeistMono` at size 10 verbatim from the oracle.
+    /// age; both IBMPlexMono SemiBold at size 10.
     private func toolRow(_ row: AgentRecentToolRow) -> some View {
         HStack(spacing: 8) {
             Text(row.name)
-                .font(Font.custom("GeistMono-SemiBold", size: 10))
+                .font(Font.custom("IBMPlexMono-SemiBold", size: 10))
                 .foregroundStyle(NexusColor.Text.tertiary)
             Spacer()
             Text(row.age)

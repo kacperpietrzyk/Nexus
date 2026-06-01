@@ -7,21 +7,21 @@ import Testing
     #expect(files.count == 8)
     #expect(
         Set(files) == [
-            "Geist-Regular",
-            "Geist-Medium",
-            "Geist-SemiBold",
-            "Geist-Bold",
-            "GeistMono-Regular",
-            "GeistMono-Medium",
-            "GeistMono-SemiBold",
-            "GeistMono-Bold",
+            "Inter-Regular",
+            "Inter-Medium",
+            "Inter-SemiBold",
+            "Inter-Bold",
+            "IBMPlexMono-Regular",
+            "IBMPlexMono-Medium",
+            "IBMPlexMono-SemiBold",
+            "IBMPlexMono-Bold",
         ])
 }
 
 @Test func fontRegistration_doesNotReferencePreviousFontFamilies() {
     let files = NexusFontRegistration.fontFiles.joined(separator: " ")
-    #expect(!files.contains("Inter"))
-    #expect(!files.contains("InterTight"))
+    #expect(!files.contains("Geist"))
+    #expect(!files.contains("GeistMono"))
     #expect(!files.contains("JetBrains"))
     #expect(!files.contains("JetBrainsMono"))
 }

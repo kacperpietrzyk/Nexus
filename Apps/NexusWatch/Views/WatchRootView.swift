@@ -17,51 +17,48 @@ struct WatchRootView: View {
     }
 
     var body: some View {
-        ZStack {
-            NexusWallpaper()
-            NavigationStack {
-                WatchAgendaView(
-                    onCapture: { captureSheetPresented = true },
-                    onAskNexus: { askNexusSheetPresented = true }
-                )
-                .navigationTitle("Nexus")
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            askNexusSheetPresented = true
-                        } label: {
-                            Label("Ask Nexus", systemImage: "sparkles")
-                        }
+        NavigationStack {
+            WatchAgendaView(
+                onCapture: { captureSheetPresented = true },
+                onAskNexus: { askNexusSheetPresented = true }
+            )
+            .navigationTitle("Nexus")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        askNexusSheetPresented = true
+                    } label: {
+                        Label("Ask Nexus", systemImage: "sparkles")
                     }
+                }
 
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            captureSheetPresented = true
-                        } label: {
-                            Label("Capture", systemImage: "mic.fill")
-                        }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        captureSheetPresented = true
+                    } label: {
+                        Label("Capture", systemImage: "mic.fill")
                     }
                 }
-                .sheet(isPresented: $captureSheetPresented) {
-                    WatchCaptureView()
-                }
-                .sheet(isPresented: $askNexusSheetPresented) {
-                    AskNexusInputView()
-                }
-                .sheet(item: $customSnoozeTaskID) { id in
-                    WatchCustomSnoozeView(
-                        taskID: id,
-                        onCommit: { until in
-                            _Concurrency.Task { @MainActor in
-                                await actionHandler?.snoozeCustom(taskID: id, until: until)
-                                customSnoozeTaskID = nil
-                            }
-                        },
-                        onCancel: { customSnoozeTaskID = nil }
-                    )
-                }
-                .onOpenURL { url in handleURL(url) }
             }
+            .sheet(isPresented: $captureSheetPresented) {
+                WatchCaptureView()
+            }
+            .sheet(isPresented: $askNexusSheetPresented) {
+                AskNexusInputView()
+            }
+            .sheet(item: $customSnoozeTaskID) { id in
+                WatchCustomSnoozeView(
+                    taskID: id,
+                    onCommit: { until in
+                        _Concurrency.Task { @MainActor in
+                            await actionHandler?.snoozeCustom(taskID: id, until: until)
+                            customSnoozeTaskID = nil
+                        }
+                    },
+                    onCancel: { customSnoozeTaskID = nil }
+                )
+            }
+            .onOpenURL { url in handleURL(url) }
         }
     }
 

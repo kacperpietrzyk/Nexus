@@ -1,8 +1,11 @@
 import SwiftUI
 
-/// Top-edge refraction highlight over a glass surface.
+/// Edge rim over a surface.
 ///
-/// v4 contract: white 7% -> 0% over 0% -> 40% of the surface height.
+/// Retargeted for Linear "Midnight Command Center": a single flat 1px
+/// `Line.regular` stroke around the shape — no top-edge refraction gradient.
+/// The legacy refraction constants are retained as frozen-API guards (the body
+/// no longer reads them).
 public enum NexusGlassRimSpec {
     public static let topOpacity: Double = 0.07
     public static let fadeEndLocation: CGFloat = 0.4
@@ -17,22 +20,11 @@ public struct NexusGlassRim<S: Shape>: ViewModifier {
         self.shape = shape
     }
 
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
     public func body(content: Content) -> some View {
         content.overlay {
-            if !reduceTransparency {
-                LinearGradient(
-                    stops: [
-                        .init(color: NexusGlassRimSpec.refractionColor, location: 0),
-                        .init(color: .white.opacity(0), location: NexusGlassRimSpec.fadeEndLocation),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .clipShape(shape)
+            shape
+                .stroke(NexusColor.Line.regular, lineWidth: 1)
                 .allowsHitTesting(false)
-            }
         }
     }
 }

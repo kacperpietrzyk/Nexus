@@ -1,4 +1,5 @@
 import Foundation
+import NexusUI
 import Observation
 import SwiftUI
 
@@ -69,8 +70,16 @@ struct WatchCustomSnoozeView: View {
                     in: Date()...,
                     displayedComponents: [.date, .hourAndMinute]
                 )
-                Button("Snooze") { onCommit(state.selectedUntil) }
-                    .buttonStyle(.borderedProminent)
+                // Lime: single primary action on this surface (confirm snooze).
+                // limeInk foreground for contrast on lime fill.
+                Button {
+                    onCommit(state.selectedUntil)
+                } label: {
+                    Text("Snooze")
+                        .foregroundStyle(NexusColor.Accent.limeInk)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(NexusColor.Accent.lime)
                 Button("Cancel", role: .cancel) { onCancel() }
                     .buttonStyle(.bordered)
             }

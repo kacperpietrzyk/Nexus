@@ -135,17 +135,11 @@ struct WatchAgendaView: View {
                             .foregroundStyle(NexusColor.Text.primary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            // §3 value-changing: Text.primary.opacity(0.85)
-                            // is invalid here because the Capsule's own label
-                            // is Text.primary — same-tier label/bg collapse.
-                            // The achromatic translucent-surface token
-                            // Glass.surface3 (white.opacity(0.10)) is the
-                            // principled target: the MP-5.1e
-                            // Accent.soft→Glass.surface2 tile-bg class, one
-                            // tier up. Raw token, no .opacity() wrapper —
-                            // Glass.surface3 already carries its own alpha.
+                            // Linear flat: Background.raised is the principled
+                            // elevated surface for a floating undo banner on a
+                            // near-black Watch ground. No glass alpha needed.
                             .background(
-                                NexusColor.Glass.surface3,
+                                NexusColor.Background.raised,
                                 in: Capsule()
                             )
                     }
@@ -286,14 +280,17 @@ private struct WatchQuickActions: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            // Lime: single primary action on this surface (voice capture).
+            // limeInk foreground for contrast on the lime fill.
             Button(action: onCapture) {
                 Label("Capture", systemImage: "mic.fill")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(NexusColor.Accent.limeInk)
                     .frame(maxWidth: .infinity, minHeight: 36)
             }
             .buttonStyle(.borderedProminent)
-            .tint(NexusColor.Text.secondary)
+            .tint(NexusColor.Accent.lime)
             .accessibilityLabel("Capture task")
 
             Button(action: onAskNexus) {
@@ -303,7 +300,7 @@ private struct WatchQuickActions: View {
                     .frame(maxWidth: .infinity, minHeight: 36)
             }
             .buttonStyle(.bordered)
-            .tint(NexusColor.Text.primary)
+            .tint(NexusColor.Text.secondary)
             .accessibilityLabel("Ask Nexus")
         }
     }

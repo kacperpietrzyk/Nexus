@@ -18,25 +18,45 @@ public struct NexusToast: View {
     }
 
     public var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 11))
-                .foregroundStyle(NexusColor.Text.tertiary)
-            Text(message)
-                .font(NexusType.meta)
-                .foregroundStyle(NexusColor.Text.secondary)
-            if undo {
-                Rectangle()
-                    .fill(Color.white.opacity(0.07))
-                    .frame(width: 1, height: 12)
-                Text("Undo")
+        HStack(spacing: 0) {
+            // Leading status stripe: lime for a primary confirmation, info for an
+            // undoable action. The stripe is the only colored accent on the toast.
+            Rectangle()
+                .fill(stripeColor)
+                .frame(width: 3)
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 11))
+                    .foregroundStyle(NexusColor.Text.tertiary)
+                Text(message)
                     .font(NexusType.meta)
                     .foregroundStyle(NexusColor.Text.primary)
+                if undo {
+                    Rectangle()
+                        .fill(NexusColor.Line.regular)
+                        .frame(width: 1, height: 12)
+                    Text("Undo")
+                        .font(NexusType.meta)
+                        .foregroundStyle(NexusColor.Text.primary)
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 11)
-        .nexusGlass(.elevated, in: Capsule())
+        .background(NexusColor.Background.raised)
+        .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)
+                .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
+        )
+        .nexusShadow(NexusShadow.pop)
+    }
+
+    /// The leading stripe color. A confirmation toast is the surface's single
+    /// primary action, so it earns the lime accent; an undoable action is
+    /// informational and uses the neutral `Status.info` cyan instead.
+    private var stripeColor: Color {
+        undo ? NexusColor.Status.info : NexusColor.Accent.lime
     }
 }
 

@@ -42,9 +42,10 @@ public struct InboxReaderPane: View {
             // Slice-2: neutral "nothing selected" state to the Inbox-oracle
             // §9 idiom. `LabEmptyState(tone: .neutral)` → dashed circle 28×28
             // (NO glyph — the 34×34 + glyph form is the .achievement tone;
-            // see self-review note), 380-wide centred, wrapped in the
-            // oracle's glass card (`.frame(height:460).padding(20).labGlass`
-            // → `nexusGlass`). Achievement full-inbox state is SLICE 4.
+            // see self-review note), 380-wide centred, wrapped in the flat
+            // Linear reader surface (`readerPaneSurface()` → `Background.raised`
+            // + one hairline stroke + `s1` shadow). Achievement full-inbox
+            // state is SLICE 4.
             neutralEmptyState
                 .readerPaneSurface()
         }
@@ -61,12 +62,12 @@ public struct InboxReaderPane: View {
                 .frame(height: 38)
                 .padding(.bottom, 18)
             Text(emptyState.title)
-                .font(Font.custom("Geist-SemiBold", size: 17))
+                .nexusType(.h3)
                 .foregroundStyle(NexusColor.Text.secondary)
                 .multilineTextAlignment(.center)
             if let subtitle = emptyState.subtitle {
                 Text(subtitle)
-                    .font(Font.custom("Geist-Regular", size: 12.5))
+                    .nexusType(.meta)
                     .foregroundStyle(NexusColor.Text.muted)
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
@@ -98,7 +99,8 @@ public struct InboxReaderPane: View {
                 .frame(height: 1)
                 .padding(.bottom, 18)
             actionPills(item)
-            // §10: AI-proposal block omitted — no backend reachable from this surface (deferred follow-up, tracked in counts §12).
+            // §10: AI-proposal block omitted — no backend reachable from this surface
+            // (deferred follow-up, tracked in counts §12).
         }
     }
 
@@ -109,7 +111,7 @@ public struct InboxReaderPane: View {
                 .font(.system(size: 10))
                 .foregroundStyle(NexusColor.Text.muted)
             Text(item.nexusInboxSourceLabel)
-                .font(Font.custom("GeistMono-SemiBold", size: 10))
+                .font(NexusType.metaMono)
                 .tracking(1.6)
                 .foregroundStyle(NexusColor.Text.muted)
             Spacer()
@@ -123,7 +125,7 @@ public struct InboxReaderPane: View {
     // 2. Title
     private func titleText(_ item: InboxItem) -> some View {
         Text(item.title)
-            .font(Font.custom("Geist-SemiBold", size: 19))
+            .font(Font.custom("Inter-SemiBold", size: 19))
             .foregroundStyle(NexusColor.Text.primary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 10)
@@ -132,7 +134,7 @@ public struct InboxReaderPane: View {
     // 3. Body — always rendered; empty string for bodyless items (§10: no placeholder copy)
     private func bodyText(_ item: InboxItem) -> some View {
         Text(item.body ?? "")
-            .font(Font.custom("Geist-Regular", size: 13))
+            .nexusType(.bodySmall)
             .foregroundStyle(NexusColor.Text.tertiary)
             .lineSpacing(4)
             .fixedSize(horizontal: false, vertical: true)
@@ -215,29 +217,15 @@ private struct InboxReaderPaneSurface: ViewModifier {
         content
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background {
+            .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(NexusColor.Background.raised.opacity(0.92))
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.052),
-                                Color.white.opacity(0.016),
-                                Color.black.opacity(0.040),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            }
+                    .fill(NexusColor.Background.raised)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
             }
-            .nexusGlassRim(cornerRadius: 18)
-            .shadow(color: Color.white.opacity(0.026), radius: 16, x: -2, y: -1)
-            .shadow(color: .black.opacity(0.40), radius: 20, x: -8, y: 9)
+            .nexusShadow(NexusShadow.s1)
     }
 }
 

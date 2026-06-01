@@ -57,55 +57,64 @@ public struct NexusChip: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, 11)
+        .padding(.horizontal, 6)
         .padding(.vertical, 4)
         .foregroundStyle(textColor)
-        .background(backgroundColor, in: Capsule(style: .continuous))
+        .background(backgroundColor, in: chipShape)
         .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(borderColor, lineWidth: 0.5)
+            chipShape
+                .strokeBorder(borderColor, lineWidth: 1)
         )
+    }
+
+    /// Linear tag/badge — flat 4 px corner (`NexusRadius.badge`), not a pill.
+    private var chipShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: NexusRadius.badge, style: .continuous)
     }
 
     internal var textColor: Color {
         switch tone {
-        case .neutral: return NexusColor.Text.tertiary
-        // Accent audit (spec §3): the strongest neutral chip — ink emphasis,
-        // no hue. `.accent` survives as an enum case (call-sites + MP-6) but
-        // renders achromatically here.
+        // `.accent` is the single active/selected chip — Porcelain ink paired
+        // with the lime rim below. Lime stays on the rim only (economy rule).
         case .accent: return NexusColor.Text.primary
-        // .rose ≡ .negative post-MP-6.3 (both Text.primary); cases preserved —
-        // §11 public-API byte-freeze, do not dedup.
-        case .rose: return NexusColor.Text.primary
-        case .positive: return NexusColor.Text.secondary
-        case .negative: return NexusColor.Text.primary
-        case .warning: return NexusColor.Text.secondary
+        // Neutral chrome (tags, P2/P3, future-due) recedes to Storm Cloud ink so
+        // the loud semantic tones below carry the hierarchy.
+        case .neutral: return NexusColor.Text.tertiary
+        // Restrained semantic ink — tinted text only; the fill/rim below stay
+        // faint so no chip ever reads as a saturated block. `.warning` shares
+        // the danger family (amber is forbidden — lime-adjacent).
+        case .rose, .negative, .warning: return NexusColor.Status.danger
+        case .positive: return NexusColor.Status.success
         }
     }
 
     internal var backgroundColor: Color {
         switch tone {
-        case .neutral: return Color.white.opacity(0.055)
-        case .accent: return Color.white.opacity(0.10)
-        // .rose ≡ .negative post-MP-6.3 (both Text.primary); cases preserved —
-        // §11 public-API byte-freeze, do not dedup.
-        case .rose: return NexusColor.Text.primary.opacity(0.12)
-        case .positive: return NexusColor.Text.secondary.opacity(0.14)
-        case .negative: return NexusColor.Text.primary.opacity(0.14)
-        case .warning: return NexusColor.Text.secondary.opacity(0.14)
+        // Active/selected reads via the lime rim, so keep a flat charcoal fill
+        // a half-step up from the resting chip for a contained lift.
+        case .accent: return NexusColor.Background.controlHover
+        // Resting metadata chips: flat control fill (#1C1D1F). No translucency.
+        case .neutral: return NexusColor.Background.control
+        // Very faint tinted wash — restrained, never a saturated fill.
+        case .rose, .negative: return NexusColor.Status.danger.opacity(0.10)
+        // Amber is forbidden (lime-adjacent) — soft caution is the faintest red,
+        // not amber. Lowest-intensity red in the danger family.
+        case .warning: return NexusColor.Status.danger.opacity(0.06)
+        case .positive: return NexusColor.Status.success.opacity(0.10)
         }
     }
 
     internal var borderColor: Color {
         switch tone {
+        // The one place lime is allowed on this primitive: a subtle rim marking
+        // the single active/selected state. Never on neutral chrome.
+        case .accent: return NexusColor.Accent.lime.opacity(0.45)
+        // Neutral hairline rim for every resting chip.
         case .neutral: return NexusColor.Line.hairline
-        case .accent: return Color.white.opacity(0.16)
-        // .rose ≡ .negative post-MP-6.3 (both Text.primary); cases preserved —
-        // §11 public-API byte-freeze, do not dedup.
-        case .rose: return NexusColor.Text.primary.opacity(0.35)
-        case .positive: return NexusColor.Text.secondary.opacity(0.40)
-        case .negative: return NexusColor.Text.primary.opacity(0.40)
-        case .warning: return NexusColor.Text.secondary.opacity(0.40)
+        // Subtle tinted rim, paired with the faint wash above.
+        case .rose, .negative: return NexusColor.Status.danger.opacity(0.30)
+        case .warning: return NexusColor.Status.danger.opacity(0.22)
+        case .positive: return NexusColor.Status.success.opacity(0.30)
         }
     }
 }

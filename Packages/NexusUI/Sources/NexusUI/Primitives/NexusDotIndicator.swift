@@ -20,44 +20,31 @@ public struct NexusDotIndicator: View {
         Circle()
             .fill(color)
             .frame(width: Self.side, height: Self.side)
-            .overlay { ringOverlay }
-            .shadow(
-                color: tone == .acc ? Color.white.opacity(0.10) : .clear,
-                radius: tone == .acc ? 8 : 0
-            )
     }
 
+    /// Linear is flat: a clean filled dot, no glow. Lime is reserved for the
+    /// single active/accent state; status tones carry semantic meaning; every
+    /// other tone resolves to the neutral Fog Grey ground.
     internal var color: Color {
         switch tone {
         case .acc:
-            return NexusColor.Text.primary
+            return NexusColor.Accent.lime
         case .pos:
-            return NexusColor.Text.secondary
+            return NexusColor.Status.success
         case .neg:
-            return NexusColor.Text.primary
+            return NexusColor.Status.danger
+        case .info:
+            return NexusColor.Status.info
         case .warn:
             return NexusColor.Text.secondary
-        case .info:
-            return NexusColor.Text.tertiary
         case .muted:
             return NexusColor.Text.muted
         }
     }
 
-    internal var ringColor: Color? {
-        switch tone {
-        case .acc:
-            return Color.white.opacity(0.10)
-        case .pos, .neg, .warn, .info, .muted:
-            return nil
-        }
-    }
-
-    @ViewBuilder private var ringOverlay: some View {
-        if let ringColor {
-            Circle().stroke(ringColor, lineWidth: 3)
-        }
-    }
+    /// Linear dots carry no ring — elevation comes from flat surfaces, not glows.
+    /// Retained as `nil` for every tone so the surface reads as a clean fill.
+    internal var ringColor: Color? { nil }
 
     internal static let side: CGFloat = 6
 }

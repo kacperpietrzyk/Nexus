@@ -158,7 +158,7 @@ extension TodayDashboard {
             .padding(.bottom, 20)
 
             Text("All clear")
-                .font(Font.custom("Geist-SemiBold", size: 22))
+                .font(Font.custom("Inter-SemiBold", size: 22))
                 .foregroundStyle(NexusColor.Text.primary)
                 .multilineTextAlignment(.center)
 
@@ -166,7 +166,7 @@ extension TodayDashboard {
                 "Nothing is waiting for you. The agent watches the background — "
                     + "it will reach out when something needs a decision."
             )
-            .font(Font.custom("Geist-Regular", size: 13.5))
+            .font(Font.custom("Inter-Regular", size: 13.5))
             .foregroundStyle(NexusColor.Text.tertiary)
             .multilineTextAlignment(.center)
             .lineSpacing(3)
@@ -272,7 +272,10 @@ extension TodayDashboard {
                 }
             }
         }
-        .frame(maxWidth: 620, alignment: .leading)
+        // Fill the freed content area (left-aligned with the chrome) up to the
+        // DAY rail instead of capping at a narrow 620 measure — the old cap left
+        // a dead centre void between the column and the timeline rail. Rows +
+        // sections breathe; the empty/achievement state keeps its own 420 cap.
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 26)
         .padding(.vertical, 24)
@@ -379,8 +382,11 @@ extension TodayDashboard {
             embeddedFocusPill(task)
         }
         .padding(20)
-        .nexusGlass(.regular, cornerRadius: 18)
-        .nexusGlassRim(cornerRadius: 18)
+        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+        }
         .nexusAppear(0)
     }
 
@@ -404,7 +410,11 @@ extension TodayDashboard {
             .foregroundStyle(NexusColor.Text.primary)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .nexusGlass(.regular, in: Capsule())
+            .background(NexusColor.Background.control, in: Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
     }

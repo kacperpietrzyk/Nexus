@@ -33,26 +33,21 @@ struct TasksTab: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                NexusWallpaper()
-                    .ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    Picker("", selection: $filter) {
-                        ForEach(Filter.allCases) { filter in
-                            Text(filter.rawValue).tag(filter)
-                        }
+            VStack(spacing: 0) {
+                Picker("", selection: $filter) {
+                    ForEach(Filter.allCases) { filter in
+                        Text(filter.rawValue).tag(filter)
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-
-                    TaskListView(filter: filter.toTaskFilter(), onSelect: onOpenTask)
-                        .padding(.top, 4)
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+                TaskListView(filter: filter.toTaskFilter(), onSelect: onOpenTask)
+                    .padding(.top, 4)
             }
             .navigationTitle("Tasks")
-            .toolbarBackground(.thinMaterial, for: .navigationBar)
+            .toolbarBackground(NexusColor.Background.base, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .scrollContentBackground(.hidden)
             .background(Color.clear)

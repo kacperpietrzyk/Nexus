@@ -36,20 +36,66 @@ public struct NexusRowQuickActions: View {
     public var body: some View {
         HStack(spacing: 6) {
             ForEach(actions) { quickAction in
-                Button(action: quickAction.action) {
-                    Image(systemName: quickAction.icon)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(NexusColor.Text.tertiary)
-                        .frame(width: 22, height: 22)
-                        .background(
-                            Color.white.opacity(0.10),
-                            in: RoundedRectangle(cornerRadius: 6)
-                        )
-                }
-                .buttonStyle(NexusPressableButtonStyle())
-                .accessibilityLabel(quickAction.accessibilityLabel ?? quickAction.icon)
+                QuickActionButton(quickAction: quickAction)
             }
         }
+    }
+}
+
+/// A single hover-reactive quick-action button. Private internal so the public
+/// `NexusRowQuickAction`/`NexusRowQuickActions` API stays frozen — this only
+/// carries the per-button hover state Linear's neutral→primary ink swap needs.
+private struct QuickActionButton: View {
+    let quickAction: NexusRowQuickAction
+
+    @State private var isHovered = false
+
+    /// Linear quick-actions are neutral hover chrome: Storm Cloud at rest,
+    /// Porcelain on hover. A destructive action (inferred from its icon, since
+    /// the model carries no role flag) instead resolves to Warning Red — but
+    /// only on hover, never at rest.
+    private var iconColor: Color {
+        guard isHovered else { return NexusColor.Text.tertiary }
+        return isDestructive ? NexusColor.Status.danger : NexusColor.Text.primary
+    }
+
+    /// Quick actions never use the lime accent (reserved for primary actions /
+    /// selection). The hover fill is a neutral raised surface, transparent at
+    /// rest so the cluster reads as ghost chrome.
+    private var backgroundColor: Color {
+        isHovered ? NexusColor.Background.controlHover : .clear
+    }
+
+    /// Heuristic: the model has no destructive role, so we infer it from the
+    /// SF Symbol the surface passed. Keeps the public API frozen while still
+    /// honoring the destructive-on-hover treatment if a delete action appears.
+    private var isDestructive: Bool {
+        let destructiveIcons: Set<String> = [
+            "trash", "trash.fill", "trash.slash", "xmark.bin", "xmark.bin.fill",
+        ]
+        return destructiveIcons.contains(quickAction.icon)
+    }
+
+    var body: some View {
+        Button(action: quickAction.action) {
+            Image(systemName: quickAction.icon)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(iconColor)
+                .frame(width: 22, height: 22)
+                .background(
+                    backgroundColor,
+                    in: RoundedRectangle(cornerRadius: NexusRadius.r1)
+                )
+        }
+        .buttonStyle(NexusPressableButtonStyle())
+        #if !os(watchOS)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+        #endif
+        .accessibilityLabel(quickAction.accessibilityLabel ?? quickAction.icon)
     }
 }
 

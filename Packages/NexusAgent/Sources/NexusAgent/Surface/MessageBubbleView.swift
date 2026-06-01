@@ -17,9 +17,10 @@ import SwiftUI
 // soft→`Text.tertiary` · faint→`Text.muted` · dim→`Text.disabled` ·
 // block→`Glass.surface1`.
 //
-// §8: raw `Font.custom("Geist-*"/"GeistMono-*", size:)` is the locked stopgap
-// for the sub-`NexusType`-scale oracle values (GeistMono-SemiBold-9/10,
-// Geist-Regular-14). Precedent: `AgentTopControl` / `AgentEmptyStateView`.
+// Fonts: Geist-* → Inter-*, GeistMono-* → IBMPlexMono-* per Linear redesign.
+// body-role (14 pt Regular) routes to NexusType.body; sub-scale mono (9/10 pt
+// SemiBold) and tool-row mono (10 pt SemiBold) use IBMPlexMono-SemiBold directly
+// (NexusType.metaMono is IBMPlexMono-Medium 10 pt — weight differs; preserve).
 
 struct MessageBubbleView: View {
     let block: AgentMessageBlock
@@ -41,14 +42,14 @@ struct MessageBubbleView: View {
     private var userBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(block.eyebrow)
-                .font(Font.custom("GeistMono-SemiBold", size: 9))
+                .font(Font.custom("IBMPlexMono-SemiBold", size: 9))
                 .tracking(2)
                 .foregroundStyle(NexusColor.Text.disabled)  // §2 dim
             // LabKit Phase1l#4 interim: strip the prepended OCR/attachment
             // markers so the user's own bubble shows what they typed (the
             // markers stay in persisted `content` for multi-turn context).
             Text(AgentOCRMarker.userFacingText(block.text))
-                .font(Font.custom("Geist-Regular", size: 14))
+                .font(NexusType.body)
                 .foregroundStyle(NexusColor.Text.secondary)  // §2 read
                 .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
@@ -70,7 +71,7 @@ struct MessageBubbleView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(block.eyebrow)
-                    .font(Font.custom("GeistMono-SemiBold", size: 9))
+                    .font(Font.custom("IBMPlexMono-SemiBold", size: 9))
                     .tracking(2)
                     .foregroundStyle(NexusColor.Text.muted)  // §2 faint
 
@@ -91,7 +92,7 @@ struct MessageBubbleView: View {
 
             if !block.text.isEmpty {
                 Text(block.text)
-                    .font(Font.custom("Geist-Regular", size: 14))
+                    .font(NexusType.body)
                     .foregroundStyle(NexusColor.Text.primary)  // §2 ink
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
@@ -129,15 +130,15 @@ struct MessageBubbleView: View {
                 .font(.system(size: 9))
                 .foregroundStyle(NexusColor.Text.muted)  // §2 faint
             Text(tool.name)
-                .font(Font.custom("GeistMono-SemiBold", size: 10))
+                .font(Font.custom("IBMPlexMono-SemiBold", size: 10))
                 .foregroundStyle(NexusColor.Text.tertiary)  // §2 soft
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            NexusColor.Glass.surface1,  // §2 block
-            in: RoundedRectangle(cornerRadius: 7)
+            NexusColor.Background.raised,
+            in: RoundedRectangle(cornerRadius: NexusRadius.r1)
         )
     }
 

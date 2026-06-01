@@ -23,9 +23,15 @@ public struct BacklinksView: View {
     public var body: some View {
         NexusCard(padding: 16) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Backlinks")
-                    .nexusType(.eyebrow)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                HStack(spacing: 7) {
+                    Text("Backlinks")
+                        .nexusType(.eyebrow)
+                        .foregroundStyle(NexusColor.Text.tertiary)
+                    if !items.isEmpty {
+                        NexusCount(value: items.count, font: NexusType.metaMono)
+                    }
+                    Spacer(minLength: 0)
+                }
 
                 if items.isEmpty {
                     Text(emptyMessage)

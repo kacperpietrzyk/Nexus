@@ -272,7 +272,7 @@ struct TaskAssistMenuSurface<MenuContent: View>: ViewModifier {
                     ProgressView()
                         .controlSize(.small)
                         .padding(6)
-                        .background(.thinMaterial, in: Circle())
+                        .background(NexusColor.Background.raised, in: Circle())
                         .padding(4)
                 }
             }

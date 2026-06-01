@@ -17,7 +17,7 @@ struct InboxTab: View {
                 onOpen: { item in onOpenItem(item) }
             )
             .navigationTitle("Inbox")
-            .toolbarBackground(.thinMaterial, for: .navigationBar)
+            .toolbarBackground(NexusColor.Background.base, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .scrollContentBackground(.hidden)
             .background(Color.clear)

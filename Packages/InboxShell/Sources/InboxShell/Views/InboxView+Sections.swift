@@ -67,13 +67,9 @@ enum InboxSectionBuilder {
 // MARK: - Layout geometry (Inbox oracle — NOT §3's single-column 620)
 
 enum InboxLayout {
-    /// Oracle LEFT list panel max content width (`Lab/InboxPreview.swift`
-    /// `.frame(maxWidth: 560)`). Distinct from §3's single-column 620 (Today
-    /// has one content column; Inbox is a 2-column surface — per the MP-2.2
-    /// §3 binding clarification, the section *idiom* is reused but the column
-    /// geometry comes from the Inbox oracle).
-    static let listMaxWidth: CGFloat = 560
-    /// Oracle RIGHT reader pane fixed width.
+    /// Oracle RIGHT reader pane fixed width. The LEFT list panel no longer caps
+    /// at a narrow 560 measure — it fills the space up to this reader pane
+    /// (left-aligned with the chrome) so there is no dead centre void.
     static let readerWidth: CGFloat = 380
 }
 
@@ -117,8 +113,9 @@ struct InboxListPanel: View {
                         )
                     }
                 }
-                .frame(maxWidth: InboxLayout.listMaxWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 26)
+                .padding(.trailing, 12)
                 .padding(.bottom, 24)
             }
         }
@@ -180,7 +177,7 @@ struct InboxPanelRow: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
                 Circle()
-                    .fill(isUnread ? NexusColor.Text.primary : Color.clear)
+                    .fill(isUnread ? NexusColor.Accent.lime : Color.clear)
                     .frame(width: 5, height: 5)
                     .padding(.top, 6)
                 Image(systemName: item.nexusInboxSourceIcon)
@@ -191,7 +188,7 @@ struct InboxPanelRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
                         Text(item.title)
-                            .font(Font.custom("Geist-Medium", size: 13))
+                            .font(Font.custom("Inter-Medium", size: 13))
                             .foregroundStyle(isUnread ? NexusColor.Text.primary : NexusColor.Text.secondary)
                             .lineLimit(1)
                         Spacer(minLength: 12)
@@ -201,7 +198,7 @@ struct InboxPanelRow: View {
                             .foregroundStyle(NexusColor.Text.disabled)
                     }
                     Text(item.body ?? "")
-                        .font(Font.custom("Geist-Regular", size: 12))
+                        .nexusType(.meta)
                         .foregroundStyle(NexusColor.Text.muted)
                         .lineLimit(1)
                 }
@@ -212,8 +209,8 @@ struct InboxPanelRow: View {
                 RoundedRectangle(cornerRadius: 7)
                     .fill(
                         isSelected
-                            ? NexusColor.Glass.surface1
-                            : (hover ? NexusColor.Background.controlHover : Color.clear)
+                            ? NexusColor.Background.controlHover
+                            : (hover ? NexusColor.Background.control : Color.clear)
                     )
             )
             .contentShape(Rectangle())
@@ -234,10 +231,10 @@ struct InboxPanelEmptyState: View {
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(NexusColor.Text.muted)
             Text(title)
-                .font(Font.custom("Geist-SemiBold", size: 18))
+                .nexusType(.h3)
                 .foregroundStyle(NexusColor.Text.secondary)
             Text(subtitle)
-                .font(Font.custom("Geist-Regular", size: 13))
+                .nexusType(.bodySmall)
                 .foregroundStyle(NexusColor.Text.muted)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)

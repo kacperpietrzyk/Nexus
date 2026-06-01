@@ -53,17 +53,19 @@ enum TodayDashboardContentRoute: Equatable {
     ///
     /// Audit B3 — user decision "global but refined": the DAY rail
     /// stays the single global right rail on routes that have no right
-    /// column of their own (`today`, `tasks`, `productivity`, `settings`),
+    /// column of their own (`today`, `productivity`, `settings`),
     /// but `inbox` (owns `InboxReaderPane`, fixed 380) and `meetings` (owns
     /// the meeting-detail pane) already render their own right pane, so
     /// also mounting the 320pt rail there produced a competing double-rail.
     /// On those two routes the rail yields to the route's own pane.
-    /// Pure decision — same testable-static precedent as `route(for:)`.
+    /// Linear redesign: `.tasks` joins the false group too — the Today-only
+    /// DAY timeline is always empty here and crushed the list; the freed
+    /// column is capped + hugged left at the `.tasks` route case instead.
     var showsEmbeddedTimelineRail: Bool {
         switch self {
-        case .today, .tasks, .productivity, .settings:
+        case .today, .productivity, .settings:
             return true
-        case .inbox, .meetings:
+        case .tasks, .inbox, .meetings:
             return false
         }
     }
@@ -267,27 +269,12 @@ public struct TodayDashboard: View {
                 .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             if showsTimelineRail {
                 // MP-2 slice-4: the embedded right rail is the Lab `DayTimeline`
-                // Canvas (see `+EmbeddedTimeline.swift`). The capture-pills +
-                // morning-digest `rightRail` is retained UNCHANGED and still
-                // mounted on the standalone / iOS-compact paths
-                // (`+Standalone.swift`); flipping this one line back to
-                // `rightRail.frame(width: 320)` fully reverses slice-4.
-                //
-                // MP-2 slice-5 — AUTHORITATIVE DELTA-STRIP OMISSION (this is the
-                // single canonical statement; the slice-4 header note in
-                // `+EmbeddedTimeline.swift` points here). The Lab oracle's right
-                // rail composes a "since you last looked" delta-strip BELOW the
-                // `DayTimeline` (oracle: `TodayHUDPreview.swift` — `DayTimeline`
-                // then `DeltaStrip`). It is INTENTIONALLY OMITTED from the
-                // embedded rail: a "since you last looked" feed requires
-                // persisted last-viewed state, which is new backend the §5
-                // invariants and `feedback_no_canvas_emulation_without_backend`
-                // forbid this migration from inventing. Tracked follow-up that
-                // rolls into MP-2.2 pattern-lock / the controller (MP-6.5),
-                // bundled with the same-family achievement-state telemetry pill
-                // omission (today-scoped `AgentActivityLog` count — see
-                // `embeddedEmptyState` in `+EmbeddedToday.swift`). The rail is
-                // therefore `DayTimeline`-only by design.
+                // Canvas (see `+EmbeddedTimeline.swift`); flipping this line back
+                // to `rightRail.frame(width: 320)` fully reverses slice-4. The
+                // oracle's "since you last looked" delta-strip below the timeline
+                // is INTENTIONALLY OMITTED (it needs persisted last-viewed state —
+                // new backend the §5 invariants + `no_canvas_emulation_without_backend`
+                // forbid). Tracked into MP-2.2 / MP-6.5; rail is `DayTimeline`-only.
                 embeddedTimelineRail
                     .padding(.trailing, 26)
             }
@@ -392,7 +379,17 @@ public struct TodayDashboard: View {
                 )
             }
         case .tasks:
+            // Freed column (the always-empty DAY rail is dropped for `.tasks`):
+            // the list fills the content width — left-aligned with the chrome
+            // (breadcrumb + search), Linear-style full-width rows whose trailing
+            // meta forms a scannable right edge under the search bar. A generous
+            // 1280 safety cap keeps the title↔meta gap sane on ultra-wide
+            // monitors. Applied at the `.tasks` case only (NOT on `content`,
+            // which every route shares).
             TaskListView(filter: taskFilter, onSelect: onOpenTask)
+                .frame(maxWidth: 1280, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28)
         case .productivity:
             ProductivityDashboardView()
         case .settings:
@@ -517,8 +514,8 @@ public struct TodayDashboard: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(24)
-                .nexusGlass(.regular, cornerRadius: 20)
-                .nexusGlassRim(cornerRadius: 20)
+                .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(NexusColor.Line.regular, lineWidth: 1))
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 24)

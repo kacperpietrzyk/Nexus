@@ -16,7 +16,7 @@ public struct NexusAvatar: View {
             .frame(width: size, height: size)
             .background(backgroundColor, in: Circle())
             .overlay(Circle().strokeBorder(NexusColor.Line.hairline, lineWidth: 1))
-            .shadow(color: .black.opacity(0.30), radius: 2, y: 1)
+            .nexusShadow(NexusShadow.s1)
             .accessibilityLabel(name.isEmpty ? "Avatar" : name)
             .accessibilityHidden(name.isEmpty)
     }
@@ -32,11 +32,11 @@ public struct NexusAvatar: View {
     }
 
     internal var textColor: Color {
-        NexusColor.Text.primary
+        NexusColor.Text.secondary
     }
 
     internal var backgroundColor: Color {
-        NexusColor.Text.muted
+        NexusColor.Background.controlHover
     }
 }
 

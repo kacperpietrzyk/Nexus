@@ -8,12 +8,14 @@ public struct ItemRow: View {
     public let kind: ItemKind
     public let updatedAt: Date
     public let maxTitleLength: Int
+    public let isSelected: Bool
 
-    public init(item: any Linkable, maxTitleLength: Int = 80) {
+    public init(item: any Linkable, maxTitleLength: Int = 80, isSelected: Bool = false) {
         self.title = item.title
         self.kind = item.kind
         self.updatedAt = item.updatedAt
         self.maxTitleLength = maxTitleLength
+        self.isSelected = isSelected
     }
 
     public var displayTitle: String {
@@ -22,31 +24,40 @@ public struct ItemRow: View {
         return trimmed + "…"
     }
 
-    /// Flat LabKit row resting background — `.clear`. LabKit content rows
-    /// carry no per-row fill or divider (separation is spacing); a hover
-    /// fill, if a surface wants one, is layered by that surface in
-    /// MP-2…MP-5, not baked into this generic read-only row.
-    internal var rowBackgroundColor: Color { .clear }
+    /// Flat Linear row resting background. The neutral resting state is
+    /// `.clear` — content rows carry no per-row fill (separation is spacing).
+    /// The active/selected state lifts to `Background.controlHover` (Charcoal
+    /// Grey, surface 3), a flat opaque layer — never glass, never glow.
+    internal var rowBackgroundColor: Color {
+        isSelected ? NexusColor.Background.controlHover : .clear
+    }
 
     public var body: some View {
-        // LabKit `LabRowView` flat treatment, status-glyph-free (ItemRow is
-        // generic over all ItemKinds and has no status concept).
+        // Flat Linear treatment, status-glyph-free (ItemRow is generic over
+        // all ItemKinds and has no status concept). Selection is signalled by
+        // a subtle lime leading marker — lime's single reserved appearance on
+        // this row — plus the Charcoal Grey row fill.
         HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: NexusRadius.tag, style: .continuous)
+                .fill(isSelected ? NexusColor.Accent.lime : Color.clear)
+                .frame(width: 2)
+                .frame(maxHeight: .infinity)
+                .accessibilityHidden(true)
             NexusChip(kind.displayName, systemImage: Self.iconName(for: kind), tone: Self.chipTone(for: kind))
             Text(displayTitle)
                 .nexusType(.bodySmall)
-                .foregroundStyle(NexusColor.Text.secondary)
+                .foregroundStyle(isSelected ? NexusColor.Text.primary : NexusColor.Text.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 12)
             Text(updatedAt, style: .relative)
                 .nexusType(.caption)
                 .monospacedDigit()
-                .foregroundStyle(NexusColor.Text.disabled)
+                .foregroundStyle(NexusColor.Text.tertiary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 6).fill(rowBackgroundColor))
+        .background(RoundedRectangle(cornerRadius: NexusRadius.r1).fill(rowBackgroundColor))
         .contentShape(Rectangle())
     }
 
@@ -73,6 +84,7 @@ public struct ItemRow: View {
 #Preview {
     VStack(spacing: 0) {
         ItemRow(item: TaskItem(title: "Short title"))
+        ItemRow(item: TaskItem(title: "Selected row with the lime leading marker"), isSelected: true)
         ItemRow(item: TaskItem(title: "A medium-length title that demonstrates wrapping behavior"))
     }
     .padding(40)

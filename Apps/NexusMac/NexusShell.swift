@@ -315,17 +315,17 @@ private struct NexusCommandBar: View {
             .help("Capture task")
             .accessibilityLabel("Capture task")
 
-            // Geist-Regular 13 = the oracle `LabCommandBar` placeholder
-            // type, byte-identical to the static Text it replaced; only the
-            // ink moves to `Text.primary` so typed text is legible (the
-            // placeholder still renders muted by default). The "or ask Nexus"
-            // half was dropped: this bar only creates tasks, so
-            // carrying the agent-ask promise would just be a second lie.
+            // Inter-Regular 13 = body-small weight placeholder type, matching
+            // the inline bar role; only the ink moves to `Text.primary` so
+            // typed text is legible (the placeholder still renders muted by
+            // default). The "or ask Nexus" half was dropped: this bar only
+            // creates tasks, so carrying the agent-ask promise would just be
+            // a second lie.
             TextField("Add a task or date…", text: inputBinding)
                 .textFieldStyle(.plain)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .font(Font.custom("Geist-Regular", size: 13))
+                .font(Font.custom("Inter-Regular", size: 13))
                 .foregroundStyle(NexusColor.Text.primary)
                 .onSubmit { submit() }
                 .onChange(of: inputBinding.wrappedValue) { _, newValue in
@@ -336,10 +336,10 @@ private struct NexusCommandBar: View {
 
             Spacer(minLength: 8)
 
-            // Oracle ⌘K kbd is `GeistMono-Medium` 10; `NexusType.metaMono`
-            // matches. The kbd fill matches the oracle exactly
-            // (`Color.white.opacity(0.06)`). Wrapped in a Button so the
-            // visual affordance still opens the palette now that the lying
+            // ⌘K kbd chip — `NexusType.metaMono` (IBMPlexMono-Medium 10pt).
+            // Fill uses `Background.control` (flat token, matches the chip
+            // idiom in AgentTopControl). Wrapped in a Button so the visual
+            // affordance still opens the palette now that the lying
             // whole-capsule tap is removed (the global ⌘K shortcut also
             // still works via `NexusMacApp`'s `CommandGroup`).
             Button(action: onOpenCommandPalette) {
@@ -349,7 +349,7 @@ private struct NexusCommandBar: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(
-                        Color.white.opacity(0.06),
+                        NexusColor.Background.control,
                         in: RoundedRectangle(cornerRadius: 4)
                     )
             }
@@ -359,11 +359,6 @@ private struct NexusCommandBar: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 13)
-        .background(Color.white.opacity(0.025), in: Capsule())
-        .overlay {
-            Capsule()
-                .strokeBorder(Color.white.opacity(0.105), lineWidth: 1)
-        }
         .nexusGlass(.regular, in: Capsule())
         .alert("Couldn’t save", isPresented: isShowingSaveError) {
             Button("OK", role: .cancel) { saveError = nil }

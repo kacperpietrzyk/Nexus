@@ -104,3 +104,66 @@ struct DeadlineBadgeMP2NeutralTests {
         }
     }
 }
+
+// MARK: - Due/deadline dedupe precedence (Linear redesign)
+
+@Suite("TaskRowView — due/deadline dedupe precedence")
+struct DueDeadlineDedupeTests {
+
+    private func roseDeadline(_ label: String, kind: DeadlineUrgency) -> DeadlineBadgePresentation {
+        DeadlineBadgePresentation(label: label, tone: .rose, kind: kind)
+    }
+
+    @Test("overdue due + missed (rose) deadline → suppress the deadline chip (due wins)")
+    func overdueDueSuppressesRoseDeadline() {
+        #expect(
+            suppressesDeadlineChip(
+                due: .overdue(daysLate: 3),
+                deadline: roseDeadline("deadline missed", kind: .missed)
+            ) == true
+        )
+    }
+
+    @Test("overdue due + TODAY (rose) deadline → keep the deadline chip (distinct, more-urgent fact)")
+    func overdueDueKeepsTodayDeadline() {
+        // Regression: due slipped days ago but the hard deadline is TODAY. Both
+        // render rose, yet "deadline today" is the more urgent fact and must NOT
+        // be hidden. Suppression keys on `.missed`, not on tone, so this is kept.
+        #expect(
+            suppressesDeadlineChip(
+                due: .overdue(daysLate: 2),
+                deadline: roseDeadline("deadline today", kind: .today)
+            ) == false
+        )
+    }
+
+    @Test("overdue due + neutral future deadline → keep the deadline chip (distinct signal)")
+    func overdueDueKeepsNeutralDeadline() {
+        #expect(
+            suppressesDeadlineChip(
+                due: .overdue(daysLate: 5),
+                deadline: DeadlineBadgePresentation(label: "deadline in 4d", tone: .neutral, kind: .upcoming)
+            ) == false
+        )
+    }
+
+    @Test("today due + missed (rose) deadline → keep the deadline chip (due is not overdue)")
+    func todayDueKeepsRoseDeadline() {
+        #expect(
+            suppressesDeadlineChip(
+                due: .today(timeOfDay: nil),
+                deadline: roseDeadline("deadline today", kind: .today)
+            ) == false
+        )
+    }
+
+    @Test("future due + no deadline → nothing to suppress")
+    func futureDueNoDeadline() {
+        #expect(
+            suppressesDeadlineChip(
+                due: .future(date: "4 Jun", timeOfDay: nil),
+                deadline: nil
+            ) == false
+        )
+    }
+}

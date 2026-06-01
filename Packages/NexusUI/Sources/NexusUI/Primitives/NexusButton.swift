@@ -40,12 +40,12 @@ public struct NexusButton<Label: View>: View {
         .buttonStyle(NexusPressableButtonStyle())
     }
 
-    // LabPill look (Lab/LabKit.swift `LabPill`): achromatic ink/read
-    // foreground over the reconciled glass substrate, then `nexusPressable`.
-    // `.ghost` drops the glass entirely (no fill, no rim) — foreground +
-    // press only. `.default`/`.outline`/`.primary` share the glass; the
-    // glass material's built-in 1pt rim is the only edge (LabPill carries no
-    // separate stroke), so no per-variant border remains.
+    // Linear flat button: a contained surface (no glass, no glow) with a 1px
+    // Line rim and a small `s1` drop. `.primary` is the only variant that
+    // breaks neutrality — a solid Neon Lime fill with limeInk ink, the single
+    // accent the component is allowed. `.default`/`.outline` are neutral flat
+    // substrates over the Background ladder. `.ghost` drops the surface
+    // entirely (transparent, no rim, no shadow) — foreground + press only.
     @ViewBuilder private var styledLabel: some View {
         let content =
             label()
@@ -58,7 +58,12 @@ public struct NexusButton<Label: View>: View {
             content
         } else {
             content
-                .nexusGlass(.regular, cornerRadius: radius)
+                .background(fillColor, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(borderColor, lineWidth: borderColor == .clear ? 0 : 1)
+                }
+                .nexusShadow(NexusShadow.s1)
         }
     }
 
@@ -81,16 +86,40 @@ public struct NexusButton<Label: View>: View {
 
     internal var radius: CGFloat {
         switch size {
-        case .sm, .md, .icon, .iconSm: return NexusRadius.r2
+        case .sm, .md, .icon, .iconSm: return NexusRadius.r1
         case .lg: return NexusRadius.r3
         }
     }
 
-    /// LabPill foreground: `.primary` is the strongest ink emphasis
-    /// (`Text.primary`, == LabPill `strong`); every other variant uses the
-    /// `read` ink (`Text.secondary`). No accent — emphasis is ink weight.
+    /// Linear foreground ink. `.primary` draws on a Neon Lime fill, so it uses
+    /// `Accent.limeInk` (pitch black) for legible contrast; every neutral
+    /// variant uses the secondary read ink. No accent appears on text.
     internal var textColor: Color {
-        variant == .primary ? NexusColor.Text.primary : NexusColor.Text.secondary
+        variant == .primary ? NexusColor.Accent.limeInk : NexusColor.Text.secondary
+    }
+
+    /// Flat surface fill. `.primary` is the single lime fill; `.default` rides
+    /// the raised surface, `.outline` the recessed control fill. `.ghost` has
+    /// no fill (it never reaches this property — the surface is omitted).
+    internal var fillColor: Color {
+        switch variant {
+        case .primary: return NexusColor.Accent.lime
+        case .default: return NexusColor.Background.raised
+        case .outline: return NexusColor.Background.control
+        case .ghost: return .clear
+        }
+    }
+
+    /// 1px Line rim. The lime `.primary` fill carries its own edge, so it takes
+    /// no border; neutral variants get a hairline (`.default`) or stronger
+    /// (`.outline`) Line. `.ghost` has no rim.
+    internal var borderColor: Color {
+        switch variant {
+        case .primary: return .clear
+        case .default: return NexusColor.Line.hairline
+        case .outline: return NexusColor.Line.strong
+        case .ghost: return .clear
+        }
     }
 
     internal var fixedWidth: CGFloat? {

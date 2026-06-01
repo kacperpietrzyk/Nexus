@@ -19,8 +19,8 @@ public struct NexusTimeRow<Content: View>: View {
     public var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text(timeLabel)
-                .font(NexusType.mono)
-                .foregroundStyle(isCurrent ? NexusColor.Text.primary : NexusColor.Text.muted)
+                .font(NexusType.metaMono)
+                .foregroundStyle(isCurrent ? NexusColor.Text.primary : NexusColor.Text.secondary)
                 .frame(width: Self.gutterWidth, alignment: .trailing)
                 .padding(.top, 2)
 
@@ -39,11 +39,11 @@ public struct NexusTimeRow<Content: View>: View {
 
     private var currentRail: some View {
         Rectangle()
-            .fill(NexusColor.Text.primary)
+            .fill(NexusColor.Accent.lime)
             .frame(height: 1)
             .overlay(alignment: .leading) {
                 Circle()
-                    .fill(NexusColor.Text.primary)
+                    .fill(NexusColor.Accent.lime)
                     .frame(width: 7, height: 7)
                     .offset(x: -4, y: -3)
             }

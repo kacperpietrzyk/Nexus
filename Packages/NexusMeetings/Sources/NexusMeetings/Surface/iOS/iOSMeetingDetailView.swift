@@ -1,4 +1,5 @@
 import Foundation
+import NexusUI
 import SwiftData
 import SwiftUI
 
@@ -32,10 +33,13 @@ public struct iOSMeetingDetailView: View {  // swiftlint:disable:this type_name
             .labelsHidden()
             .padding()
 
-            Divider()
+            Rectangle()
+                .fill(NexusColor.Line.hairline)
+                .frame(height: 1)
 
             tabContent
         }
+        .background(NexusColor.Background.base)
         .navigationTitle(meeting?.title ?? "Meeting")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {

@@ -115,7 +115,7 @@ public struct CapturePane: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(NexusColor.Text.muted)
                 Text("QUICK CAPTURE")
-                    .font(Font.custom("GeistMono-SemiBold", size: 10))
+                    .font(Font.custom("IBMPlexMono-SemiBold", size: 10))
                     .tracking(1.8)
                     .foregroundStyle(NexusColor.Text.muted)
                 Spacer()
@@ -125,7 +125,7 @@ public struct CapturePane: View {
                         .foregroundStyle(NexusColor.Text.disabled)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(NexusColor.Glass.surface2, in: RoundedRectangle(cornerRadius: 4))
+                        .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: 4))
                 }
                 .buttonStyle(.plain)
                 .help("Dismiss capture")
@@ -148,7 +148,7 @@ public struct CapturePane: View {
                     .padding(.bottom, 16)
 
                 Text("RECOGNIZED")
-                    .font(Font.custom("GeistMono-SemiBold", size: 9))
+                    .font(Font.custom("IBMPlexMono-SemiBold", size: 9))
                     .tracking(1.8)
                     .foregroundStyle(NexusColor.Text.disabled)
                     .padding(.bottom, 10)
@@ -203,7 +203,7 @@ public struct CapturePane: View {
                 .font(.system(size: 11))
                 .foregroundStyle(NexusColor.Text.muted)
             Text(title)
-                .font(Font.custom("Geist-Medium", size: 14))
+                .font(Font.custom("Inter-Medium", size: 14))
                 .foregroundStyle(NexusColor.Text.secondary)
             Spacer(minLength: 0)
         }
@@ -234,8 +234,11 @@ public struct CapturePane: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity)
-        .nexusGlass(.elevated, cornerRadius: NexusRadius.r5)
-        .nexusGlassRim(cornerRadius: NexusRadius.r5)
+        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: NexusRadius.r5, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: NexusRadius.r5, style: .continuous)
+                .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+        }
         .nexusShadow(NexusShadow.glass)
     }
 
@@ -245,7 +248,7 @@ public struct CapturePane: View {
     // ParseResult has no token-span API; single TextField retypographed only.
     private var inputFont: Font {
         #if os(macOS)
-        Font.custom("Geist-Regular", size: 18)
+        Font.custom("Inter-Regular", size: 18)
         #else
         NexusType.body
         #endif

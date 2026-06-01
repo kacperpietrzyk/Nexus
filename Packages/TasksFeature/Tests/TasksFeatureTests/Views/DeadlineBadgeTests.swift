@@ -33,7 +33,7 @@ struct DeadlineBadgeTests {
             calendar: calendar
         )
 
-        #expect(presentation == DeadlineBadgePresentation(label: "deadline missed", tone: .rose))
+        #expect(presentation == DeadlineBadgePresentation(label: "deadline missed", tone: .rose, kind: .missed))
     }
 
     @Test("same-day deadline is marked today with rose tone")
@@ -44,7 +44,7 @@ struct DeadlineBadgeTests {
             calendar: calendar
         )
 
-        #expect(presentation == DeadlineBadgePresentation(label: "deadline today", tone: .rose))
+        #expect(presentation == DeadlineBadgePresentation(label: "deadline today", tone: .rose, kind: .today))
     }
 
     @Test("deadlines one to three days out use neutral tone (MP-2 accent burn-down)")
@@ -57,7 +57,7 @@ struct DeadlineBadgeTests {
                 calendar: calendar
             )
 
-            #expect(presentation == DeadlineBadgePresentation(label: "deadline in \(days)d", tone: .neutral))
+            #expect(presentation == DeadlineBadgePresentation(label: "deadline in \(days)d", tone: .neutral, kind: .upcoming))
         }
     }
 
@@ -70,6 +70,6 @@ struct DeadlineBadgeTests {
             calendar: calendar
         )
 
-        #expect(presentation == DeadlineBadgePresentation(label: "deadline in 4d", tone: .neutral))
+        #expect(presentation == DeadlineBadgePresentation(label: "deadline in 4d", tone: .neutral, kind: .upcoming))
     }
 }

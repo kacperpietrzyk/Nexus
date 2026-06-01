@@ -19,24 +19,32 @@ public struct NexusStatusGlyph: View {
         ZStack {
             switch status {
             case .inProgress:
-                // LabKit `.now` — solid ink (no partial-progress ring; the
-                // remaining progress value survives only for accessibility).
-                Circle().fill(NexusColor.Text.primary)
+                // Active — the single lime indicator on this glyph (no
+                // partial-progress ring; the remaining progress value
+                // survives only for accessibility).
+                Circle().fill(NexusColor.Accent.lime)
             case .todo:
+                // Neutral default — empty Storm Cloud ring.
                 Circle().stroke(NexusColor.Text.tertiary, lineWidth: 1.3)
             case .inReview:
-                // LabKit `.waiting` — dashed muted ring.
+                // Waiting — dashed muted ring (stays neutral).
                 Circle().stroke(
                     NexusColor.Text.muted,
                     style: StrokeStyle(lineWidth: 1.3, dash: [2, 2.4]))
-            case .done, .cancelled:
+            case .done:
+                // Completed — flat lime disc (matches NexusCheckbox's
+                // completed idiom; lime is reserved for exactly this state).
+                Circle().fill(NexusColor.Accent.lime)
+            case .cancelled:
+                // Dismissed — neutral ash ring, never lime.
                 Circle().stroke(NexusColor.Text.disabled, lineWidth: 1.3)
             }
             // Checkmark always mounted; scales + bounces in when status flips
             // to .done within withAnimation. Static screens render it
-            // invisible (todo/…) or fully shown (done) — zero drift.
+            // invisible (todo/…) or fully shown (done) — zero drift. Drawn in
+            // limeInk so it reads as dark ink on the lime done disc.
             Image(systemName: "checkmark").font(.system(size: 6, weight: .bold))
-                .foregroundStyle(NexusColor.Text.disabled)
+                .foregroundStyle(NexusColor.Accent.limeInk)
                 .scaleEffect(isDone ? 1 : 0.1)
                 .opacity(isDone ? 1 : 0)
                 .symbolEffect(.bounce, value: isDone)

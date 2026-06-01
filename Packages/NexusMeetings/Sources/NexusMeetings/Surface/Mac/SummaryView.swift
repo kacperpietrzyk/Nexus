@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import NexusUI
 import SwiftData
 import SwiftUI
 
@@ -50,33 +51,33 @@ public struct SummaryView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Summary")
-                    .font(.headline)
+                Text("SUMMARY")
+                    .nexusType(.eyebrow)
+                    .foregroundStyle(NexusColor.Text.muted)
                 Spacer()
                 if !isReadOnly {
                     Toggle("Edit", isOn: editingBinding)
                         .toggleStyle(.button)
+                        .font(NexusType.meta)
                 }
             }
 
             if let saveError {
                 Text(saveError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    .font(NexusType.meta)
+                    .foregroundStyle(NexusColor.Status.danger)
             }
 
             if viewModel.editing {
                 TextEditor(text: $viewModel.rawMarkdown)
-                    .font(.body.monospaced())
+                    .font(NexusType.bodySmall.monospaced())
+                    .foregroundStyle(NexusColor.Text.secondary)
                     .scrollContentBackground(.hidden)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    Text(.init(viewModel.rawMarkdown))
-                        .font(.body)
-                        .textSelection(.enabled)
+                    MeetingSummaryMarkdown(raw: viewModel.rawMarkdown)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, 4)
                 }
             }
@@ -108,5 +109,94 @@ public struct SummaryView: View {
                 }
             }
         )
+    }
+}
+
+/// Lightweight block-markdown renderer for the meeting summary. SwiftUI's
+/// `Text(.init(markdown:))` parses only INLINE markdown (bold/italic), so raw
+/// `##` headings and `-` bullets render literally. This splits the source into
+/// block lines and renders headings / bullets / paragraphs with Nexus tokens,
+/// still delegating inline emphasis to `AttributedString` per line.
+private struct MeetingSummaryMarkdown: View {
+    let raw: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                row(for: block)
+            }
+        }
+        .textSelection(.enabled)
+        .tint(NexusColor.Text.primary)
+    }
+
+    @ViewBuilder
+    private func row(for block: Block) -> some View {
+        switch block {
+        case .heading(let text):
+            Text(inline(text))
+                .font(NexusType.h3)
+                .foregroundStyle(NexusColor.Text.primary)
+                .padding(.top, 4)
+        case .bullet(let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("•")
+                    .font(NexusType.body)
+                    .foregroundStyle(NexusColor.Text.muted)
+                Text(inline(text))
+                    .font(NexusType.body)
+                    .foregroundStyle(NexusColor.Text.secondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .numbered(let index, let text):
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(index).")
+                    .font(NexusType.body)
+                    .monospacedDigit()
+                    .foregroundStyle(NexusColor.Text.muted)
+                Text(inline(text))
+                    .font(NexusType.body)
+                    .foregroundStyle(NexusColor.Text.secondary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .paragraph(let text):
+            Text(inline(text))
+                .font(NexusType.body)
+                .foregroundStyle(NexusColor.Text.secondary)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func inline(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    }
+
+    private enum Block {
+        case heading(String)
+        case bullet(String)
+        case numbered(index: Int, text: String)
+        case paragraph(String)
+    }
+
+    private var blocks: [Block] {
+        raw.split(separator: "\n", omittingEmptySubsequences: true).map { rawLine in
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if let hash = line.range(of: "^#{1,6}\\s+", options: .regularExpression) {
+                return .heading(String(line[hash.upperBound...]))
+            }
+            if let bullet = line.range(of: "^[-*]\\s+", options: .regularExpression) {
+                return .bullet(String(line[bullet.upperBound...]))
+            }
+            if let marker = line.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
+                let digits = line[marker.lowerBound..<line.index(before: marker.upperBound)]
+                    .prefix { $0.isNumber }
+                let index = Int(digits) ?? 0
+                return .numbered(index: index, text: String(line[marker.upperBound...]))
+            }
+            return .paragraph(line)
+        }
     }
 }

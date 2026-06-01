@@ -21,10 +21,10 @@ import SwiftUI
 /// `soft→Text.tertiary`, `ink→Text.primary`, `faint→Text.muted`,
 /// `glassRim→Line.hairline`, `dim→Text.disabled`. Not a primitive — a thin
 /// token composition, same status as the private `NexusCommandBar` /
-/// `InboxFilterTab`. Geist-SemiBold 13 / GeistMono-Medium 11/10 are
+/// `InboxFilterTab`. Inter-SemiBold 13 / IBMPlexMono-Medium 11/10 are
 /// below/aside the `NexusType` scale, so raw `Font.custom` against the
-/// process-registered family is the honest §8 stopgap (the path
-/// `NexusCommandBar` already uses for its kbd).
+/// process-registered family is the honest §8 stopgap (same path
+/// `NexusCommandBar` uses for its ⌘K kbd chip).
 ///
 /// The thread label is derived from the live view-model (`threads` +
 /// `currentThreadID`, both already published — no new query / behaviour):
@@ -60,12 +60,12 @@ struct AgentTopControl: View {
                     .fill(NexusColor.Text.tertiary)
                     .frame(width: 5, height: 5)
                 Text("Nexus")
-                    .font(Font.custom("Geist-SemiBold", size: 13))
+                    .font(Font.custom("Inter-SemiBold", size: 13))
                     .foregroundStyle(NexusColor.Text.primary)
             }
 
             Text("ready")
-                .font(Font.custom("GeistMono-Medium", size: 11))
+                .font(Font.custom("IBMPlexMono-Medium", size: 11))
                 .foregroundStyle(NexusColor.Text.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
@@ -75,7 +75,7 @@ struct AgentTopControl: View {
             Spacer()
 
             Text(threadLabel)
-                .font(Font.custom("GeistMono-Medium", size: 11))
+                .font(Font.custom("IBMPlexMono-Medium", size: 11))
                 .foregroundStyle(NexusColor.Text.muted)
                 .lineLimit(1)
 
@@ -93,7 +93,7 @@ struct AgentTopControl: View {
                         Image(systemName: "plus")
                             .font(.system(size: 10, weight: .semibold))
                         Text("New")
-                            .font(Font.custom("Geist-SemiBold", size: 12))
+                            .font(Font.custom("Inter-SemiBold", size: 12))
                     }
                     .foregroundStyle(NexusColor.Text.secondary)
                     .padding(.horizontal, 10)

@@ -164,7 +164,7 @@ private struct SidebarRow: View {
                         .foregroundStyle(isSelected ? NexusColor.Text.primary : NexusColor.Text.tertiary)
                         .padding(.horizontal, 6)
                         .frame(height: 18)
-                        .background(NexusColor.Glass.surface2, in: Capsule())
+                        .background(NexusColor.Background.control, in: Capsule())
                 }
             }
             .frame(height: 32)

@@ -32,6 +32,28 @@ internal func taskNexusStatus(for status: TaskStatus) -> NexusStatus {
     }
 }
 
+/// True when the due chip's overdue red already represents the same "you're
+/// late" fact a missed/today deadline would — so the deadline chip is
+/// suppressed to avoid two red tokens for one fact. Due wins (the overdue due
+/// chip stays the single red token). Pure + module-scope so the precedence is
+/// unit-tested and cannot silently regress; formatter tone outputs are left
+/// untouched (suppression lives in the row, not the formatter).
+internal func suppressesDeadlineChip(
+    due: DueChipFormatter.DueChipLabel,
+    deadline: DeadlineBadgePresentation?
+) -> Bool {
+    // Suppress ONLY a *missed* deadline under an overdue due chip — that is the
+    // single sanctioned redundancy (both say "you're late"; the overdue due
+    // chip wins as the one red token). Key on the semantic `kind`, never on the
+    // human-readable label or on `tone`: a "deadline TODAY" is also `.rose` but
+    // is a distinct, MORE-urgent hard-deadline fact (e.g. due slipped 3 days
+    // ago, deadline is today) and must stay visible. A neutral future deadline
+    // is likewise a distinct signal and is never suppressed.
+    guard let deadline, deadline.kind == .missed else { return false }
+    if case .overdue = due { return true }
+    return false
+}
+
 /// One row in `TaskListView`. Displays status glyph, title, due chip,
 /// priority pill, tag chips, and recurrence icon. Uses `NexusUI`
 /// primitives so styling stays consistent with the design system.
@@ -125,20 +147,21 @@ private struct RowBody: View {
             // Snoozed maps to `.inReview` (dashed ring); override the glyph's own
             // a11y label so VoiceOver announces the truth ("Snoozed"), not "In review".
             statusToggleButton
-            VStack(alignment: .leading, spacing: 4) {
+            // Dense single scan-line: title dominates, with the achromatic
+            // ranked priority bars immediately after it (every level distinct).
+            // The body line is dropped in the list — density over preview text
+            // (Linear/Raycast idiom). All meta moves to the trailing cluster.
+            HStack(spacing: 6) {
                 Text(task.title)
                     .nexusType(.body)
                     .foregroundStyle(NexusColor.Text.primary)
                     .lineLimit(1)
-                if !task.body.isEmpty {
-                    Text(task.body)
-                        .nexusType(.caption)
-                        .foregroundStyle(NexusColor.Text.tertiary)
-                        .lineLimit(1)
-                }
-                metaStrip
+                priorityIndicator
             }
             Spacer(minLength: 12)
+            // Right-aligned meta cluster (quiet → loud, overdue red rightmost),
+            // then the trailing slot (mac hover actions / touch menu).
+            metaCluster
             // Trailing slot: resting meta fades out, hover cluster fades in —
             // matches LabRowView ZStack anatomy, no layout jump.
             trailingSlot
@@ -156,7 +179,7 @@ private struct RowBody: View {
             ZStack {
                 rowBackground
                 RoundedRectangle(cornerRadius: NexusRadius.r2)
-                    .fill(isHovering ? NexusColor.Glass.surface1 : Color.clear)
+                    .fill(isHovering ? NexusColor.Background.controlHover : Color.clear)
             }
         )
         .overlay(alignment: .bottom) {
@@ -263,10 +286,10 @@ private struct RowBody: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(NexusColor.Text.tertiary)
                 .frame(width: 30, height: 30)
-                .background(NexusColor.Glass.surface1.opacity(0.55), in: Circle())
+                .background(NexusColor.Background.control, in: Circle())
                 .overlay {
                     Circle()
-                        .strokeBorder(NexusColor.Line.hairline.opacity(0.7), lineWidth: 1)
+                        .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
                 }
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -281,10 +304,11 @@ private struct RowBody: View {
 
     private var horizontalPadding: CGFloat { depth == 0 ? 16 : 12 }
     private var verticalPadding: CGFloat {
+        // Tightened for the dense single-line row (Linear/Raycast density).
         #if os(macOS)
-        depth == 0 ? 10 : 8
+        depth == 0 ? 7 : 6
         #else
-        depth == 0 ? 12 : 10
+        depth == 0 ? 9 : 8
         #endif
     }
     private var indentation: CGFloat { CGFloat(min(depth, 6)) * 20 }
@@ -301,7 +325,7 @@ private struct RowBody: View {
         #if os(macOS)
         .clear
         #else
-        NexusColor.Glass.surface1
+        NexusColor.Background.control
         #endif
     }
 
@@ -356,12 +380,21 @@ private struct RowBody: View {
             }
     }
 
+    // Right-aligned meta cluster, ordered quiet → loud (rightmost = strongest):
+    // tags · overflow · recurrence · blocks · subtasks · deadline (only if not
+    // suppressed by an overdue due chip) · DUE. The overdue due chip is the
+    // single red urgency token and sits at the trailing edge where the eye
+    // lands first on a right-aligned cluster.
     @ViewBuilder
-    private var metaStrip: some View {
+    private var metaCluster: some View {
+        let due = DueChipFormatter.label(for: task, now: now, calendar: Self.chipCalendar)
+        let deadline = DeadlineBadgeFormatter.presentation(
+            deadlineAt: task.deadlineAt,
+            now: now,
+            calendar: Self.chipCalendar
+        )
+        let showsDeadline = deadline != nil && !suppressesDeadlineChip(due: due, deadline: deadline)
         HStack(spacing: 6) {
-            dueChip
-            deadlineChip
-            priorityPill
             ForEach(Array(task.tags.prefix(3).enumerated()), id: \.offset) { _, tag in
                 NexusChip("#\(tag)")
             }
@@ -374,7 +407,6 @@ private struct RowBody: View {
                     .foregroundStyle(NexusColor.Text.tertiary)
             }
             if let blockedCount, blockedCount > 0 {
-                // MP-2 accent burn-down: blocks chip → .neutral
                 NexusChip("blocks \(blockedCount)", tone: .neutral)
             }
             if let subtaskProgress, subtaskProgress.total > 0 {
@@ -384,21 +416,10 @@ private struct RowBody: View {
                     tone: subtaskProgress.isComplete ? .positive : .neutral
                 )
             }
-        }
-    }
-
-    @ViewBuilder
-    private var deadlineChip: some View {
-        if let presentation = DeadlineBadgeFormatter.presentation(
-            deadlineAt: task.deadlineAt,
-            now: now,
-            calendar: Self.chipCalendar
-        ) {
-            NexusChip(
-                presentation.label,
-                systemImage: presentation.systemImage,
-                tone: presentation.tone
-            )
+            if let deadline, showsDeadline {
+                NexusChip(deadline.label, systemImage: deadline.systemImage, tone: deadline.tone)
+            }
+            dueChipView(due)
         }
     }
 
@@ -409,14 +430,14 @@ private struct RowBody: View {
     }()
 
     @ViewBuilder
-    private var dueChip: some View {
-        switch DueChipFormatter.label(for: task, now: now, calendar: Self.chipCalendar) {
+    private func dueChipView(_ label: DueChipFormatter.DueChipLabel) -> some View {
+        switch label {
         case .noDate:
             EmptyView()
         case .overdue(let daysLate):
+            // The single red urgency token — restrained tinted-ink chip.
             NexusChip("\(daysLate)d late", systemImage: "exclamationmark.triangle.fill", tone: .rose)
         case .today(let timeOfDay):
-            // MP-2 accent burn-down: temporal signal carried by label, achromatic
             NexusChip(timeOfDay.map { "Today \($0)" } ?? "Today", systemImage: "calendar")
         case .tomorrow(let timeOfDay):
             NexusChip(timeOfDay.map { "Tomorrow \($0)" } ?? "Tomorrow", systemImage: "calendar")
@@ -426,33 +447,57 @@ private struct RowBody: View {
         }
     }
 
+    // Priority is ranked on a non-color channel (red is spent on the temporal
+    // axis). The shipped achromatic `NexusPriorityBars` ranks EVERY level
+    // (low = 1 / medium = 2 / high = 3 filled bars, with a weight ramp and the
+    // single lime accent reserved for the urgent crest); no-priority tasks omit
+    // it. This restores the P2/P3 distinction the dense list had dropped — the
+    // brief's rule is "rank, don't strip" — by reusing the purpose-built
+    // primitive rather than re-inventing a P1-only glyph.
     @ViewBuilder
-    private var priorityPill: some View {
+    private var priorityIndicator: some View {
+        if let level = priorityLevel {
+            NexusPriorityBars(level)
+        }
+    }
+
+    private var priorityLevel: NexusPriorityLevel? {
         switch task.priority {
-        case .high:
-            // MP-2 accent burn-down: P1 chip → .neutral
-            NexusChip("P1", systemImage: "exclamationmark", tone: .neutral)
-        case .medium:
-            NexusChip("P2")
-        case .low:
-            NexusChip("P3")
-        case .none:
-            EmptyView()
+        case .none: return nil
+        case .low: return .low
+        case .medium: return .medium
+        case .high: return .high
         }
     }
 }
 
 // MARK: - DeadlineBadgePresentation
 
+/// Semantic urgency of a deadline, independent of its display tone. Two kinds
+/// (`.missed`, `.today`) both render red (`.rose`) but are distinct facts, so
+/// dedupe logic keys on this, not on `tone` or the human-readable label.
+public enum DeadlineUrgency: Equatable, Sendable {
+    case missed  // dayDelta < 0 — the deadline has already passed
+    case today  // dayDelta == 0 — the deadline is today (more urgent than a slipped due)
+    case upcoming  // dayDelta > 0 — a future deadline
+}
+
 public struct DeadlineBadgePresentation: Equatable, Sendable {
     public let label: String
     public let systemImage: String
     public let tone: NexusChipTone
+    public let kind: DeadlineUrgency
 
-    public init(label: String, systemImage: String = "flag.fill", tone: NexusChipTone) {
+    public init(
+        label: String,
+        systemImage: String = "flag.fill",
+        tone: NexusChipTone,
+        kind: DeadlineUrgency
+    ) {
         self.label = label
         self.systemImage = systemImage
         self.tone = tone
+        self.kind = kind
     }
 }
 
@@ -471,14 +516,14 @@ public enum DeadlineBadgeFormatter {
         let dayDelta = calendar.dateComponents([.day], from: startOfToday, to: startOfDeadline).day ?? 0
 
         if dayDelta < 0 {
-            return DeadlineBadgePresentation(label: "deadline missed", tone: .rose)
+            return DeadlineBadgePresentation(label: "deadline missed", tone: .rose, kind: .missed)
         }
         if dayDelta == 0 {
-            return DeadlineBadgePresentation(label: "deadline today", tone: .rose)
+            return DeadlineBadgePresentation(label: "deadline today", tone: .rose, kind: .today)
         }
 
         // MP-2 accent burn-down: always .neutral regardless of 1…3 day window
-        return DeadlineBadgePresentation(label: "deadline in \(dayDelta)d", tone: .neutral)
+        return DeadlineBadgePresentation(label: "deadline in \(dayDelta)d", tone: .neutral, kind: .upcoming)
     }
 }
 

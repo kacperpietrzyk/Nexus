@@ -61,10 +61,7 @@ struct WatchAgendaRow: View {
                 } label: {
                     Label("Done", systemImage: "checkmark")
                 }
-                // §2 value-identical zero-pixel rename: Semantic.positive and
-                // Text.secondary are both 0xC7C8CE (5.1d `.tint` precedent —
-                // re-point the tint value, `.swipeActions`/`.tint` modifiers
-                // are frozen watchOS chrome).
+                // watchOS swipe-action chrome: neutral done indicator.
                 .tint(NexusColor.Text.secondary)
             }
         }
@@ -78,10 +75,7 @@ struct WatchAgendaRow: View {
                 } label: {
                     Label("Reopen", systemImage: "arrow.uturn.backward")
                 }
-                // §2 value-identical zero-pixel rename: Accent.solid and
-                // Text.primary are both 0xF2F2F4 (5.1d `.tint` precedent —
-                // re-point the tint value, `.swipeActions`/`.tint` modifiers
-                // are frozen watchOS chrome).
+                // watchOS swipe-action chrome: neutral reopen indicator.
                 .tint(NexusColor.Text.primary)
             }
         }

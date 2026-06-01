@@ -1,5 +1,6 @@
 import Foundation
 import NexusCore
+import NexusUI
 import SwiftData
 import SwiftUI
 
@@ -16,23 +17,35 @@ public struct ActionItemsTabView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Action items")
-                .font(.headline)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
+            HStack(spacing: 7) {
+                Text("ACTION ITEMS")
+                    .nexusType(.eyebrow)
+                    .foregroundStyle(NexusColor.Text.muted)
+                if !actionItems.isEmpty {
+                    NexusCount(
+                        value: actionItems.count,
+                        font: NexusType.mono,
+                        color: NexusColor.Text.disabled)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
 
             if actionItems.isEmpty {
-                ContentUnavailableView(
-                    "No action items",
-                    systemImage: "checklist",
-                    description: Text("Nothing was extracted from this meeting.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ActionItemsEmptyState()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(actionItems, id: \.id) { task in
-                    ActionItemRow(task: task)
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(actionItems, id: \.id) { task in
+                            ActionItemRow(task: task)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 12)
                 }
-                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -78,52 +91,66 @@ private struct ActionItemRow: View {
     let task: TaskItem
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Label(statusLabel, systemImage: statusSystemImage)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(task.status == .done ? .secondary : .tertiary)
-                .padding(.top, 2)
+        HStack(alignment: .top, spacing: 11) {
+            NexusStatusGlyph(nexusStatus)
+                .frame(width: 18, height: 18)
+                .padding(.top, 1)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
-                    .font(.body.weight(.medium))
+                    .font(NexusType.body)
+                    .foregroundStyle(
+                        task.status == .done ? NexusColor.Text.tertiary : NexusColor.Text.primary
+                    )
+                    .strikethrough(task.status == .done, color: NexusColor.Text.disabled)
 
                 if !task.body.isEmpty {
                     Text(task.body)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
+                        .font(NexusType.bodySmall)
+                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .lineLimit(2)
                 }
 
                 if let dueAt = task.dueAt {
-                    Text(dueAt, style: .date)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    NexusChip(dueAt.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
                 }
             }
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
-    }
-
-    private var statusLabel: String {
-        switch task.status {
-        case .done:
-            "Done"
-        case .open:
-            "Open"
-        case .snoozed:
-            "Snoozed"
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(NexusColor.Line.hairline).frame(height: 1)
         }
     }
 
-    private var statusSystemImage: String {
+    private var nexusStatus: NexusStatus {
         switch task.status {
-        case .done:
-            "checkmark.circle.fill"
-        case .open:
-            "circle"
-        case .snoozed:
-            "clock"
+        case .open: return .todo
+        case .done: return .done
+        case .snoozed: return .inReview
         }
+    }
+}
+
+private struct ActionItemsEmptyState: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "checklist")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(NexusColor.Text.muted)
+            Text("No action items")
+                .font(NexusType.h3)
+                .foregroundStyle(NexusColor.Text.secondary)
+            Text("Nothing was extracted from this meeting.")
+                .font(NexusType.meta)
+                .foregroundStyle(NexusColor.Text.muted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 260)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+        .padding(.top, 120)
     }
 }

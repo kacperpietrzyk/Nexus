@@ -39,7 +39,10 @@ public struct CommandPaletteView: View {
         .containerRelativeFrame(.horizontal) { length, _ in
             min(Self.maxPaletteWidth, length)
         }
-        .nexusGlass(.regular, in: RoundedRectangle(cornerRadius: 18))
+        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(NexusColor.Line.regular, lineWidth: 1))
+        .nexusShadow(NexusShadow.pop)
         .nexusOverlayEnter()
         .padding(.bottom, 120)
         .task { await reload(for: query) }
@@ -80,21 +83,13 @@ public struct CommandPaletteView: View {
                     .foregroundStyle(NexusColor.Text.muted)
             )
             .textFieldStyle(.plain)
-            .font(Font.custom("Geist-Regular", size: 15))
+            .font(Font.custom("Inter-Regular", size: 15))
             .foregroundStyle(NexusColor.Text.primary)
             .focused($inputFocused)
             .onSubmit { executeSelected() }
             Spacer()
             if presentation.showsEscapeKey {
-                Text("esc")
-                    .font(NexusType.metaMono)
-                    .foregroundStyle(NexusColor.Text.disabled)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        Color.white.opacity(0.06),
-                        in: RoundedRectangle(cornerRadius: 4)
-                    )
+                NexusKbd("esc")
             }
         }
         .padding(.horizontal, 18)
@@ -146,14 +141,13 @@ public struct CommandPaletteView: View {
                 .frame(width: 26, height: 26)
                 // decorative dashed ring — the text carries the meaning.
                 .accessibilityHidden(true)
-            // §8: raw Geist-SemiBold/Geist-Regular — oracle weights not
-            // expressible via a semantic token; locked stopgap, same precedent
-            // as the raw GeistMono-* / Geist-Medium usages above.
+            // Raw Inter at sizes that have no direct NexusType semantic token
+            // (15 SemiBold display heading, 12.5 body-small variant).
             Text("No matches")
-                .font(Font.custom("Geist-SemiBold", size: 15))
+                .font(Font.custom("Inter-SemiBold", size: 15))
                 .foregroundStyle(NexusColor.Text.secondary)
             Text("Nothing matches \"\(query)\".")
-                .font(Font.custom("Geist-Regular", size: 12.5))
+                .font(Font.custom("Inter-Regular", size: 12.5))
                 .foregroundStyle(NexusColor.Text.muted)
             // §10: the oracle's "↩ ask Nexus instead" pill is omitted entirely
             // — no reachable query→agent backend at the palette layer (init exposes
@@ -189,7 +183,7 @@ public struct CommandPaletteView: View {
                 .font(NexusType.metaMono)
                 .foregroundStyle(NexusColor.Text.tertiary)
             Text(s)
-                .font(Font.custom("Geist-Regular", size: 11))
+                .font(NexusType.caption)
                 .foregroundStyle(NexusColor.Text.disabled)
         }
     }
@@ -203,61 +197,19 @@ public struct CommandPaletteView: View {
     ) -> some View {
         let isEnabled = availability.isEnabled
         let disabledReason = availability.disabledReason
-        // Oracle row idiom: bare 16pt icon + medium title + mono hint, highlight
-        // is solely the §2 Glass.surface3 fill + achromatic fg swap. The old
-        // accent tile / leading rule / accent fill do not exist in the oracle
-        // and are removed outright (not retoned). Button + execute/onDismiss is
-        // kept as the interactivity scaffold the non-interactive oracle omits.
+        // Row: SF Symbol icon + Inter-Medium title + metaMono shortcut.
+        // Highlight = Background.controlHover fill + leading Accent.lime marker.
+        // Button + execute/onDismiss is the interactivity scaffold.
         return Button {
             execute(command)
         } label: {
-            HStack(spacing: 11) {
-                Image(systemName: command.iconName)
-                    .font(.system(size: 12))
-                    .foregroundStyle(
-                        rowIconColor(isHighlighted: isHighlighted, isEnabled: isEnabled)
-                    )
-                    .frame(width: 16)
-                    // decorative SF Symbol — title carries the meaning.
-                    .accessibilityHidden(true)
-                // §8: raw Geist-Medium 13 — oracle weight not expressible via a
-                // semantic token (.bodySmall resolves Geist-Regular); locked
-                // stopgap, same precedent as the raw GeistMono-* footer usages.
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(command.title)
-                        .font(Font.custom("Geist-Medium", size: 13))
-                        .foregroundStyle(
-                            rowTitleColor(isHighlighted: isHighlighted, isEnabled: isEnabled)
-                        )
-                    if let disabledReason {
-                        Text(disabledReason)
-                            .font(Font.custom("Geist-Regular", size: 11))
-                            .foregroundStyle(NexusColor.Text.disabled)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
-                // shortcut is legitimately empty for some commands; render only
-                // when non-empty — no fabricated hint string (§10).
-                if presentation.showsCommandShortcuts, !command.shortcut.isEmpty {
-                    Text(command.shortcut.joined(separator: " "))
-                        .font(NexusType.metaMono)
-                        .foregroundStyle(NexusColor.Text.disabled)
-                        // visual-only shortcut tokens — not spoken.
-                        .accessibilityHidden(true)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            // frame after padding, before background so the highlight fill and
-            // the full-row tap target span the row (oracle relies on its inner
-            // Spacer; production keeps the explicit row scaffolding).
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(isHighlighted ? NexusColor.Glass.surface3 : Color.clear)
+            rowLabel(
+                command,
+                isEnabled: isEnabled,
+                disabledReason: disabledReason,
+                isHighlighted: isHighlighted,
+                presentation: presentation
             )
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -274,6 +226,69 @@ public struct CommandPaletteView: View {
         .accessibilityLabel(command.title)
         .accessibilityValue(isEnabled ? "" : "Disabled")
         .accessibilityHint(disabledReason ?? command.subtitle ?? "")
+    }
+
+    private func rowLabel(
+        _ command: any Command,
+        isEnabled: Bool,
+        disabledReason: String?,
+        isHighlighted: Bool,
+        presentation: CommandPalettePresentation
+    ) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: command.iconName)
+                .font(.system(size: 12))
+                .foregroundStyle(
+                    rowIconColor(isHighlighted: isHighlighted, isEnabled: isEnabled)
+                )
+                .frame(width: 16)
+                // decorative SF Symbol — title carries the meaning.
+                .accessibilityHidden(true)
+            // Inter-Medium 13 — medium weight at this size has no semantic
+            // token (.bodySmall is Regular); raw size kept to match design.
+            VStack(alignment: .leading, spacing: 2) {
+                Text(command.title)
+                    .font(Font.custom("Inter-Medium", size: 13))
+                    .foregroundStyle(
+                        rowTitleColor(isHighlighted: isHighlighted, isEnabled: isEnabled)
+                    )
+                if let disabledReason {
+                    Text(disabledReason)
+                        .font(NexusType.caption)
+                        .foregroundStyle(NexusColor.Text.disabled)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            // shortcut is legitimately empty for some commands; render only
+            // when non-empty — no fabricated hint string (§10).
+            if presentation.showsCommandShortcuts, !command.shortcut.isEmpty {
+                Text(command.shortcut.joined(separator: " "))
+                    .font(NexusType.metaMono)
+                    .foregroundStyle(NexusColor.Text.disabled)
+                    // visual-only shortcut tokens — not spoken.
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        // frame after padding, before background so the highlight fill and
+        // the full-row tap target span the row (oracle relies on its inner
+        // Spacer; production keeps the explicit row scaffolding).
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: NexusRadius.r1)
+                .fill(isHighlighted ? NexusColor.Background.controlHover : Color.clear)
+        )
+        .overlay(alignment: .leading) {
+            if isHighlighted {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(NexusColor.Accent.lime)
+                    .frame(width: 2)
+                    .padding(.vertical, 4)
+            }
+        }
+        .contentShape(Rectangle())
     }
 
     @MainActor

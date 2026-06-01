@@ -553,11 +553,12 @@ struct ContentView: View {
 /// deleted in MP-6), re-toned through the MP-2.2 §2
 /// achromatic LabPalette→NexusColor map:
 /// `ink→Text.primary`, `read→Text.secondary`, `faint→Text.muted`,
-/// `dim→Text.disabled`, `block→Glass.surface1`. Not a primitive — a thin
+/// `dim→Text.disabled`, `block→Background.raised`. Not a primitive — a thin
 /// token composition, same status as the private `NexusCommandBar`.
-/// Geist-Medium 12 / GeistMono-Medium 10 are below the `NexusType` scale,
-/// so raw `Font.custom` against the process-registered family is the
-/// honest §8 stopgap (the path `NexusCommandBar` already uses for its kbd).
+/// Inter-Medium 12 / IBMPlexMono-Medium 10 are below the `NexusType` scale
+/// (which starts at 11 pt caption), so raw `Font.custom` against the
+/// process-registered family is the honest §8 stopgap (same path
+/// `NexusCommandBar` uses for its ⌘K kbd chip).
 private struct InboxFilterTab: View {
     let label: String
     let count: Int
@@ -568,7 +569,7 @@ private struct InboxFilterTab: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(Font.custom("Geist-Medium", size: 12))
+                    .font(Font.custom("Inter-Medium", size: 12))
                 Text("\(count)")
                     .font(NexusType.metaMono)
                     .monospacedDigit()
@@ -581,7 +582,7 @@ private struct InboxFilterTab: View {
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 7)
-                    .fill(isActive ? NexusColor.Glass.surface1 : Color.clear)
+                    .fill(isActive ? NexusColor.Background.raised : Color.clear)
             )
             .contentShape(Rectangle())
         }

@@ -3,59 +3,55 @@ import Testing
 
 @testable import NexusUI
 
-@Suite("NexusColor achromatic LabKit tokens")
+@Suite("NexusColor Linear palette tokens")
 struct NexusColorTests {
-    @Test("Background tokens are luma-preserving true neutral grays (audit #14)")
+    @Test("Background tokens match Linear layered-dark surface ladder")
     func backgroundTokens() {
-        // Former cool-biased values neutralized to Rec.601 luma grays
-        // (R == G == B). Numbers below = V/255 for the new single value.
-        assertColor(NexusColor.Background.base, r: 0.0392157, g: 0.0392157, b: 0.0392157)
-        assertColor(NexusColor.Background.panel, r: 0.0549020, g: 0.0549020, b: 0.0549020)
-        assertColor(NexusColor.Background.raised, r: 0.0823529, g: 0.0823529, b: 0.0823529)
-        assertColor(NexusColor.Background.control, r: 0.1019608, g: 0.1019608, b: 0.1019608)
-        assertColor(NexusColor.Background.controlHover, r: 0.1215686, g: 0.1215686, b: 0.1215686)
+        // Surface 0–3: Pitch Black → Graphite → Deep Slate → control → Charcoal Grey
+        assertColor(NexusColor.Background.base, r: 0.0313725, g: 0.0352941, b: 0.0392157)
+        assertColor(NexusColor.Background.panel, r: 0.0588235, g: 0.0627451, b: 0.0666667)
+        assertColor(NexusColor.Background.raised, r: 0.0862745, g: 0.0901961, b: 0.0941176)
+        assertColor(NexusColor.Background.control, r: 0.1098039, g: 0.1137255, b: 0.1215686)
+        assertColor(NexusColor.Background.controlHover, r: 0.1372549, g: 0.1450980, b: 0.1647059)
     }
 
-    @Test("Glass tokens are achromatic white-alpha")
+    @Test("Glass tokens are white-alpha (retained for de-glass sweep)")
     func glassTokens() {
         assertColor(NexusColor.Glass.surface1, r: 1.0, g: 1.0, b: 1.0, a: 0.05)
         assertColor(NexusColor.Glass.surface2, r: 1.0, g: 1.0, b: 1.0, a: 0.06)
         assertColor(NexusColor.Glass.surface3, r: 1.0, g: 1.0, b: 1.0, a: 0.10)
     }
 
-    @Test("Line tokens are achromatic white-alpha")
+    @Test("Line tokens match Linear solid border values")
     func lineTokens() {
-        assertColor(NexusColor.Line.hairline, r: 1.0, g: 1.0, b: 1.0, a: 0.07)
-        assertColor(NexusColor.Line.regular, r: 1.0, g: 1.0, b: 1.0, a: 0.10)
-        assertColor(NexusColor.Line.strong, r: 1.0, g: 1.0, b: 1.0, a: 0.16)
+        // Solid hex values (not white-alpha) in the Linear palette
+        assertColor(NexusColor.Line.hairline, r: 0.1372549, g: 0.1450980, b: 0.1647059)
+        assertColor(NexusColor.Line.regular, r: 0.1725490, g: 0.1803922, b: 0.2000000)
+        assertColor(NexusColor.Line.strong, r: 0.2196078, g: 0.2313725, b: 0.2470588)
     }
 
-    @Test("Text tokens are luma-preserving true neutral grays (audit #14)")
+    @Test("Text tokens match Linear cool-biased type palette")
     func textTokens() {
-        assertColor(NexusColor.Text.primary, r: 0.9490196, g: 0.9490196, b: 0.9490196)
-        assertColor(NexusColor.Text.secondary, r: 0.7843137, g: 0.7843137, b: 0.7843137)
-        assertColor(NexusColor.Text.tertiary, r: 0.5568627, g: 0.5568627, b: 0.5568627)
-        assertColor(NexusColor.Text.muted, r: 0.3921569, g: 0.3921569, b: 0.3921569)
-        assertColor(NexusColor.Text.disabled, r: 0.2745098, g: 0.2745098, b: 0.2745098)
+        // Linear deliberately carries blue bias (Light Steel, Storm Cloud)
+        assertColor(NexusColor.Text.primary, r: 0.9686275, g: 0.9725490, b: 0.9725490)
+        assertColor(NexusColor.Text.secondary, r: 0.8156863, g: 0.8392157, b: 0.8784314)
+        assertColor(NexusColor.Text.tertiary, r: 0.5411765, g: 0.5607843, b: 0.5960784)
+        assertColor(NexusColor.Text.muted, r: 0.3843137, g: 0.4000000, b: 0.4274510)
+        assertColor(NexusColor.Text.disabled, r: 0.2901961, g: 0.3019608, b: 0.3215686)
     }
 
-    @Test("Every tonal token is genuinely zero-hue (R == G == B) — #14 regression lock")
-    func tonalTokensAreTrueNeutralGray() {
-        let tonal: [Color] = [
-            NexusColor.Background.base, NexusColor.Background.panel,
-            NexusColor.Background.raised, NexusColor.Background.control,
-            NexusColor.Background.controlHover,
-            NexusColor.Text.primary, NexusColor.Text.secondary,
-            NexusColor.Text.tertiary, NexusColor.Text.muted,
-            NexusColor.Text.disabled,
-        ]
-        for color in tonal {
-            let rgba = color.resolvedRGBA
-            #expect(abs(rgba.r - rgba.g) < 0.0001)
-            #expect(abs(rgba.g - rgba.b) < 0.0001)
-        }
+    @Test("Accent tokens: Neon Lime primary action + Pitch Black ink on lime")
+    func accentTokens() {
+        assertColor(NexusColor.Accent.lime, r: 0.8941176, g: 0.9490196, b: 0.1333333)
+        assertColor(NexusColor.Accent.limeInk, r: 0.0313725, g: 0.0352941, b: 0.0392157)
     }
 
+    @Test("Status tokens: Emerald success, Cyan Spark info, Warning Red danger")
+    func statusTokens() {
+        assertColor(NexusColor.Status.success, r: 0.1529412, g: 0.6509804, b: 0.2666667)
+        assertColor(NexusColor.Status.info, r: 0.0078431, g: 0.7215686, b: 0.8000000)
+        assertColor(NexusColor.Status.danger, r: 0.9215686, g: 0.3411765, b: 0.3411765)
+    }
 }
 
 private func assertColor(

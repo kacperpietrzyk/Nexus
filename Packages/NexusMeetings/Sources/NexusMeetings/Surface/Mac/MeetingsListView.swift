@@ -52,25 +52,12 @@ public struct MeetingsListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(NexusColor.Background.raised.opacity(0.88))
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.045),
-                            Color.white.opacity(0.012),
-                            Color.black.opacity(0.040),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .fill(NexusColor.Background.panel)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
         }
-        .nexusGlassRim(cornerRadius: 18)
         .shadow(color: .black.opacity(0.36), radius: 18, x: -6, y: 8)
         .onAppear {
             viewModel.reload()
@@ -89,7 +76,7 @@ public struct MeetingsListView: View {
                 .foregroundStyle(NexusColor.Text.muted)
             TextField("Search meetings...", text: $viewModel.searchQuery)
                 .textFieldStyle(.plain)
-                .font(Font.custom("Geist-Regular", size: 13))
+                .font(NexusType.bodySmall)
                 .foregroundStyle(NexusColor.Text.secondary)
                 .onChange(of: viewModel.searchQuery) { _, _ in
                     viewModel.reload()
@@ -122,7 +109,7 @@ public struct MeetingsListView: View {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .font(.system(size: 12, weight: .medium))
                 Text(viewModel.filter.label)
-                    .font(Font.custom("Geist-Medium", size: 12))
+                    .font(NexusType.meta)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(NexusColor.Text.muted)
@@ -164,7 +151,7 @@ private struct MeetingsListRow: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(meeting.title)
-                        .font(Font.custom("Geist-Medium", size: 13))
+                        .font(Font.custom("Inter-Medium", size: 13))
                         .foregroundStyle(isSelected ? NexusColor.Text.primary : NexusColor.Text.secondary)
                         .lineLimit(1)
 
@@ -187,7 +174,7 @@ private struct MeetingsListRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? NexusColor.Glass.surface2 : Color.clear)
+                    .fill(isSelected ? NexusColor.Background.controlHover : Color.clear)
             }
             .contentShape(Rectangle())
         }
@@ -204,14 +191,14 @@ private struct MeetingsListEmptyState: View {
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(NexusColor.Text.muted)
             Text(isSearching ? "No results" : "No meetings")
-                .font(Font.custom("Geist-SemiBold", size: 17))
+                .font(NexusType.h3)
                 .foregroundStyle(NexusColor.Text.secondary)
             Text(
                 isSearching
                     ? "Try a different search or filter."
                     : "Recordings and imports will appear here."
             )
-            .font(Font.custom("Geist-Regular", size: 12.5))
+            .font(NexusType.meta)
             .foregroundStyle(NexusColor.Text.muted)
             .multilineTextAlignment(.center)
             .lineSpacing(3)

@@ -46,46 +46,11 @@ extension TodayDashboard {
         .padding(18)
         .frame(width: 320)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(NexusColor.Background.raised.opacity(0.92))
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.060),
-                            Color.white.opacity(0.018),
-                            Color.black.opacity(0.035),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-        }
+        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
         }
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.12),
-                            Color.white.opacity(0.035),
-                            Color.white.opacity(0),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 1)
-                .padding(.vertical, 18)
-                .offset(x: 0.5)
-                .allowsHitTesting(false)
-        }
-        .nexusGlassRim(cornerRadius: 18)
-        .shadow(color: Color.white.opacity(0.030), radius: 18, x: -2, y: -1)
         .shadow(color: .black.opacity(0.42), radius: 22, x: -10, y: 10)
     }
 
@@ -447,7 +412,7 @@ private struct EmbeddedDayTimeline: View {
                             )
                             ctx.fill(
                                 Path(roundedRect: rect, cornerRadius: 7),
-                                with: .color(NexusColor.Glass.surface1)
+                                with: .color(NexusColor.Background.controlHover)
                             )
                             let tick = CGRect(
                                 x: rect.minX,
@@ -586,13 +551,13 @@ private struct EmbeddedDayTimeline: View {
     // exact Canvas type — this is not bypassing the token system, it is the
     // same mechanism `NexusType` itself uses internally, matched 1:1 to the
     // oracle's `DayTimeline` Canvas.
-    private static let headerFont = Font.custom("GeistMono-SemiBold", size: 11)
-    private static let headerTimeFont = Font.custom("GeistMono-Medium", size: 12)
-    private static let gridFont = Font.custom("GeistMono-Medium", size: 10)
-    private static let freeFont = Font.custom("Geist-Regular", size: 11)
-    private static let emptyTitleFont = Font.custom("Geist-Medium", size: 12)
-    private static let emptyBodyFont = Font.custom("Geist-Regular", size: 11)
-    private static let blockTitleFont = Font.custom("Geist-Medium", size: 12)
-    private static let blockTimeFont = Font.custom("GeistMono-Medium", size: 10)
-    private static let nowFont = Font.custom("GeistMono-SemiBold", size: 10)
+    private static let headerFont = Font.custom("IBMPlexMono-SemiBold", size: 11)
+    private static let headerTimeFont = Font.custom("IBMPlexMono-Medium", size: 12)
+    private static let gridFont = Font.custom("IBMPlexMono-Medium", size: 10)
+    private static let freeFont = Font.custom("Inter-Regular", size: 11)
+    private static let emptyTitleFont = Font.custom("Inter-Medium", size: 12)
+    private static let emptyBodyFont = Font.custom("Inter-Regular", size: 11)
+    private static let blockTitleFont = Font.custom("Inter-Medium", size: 12)
+    private static let blockTimeFont = Font.custom("IBMPlexMono-Medium", size: 10)
+    private static let nowFont = Font.custom("IBMPlexMono-SemiBold", size: 10)
 }

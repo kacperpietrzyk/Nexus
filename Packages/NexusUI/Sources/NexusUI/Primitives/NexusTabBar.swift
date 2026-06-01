@@ -36,12 +36,7 @@ public struct NexusTabBar<ID: Hashable>: View {
                     tabLabel(for: item)
                         .padding(.horizontal, Self.horizontalPadding)
                         .frame(height: Self.itemHeight)
-                        .foregroundStyle(item.id == active ? NexusColor.Text.primary : NexusColor.Text.tertiary)
-                        .background {
-                            if item.id == active {
-                                activeBackground
-                            }
-                        }
+                        .foregroundStyle(item.id == active ? NexusColor.Accent.lime : NexusColor.Text.tertiary)
                         .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r2, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -49,10 +44,11 @@ public struct NexusTabBar<ID: Hashable>: View {
             }
         }
         .padding(3)
-        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
-                .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
+        .background(NexusColor.Background.panel)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(NexusColor.Line.hairline)
+                .frame(height: 1)
         }
     }
 
@@ -72,14 +68,6 @@ public struct NexusTabBar<ID: Hashable>: View {
                     .foregroundStyle(NexusColor.Text.muted)
             }
         }
-    }
-
-    private var activeBackground: some View {
-        LinearGradient(
-            colors: [Color.white.opacity(0.10), Color.white.opacity(0.04)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
     }
 }
 #endif

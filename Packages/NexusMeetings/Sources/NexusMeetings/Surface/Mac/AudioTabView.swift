@@ -1,4 +1,5 @@
 import AVFoundation
+import NexusUI
 import SwiftUI
 
 public struct AudioTabView: View {
@@ -113,7 +114,7 @@ public struct AudioTabView: View {
             if let error = track.errorMessage.wrappedValue {
                 Text(error)
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.red)
+                    .foregroundStyle(NexusColor.Status.danger)
             }
         }
     }

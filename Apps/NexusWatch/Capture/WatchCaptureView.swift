@@ -29,10 +29,7 @@ struct WatchCaptureView: View {
                 if case .error(let message) = state.phase {
                     Text(message)
                         .font(.system(size: 12, weight: .medium))
-                        // §2 value-identical zero-pixel rename: Semantic.negative
-                        // and Text.primary are both 0xF2F2F4 (canonical §5
-                        // error-row anchor).
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .foregroundStyle(NexusColor.Status.danger)
                 }
 
                 Button {
@@ -45,14 +42,13 @@ struct WatchCaptureView: View {
                 } label: {
                     Label("Save", systemImage: "checkmark.circle.fill")
                         .font(.system(size: 16, weight: .semibold))
+                        // limeInk for contrast on lime fill.
+                        .foregroundStyle(NexusColor.Accent.limeInk)
                         .frame(maxWidth: .infinity, minHeight: 38)
                 }
                 .buttonStyle(.borderedProminent)
-                // §2 value-identical zero-pixel rename: Semantic.positive and
-                // Text.secondary are both 0xC7C8CE (5.1d `.tint` precedent —
-                // re-point the tint value, the `.tint` modifier itself is
-                // frozen watchOS chrome).
-                .tint(NexusColor.Text.secondary)
+                // Lime: single primary action on this surface (save captured task).
+                .tint(NexusColor.Accent.lime)
                 .disabled(state.input.trimmingCharacters(in: .whitespaces).isEmpty || state.phase == .sending)
             }
             .padding(.horizontal, 6)

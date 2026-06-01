@@ -1,24 +1,26 @@
 import SwiftUI
 
-/// Pure achromatic foundation — genuinely zero hue (R == G == B).
-/// State is expressed via shape, weight, contrast, motion, and glyph — never
-/// color. Token ladder: Background → Glass → Line → Text. No scaffold enums.
+/// Linear "Midnight Command Center" layered-dark palette.
 ///
-/// The MP-6.3 teardown removed accent/semantic *hues* but the surviving
-/// base grays were still cool-biased (B > R,G — a v4 "coss-azure" OKLCH
-/// relic). On large translucent panels over the wallpaper glow that bias
-/// read as a visible blue (audit #14, user-reported "wpada w niebieski").
-/// Every `Color(hex:)` below is now a true neutral gray whose value is the
-/// Rec.601 luma (0.299R + 0.587G + 0.114B) of the former cool token, so
-/// perceived lightness is preserved app-wide while the chroma is zero.
+/// Five surface levels (Background) form a depth ladder from Pitch Black (#08090A)
+/// up through Charcoal Grey (#23252A). Text and Line tokens carry deliberate cool
+/// bias (Light Steel, Storm Cloud) matching the Linear specification.
+///
+/// Neon Lime (`Accent.lime`, #E4F222) is the **only** saturated accent and is
+/// reserved exclusively for primary-action surfaces — do NOT apply it to base
+/// tokens or secondary UI chrome.
+///
+/// Token ladder: Background → Glass → Line → Text → Accent → Status.
+/// `Glass` is retained for incremental de-glass sweeps; prefer flat `Background`
+/// surfaces + `NexusShadow` for elevation in new code.
 public enum NexusColor {
 
     public enum Background {
-        public static let base = Color(hex: 0x0A0A0A)  // was 0x090A0C
-        public static let panel = Color(hex: 0x0E0E0E)  // was 0x0D0E11
-        public static let raised = Color(hex: 0x151515)  // was 0x141519
-        public static let control = Color(hex: 0x1A1A1A)  // was 0x191A1F
-        public static let controlHover = Color(hex: 0x1F1F1F)  // was 0x1E1F25
+        public static let base = Color(hex: 0x08090A)  // Pitch Black
+        public static let panel = Color(hex: 0x0F1011)  // Graphite
+        public static let raised = Color(hex: 0x161718)  // Deep Slate
+        public static let control = Color(hex: 0x1C1D1F)  // between Deep Slate and Charcoal Grey
+        public static let controlHover = Color(hex: 0x23252A)  // Charcoal Grey
     }
 
     public enum Glass {
@@ -28,16 +30,35 @@ public enum NexusColor {
     }
 
     public enum Line {
-        public static let hairline = Color.white.opacity(0.07)
-        public static let regular = Color.white.opacity(0.10)
-        public static let strong = Color.white.opacity(0.16)
+        public static let hairline = Color(hex: 0x23252A)  // Charcoal Grey (subtle border)
+        public static let regular = Color(hex: 0x2C2E33)  // Muted Ash region
+        public static let strong = Color(hex: 0x383B3F)  // Gunmetal (input border)
     }
 
     public enum Text {
-        public static let primary = Color(hex: 0xF2F2F2)  // was 0xF2F2F4
-        public static let secondary = Color(hex: 0xC8C8C8)  // was 0xC7C8CE
-        public static let tertiary = Color(hex: 0x8E8E8E)  // was 0x8C8D96
-        public static let muted = Color(hex: 0x646464)  // was 0x62636D
-        public static let disabled = Color(hex: 0x464646)  // was 0x44454E
+        public static let primary = Color(hex: 0xF7F8F8)  // Porcelain
+        public static let secondary = Color(hex: 0xD0D6E0)  // Light Steel
+        public static let tertiary = Color(hex: 0x8A8F98)  // Storm Cloud
+        public static let muted = Color(hex: 0x62666D)  // Fog Grey
+        public static let disabled = Color(hex: 0x4A4D52)  // muted ash region
+    }
+
+    /// Neon Lime accent — primary action surfaces only.
+    /// Never apply `lime` to base backgrounds, borders, or secondary chrome.
+    public enum Accent {
+        /// Neon Lime (#E4F222) — fill for primary action elements.
+        public static let lime = Color(hex: 0xE4F222)
+        /// Pitch Black (#08090A) — text/icon drawn on top of a lime surface.
+        public static let limeInk = Color(hex: 0x08090A)
+    }
+
+    /// Semantic status colors for success, informational, and danger states.
+    public enum Status {
+        /// Emerald (#27A644) — success and completion states.
+        public static let success = Color(hex: 0x27A644)
+        /// Cyan Spark (#02B8CC) — informational highlights.
+        public static let info = Color(hex: 0x02B8CC)
+        /// Warning Red (#EB5757) — error and danger states.
+        public static let danger = Color(hex: 0xEB5757)
     }
 }

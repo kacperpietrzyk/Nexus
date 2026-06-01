@@ -1,4 +1,5 @@
 import Foundation
+import NexusUI
 import SwiftUI
 
 #if os(macOS)
@@ -31,7 +32,9 @@ public struct MeetingDetailView: View {
     public var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            Rectangle()
+                .fill(NexusColor.Line.hairline)
+                .frame(height: 1)
             tabContent
         }
         .toolbar {
@@ -58,7 +61,8 @@ public struct MeetingDetailView: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 TextField("Meeting title", text: $titleDraft)
                     .textFieldStyle(.plain)
-                    .font(.title2.weight(.semibold))
+                    .font(NexusType.h2)
+                    .foregroundStyle(NexusColor.Text.primary)
                     .onSubmit {
                         saveTitle()
                     }
@@ -70,8 +74,9 @@ public struct MeetingDetailView: View {
 
                 if let meeting {
                     Text(meeting.startedAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(NexusType.metaMono)
+                        .monospacedDigit()
+                        .foregroundStyle(NexusColor.Text.muted)
                 }
             }
 

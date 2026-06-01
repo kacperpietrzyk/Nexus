@@ -1,22 +1,26 @@
 import CoreText
 import Foundation
 
-/// Registers bundled OFL fonts (Geist + Geist Mono) with the
-/// process so SwiftUI's `Font.custom("Geist-Regular", size:)` and
-/// `Font.custom("GeistMono-Regular", size:)` resolve to our copies instead
+/// Registers bundled OFL fonts (Inter + IBM Plex Mono) with the
+/// process so SwiftUI's `Font.custom("Inter-Regular", size:)` and
+/// `Font.custom("IBMPlexMono-Regular", size:)` resolve to our copies instead
 /// of the system fallback. Call once at app startup, before any UI is
 /// constructed.
+///
+/// Inter is bundled as a variable font (covers all weights via the `wght`
+/// axis); the four weight-named TTF copies all point to the same variable
+/// file so that `Font.custom` look-ups using any weight suffix succeed.
 public enum NexusFontRegistration {
 
     static let fontFiles: [String] = [
-        "Geist-Regular",
-        "Geist-Medium",
-        "Geist-SemiBold",
-        "Geist-Bold",
-        "GeistMono-Regular",
-        "GeistMono-Medium",
-        "GeistMono-SemiBold",
-        "GeistMono-Bold",
+        "Inter-Regular",
+        "Inter-Medium",
+        "Inter-SemiBold",
+        "Inter-Bold",
+        "IBMPlexMono-Regular",
+        "IBMPlexMono-Medium",
+        "IBMPlexMono-SemiBold",
+        "IBMPlexMono-Bold",
     ]
 
     public static func registerAll() {
@@ -52,7 +56,7 @@ public enum NexusFontRegistration {
         let allFamilies = (CTFontManagerCopyAvailableFontFamilyNames() as? [String]) ?? []
         let nexusFamilies = allFamilies.filter { name in
             let lower = name.lowercased()
-            return lower.contains("geist")
+            return lower.contains("inter") || lower.contains("plex")
         }
         debugLog(
             "[NexusFontRegistration] summary: \(registered)/\(fontFiles.count) registered, "

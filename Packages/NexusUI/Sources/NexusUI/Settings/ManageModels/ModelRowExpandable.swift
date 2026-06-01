@@ -349,9 +349,10 @@ private struct ModelRowTagChip: View {
     var body: some View {
         Text(text)
             .font(.caption2.bold())
+            .foregroundStyle(NexusColor.Text.secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(.tint.opacity(0.15))
+            .background(NexusColor.Background.control)
             .clipShape(Capsule())
     }
 }
