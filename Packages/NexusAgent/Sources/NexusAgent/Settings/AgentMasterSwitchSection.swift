@@ -12,21 +12,38 @@ public struct AgentMasterSwitchSection: View {
     }
 
     public var body: some View {
-        Section("Master Switch") {
-            Toggle("Enable Nexus Agent", isOn: $enabled)
-                .toggleStyle(.switch)
-            Text(
-                enabled
-                    ? "Chat, briefs and tool calls are active."
-                    : "Chat is hidden; schedules are paused. Storage stays."
-            )
-            .font(.caption)
-            .foregroundStyle(NexusColor.Text.muted)
-            Toggle("Vacation Mode", isOn: $vacationMode)
-                .toggleStyle(.switch)
-            Text("Pauses scheduled runs.")
-                .font(.caption)
-                .foregroundStyle(NexusColor.Text.muted)
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Master Switch")
+            NexusSettingsCard {
+                VStack(alignment: .leading, spacing: 0) {
+                    NexusSettingsRow("Enable Nexus Agent") {
+                        Toggle("", isOn: $enabled)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                    helperText(
+                        enabled
+                            ? "Chat, briefs and tool calls are active."
+                            : "Chat is hidden; schedules are paused. Storage stays."
+                    )
+                    NexusSettingsDivider()
+                    NexusSettingsRow("Vacation Mode") {
+                        Toggle("", isOn: $vacationMode)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                    helperText("Pauses scheduled runs.")
+                }
+            }
         }
+    }
+
+    private func helperText(_ text: String) -> some View {
+        Text(text)
+            .font(NexusType.caption)
+            .foregroundStyle(NexusColor.Text.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, NexusSpacing.s4)
+            .padding(.bottom, NexusSpacing.s3)
     }
 }

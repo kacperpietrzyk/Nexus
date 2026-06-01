@@ -353,18 +353,14 @@ public struct ModelRowExpandable: View {
 // MARK: - Private chip
 
 /// Small uppercase assignment chip ("CHAT" / "EMBED"). Named to avoid colliding
-/// with SwiftUI's `Tag`/`.tag(_:)` family.
+/// with SwiftUI's `Tag`/`.tag(_:)` family. Renders as a neutral `NexusChip` —
+/// assignment is plain metadata, not a semantic/active state, so the tone is
+/// `.neutral` (no lime).
 private struct ModelRowTagChip: View {
     let text: String
 
     var body: some View {
-        Text(text)
-            .font(.caption2.bold())
-            .foregroundStyle(NexusColor.Text.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(NexusColor.Background.control)
-            .clipShape(Capsule())
+        NexusChip(text, tone: .neutral)
     }
 }
 

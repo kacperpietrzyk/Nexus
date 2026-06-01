@@ -12,7 +12,7 @@ struct WatchTaskDetailSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(task.title)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(NexusType.h3)
                     .foregroundStyle(NexusColor.Text.primary)
                     .multilineTextAlignment(.leading)
                     .lineLimit(4)
@@ -28,7 +28,7 @@ struct WatchTaskDetailSheet: View {
                     }
                 } label: {
                     Label(buttonTitle, systemImage: buttonIcon)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(NexusType.h3)
                         // limeInk for contrast when lime fill is active (Done action).
                         // Neutral label is fine when Undo uses Text.secondary tint.
                         .foregroundStyle(buttonLabelColor)
@@ -40,9 +40,10 @@ struct WatchTaskDetailSheet: View {
                 if let due = task.dueAt {
                     Label {
                         Text(due, format: .dateTime.weekday(.abbreviated).hour().minute())
-                            .font(.system(size: 13, weight: .medium))
+                            .font(NexusType.bodySmall)
                     } icon: {
                         Image(systemName: "calendar")
+                            .font(.system(size: 13, weight: .medium))
                     }
                     .foregroundStyle(NexusColor.Text.primary)
                 }
@@ -50,14 +51,15 @@ struct WatchTaskDetailSheet: View {
                 if task.priority != .none {
                     Label {
                         Text(label(for: task.priority))
-                            .font(.system(size: 13, weight: .medium))
+                            .font(NexusType.bodySmall)
                     } icon: {
                         Image(systemName: priorityIcon(for: task.priority))
+                            .font(.system(size: 13, weight: .medium))
                     }
                     .foregroundStyle(NexusColor.Text.tertiary)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 6)
         }
     }
 

@@ -1,4 +1,5 @@
 import NexusCore
+import NexusUI
 import SwiftUI
 
 public struct MeetingsProviderSettingsView: View {
@@ -15,23 +16,41 @@ public struct MeetingsProviderSettingsView: View {
     }
 
     public var body: some View {
-        Section("Transcription") {
-            Picker("Provider", selection: $transcription) {
-                Text("Parakeet TDT v3 (default)")
-                    .tag(MeetingsTranscriptionProviderPreference.parakeetTDTv3.rawValue)
-                Text("WhisperKit-large (fallback)")
-                    .tag(MeetingsTranscriptionProviderPreference.whisperKitLarge.rawValue)
-                Text("Ask per meeting")
-                    .tag(MeetingsTranscriptionProviderPreference.ask.rawValue)
+        VStack(alignment: .leading, spacing: NexusSpacing.s7) {
+            VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+                nexusSettingsCardSectionHeader("Transcription")
+                NexusSettingsCard {
+                    NexusSettingsRow("Provider") {
+                        Picker("Provider", selection: $transcription) {
+                            Text("Parakeet TDT v3 (default)")
+                                .tag(MeetingsTranscriptionProviderPreference.parakeetTDTv3.rawValue)
+                            Text("WhisperKit-large (fallback)")
+                                .tag(MeetingsTranscriptionProviderPreference.whisperKitLarge.rawValue)
+                            Text("Ask per meeting")
+                                .tag(MeetingsTranscriptionProviderPreference.ask.rawValue)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 220, alignment: .trailing)
+                    }
+                }
             }
-        }
 
-        Section("Summary") {
-            Picker("Provider", selection: $summary) {
-                Text("Apple Intelligence (default)")
-                    .tag(MeetingsSummaryProviderPreference.auto.rawValue)
-                Text("Disabled")
-                    .tag(MeetingsSummaryProviderPreference.disabled.rawValue)
+            VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+                nexusSettingsCardSectionHeader("Summary")
+                NexusSettingsCard {
+                    NexusSettingsRow("Provider") {
+                        Picker("Provider", selection: $summary) {
+                            Text("Apple Intelligence (default)")
+                                .tag(MeetingsSummaryProviderPreference.auto.rawValue)
+                            Text("Disabled")
+                                .tag(MeetingsSummaryProviderPreference.disabled.rawValue)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 220, alignment: .trailing)
+                    }
+                }
             }
         }
     }

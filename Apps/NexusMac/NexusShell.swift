@@ -18,7 +18,7 @@ import TasksFeature
 ///
 /// ```
 /// VStack(spacing: 0) {
-///   NexusTopBar / control capsule   // == LabTopBar
+///   NexusTopBar / control bar strip  // flat chrome strip
 ///   content (fills)                 // == content slot
 ///   NexusCommandBar / surface input // == LabCommandBar
 /// }
@@ -34,11 +34,11 @@ import TasksFeature
 ///   exactly as Today uses it. The `NexusTopBar` MP-1 API stays byte-frozen.
 /// - **Control mode** — a surface whose oracle renders an interactive
 ///   control strip (Inbox filter tabs, …) supplies a bespoke
-///   `topControl` view; the shell wraps it in the SAME glass-capsule idiom
-///   the private `NexusCommandBar` already composes directly (the §5-safe
-///   precedent — `NexusTopBar` is NOT used). Selecting control mode is the
-///   constrained-init opt-in below; Today never opts in, so its band is
-///   byte-for-byte unaffected.
+///   `topControl` view; the shell wraps it in the SAME flat `NexusBarStrip`
+///   chrome strip the bottom command bar uses (panel + hairline + s1, no
+///   glass, no capsule). Selecting control mode is the constrained-init
+///   opt-in below; Today never opts in, so its band is byte-for-byte
+///   unaffected.
 ///
 /// The bottom-bar band has **two modes** (MP-2.2 §1c, locked at MP-3.2,
 /// symmetric to §1a — `NexusCommandBar` is app-side, NOT a frozen
@@ -46,18 +46,20 @@ import TasksFeature
 /// *forced*; this still uses the §1a-symmetric constrained-init idiom for
 /// file consistency):
 /// - **Command-bar mode** (default — Today/Inbox/all current surfaces) —
-///   the generic `NexusCommandBar` that opens the command palette /
-///   capture, byte-for-byte unaffected (`BottomBar == EmptyView` is
-///   inferred at every existing call site).
+///   the generic `NexusCommandBar`, a full-bleed `NexusBarStrip(edge: .top)`
+///   chrome strip (panel + top hairline + s1) that opens the command palette
+///   / capture (`BottomBar == EmptyView` is inferred at every existing call
+///   site).
 /// - **Surface-input mode** — a surface whose oracle bottom band is a real
 ///   input (Agent: `"Write to Nexus…"`, an actual message composer, not
-///   the palette opener) supplies a bespoke `bottomBar` view; the shell
-///   renders it in the SAME outer band padding the `NexusCommandBar`
-///   already gets (`.h26/.t14/.b20`, unchanged). Backend-retention rule
-///   (same precedent class as §1a keeping Inbox's Read/New actions): the
-///   surface input may carry working backend the Lab did not model
-///   (Agent's `AgentInputBar` = Phase 1i-Outer voice/image/file capture);
-///   it is placed AS-IS structurally, never internally rebuilt here.
+///   the palette opener) supplies a bespoke `bottomBar` view; it carries its
+///   own background + hairline (`AgentInputBar`), so the shell renders it in
+///   its established placement padding (`.h26/.t14/.b20`) rather than the
+///   full-bleed chrome strip. Backend-retention rule (same precedent class
+///   as §1a keeping Inbox's Read/New actions): the surface input may carry
+///   working backend the Lab did not model (Agent's `AgentInputBar` =
+///   Phase 1i-Outer voice/image/file capture); it is placed AS-IS
+///   structurally, never internally rebuilt here.
 struct NexusShell<Content: View, TopTrailing: View, TopControl: View, BottomBar: View>: View {
     let crumbs: [String]
     let controlMode: Bool
@@ -95,21 +97,21 @@ struct NexusShell<Content: View, TopTrailing: View, TopControl: View, BottomBar:
 
     /// The top-bar band content (MP-2.2 §1a two modes).
     ///
-    /// Control mode wraps the supplied bespoke content in the pinned
-    /// glass-capsule idiom — the binding constants are the same status as
-    /// the §2 token map and are mirrored 1:1 from the private
-    /// `NexusCommandBar` below (the established §5-safe precedent: compose
-    /// the glass idiom directly, never via a frozen primitive). Breadcrumb
-    /// mode is `NexusTopBar` exactly as before — its public API is untouched.
+    /// Both modes render the SAME flat Linear chrome strip — `NexusBarStrip`
+    /// (`Background.panel` + a 1px `Line.hairline` bottom rim + a contained
+    /// `NexusShadow.s1`, rectangular, no rounding/blur). Control mode places
+    /// the surface's bespoke control content inside that strip; breadcrumb
+    /// mode is `NexusTopBar`, which is itself flat panel+hairline+s1 — so the
+    /// two top-bar modes are visually identical chrome. `NexusTopBar`'s
+    /// public API is untouched.
     @ViewBuilder
     private var topBar: some View {
         if controlMode {
-            HStack(spacing: 14) {
-                topControl()
+            NexusBarStrip(edge: .bottom) {
+                HStack(spacing: 14) {
+                    topControl()
+                }
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 11)
-            .nexusGlass(.regular, in: Capsule())
         } else {
             NexusTopBar(crumbs: crumbs, onCmdK: onOpenCommandPalette) {
                 topTrailing()
@@ -121,32 +123,34 @@ struct NexusShell<Content: View, TopTrailing: View, TopControl: View, BottomBar:
         // Just the band stack. Wallpaper + nav-rail live in `ContentView`
         // (audit C3 hoist) so they survive this view's re-specialization.
         VStack(spacing: 0) {
+            // Full-bleed flat chrome strip (`NexusBarStrip` / `NexusTopBar`),
+            // edge-to-edge so its bottom hairline rim reads as a clean seam
+            // against the full-width content below.
             topBar
-                .padding(.horizontal, 26)
-                .padding(.top, 18)
-                .padding(.bottom, 18)
 
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // §1c bottom-bar band — two modes. The outer band padding is
-            // identical in both modes (the precedent the §1c lock requires):
-            // surface-input mode supplies its own background + hairline
-            // (Agent's `AgentInputBar`), so the band only contributes the
-            // standing padding — no second glass capsule wrapping.
-            Group {
-                if surfaceBottomBar {
-                    bottomBar()
-                } else {
-                    NexusCommandBar(
-                        onOpenCommandPalette: onOpenCommandPalette,
-                        onOpenCapture: { onOpenCapture(.task) }
-                    )
-                }
+            // §1c bottom-bar band — two modes.
+            //  • command-bar mode (Today/Inbox/all current surfaces) — the
+            //    generic `NexusCommandBar`, now itself a full-bleed
+            //    `NexusBarStrip(edge: .top)` (panel + top hairline + s1),
+            //    matching the top bars exactly.
+            //  • surface-input mode (Agent) — the surface supplies its own
+            //    bar with its own background + hairline (`AgentInputBar`);
+            //    it keeps its established placement padding and is NOT
+            //    re-wrapped in the chrome strip.
+            if surfaceBottomBar {
+                bottomBar()
+                    .padding(.horizontal, 26)
+                    .padding(.top, 14)
+                    .padding(.bottom, 20)
+            } else {
+                NexusCommandBar(
+                    onOpenCommandPalette: onOpenCommandPalette,
+                    onOpenCapture: { onOpenCapture(.task) }
+                )
             }
-            .padding(.horizontal, 26)
-            .padding(.top, 14)
-            .padding(.bottom, 20)
         }
     }
 }
@@ -201,8 +205,8 @@ extension NexusShell where TopControl == EmptyView, BottomBar == EmptyView {
 extension NexusShell where TopTrailing == EmptyView, BottomBar == EmptyView {
     /// Control top-bar + command-bar bottom (MP-2.2 §1a — e.g. Inbox).
     /// The surface supplies a bespoke top-bar content view; the shell wraps
-    /// it in the pinned glass-capsule idiom and keeps the generic bottom
-    /// `NexusCommandBar` (`BottomBar == EmptyView` inferred — call site
+    /// it in the flat `NexusBarStrip` chrome strip and keeps the generic
+    /// bottom `NexusCommandBar` (`BottomBar == EmptyView` inferred — call site
     /// unchanged from MP-3.1). `crumbs` is unused in this mode (no
     /// `NexusTopBar`) but kept so the caller's shell-title plumbing stays
     /// uniform.
@@ -231,9 +235,9 @@ extension NexusShell where TopTrailing == EmptyView {
     /// Control top-bar + surface-input bottom (MP-2.2 §1c — Agent). The
     /// surface supplies BOTH a bespoke top-bar control strip AND a bespoke
     /// bottom bar (its real message composer). The shell wraps the top
-    /// control in the pinned glass-capsule idiom (§1a) and renders the
+    /// control in the flat `NexusBarStrip` chrome strip (§1a) and renders the
     /// surface's `bottomBar` in place of the generic `NexusCommandBar`, in
-    /// the SAME outer band padding (§1c). `crumbs` is unused in this mode
+    /// its own established placement padding (§1c). `crumbs` is unused in this mode
     /// (no `NexusTopBar`) but kept so shell-title plumbing stays uniform.
     init(
         crumbs: [String],
@@ -257,8 +261,9 @@ extension NexusShell where TopTrailing == EmptyView {
     }
 }
 
-/// Bottom command bar — structurally the LabKit `LabCommandBar`
-/// (`HStack { plus · field · Spacer · ⌘K kbd }` in a glass capsule).
+/// Bottom command bar — `HStack { plus · field · Spacer · ⌘K kbd }` in a
+/// flat `NexusBarStrip(edge: .top)` chrome strip (panel + top hairline +
+/// contained `NexusShadow.s1`), matching the top bars exactly.
 ///
 /// Not a `NexusUI` primitive: a thin app-private token composition with a
 /// single call site (the §1c band-shape lock governs the band, not this
@@ -266,19 +271,19 @@ extension NexusShell where TopTrailing == EmptyView {
 ///
 /// **Audit B1 — the middle region is now a real inline composer.** The
 /// placeholder text used to promise an input (`"Save a task or
-/// ask Nexus…"`) while the *entire capsule* was a single
+/// ask Nexus…"`) while the *entire bar* was a single
 /// `.onTapGesture` that merely opened the command palette — a lying
 /// affordance (the reported "quick save = UX disaster": click the
 /// promised input → palette → Add Task → a mispositioned popup). It now
 /// hosts a `TextField` wired to the existing, already-tested
 /// `CapturePaneState` (the same parse+commit machine `CapturePane` uses),
-/// so typing + Enter creates a task in place with no window. The glass
-/// capsule, leading `+`, and trailing `⌘K` chip render byte-for-byte as
+/// so typing + Enter creates a task in place with no window. The chrome
+/// strip, leading `+`, and trailing `⌘K` chip render as
 /// before — only the behaviour of the text region changed:
 ///  • `+`     → the rich capture window (now correctly centred, audit B2)
 ///  • field   → type + Enter creates the parsed task via the repository
 ///  • `⌘K`    → opens the command palette (chip tap + the global ⌘K
-///              `CommandGroup` in `NexusMacApp`; the lying whole-capsule
+///              `CommandGroup` in `NexusMacApp`; the lying whole-bar
 ///              tap is gone so it can no longer fight TextField focus)
 ///
 /// Parser/repository come from the env injected at the Mac composition
@@ -305,61 +310,68 @@ private struct NexusCommandBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: onOpenCapture) {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NexusColor.Text.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Capture task")
-            .accessibilityLabel("Capture task")
-
-            // Inter-Regular 13 = body-small weight placeholder type, matching
-            // the inline bar role; only the ink moves to `Text.primary` so
-            // typed text is legible (the placeholder still renders muted by
-            // default). The "or ask Nexus" half was dropped: this bar only
-            // creates tasks, so carrying the agent-ask promise would just be
-            // a second lie.
-            TextField("Add a task or date…", text: inputBinding)
-                .textFieldStyle(.plain)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .font(Font.custom("Inter-Regular", size: 13))
-                .foregroundStyle(NexusColor.Text.primary)
-                .onSubmit { submit() }
-                .onChange(of: inputBinding.wrappedValue) { _, newValue in
-                    ensureState()
-                    _Concurrency.Task { await state?.handleInputChange(newValue) }
+        // Full-bleed flat chrome strip (`NexusBarStrip(edge: .top)`):
+        // `Background.panel` + a 1px `Line.hairline` top rim + a contained
+        // `NexusShadow.s1` — the SAME idiom as the top bars, no glass, no
+        // capsule. The strip supplies the standing 18/11 band padding.
+        NexusBarStrip(edge: .top) {
+            HStack(spacing: 12) {
+                Button(action: onOpenCapture) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(NexusColor.Text.secondary)
                 }
-                .onAppear { ensureState() }
+                .buttonStyle(.plain)
+                .help("Capture task")
+                .accessibilityLabel("Capture task")
 
-            Spacer(minLength: 8)
+                // Inter-Regular 13 = body-small weight placeholder type,
+                // matching the inline bar role; only the ink moves to
+                // `Text.primary` so typed text is legible (the placeholder
+                // still renders muted by default). The "or ask Nexus" half
+                // was dropped: this bar only creates tasks, so carrying the
+                // agent-ask promise would just be a second lie.
+                TextField("Add a task or date…", text: inputBinding)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .font(Font.custom("Inter-Regular", size: 13))
+                    .foregroundStyle(NexusColor.Text.primary)
+                    .onSubmit { submit() }
+                    .onChange(of: inputBinding.wrappedValue) { _, newValue in
+                        ensureState()
+                        _Concurrency.Task { await state?.handleInputChange(newValue) }
+                    }
+                    .onAppear { ensureState() }
 
-            // ⌘K kbd chip — `NexusType.metaMono` (IBMPlexMono-Medium 10pt).
-            // Fill uses `Background.control` (flat token, matches the chip
-            // idiom in AgentTopControl). Wrapped in a Button so the visual
-            // affordance still opens the palette now that the lying
-            // whole-capsule tap is removed (the global ⌘K shortcut also
-            // still works via `NexusMacApp`'s `CommandGroup`).
-            Button(action: onOpenCommandPalette) {
-                Text("⌘K")
-                    .font(NexusType.metaMono)
-                    .foregroundStyle(NexusColor.Text.disabled)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        NexusColor.Background.control,
-                        in: RoundedRectangle(cornerRadius: 4)
-                    )
+                Spacer(minLength: 8)
+
+                // ⌘K kbd chip — the shared topbar/command-bar idiom:
+                // `Background.control` fill + `NexusType.metaMono` ink + a
+                // `Line.regular` hairline, flat r1 corners (byte-identical to
+                // `NexusTopBar`'s search-pill chip). Wrapped in a Button so
+                // the visual affordance still opens the palette (the global
+                // ⌘K shortcut also fires via `NexusMacApp`'s `CommandGroup`).
+                Button(action: onOpenCommandPalette) {
+                    Text("⌘K")
+                        .font(NexusType.metaMono)
+                        .foregroundStyle(NexusColor.Text.disabled)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            NexusColor.Background.control,
+                            in: RoundedRectangle(cornerRadius: NexusRadius.r1)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: NexusRadius.r1)
+                                .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+                .help("Open command palette")
+                .accessibilityLabel("Open command palette")
             }
-            .buttonStyle(.plain)
-            .help("Open command palette")
-            .accessibilityLabel("Open command palette")
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 13)
-        .nexusGlass(.regular, in: Capsule())
         .alert("Couldn’t save", isPresented: isShowingSaveError) {
             Button("OK", role: .cancel) { saveError = nil }
         } message: {

@@ -88,7 +88,7 @@ public struct WelcomeFlowView: View {
             currentScreen
                 .frame(width: 360)
                 .padding(26)
-                .nexusGlass(.regular, in: RoundedRectangle(cornerRadius: 20))
+                .nexusGlass(.regular, in: RoundedRectangle(cornerRadius: NexusRadius.r5))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             #else
             currentScreen

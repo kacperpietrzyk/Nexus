@@ -9,13 +9,18 @@ public struct AgentDevHubSection: View {
     }
 
     public var body: some View {
-        Section("Dev Hub") {
-            Text(
-                "Git, GitHub, Linear, and Xcode adapters land in the next release. "
-                    + "The agent will read repo + PR + issue + build state to brief project work."
-            )
-            .font(.caption)
-            .foregroundStyle(NexusColor.Text.muted)
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Dev Hub")
+            NexusSettingsCard {
+                Text(
+                    "Git, GitHub, Linear, and Xcode adapters land in the next release. "
+                        + "The agent will read repo + PR + issue + build state to brief project work."
+                )
+                .font(NexusType.caption)
+                .foregroundStyle(NexusColor.Text.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(NexusSpacing.s4)
+            }
         }
     }
 }

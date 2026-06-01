@@ -1,4 +1,5 @@
 import Combine
+import NexusUI
 import SwiftUI
 
 @MainActor
@@ -38,17 +39,35 @@ public struct MeetingsDetectionSettingsView: View {
     }
 
     public var body: some View {
-        Section("Tracked apps") {
-            ForEach(viewModel.registry.patterns, id: \.bundleID) { pattern in
-                Toggle(
-                    pattern.displayName,
-                    isOn: Binding(
-                        get: { pattern.enabled },
-                        set: { enabled in
-                            viewModel.toggle(bundleID: pattern.bundleID, enabled: enabled)
-                        }
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Tracked apps")
+            NexusSettingsCard {
+                if viewModel.registry.patterns.isEmpty {
+                    NexusEmptyState(
+                        systemImage: "app.dashed",
+                        title: "No tracked apps yet."
                     )
-                )
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(viewModel.registry.patterns.enumerated()), id: \.element.bundleID) { index, pattern in
+                            if index > 0 {
+                                NexusSettingsDivider()
+                            }
+                            NexusSettingsRow(pattern.displayName) {
+                                Toggle(
+                                    "",
+                                    isOn: Binding(
+                                        get: { pattern.enabled },
+                                        set: { enabled in
+                                            viewModel.toggle(bundleID: pattern.bundleID, enabled: enabled)
+                                        }
+                                    )
+                                )
+                                .labelsHidden()
+                            }
+                        }
+                    }
+                }
             }
         }
     }

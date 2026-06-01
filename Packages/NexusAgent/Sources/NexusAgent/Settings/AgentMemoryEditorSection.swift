@@ -15,26 +15,47 @@ public struct AgentMemoryEditorSection: View {
     }
 
     public var body: some View {
-        SwiftUI.Section("Memory") {
-            Toggle("Auto-save high-confidence memory", isOn: $autoSave)
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Memory")
+            NexusSettingsCard {
+                VStack(alignment: .leading, spacing: 0) {
+                    NexusSettingsRow("Auto-save high-confidence memory") {
+                        Toggle("", isOn: $autoSave)
+                            .labelsHidden()
+                    }
+                    NexusSettingsDivider()
 
-            Picker("Scope", selection: $viewModel.scope) {
-                Text("Global").tag("global")
-                Text("Project").tag("project")
-                Text("Tag").tag("tag")
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: viewModel.scope) { _, _ in
-                viewModel.reload()
-            }
+                    Picker("Scope", selection: $viewModel.scope) {
+                        Text("Global").tag("global")
+                        Text("Project").tag("project")
+                        Text("Tag").tag("tag")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .onChange(of: viewModel.scope) { _, _ in
+                        viewModel.reload()
+                    }
+                    .padding(.horizontal, NexusSpacing.s4)
+                    .padding(.vertical, NexusSpacing.s3)
+                    NexusSettingsDivider()
 
-            if viewModel.entries.isEmpty {
-                Text("No memories in this scope yet.")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
-            } else {
-                ForEach(viewModel.entries, id: \.id) { entry in
-                    memoryRow(entry)
+                    if viewModel.entries.isEmpty {
+                        NexusEmptyState(
+                            systemImage: "brain",
+                            title: "No memories in this scope yet."
+                        )
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
+                                if index > 0 {
+                                    NexusSettingsDivider()
+                                }
+                                memoryRow(entry)
+                                    .padding(.horizontal, NexusSpacing.s4)
+                                    .padding(.vertical, NexusSpacing.s3)
+                            }
+                        }
+                    }
                 }
             }
         }

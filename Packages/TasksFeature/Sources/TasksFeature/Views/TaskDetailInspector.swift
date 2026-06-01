@@ -4,17 +4,22 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
-/// Card-based editor for a single task. Auto-saves on field commit via
-/// `TaskItemRepository.update`. Recurrence picker emits curated RRULE
-/// strings; "Custom" path leaves the existing rule untouched and surfaces
-/// a text field for direct editing.
+/// Card-based editor for a single task. Auto-saves on field commit; recurrence
+/// picker emits curated RRULE strings ("Custom" surfaces a direct-edit field).
 public struct TaskDetailInspector: View {
 
     @Environment(\.modelContext) var modelContext
     @Environment(\.taskRepository) var repository
 
+    /// Field arrangement. `.column` is the single-column scroll (iOS sheet /
+    /// pushed view — the default). `.wide` is a 2-column, content-hugging layout
+    /// for the Mac centered modal, so the dialog is short and needs little/no
+    /// scrolling instead of a tall single-column stack.
+    public enum Layout { case column, wide }
+
     @Bindable public var task: TaskItem
     public let onClose: (() -> Void)?
+    public let layout: Layout
 
     @State private var allDay: Bool
     @State private var recurrenceChoice: RecurrenceChoice
@@ -26,10 +31,13 @@ public struct TaskDetailInspector: View {
     @State var blockSearchCandidates: [TaskItem] = []
     @State var parentTaskPicker = TaskParentPickerState()
     @State var subtaskActionError: String?
+    @State var parentPickerPresented = false
+    @State var blockPickerPresented = false
 
-    public init(task: TaskItem, onClose: (() -> Void)? = nil) {
+    public init(task: TaskItem, onClose: (() -> Void)? = nil, layout: Layout = .column) {
         self._task = Bindable(task)
         self.onClose = onClose
+        self.layout = layout
         self._allDay = State(initialValue: task.startAt == nil)
         self._recurrenceChoice = State(
             initialValue: RecurrenceChoice.from(rrule: task.recurrenceRule)
@@ -48,49 +56,28 @@ public struct TaskDetailInspector: View {
     }
 
     public var body: some View {
-        ZStack {
-            NexusWallpaper()
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    headerCard
-                    aiAssistCard
-                    scheduleCard
-                    deadlineCard
-                    recurrenceCard
-                    linksCard
-                    notesCard
-                }
-                .padding(20)
+        layoutBody
+            .background(NexusColor.Background.base)
+            // This panel hosts in a detached overlay (Mac modal) / sheet that does
+            // NOT inherit the app-root `.tint`, so its native controls (segmented
+            // Priority picker, toggles, DatePickers) would fall back to system blue.
+            // Re-assert the achromatic control tint here (lime stays for actions).
+            .tint(NexusColor.Text.primary)
+            .navigationTitle(task.title.isEmpty ? "Task" : task.title)
+            .task { loadLinkState() }
+            .onChange(of: task.id) { _, _ in
+                // View identity is reused across selection swaps; resync derived
+                // state else an edit writes the previous task's fields onto the new.
+                resyncDerivedState()
+                loadLinkState()
             }
-            .scrollContentBackground(.hidden)
-        }
-        .background(NexusColor.Background.base)
-        // The `.inspector()` overlay is a separate presentation context that did
-        // NOT inherit the app-root `.tint` (NexusMacApp), so its system controls
-        // (segmented Priority picker, All-day / Deadline / Pin toggles, the
-        // DatePickers) fell back to system blue — jarring against the Linear
-        // dark theme. Re-assert the app's achromatic control tint here; active
-        // states read white (lime stays reserved for primary actions).
-        .tint(NexusColor.Text.primary)
-        .navigationTitle(task.title.isEmpty ? "Task" : task.title)
-        .task { loadLinkState() }
-        .onChange(of: task.id) { _, _ in
-            // The inspector view identity is reused when the selection switches
-            // to another task (the Mac host returns it without an `.id(task.id)`),
-            // so `init` does not re-run. Resync the derived editor state from the
-            // new task — otherwise an edit would write the previous task's
-            // all-day/recurrence values onto the newly selected one.
-            resyncDerivedState()
-            loadLinkState()
-        }
-        .onKeyPress(.escape) {
-            onClose?()
-            return onClose == nil ? .ignored : .handled
-        }
+            .onKeyPress(.escape) {
+                onClose?()
+                return onClose == nil ? .ignored : .handled
+            }
     }
 
-    private var headerCard: some View {
+    var headerCard: some View {
         inspectorCard("Task") {
             HStack(alignment: .top, spacing: 8) {
                 TextField("Title", text: $task.title, axis: .vertical)
@@ -125,23 +112,17 @@ public struct TaskDetailInspector: View {
                 priorityStatusChip
                 lifecycleChip
                 if let dueChipLabel {
+                    // Lime economy: future due = neutral; only OVERDUE is loud (`.rose`).
                     NexusChip(
                         dueChipLabel,
                         systemImage: isOverdue ? "exclamationmark.triangle.fill" : "calendar",
-                        tone: isOverdue ? .rose : .accent
+                        tone: isOverdue ? .rose : .neutral
                     )
                 }
                 Spacer(minLength: 0)
             }
 
-            Picker("Priority", selection: priorityBinding) {
-                Text("None").tag(TaskPriority.none)
-                Text("Low").tag(TaskPriority.low)
-                Text("Medium").tag(TaskPriority.medium)
-                Text("High").tag(TaskPriority.high)
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: task.priorityRaw) { _, _ in save() }
+            priorityPicker
 
             Toggle("Pin as focus", isOn: $task.pinnedAsFocus)
                 .onChange(of: task.pinnedAsFocus) { _, _ in save() }
@@ -150,13 +131,13 @@ public struct TaskDetailInspector: View {
         }
     }
 
-    private var aiAssistCard: some View {
+    var aiAssistCard: some View {
         inspectorCard("AI Assist") {
             TaskAssistButtonGroup(task: task)
         }
     }
 
-    private var scheduleCard: some View {
+    var scheduleCard: some View {
         inspectorCard("Schedule") {
             Toggle("All-day", isOn: $allDay)
                 .onChange(of: allDay) { _, isAllDay in
@@ -172,42 +153,35 @@ public struct TaskDetailInspector: View {
                     save()
                 }
 
-            DatePicker(
-                "Due",
-                selection: dueAtBinding,
-                displayedComponents: allDay ? .date : [.date, .hourAndMinute]
-            )
-            .datePickerStyle(.compact)
-            .onChange(of: task.dueAt) { _, _ in save() }
+            dateRow("Due") {
+                NexusDateField(
+                    date: dueAtBinding,
+                    components: allDay ? [.date] : [.date, .hourAndMinute],
+                    accessibilityLabel: "Due date"
+                )
+            }
 
             if allDay {
                 Text("Timed schedule disabled in all-day mode")
                     .font(.caption)
                     .foregroundStyle(NexusColor.Text.tertiary)
             } else {
-                DatePicker(
-                    "Start",
-                    selection: startAtBinding,
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .datePickerStyle(.compact)
+                dateRow("Start") {
+                    NexusDateField(
+                        date: startAtBinding,
+                        components: [.date, .hourAndMinute],
+                        accessibilityLabel: "Start time"
+                    )
+                }
 
-                if let startAt = task.startAt {
-                    DatePicker(
-                        "End",
-                        selection: endAtBinding,
-                        in: minimumEndDate(after: startAt)...,
-                        displayedComponents: [.date, .hourAndMinute]
+                dateRow("End") {
+                    NexusDateField(
+                        date: endAtBinding,
+                        components: [.date, .hourAndMinute],
+                        minDate: task.startAt.map { minimumEndDate(after: $0) },
+                        isEnabled: task.startAt != nil,
+                        accessibilityLabel: "End time"
                     )
-                    .datePickerStyle(.compact)
-                } else {
-                    DatePicker(
-                        "End",
-                        selection: endAtBinding,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    .datePickerStyle(.compact)
-                    .disabled(true)
                 }
 
                 if let durationLabel {
@@ -219,7 +193,19 @@ public struct TaskDetailInspector: View {
         }
     }
 
-    private var recurrenceCard: some View {
+    /// A labelled field row: caption on the left, control on the right.
+    @ViewBuilder
+    func dateRow<Field: View>(_ label: String, @ViewBuilder field: () -> Field) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(NexusType.bodySmall)
+                .foregroundStyle(NexusColor.Text.secondary)
+            Spacer(minLength: 8)
+            field()
+        }
+    }
+
+    var recurrenceCard: some View {
         inspectorCard("Recurrence") {
             Picker("Repeat", selection: $recurrenceChoice) {
                 ForEach(RecurrenceChoice.allCases) { choice in
@@ -252,7 +238,7 @@ public struct TaskDetailInspector: View {
         }
     }
 
-    private var notesCard: some View {
+    var notesCard: some View {
         inspectorCard("Notes") {
             TextEditor(text: $task.body)
                 .font(NexusType.body)
@@ -288,10 +274,11 @@ public struct TaskDetailInspector: View {
     }
 
     private var priorityStatusChip: some View {
+        // Lime economy: priority is metadata → neutral; High keeps its glyph.
         NexusChip(
             priorityLabel(for: task.priority),
             systemImage: task.priority == .high ? "exclamationmark" : nil,
-            tone: task.priority == .high ? .accent : .neutral
+            tone: .neutral
         )
     }
 
@@ -304,7 +291,8 @@ public struct TaskDetailInspector: View {
             case .open:
                 NexusChip("Open")
             case .done:
-                NexusChip("Done", systemImage: "checkmark.circle.fill", tone: .accent)
+                // Lime economy: done-state is metadata → neutral; glyph reads "done".
+                NexusChip("Done", systemImage: "checkmark.circle.fill", tone: .neutral)
             case .snoozed:
                 NexusChip("Snoozed", systemImage: "clock")
             }
@@ -341,6 +329,7 @@ public struct TaskDetailInspector: View {
                 if !allDay {
                     moveStart(to: $0, previousStart: previousStart, previousEnd: previousEnd)
                 }
+                save()  // persist on edit (was the removed DatePicker's onChange)
             }
         )
     }
@@ -462,17 +451,37 @@ public struct TaskDetailInspector: View {
 }
 
 extension TaskDetailInspector {
-    fileprivate var deadlineCard: some View {
+    /// Eyebrow over a full-width segmented control: a leading picker label
+    /// hyphenated "Priority" → "Priori-ty" in the ~360 panel.
+    fileprivate var priorityPicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("PRIORITY")
+                .font(NexusType.eyebrow)
+                .foregroundStyle(NexusColor.Text.tertiary)
+            Picker("Priority", selection: priorityBinding) {
+                Text("None").tag(TaskPriority.none)
+                Text("Low").tag(TaskPriority.low)
+                Text("Medium").tag(TaskPriority.medium)
+                Text("High").tag(TaskPriority.high)
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .onChange(of: task.priorityRaw) { _, _ in save() }
+        }
+    }
+
+    var deadlineCard: some View {
         inspectorCard("Deadline") {
             Toggle("Deadline", isOn: deadlineEnabledBinding)
 
             if task.deadlineAt != nil {
-                DatePicker(
-                    "Date",
-                    selection: deadlineAtBinding,
-                    displayedComponents: [.date]
-                )
-                .datePickerStyle(.compact)
+                dateRow("Date") {
+                    NexusDateField(
+                        date: deadlineAtBinding,
+                        components: [.date],
+                        accessibilityLabel: "Deadline date"
+                    )
+                }
 
                 Button("Clear deadline", role: .destructive) {
                     task.deadlineAt = nil

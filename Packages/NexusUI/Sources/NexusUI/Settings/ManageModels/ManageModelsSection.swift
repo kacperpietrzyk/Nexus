@@ -71,80 +71,117 @@ public struct ManageModelsSection: View {
     }
 
     public var body: some View {
-        Form {
-            Section {
-                let storage = Self.storageUsage(
-                    manifests: manifests,
-                    localStateStore: localStateStore
-                )
-                StorageUsageBar(usedGB: storage.usedGB, totalGB: storage.totalGB)
-            } header: {
-                nexusSettingsSectionHeader("Storage")
-            }
-
-            Section {
-                ForEach(manifests) { manifest in
-                    ModelRowExpandable(
-                        manifest: manifest,
-                        localState: snapshots[manifest.id]
-                            ?? localStateStore.load(manifestID: manifest.id),
-                        progress: activeProgress[manifest.id],
-                        onAssignChat: {
-                            assign(manifest, keyPath: \.assignedAsChat)
-                            if let hook = onChatReassigned {
-                                Task { await hook() }
-                            }
-                        },
-                        onAssignEmbedder: {
-                            assign(manifest, keyPath: \.assignedAsEmbedder)
-                            if let hook = onEmbedderReassigned {
-                                Task { await hook() }
-                            }
-                        },
-                        onDownload: { Task { await download(manifest) } },
-                        onDelete: { delete(manifest) },
-                        onReDownload: { Task { await reDownload(manifest) } },
-                        onDownloadFinished: { downloadFinished(manifest) }
-                    )
-                }
-            } header: {
-                nexusSettingsSectionHeader("Models")
-            }
-
-            Section {
-                AutoUnloadToggle()
-                PreloadChatToggle()
-                Button("Unload now") { lifecycle.unloadAll() }
-            } header: {
-                nexusSettingsSectionHeader("Behavior")
-            } footer: {
-                Text("Unloading frees model RAM immediately; the next request reloads on demand.")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
+        // Flat Linear chrome shared with the macOS root + the sibling detail
+        // screens: a custom-chevron header + scrolling `NexusSettingsCard`
+        // groups, no native grouped-`Form` chrome. The container supplies the
+        // "Manage Models" title and the back affordance, so the former
+        // `.formStyle(.grouped)` / `.navigationTitle` are gone.
+        NexusSettingsDetailContainer(title: "Manage Models") {
+            VStack(alignment: .leading, spacing: NexusSpacing.s7) {
+                storageSection
+                modelsSection
+                behaviorSection
             }
         }
-        // Match the sibling settings destinations (`AgentSettingsView`,
-        // `MeetingsSettingsSection`). Without `.formStyle(.grouped)` a macOS
-        // `Form` falls back to the two-column style, which mislaid this screen's
-        // custom-header sections: the Storage bar overlapped the "MODELS" header
-        // and the list, content gravitated to the bottom of the window with a
-        // large void on top, and it scrolled under the title bar. The grouped
-        // style stacks the Storage / Models / Behavior sections cleanly and
-        // scrolls normally. `.scrollContentBackground(.hidden)` + clear
-        // background let the shared Settings wallpaper show through, as the
-        // siblings do. Harmless on iOS (the same screen ships there via a
-        // `.sheet`): grouped is the default-equivalent there and the background
-        // modifiers are benign.
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-        .background(Color.clear)
         .onAppear {
             reloadSnapshots()
             reattachInflightProgress()
             reconcileInterruptedDownloads()
         }
         .onChange(of: manifests.map(\.id)) { reloadSnapshots() }
-        .navigationTitle("Manage Models")
+    }
+
+    private var storageSection: some View {
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Storage")
+            NexusSettingsCard {
+                let storage = Self.storageUsage(
+                    manifests: manifests,
+                    localStateStore: localStateStore
+                )
+                StorageUsageBar(usedGB: storage.usedGB, totalGB: storage.totalGB)
+                    .padding(NexusSpacing.s4)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var modelsSection: some View {
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Models")
+            NexusSettingsCard {
+                if manifests.isEmpty {
+                    // No catalog model present. Downloads live on the model
+                    // Catalog, not here — so this stays a neutral empty state
+                    // with no download affordance (backend gate).
+                    NexusEmptyState(
+                        systemImage: "cpu",
+                        title: "No models yet",
+                        message: "Downloaded models appear here once added from the catalog."
+                    )
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(manifests.enumerated()), id: \.element.id) { index, manifest in
+                            if index > 0 {
+                                NexusSettingsDivider()
+                            }
+                            ModelRowExpandable(
+                                manifest: manifest,
+                                localState: snapshots[manifest.id]
+                                    ?? localStateStore.load(manifestID: manifest.id),
+                                progress: activeProgress[manifest.id],
+                                onAssignChat: {
+                                    assign(manifest, keyPath: \.assignedAsChat)
+                                    if let hook = onChatReassigned {
+                                        Task { await hook() }
+                                    }
+                                },
+                                onAssignEmbedder: {
+                                    assign(manifest, keyPath: \.assignedAsEmbedder)
+                                    if let hook = onEmbedderReassigned {
+                                        Task { await hook() }
+                                    }
+                                },
+                                onDownload: { Task { await download(manifest) } },
+                                onDelete: { delete(manifest) },
+                                onReDownload: { Task { await reDownload(manifest) } },
+                                onDownloadFinished: { downloadFinished(manifest) }
+                            )
+                            .padding(.horizontal, NexusSpacing.s4)
+                            .padding(.vertical, NexusSpacing.s3)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var behaviorSection: some View {
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Behavior")
+            NexusSettingsCard {
+                VStack(alignment: .leading, spacing: 0) {
+                    AutoUnloadToggle()
+                        .padding(.horizontal, NexusSpacing.s4)
+                        .padding(.vertical, NexusSpacing.s3)
+                    NexusSettingsDivider()
+                    PreloadChatToggle()
+                        .padding(.horizontal, NexusSpacing.s4)
+                        .padding(.vertical, NexusSpacing.s3)
+                    NexusSettingsDivider()
+                    Button("Unload now") { lifecycle.unloadAll() }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(NexusColor.Text.primary)
+                        .padding(.horizontal, NexusSpacing.s4)
+                        .padding(.vertical, NexusSpacing.s3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            Text("Unloading frees model RAM immediately; the next request reloads on demand.")
+                .font(NexusType.caption)
+                .foregroundStyle(NexusColor.Text.muted)
+                .padding(.horizontal, NexusSpacing.s4)
+        }
     }
 
     // MARK: - Storage math (pure, unit-testable)

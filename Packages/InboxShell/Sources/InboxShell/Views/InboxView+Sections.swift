@@ -114,8 +114,13 @@ struct InboxListPanel: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 26)
+                // Leading gutter = the app-wide chrome gutter (18), matching the
+                // NexusTopBar filter tabs above (was 26 — list hung 8pt right).
+                .padding(.leading, 18)
                 .padding(.trailing, 12)
+                // Top gap so the first section header isn't glued to the topbar
+                // (matches the reader pane's top inset / the Today list's 24).
+                .padding(.top, 22)
                 .padding(.bottom, 24)
             }
         }
@@ -206,7 +211,7 @@ struct InboxPanelRow: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 7)
+                RoundedRectangle(cornerRadius: NexusRadius.r1)
                     .fill(
                         isSelected
                             ? NexusColor.Background.controlHover

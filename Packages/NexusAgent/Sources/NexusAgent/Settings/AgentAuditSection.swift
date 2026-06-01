@@ -16,14 +16,25 @@ public struct AgentAuditSection: View {
     }
 
     public var body: some View {
-        SwiftUI.Section("Recent autonomous mutations") {
-            if viewModel.entries.isEmpty {
-                Text("No autonomous mutations yet.")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
-            } else {
-                ForEach(viewModel.entries, id: \.id) { entry in
-                    auditRow(entry)
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Recent autonomous mutations")
+            NexusSettingsCard {
+                if viewModel.entries.isEmpty {
+                    NexusEmptyState(
+                        systemImage: "clock.arrow.circlepath",
+                        title: "No autonomous mutations yet."
+                    )
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
+                            if index > 0 {
+                                NexusSettingsDivider()
+                            }
+                            auditRow(entry)
+                                .padding(.horizontal, NexusSpacing.s4)
+                                .padding(.vertical, NexusSpacing.s3)
+                        }
+                    }
                 }
             }
         }

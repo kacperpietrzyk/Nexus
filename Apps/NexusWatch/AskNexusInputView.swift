@@ -17,25 +17,32 @@ struct AskNexusInputView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Ask Nexus")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(NexusType.h3)
                     .foregroundStyle(NexusColor.Text.primary)
                     .lineLimit(1)
 
                 Text("A short command or question for iPhone.")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(NexusType.meta)
                     .foregroundStyle(NexusColor.Text.tertiary)
                     .lineLimit(2)
 
                 TextField("Ask Nexus", text: $text, axis: .vertical)
-                    .font(.system(size: 16))
+                    .font(NexusType.body)
                     .lineLimit(4, reservesSpace: true)
                     .focused($inputFocused)
                     .padding(10)
-                    .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: 12))
+                    .background(
+                        NexusColor.Background.control,
+                        in: RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+                            .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                    )
 
                 if let resultMessage {
                     Text(resultMessage.message)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(NexusType.meta)
                         .foregroundStyle(resultMessage.color)
                         .lineLimit(3)
                 }
@@ -44,7 +51,7 @@ struct AskNexusInputView: View {
                     _Concurrency.Task { await submit() }
                 } label: {
                     Label(buttonTitle, systemImage: buttonSystemImage)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(NexusType.h3)
                         // limeInk for contrast on lime fill.
                         .foregroundStyle(NexusColor.Accent.limeInk)
                         .frame(maxWidth: .infinity, minHeight: 38)

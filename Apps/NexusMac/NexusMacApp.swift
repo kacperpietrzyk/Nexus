@@ -42,7 +42,6 @@ struct NexusMacApp: App {
     private let taskParser: CompositeNLParser
     private let taskRepository: TaskItemRepository
     private let notificationScheduler: NotificationScheduler
-    private let captureController: CaptureWindowController
     // Strong ref — UNUserNotificationCenter does NOT retain its delegate.
     private let actionHandler: NotificationActionHandler
     private let agentActivityLog: AgentActivityLog
@@ -104,7 +103,6 @@ struct NexusMacApp: App {
         self.helperToastBridge = meetingNavigation.bridge
         let heroBriefService = HeroBriefService(router: self.aiRouter)
         TaskIntentRuntime.configure(parser: self.taskParser, repository: self.taskRepository)
-        self.captureController = CaptureWindowController(parser: self.taskParser, repository: self.taskRepository)
         self.agentComposition = Self.makeAgentComposition(
             modelContext: made.mainContext,
             router: self.aiRouter,
@@ -254,10 +252,6 @@ struct NexusMacApp: App {
                         enabled: UserDefaults.standard.bool(forKey: AgentServiceConstants.mcpEnabledKey)
                     )
                 }
-                .onReceive(NotificationCenter.default.publisher(for: .nexusOpenCapture)) { notification in
-                    let mode = notification.object as? CapturePane.Mode ?? .task
-                    captureController.show(mode: mode)
-                }
                 .sheet(
                     isPresented: Binding(
                         get: { !welcomeShown },
@@ -324,8 +318,12 @@ struct NexusMacApp: App {
             }
 
             CommandMenu("Tasks") {
-                Button("Quick Capture Panel…") {
-                    captureController.toggle(mode: .task)
+                // ⌘⌃N is preserved as a menu command. The old borderless
+                // `CaptureWindowController` panel was deleted; capture is now an
+                // in-window sheet that `ContentView` owns via its own
+                // `.onReceive(.nexusOpenCapture)`, so this just posts that.
+                Button("Quick Capture") {
+                    NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .control])
 
@@ -428,9 +426,7 @@ struct NexusMacApp: App {
         }
 
         MenuBarExtra("Nexus", systemImage: "checklist") {
-            NexusMenuBarContent(
-                openCapture: { captureController.toggle(mode: .task) }
-            )
+            NexusMenuBarContent()
         }
         .menuBarExtraStyle(.menu)
     }
@@ -739,8 +735,6 @@ final class NexusMacAppDelegate: NSObject, NSApplicationDelegate {
 }
 
 private struct NexusMenuBarContent: View {
-    let openCapture: () -> Void
-
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -753,8 +747,16 @@ private struct NexusMenuBarContent: View {
         }
         .keyboardShortcut("n", modifiers: [.command])
 
-        Button("Quick Capture Panel…") {
-            openCapture()
+        // Capture is an in-window overlay now (the borderless panel was
+        // deleted), so the menu-bar trigger MUST open + activate the window
+        // first — ContentView's `.onReceive(.nexusOpenCapture)` only fires if
+        // the window exists. Same pattern as "New Task…" above.
+        Button("Quick Capture") {
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)
+            }
         }
         .keyboardShortcut("n", modifiers: [.command, .control])
 

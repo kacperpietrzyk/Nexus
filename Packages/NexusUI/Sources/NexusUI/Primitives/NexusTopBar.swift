@@ -23,9 +23,13 @@ public struct NexusTopBar<Trailing: View>: View {
     }
 
     public var body: some View {
-        // Linear top bar: a flat `Background.panel` chrome strip with a single
-        // 1px `Line.hairline` bottom rim — no glass, no capsule. Layout of
-        // crumbs/search/cmdK/trailing is unchanged.
+        // Linear top bar: the flat `NexusBarStrip` chrome idiom inlined —
+        // a `Background.panel` strip with a single 1px `Line.hairline` bottom
+        // rim and a contained `NexusShadow.s1`, no glass, no capsule. The
+        // 18/11 padding and s1 shadow match `NexusBarStrip` exactly so this
+        // top bar is visually identical chrome to the control-mode bar and
+        // the bottom command bar. Layout of crumbs/search/cmdK/trailing is
+        // unchanged.
         HStack(spacing: 14) {
             breadcrumbs
 
@@ -45,6 +49,7 @@ public struct NexusTopBar<Trailing: View>: View {
                 .fill(NexusColor.Line.hairline)
                 .frame(height: 1)
         }
+        .nexusShadow(NexusShadow.s1)
     }
 
     private var breadcrumbs: some View {
@@ -78,17 +83,25 @@ public struct NexusTopBar<Trailing: View>: View {
 
                 Spacer(minLength: 8)
 
-                // LabKit `LabCommandBar` ⌘K chip idiom.
-                // ⌘K chip: Gunmetal (`Line.strong`) fill, mono ink, 4px radius.
+                // ⌘K chip — the shared topbar/command-bar idiom:
+                // `Background.control` fill + `NexusType.metaMono` ink + a
+                // `Line.regular` hairline, flat r1 corners (identical to
+                // `NexusCommandBar`'s chip). The border is what reads the
+                // chip against the same-toned `Background.control` search
+                // field it nests inside.
                 Text("⌘K")
-                    .font(NexusType.mono)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(NexusType.metaMono)
+                    .foregroundStyle(NexusColor.Text.disabled)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(
-                        NexusColor.Line.strong,
-                        in: RoundedRectangle(cornerRadius: NexusRadius.badge)
+                        NexusColor.Background.control,
+                        in: RoundedRectangle(cornerRadius: NexusRadius.r1)
                     )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: NexusRadius.r1)
+                            .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                    }
             }
             .padding(.horizontal, 12)
             .frame(height: Self.searchHeight)

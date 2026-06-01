@@ -218,11 +218,11 @@ private struct InboxReaderPaneSurface: ViewModifier {
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
                     .fill(NexusColor.Background.raised)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
                     .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
             }
             .nexusShadow(NexusShadow.s1)

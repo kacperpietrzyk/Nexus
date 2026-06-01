@@ -110,6 +110,19 @@ struct MessageBubbleView: View {
                         toolRow(tool)
                     }
                 }
+                // Tool-call group gets its own tier so it reads as a distinct
+                // cluster against the flat message body: `control` is one step
+                // lighter than the `raised` rows it contains (clean two-tier
+                // nest), with a faint hairline. Neutral, no lime.
+                .padding(8)
+                .background(
+                    NexusColor.Background.control,
+                    in: RoundedRectangle(cornerRadius: NexusRadius.r3)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: NexusRadius.r3)
+                        .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

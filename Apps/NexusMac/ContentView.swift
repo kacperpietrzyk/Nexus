@@ -17,9 +17,15 @@ struct ContentView: View {
     @Environment(\.meetingNavigationRouter) private var meetingNavigationRouter
 
     @State private var selection: TodayNavSelection = .today
-    @State private var selectedTask: TaskItem?
+    // Internal: read from the `ContentView+CaptureAndPeek` extension.
+    @State var selectedTask: TaskItem?
     @State private var customSnoozeTask: TaskItem?
-    @State private var commandPalettePresented = false
+    // Not `private`: read by `commandPaletteOverlay` in the ContentView+CaptureAndPeek
+    // extension (sibling file), mirroring `capturePresented`.
+    @State var commandPalettePresented = false
+    // Internal (not private): read by `captureOverlay` in the sibling extension.
+    @State var capturePresented = false
+    @State var captureMode: CapturePane.Mode = .task
     @State private var inboxUnreadCount = 0
     // §1a control mode (Inbox): the filter-tab control was relocated from
     // the Inbox list-panel header into the shell's top-bar band, so its
@@ -70,30 +76,18 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .containerBackground(NexusColor.Background.base, for: .window)
-        .inspector(isPresented: inspectorBinding) {
-            inspectorContent
-                .inspectorColumnWidth(min: 320, ideal: 360, max: 460)
-        }
+        // List stays FULL-WIDTH; task detail opens as a CENTERED MODAL over a
+        // dimmed scrim (see `taskModal`) — the old trailing peek was too narrow
+        // for the inspector's content. Gated on the UNCHANGED `inspectorBinding`
+        // predicate (§1 "inspector ⊥ Agent" + its test hold).
+        .overlay { taskModal }
+        .animation(NexusMotion.standard, value: inspectorBinding.wrappedValue)
         .sheet(item: $customSnoozeTask) { task in
             CustomSnoozeSheet(task: task)
         }
         .onOpenURL { url in handleOpenURL(url) }
-        .overlay {
-            if commandPalettePresented {
-                ZStack {
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                        .ignoresSafeArea()
-                    Color.black.opacity(0.5)
-                        .ignoresSafeArea()
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { commandPalettePresented = false }
-                .overlay {
-                    CommandPaletteView { commandPalettePresented = false }
-                }
-            }
-        }
+        .overlay { commandPaletteOverlay }
+        .overlay { captureOverlay }
         .task {
             await bootstrapNavigation()
             await reloadInboxCount()
@@ -103,6 +97,10 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .nexusOpenCommandPalette)) { _ in
             commandPalettePresented = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .nexusOpenCapture)) { notification in
+            captureMode = notification.object as? CapturePane.Mode ?? .task
+            capturePresented = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .nexusGoToToday)) { _ in
             navigate(to: .today)
@@ -453,13 +451,11 @@ struct ContentView: View {
         return try? modelContext.fetch(descriptor).first
     }
 
-    private var inspectorBinding: Binding<Bool> {
-        // Defense-in-depth for the §1 "inspector ⊥ Agent" invariant: the
-        // `.onChange(of: selection)` chokepoint clears `selectedTask` on every
-        // transition into `.agent`, but the inspector-visibility decision is
-        // also routed through the pure `InspectorVisibility.shouldShowInspector`
-        // predicate so the invariant holds locally even if state ever lags a
-        // frame, and so it is unit-testable without driving SwiftUI.
+    // Internal: read by `taskModal` in the `ContentView+CaptureAndPeek` extension.
+    // Defense-in-depth for the §1 "inspector ⊥ Agent" invariant — routes the
+    // visibility decision through the pure `InspectorVisibility` predicate so it
+    // holds even if state lags a frame and is unit-testable without SwiftUI.
+    var inspectorBinding: Binding<Bool> {
         Binding(
             get: {
                 InspectorVisibility.shouldShowInspector(
@@ -469,15 +465,6 @@ struct ContentView: View {
             },
             set: { if !$0 { selectedTask = nil } }
         )
-    }
-
-    @ViewBuilder
-    private var inspectorContent: some View {
-        if let task = selectedTask {
-            TaskDetailInspector(task: task, onClose: { selectedTask = nil })
-        } else {
-            Color.clear
-        }
     }
 
     private func bootstrapNavigation() async {
@@ -553,7 +540,8 @@ struct ContentView: View {
 /// deleted in MP-6), re-toned through the MP-2.2 §2
 /// achromatic LabPalette→NexusColor map:
 /// `ink→Text.primary`, `read→Text.secondary`, `faint→Text.muted`,
-/// `dim→Text.disabled`, `block→Background.raised`. Not a primitive — a thin
+/// `dim→Text.disabled`, active fill→`Background.control` (the chrome
+/// selection tier, r1 corners). Not a primitive — a thin
 /// token composition, same status as the private `NexusCommandBar`.
 /// Inter-Medium 12 / IBMPlexMono-Medium 10 are below the `NexusType` scale
 /// (which starts at 11 pt caption), so raw `Font.custom` against the
@@ -581,8 +569,8 @@ private struct InboxFilterTab: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(isActive ? NexusColor.Background.raised : Color.clear)
+                RoundedRectangle(cornerRadius: NexusRadius.r1)
+                    .fill(isActive ? NexusColor.Background.control : Color.clear)
             )
             .contentShape(Rectangle())
         }

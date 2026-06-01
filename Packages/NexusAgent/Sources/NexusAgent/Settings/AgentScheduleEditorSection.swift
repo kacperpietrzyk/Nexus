@@ -15,10 +15,15 @@ public struct AgentScheduleEditorSection: View {
                 threadStore: AgentThreadStore(context: context.auditContext)
             )
         } else {
-            SwiftUI.Section("Schedules") {
-                Text("Schedules are unavailable in this context.")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
+            VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+                nexusSettingsCardSectionHeader("Schedules")
+                NexusSettingsCard {
+                    Text("Schedules are unavailable in this context.")
+                        .font(NexusType.caption)
+                        .foregroundStyle(NexusColor.Text.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(NexusSpacing.s4)
+                }
             }
         }
     }
@@ -37,28 +42,45 @@ private struct AgentScheduleEditorContent: View {
     }
 
     var body: some View {
-        SwiftUI.Section {
-            if viewModel.schedules.isEmpty {
-                Text("No schedules yet.")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
-            } else {
-                ForEach(viewModel.schedules) { schedule in
-                    scheduleRow(schedule)
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Schedules")
+            NexusSettingsCard {
+                VStack(alignment: .leading, spacing: 0) {
+                    if viewModel.schedules.isEmpty {
+                        NexusEmptyState(
+                            systemImage: "calendar.badge.clock",
+                            title: "No schedules yet."
+                        )
+                    } else {
+                        ForEach(Array(viewModel.schedules.enumerated()), id: \.element.id) { index, schedule in
+                            if index > 0 {
+                                NexusSettingsDivider()
+                            }
+                            scheduleRow(schedule)
+                                .padding(.horizontal, NexusSpacing.s4)
+                                .padding(.vertical, NexusSpacing.s3)
+                        }
+                    }
+
+                    NexusSettingsDivider()
+
+                    Button {
+                        draft = .new()
+                    } label: {
+                        Label("Add schedule", systemImage: "plus")
+                            .font(NexusType.bodySmall.weight(.medium))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(NexusColor.Text.primary)
+                    .padding(.horizontal, NexusSpacing.s4)
+                    .padding(.vertical, NexusSpacing.s3)
                 }
             }
-
-            Button {
-                draft = .new()
-            } label: {
-                Label("Add schedule", systemImage: "plus")
-            }
-        } header: {
-            Text("Schedules")
-        } footer: {
             Text("Cron is validated before save.")
                 .font(NexusType.caption)
                 .foregroundStyle(NexusColor.Text.muted)
+                .padding(.horizontal, NexusSpacing.s4)
         }
         .onAppear(perform: reload)
         .sheet(item: $draft) { draft in

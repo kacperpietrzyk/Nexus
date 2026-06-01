@@ -66,15 +66,13 @@ public struct AgentSettingsView: View {
     }
 
     public var body: some View {
-        Form {
-            ForEach(Self.sectionOrder, id: \.self) { section in
-                sectionBody(section)
+        NexusSettingsDetailContainer(title: "Agent") {
+            VStack(alignment: .leading, spacing: NexusSpacing.s7) {
+                ForEach(Self.sectionOrder, id: \.self) { section in
+                    sectionBody(section)
+                }
             }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-        .background(Color.clear)
-        .navigationTitle("Agent")
     }
 
     @ViewBuilder

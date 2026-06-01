@@ -33,24 +33,49 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var selectedTab: NexusTab = .today
-    @State private var selectedTask: TaskItem?
+    // Internal (not private) so the `ContentView+CaptureAndPeek` extension file
+    // can drive the regular-width task-detail peek + Quick Capture overlays.
+    @State var selectedTask: TaskItem?
     @State private var inboxUnreadCount = 0
-    @State private var capturePresented = false
-    @State private var captureMode: CapturePane.Mode = .task
+    @State var capturePresented = false
+    @State var captureMode: CapturePane.Mode = .task
     @State private var customSnoozeTask: TaskItem?
     @State private var quietHoursState = QuietHoursViewState()
     @State private var commandPalettePresented = false
     @State private var pencilCapturePresented = false
 
-    private var isRegularWidth: Bool {
+    var isRegularWidth: Bool {
         horizontalSizeClass == .regular
+    }
+
+    /// Decision #2/#3: on regular width (iPad) the task detail + Quick Capture
+    /// are presented as floating overlays on the detail pane (Mac peek idiom),
+    /// not as sheets. These bindings gate the compact-only `.sheet`s so they
+    /// never fire on iPad, where the overlay carries the surface instead.
+    private var compactSelectedTask: Binding<TaskItem?> {
+        Binding(
+            get: { isRegularWidth ? nil : selectedTask },
+            set: { selectedTask = $0 }
+        )
+    }
+
+    private var compactCapturePresented: Binding<Bool> {
+        Binding(
+            get: { isRegularWidth ? false : capturePresented },
+            set: { capturePresented = $0 }
+        )
     }
 
     var body: some View {
         ZStack {
             NexusColor.Background.base.ignoresSafeArea()
             rootContent
+            // Regular-width Quick Capture overlay sits at the window root (not the
+            // detail pane) so its scrim dims the whole window — sidebar included —
+            // mirroring the Mac full-window scrim. Self-gates on `isRegularWidth`.
+            captureOverlay
         }
+        .animation(NexusMotion.standard, value: capturePresented)
         .sheet(item: $customSnoozeTask) { task in
             CustomSnoozeSheet(task: task)
                 .presentationDetents([.medium])
@@ -119,7 +144,7 @@ struct ContentView: View {
             .presentationDetents(commandPaletteDetents)
             .presentationDragIndicator(isRegularWidth ? .hidden : .visible)
         }
-        .sheet(isPresented: $capturePresented) {
+        .sheet(isPresented: compactCapturePresented) {
             CaptureSheet(
                 initialMode: captureMode,
                 onSaved: { capturePresented = false },
@@ -136,7 +161,7 @@ struct ContentView: View {
             }
             .presentationDetents(captureDetents)
         }
-        .sheet(item: $selectedTask) { task in
+        .sheet(item: compactSelectedTask) { task in
             NavigationStack {
                 TaskDetailInspector(task: task)
                     .navigationTitle(task.title.isEmpty ? "Task" : task.title)
@@ -147,7 +172,7 @@ struct ContentView: View {
                         }
                     }
             }
-            .presentationDetents(isRegularWidth ? [.large] : [.medium, .large])
+            .presentationDetents([.medium, .large])
         }
         .onReceive(NotificationCenter.default.publisher(for: .nexusGoToSettings)) { _ in
             selectedTab = .settings
@@ -302,6 +327,8 @@ extension ContentView {
                         width: max(0, proxy.size.width - sidebarWidth),
                         height: proxy.size.height
                     )
+                    .overlay(alignment: .trailing) { taskPeek }
+                    .animation(NexusMotion.standard, value: selectedTask?.id)
             }
             .frame(
                 width: proxy.size.width,

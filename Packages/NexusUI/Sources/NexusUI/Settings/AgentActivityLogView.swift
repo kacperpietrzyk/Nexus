@@ -13,10 +13,11 @@ public struct AgentActivityLogView: View {
 
     public var body: some View {
         if log.entries.isEmpty {
-            Text("No activity yet. Tools will appear here when an MCP client uses Nexus.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
+            NexusEmptyState(
+                systemImage: "wrench.and.screwdriver",
+                title: "No activity yet",
+                message: "Tools will appear here when an MCP client uses Nexus."
+            )
         } else {
             ForEach(log.entries.reversed()) { entry in
                 row(entry)

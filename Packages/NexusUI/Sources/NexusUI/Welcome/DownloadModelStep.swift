@@ -142,9 +142,9 @@ public struct DownloadModelStep: View {
                     recommendedEmbedderRow
                 }
                 .background(NexusColor.Background.panel)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous)
                         .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
                 )
                 .frame(maxWidth: 440)
