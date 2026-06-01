@@ -7,7 +7,7 @@
     <string>com.kacperpietrzyk.nexus.meetings-helper</string>
     <key>MachServices</key>
     <dict>
-        <key>com.kacperpietrzyk.nexus.meetings-helper</key>
+        <key>group.com.kacperpietrzyk.Nexus.meetings-helper</key>
         <true/>
     </dict>
     <key>BundleProgram</key>

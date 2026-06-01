@@ -54,7 +54,7 @@ struct MeetingsHelperXPCTests {
 
     #if os(macOS)
     @Test func xpcClientPublishesStableMachServiceName() {
-        #expect(MeetingsHelperXPCClient.machServiceName == "com.kacperpietrzyk.nexus.meetings-helper")
+        #expect(MeetingsHelperXPCClient.machServiceName == "group.com.kacperpietrzyk.Nexus.meetings-helper")
     }
 
     @Test func xpcClientProxyCreationDoesNotRequireRunningHelper() {
