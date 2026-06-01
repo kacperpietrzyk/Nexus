@@ -1,3 +1,4 @@
+import NexusUI
 import SwiftUI
 
 public struct MeetingsImportSettingsView: View {
@@ -9,19 +10,31 @@ public struct MeetingsImportSettingsView: View {
     }
 
     public var body: some View {
-        Section("Import") {
-            #if os(macOS)
-            Button("Import from Circleback…") { pickFolder() }
-            Text(
-                "Pick the folder produced by the Nexus Circleback MCP-dump "
-                    + "(manifest.json + meetings/ + transcripts/ + action-items.json). "
-                    + "Re-runs are safe — duplicates are skipped."
-            )
-            .font(.caption).foregroundStyle(.secondary)
-            #else
-            Text("Circleback import runs on Mac. Imported meetings will sync to this device via iCloud.")
-                .foregroundStyle(.secondary)
-            #endif
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Import")
+            NexusSettingsCard {
+                VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+                    #if os(macOS)
+                    Button("Import from Circleback…") { pickFolder() }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(NexusColor.Text.primary)
+                        .font(NexusType.bodySmall.weight(.medium))
+                    Text(
+                        "Pick the folder produced by the Nexus Circleback MCP-dump "
+                            + "(manifest.json + meetings/ + transcripts/ + action-items.json). "
+                            + "Re-runs are safe — duplicates are skipped."
+                    )
+                    .font(NexusType.caption)
+                    .foregroundStyle(NexusColor.Text.muted)
+                    #else
+                    Text("Circleback import runs on Mac. Imported meetings will sync to this device via iCloud.")
+                        .font(NexusType.caption)
+                        .foregroundStyle(NexusColor.Text.muted)
+                    #endif
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(NexusSpacing.s4)
+            }
         }
         .sheet(
             item: Binding(

@@ -1,3 +1,4 @@
+import NexusUI
 import SwiftUI
 
 #if !(os(macOS) && canImport(ServiceManagement))
@@ -26,32 +27,44 @@ public struct MeetingsSettingsSection: View {
     }
 
     public var body: some View {
-        Form {
-            if let helperContent {
-                helperContent
+        NexusSettingsDetailContainer(title: "Meetings") {
+            VStack(alignment: .leading, spacing: NexusSpacing.s7) {
+                if let helperContent {
+                    helperContent
+                }
+                #if os(macOS)
+                MeetingsDetectionSettingsView(composition: composition)
+                #endif
+                MeetingsRetentionSettingsView(composition: composition)
+                MeetingsProviderSettingsView(composition: composition)
+                MeetingsPromptSettingsView(composition: composition)
+                MeetingsImportSettingsView(composition: composition)
+                #if os(iOS)
+                if horizontalSizeClass != .regular {
+                    browseGroup
+                }
+                #endif
             }
-            #if os(macOS)
-            MeetingsDetectionSettingsView(composition: composition)
-            #endif
-            MeetingsRetentionSettingsView(composition: composition)
-            MeetingsProviderSettingsView(composition: composition)
-            MeetingsPromptSettingsView(composition: composition)
-            MeetingsImportSettingsView(composition: composition)
-            #if os(iOS)
-            if horizontalSizeClass != .regular {
-                Section("Browse") {
-                    NavigationLink {
-                        IOSMeetingsListContentView(composition: composition)
-                    } label: {
-                        Label("Browse meetings", systemImage: "person.wave.2")
+        }
+    }
+
+    #if os(iOS)
+    private var browseGroup: some View {
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Browse")
+            NexusSettingsCard {
+                NavigationLink {
+                    IOSMeetingsListContentView(composition: composition)
+                } label: {
+                    NexusSettingsRow("Browse meetings") {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(NexusColor.Text.muted)
                     }
                 }
+                .buttonStyle(.plain)
             }
-            #endif
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-        .background(Color.clear)
-        .navigationTitle("Meetings")
     }
+    #endif
 }

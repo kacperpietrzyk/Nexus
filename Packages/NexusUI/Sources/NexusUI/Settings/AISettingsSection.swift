@@ -19,61 +19,84 @@ public struct AISettingsSection: View {
     }
 
     public var body: some View {
-        Section {
-            if let liveData {
-                providerRow(
-                    title: "Apple Intelligence",
-                    subtitle: "Local generation",
-                    state: liveData.appleIntelligenceAvailability
-                )
-                providerRow(
-                    title: "Embeddings",
-                    subtitle: "NLEmbedding semantic index",
-                    state: liveData.embeddingAvailability
-                )
-            } else {
-                providerRow(
-                    title: "Apple Intelligence",
-                    subtitle: "Local generation",
-                    state: .unavailable(reason: .modelNotAvailable)
-                )
-                providerRow(
-                    title: "Embeddings",
-                    subtitle: "NLEmbedding semantic index",
-                    state: .unavailable(reason: .modelNotAvailable)
-                )
-            }
-
-            Text("Phase 1l-MLX adds a local LLM for longer-context work.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        } header: {
-            nexusSettingsSectionHeader("On-device providers")
-        }
-
-        Section {
-            if let liveData {
-                providerRow(
-                    title: "Transcription",
-                    subtitle: "WhisperKit local speech-to-text",
-                    state: liveData.whisperKitAvailability
-                )
-            } else {
-                providerRow(
-                    title: "Transcription",
-                    subtitle: "WhisperKit local speech-to-text",
-                    state: .unavailable(reason: .modelNotAvailable)
-                )
-            }
-
-            if liveData != nil {
-                whisperDownloadControl
-            }
-            WhisperKitPreloadToggle()
-        } header: {
-            nexusSettingsSectionHeader("Voice")
+        VStack(alignment: .leading, spacing: NexusSpacing.s7) {
+            onDeviceGroup
+            voiceGroup
         }
         .task { await liveData?.refresh() }
+    }
+
+    private var onDeviceGroup: some View {
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("On-device providers")
+            NexusSettingsCard {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let liveData {
+                        providerRow(
+                            title: "Apple Intelligence",
+                            subtitle: "Local generation",
+                            state: liveData.appleIntelligenceAvailability
+                        )
+                        NexusSettingsDivider()
+                        providerRow(
+                            title: "Embeddings",
+                            subtitle: "NLEmbedding semantic index",
+                            state: liveData.embeddingAvailability
+                        )
+                    } else {
+                        providerRow(
+                            title: "Apple Intelligence",
+                            subtitle: "Local generation",
+                            state: .unavailable(reason: .modelNotAvailable)
+                        )
+                        NexusSettingsDivider()
+                        providerRow(
+                            title: "Embeddings",
+                            subtitle: "NLEmbedding semantic index",
+                            state: .unavailable(reason: .modelNotAvailable)
+                        )
+                    }
+                }
+            }
+            Text("Phase 1l-MLX adds a local LLM for longer-context work.")
+                .font(NexusType.caption)
+                .foregroundStyle(NexusColor.Text.muted)
+                .padding(.horizontal, NexusSpacing.s4)
+        }
+    }
+
+    private var voiceGroup: some View {
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Voice")
+            NexusSettingsCard {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let liveData {
+                        providerRow(
+                            title: "Transcription",
+                            subtitle: "WhisperKit local speech-to-text",
+                            state: liveData.whisperKitAvailability
+                        )
+                    } else {
+                        providerRow(
+                            title: "Transcription",
+                            subtitle: "WhisperKit local speech-to-text",
+                            state: .unavailable(reason: .modelNotAvailable)
+                        )
+                    }
+
+                    if liveData != nil {
+                        NexusSettingsDivider()
+                        whisperDownloadControl
+                            .padding(.horizontal, NexusSpacing.s4)
+                            .padding(.vertical, NexusSpacing.s3)
+                    }
+                    NexusSettingsDivider()
+                    WhisperKitPreloadToggle()
+                        .padding(.horizontal, NexusSpacing.s4)
+                        .padding(.vertical, NexusSpacing.s3)
+                }
+            }
+        }
     }
 
     /// Download button + progress for the WhisperKit transcription model. Driven
@@ -85,34 +108,47 @@ public struct AISettingsSection: View {
         case .done:
             EmptyView()
         case .idle:
-            Button("Download transcription model (~1 GB)") {
+            // The one genuine primary action in this group (gated by backend
+            // availability) — so it earns the lime primary treatment per the
+            // "lime only on primary action" rule.
+            NexusButton(variant: .primary, size: .sm) {
                 Task {
                     await whisperDownloader.download()
                     await liveData?.refresh()
                 }
+            } label: {
+                Text("Download transcription model (~1 GB)")
             }
         case .downloading(let fraction):
             ProgressView(value: fraction) {
                 Text("Downloading transcription model… \(Int(fraction * 100))%")
-                    .font(.caption)
+                    .font(NexusType.caption)
+                    .foregroundStyle(NexusColor.Text.secondary)
             }
+            .tint(NexusColor.Text.primary)
         case .preparing:
             ProgressView {
-                Text("Preparing transcription model…").font(.caption)
+                Text("Preparing transcription model…")
+                    .font(NexusType.caption)
+                    .foregroundStyle(NexusColor.Text.secondary)
             }
+            .tint(NexusColor.Text.primary)
         case .failed(let message):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: NexusSpacing.s2) {
                 Label("Download failed", systemImage: "exclamationmark.triangle")
-                    .font(.footnote)
+                    .font(NexusType.bodySmall.weight(.medium))
+                    .foregroundStyle(NexusColor.Text.primary)
                 Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(NexusType.caption)
+                    .foregroundStyle(NexusColor.Text.muted)
                     .textSelection(.enabled)
-                Button("Retry") {
+                NexusButton(variant: .outline, size: .sm) {
                     Task {
                         await whisperDownloader.download()
                         await liveData?.refresh()
                     }
+                } label: {
+                    Text("Retry")
                 }
             }
         }
@@ -120,15 +156,16 @@ public struct AISettingsSection: View {
 
     @ViewBuilder
     private func providerRow(title: String, subtitle: String, state: AvailabilityState) -> some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: NexusSpacing.s4) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.footnote)
+                    .font(NexusType.bodySmall.weight(.medium))
+                    .foregroundStyle(NexusColor.Text.primary)
                 Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(NexusType.caption)
+                    .foregroundStyle(NexusColor.Text.muted)
             }
-            Spacer()
+            Spacer(minLength: NexusSpacing.s4)
             switch state {
             case .available:
                 NexusBadge("Local", systemImage: "checkmark.circle.fill", tone: .pos)
@@ -136,6 +173,8 @@ public struct AISettingsSection: View {
                 NexusBadge(reasonLabel(reason), systemImage: "exclamationmark.circle", tone: .warn)
             }
         }
+        .padding(.horizontal, NexusSpacing.s4)
+        .padding(.vertical, NexusSpacing.s3)
     }
 
     private func reasonLabel(_ reason: AvailabilityState.UnavailableReason) -> String {

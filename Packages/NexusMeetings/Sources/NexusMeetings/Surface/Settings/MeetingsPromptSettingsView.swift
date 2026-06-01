@@ -1,3 +1,4 @@
+import NexusUI
 import SwiftUI
 
 public struct MeetingsPromptSettingsView: View {
@@ -16,18 +17,32 @@ public struct MeetingsPromptSettingsView: View {
     }
 
     public var body: some View {
-        Section("Summary prompt (custom)") {
-            TextEditor(text: $prompt)
-                .frame(minHeight: 160)
+        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+            nexusSettingsCardSectionHeader("Summary prompt (custom)")
+            NexusSettingsCard {
+                VStack(alignment: .leading, spacing: NexusSpacing.s4) {
+                    TextEditor(text: $prompt)
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 160)
 
-            HStack {
-                Button("Save") {
-                    save()
-                }
+                    HStack(spacing: NexusSpacing.s3) {
+                        Button("Save") {
+                            save()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(NexusColor.Text.primary)
+                        .font(NexusType.bodySmall.weight(.medium))
 
-                Button("Reset to default", role: .destructive) {
-                    reset()
+                        Button("Reset to default", role: .destructive) {
+                            reset()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(NexusColor.Text.secondary)
+                        .font(NexusType.bodySmall.weight(.medium))
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(NexusSpacing.s4)
             }
         }
         .onAppear(perform: load)
