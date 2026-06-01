@@ -141,6 +141,7 @@ public struct ManageModelsSection: View {
         .onAppear {
             reloadSnapshots()
             reattachInflightProgress()
+            reconcileInterruptedDownloads()
         }
         .onChange(of: manifests.map(\.id)) { reloadSnapshots() }
         .navigationTitle("Manage Models")
@@ -241,6 +242,53 @@ public struct ManageModelsSection: View {
             if let progress = downloadManager.progress(for: manifest.id) {
                 activeProgress[manifest.id] = progress
             }
+        }
+    }
+
+    /// Resets a model stuck in `.downloading` that has NO live transfer back to
+    /// `.available`, so the row offers Download again.
+    ///
+    /// A download whose process was killed mid-flight (app terminated, crash,
+    /// or the original hang) leaves `status == .downloading` persisted in
+    /// `UserDefaults`. On the next launch the manager's in-flight registry is
+    /// empty, so the row would otherwise render a perpetual indeterminate
+    /// "Downloading…" spinner with no running transfer and no way to restart —
+    /// the `.download` action is hidden in the `.downloading` branch (observed
+    /// on-device: Manage Models showed a frozen spinner with nothing actually
+    /// downloading). Runs on appear AFTER `reattachInflightProgress()`, and the
+    /// `progress(for:) == nil` guard means a genuinely live transfer
+    /// (welcome-flow / same-session) keeps its handle and is never reset.
+    private func reconcileInterruptedDownloads() {
+        let stale = Self.interruptedDownloadIDs(
+            manifests: manifests,
+            localStateStore: localStateStore,
+            hasLiveProgress: {
+                activeProgress[$0] != nil || downloadManager.progress(for: $0) != nil
+            }
+        )
+        guard !stale.isEmpty else { return }
+        for id in stale {
+            var state = localStateStore.load(manifestID: id)
+            state.status = .available
+            state.downloadError = nil
+            localStateStore.save(manifestID: id, state: state)
+        }
+        reloadSnapshots()
+    }
+
+    /// IDs of manifests persisted as `.downloading` but with no live transfer —
+    /// interrupted downloads to reset to `.available`. Pure + unit-testable
+    /// (same precedent as `storageUsage` / `currentSnapshots`).
+    static func interruptedDownloadIDs(
+        manifests: [ModelManifest],
+        localStateStore: ModelManifestLocalState.Store,
+        hasLiveProgress: (String) -> Bool
+    ) -> [String] {
+        manifests.compactMap { manifest in
+            guard !hasLiveProgress(manifest.id),
+                localStateStore.load(manifestID: manifest.id).status == .downloading
+            else { return nil }
+            return manifest.id
         }
     }
 

@@ -101,6 +101,44 @@ struct ManageModelsSectionTests {
         #expect(before["model-c"]?.status == .available)
     }
 
+    @Test("interruptedDownloadIDs: a .downloading status with no live transfer is flagged")
+    func interruptedDownloadDetected() {
+        let store = makeStore(suiteName: #function)
+        let stuck = makeManifest(id: "stuck")
+        let live = makeManifest(id: "live")
+        let done = makeManifest(id: "done")
+        store.save(manifestID: "stuck", state: ModelManifestLocalState(status: .downloading))
+        store.save(manifestID: "live", state: ModelManifestLocalState(status: .downloading))
+        store.save(manifestID: "done", state: ModelManifestLocalState(status: .downloaded))
+
+        let stale = ManageModelsSection.interruptedDownloadIDs(
+            manifests: [stuck, live, done],
+            localStateStore: store,
+            // "live" has an in-flight handle; "stuck" does not.
+            hasLiveProgress: { $0 == "live" }
+        )
+
+        // Only the interrupted one (downloading + no live transfer) is flagged;
+        // a genuinely live download and a completed model are left alone.
+        #expect(stale == ["stuck"])
+    }
+
+    @Test("interruptedDownloadIDs: nothing flagged when no model is stuck downloading")
+    func interruptedDownloadNoneWhenIdle() {
+        let store = makeStore(suiteName: #function)
+        let a = makeManifest(id: "a")
+        let b = makeManifest(id: "b")
+        store.save(manifestID: "a", state: ModelManifestLocalState(status: .available))
+        store.save(manifestID: "b", state: ModelManifestLocalState(status: .downloaded))
+
+        let stale = ManageModelsSection.interruptedDownloadIDs(
+            manifests: [a, b],
+            localStateStore: store,
+            hasLiveProgress: { _ in false }
+        )
+        #expect(stale.isEmpty)
+    }
+
     @Test("assign mutual-exclusion: saving assignedAsChat=true clears other manifests")
     func assignMutualExclusion() {
         let store = makeStore(suiteName: #function)
