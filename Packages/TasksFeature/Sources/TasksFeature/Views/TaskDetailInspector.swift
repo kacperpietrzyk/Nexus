@@ -152,42 +152,35 @@ public struct TaskDetailInspector: View {
                     save()
                 }
 
-            DatePicker(
-                "Due",
-                selection: dueAtBinding,
-                displayedComponents: allDay ? .date : [.date, .hourAndMinute]
-            )
-            .datePickerStyle(.compact)
-            .onChange(of: task.dueAt) { _, _ in save() }
+            dateRow("Due") {
+                NexusDateField(
+                    date: dueAtBinding,
+                    components: allDay ? [.date] : [.date, .hourAndMinute],
+                    accessibilityLabel: "Due date"
+                )
+            }
 
             if allDay {
                 Text("Timed schedule disabled in all-day mode")
                     .font(.caption)
                     .foregroundStyle(NexusColor.Text.tertiary)
             } else {
-                DatePicker(
-                    "Start",
-                    selection: startAtBinding,
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .datePickerStyle(.compact)
+                dateRow("Start") {
+                    NexusDateField(
+                        date: startAtBinding,
+                        components: [.date, .hourAndMinute],
+                        accessibilityLabel: "Start time"
+                    )
+                }
 
-                if let startAt = task.startAt {
-                    DatePicker(
-                        "End",
-                        selection: endAtBinding,
-                        in: minimumEndDate(after: startAt)...,
-                        displayedComponents: [.date, .hourAndMinute]
+                dateRow("End") {
+                    NexusDateField(
+                        date: endAtBinding,
+                        components: [.date, .hourAndMinute],
+                        minDate: task.startAt.map { minimumEndDate(after: $0) },
+                        isEnabled: task.startAt != nil,
+                        accessibilityLabel: "End time"
                     )
-                    .datePickerStyle(.compact)
-                } else {
-                    DatePicker(
-                        "End",
-                        selection: endAtBinding,
-                        displayedComponents: [.date, .hourAndMinute]
-                    )
-                    .datePickerStyle(.compact)
-                    .disabled(true)
                 }
 
                 if let durationLabel {
@@ -196,6 +189,18 @@ public struct TaskDetailInspector: View {
                         .foregroundStyle(NexusColor.Text.tertiary)
                 }
             }
+        }
+    }
+
+    /// A labelled field row: caption on the left, control on the right.
+    @ViewBuilder
+    func dateRow<Field: View>(_ label: String, @ViewBuilder field: () -> Field) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(NexusType.bodySmall)
+                .foregroundStyle(NexusColor.Text.secondary)
+            Spacer(minLength: 8)
+            field()
         }
     }
 
@@ -323,6 +328,7 @@ public struct TaskDetailInspector: View {
                 if !allDay {
                     moveStart(to: $0, previousStart: previousStart, previousEnd: previousEnd)
                 }
+                save()  // persist on edit (was the removed DatePicker's onChange)
             }
         )
     }
@@ -468,12 +474,13 @@ extension TaskDetailInspector {
             Toggle("Deadline", isOn: deadlineEnabledBinding)
 
             if task.deadlineAt != nil {
-                DatePicker(
-                    "Date",
-                    selection: deadlineAtBinding,
-                    displayedComponents: [.date]
-                )
-                .datePickerStyle(.compact)
+                dateRow("Date") {
+                    NexusDateField(
+                        date: deadlineAtBinding,
+                        components: [.date],
+                        accessibilityLabel: "Deadline date"
+                    )
+                }
 
                 Button("Clear deadline", role: .destructive) {
                     task.deadlineAt = nil

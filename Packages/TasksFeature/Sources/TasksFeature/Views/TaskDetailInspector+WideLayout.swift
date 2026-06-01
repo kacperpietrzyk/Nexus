@@ -52,17 +52,22 @@ extension TaskDetailInspector {
         // modal sizes to the content (a short dialog, no phantom scrollbar). A
         // ScrollView would instead fill the host frame and show a scroll
         // indicator over empty space.
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 16) {
-                headerCard
-                scheduleCard
-                deadlineCard
+        VStack(spacing: 16) {
+            // Two balanced metadata columns (header anchors the left, AI the
+            // right); Notes spans full width below so neither column is dragged
+            // tall by the editor and the two columns stay roughly even.
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 16) {
+                    headerCard
+                    scheduleCard
+                }
+                VStack(alignment: .leading, spacing: 16) {
+                    aiAssistCard
+                    deadlineCard
+                    recurrenceCard
+                }
             }
-            VStack(alignment: .leading, spacing: 16) {
-                aiAssistCard
-                recurrenceCard
-                notesCard
-            }
+            notesCard
         }
         .padding(20)
         .background(NexusWallpaper())
