@@ -58,7 +58,7 @@ public struct InboxView: View {
         // this panel header into the Mac shell's top-bar band.
         HStack(alignment: .top, spacing: 0) {
             InboxListPanel(
-                items: items,
+                items: filteredItems,
                 error: error,
                 readItemIDs: $readItemIDs,
                 selectedItem: $selectedItem
@@ -69,7 +69,7 @@ public struct InboxView: View {
 
             InboxReaderPane(
                 item: selectedItem,
-                emptyState: items.isEmpty ? .emptyInbox : .noSelection,
+                emptyState: filteredItems.isEmpty ? .emptyInbox : .noSelection,
                 onOpen: { item in onOpen(item) },
                 onArchive: { item in Task { await archive(item) } },
                 onSnooze: { item, hours in Task { await snooze(item, hours: hours) } }

@@ -20,14 +20,14 @@ public struct NotificationSnapshot: Codable, Sendable, Equatable {
 public struct NotificationSnapshotEntry: Codable, Sendable, Equatable {
     public let id: UUID
     public let title: String
-    public let dueAt: Date
+    public let dueAt: Date?
     public let projectName: String?
     public let snoozedUntil: Date?
 
     public init(
         id: UUID,
         title: String,
-        dueAt: Date,
+        dueAt: Date?,
         projectName: String?,
         snoozedUntil: Date?
     ) {
@@ -40,7 +40,9 @@ public struct NotificationSnapshotEntry: Codable, Sendable, Equatable {
 
     /// Effective trigger time used by the Watch scheduler. For snoozed tasks
     /// this is the snooze release time; for everything else it's the due time.
+    /// A snoozed entry without a due date still has a trigger via `snoozedUntil`;
+    /// the encoder guarantees at least one of the two is non-nil.
     public var effectiveTriggerAt: Date {
-        snoozedUntil ?? dueAt
+        snoozedUntil ?? dueAt ?? .distantPast
     }
 }

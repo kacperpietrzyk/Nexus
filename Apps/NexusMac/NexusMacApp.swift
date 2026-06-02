@@ -237,6 +237,14 @@ struct NexusMacApp: App {
                     await NotificationCategories.registerAll(on: SystemNotificationCenter())
                     await permissionState.refresh()
                     await permissionState.requestIfNeeded()
+                    // Arm the daily 9:00 overdue digest once authorization is not
+                    // denied. Gated the same way the per-task scheduler is — a
+                    // denied permission would otherwise make `add(request)` throw.
+                    // `try?` because a denied/restricted state is not an error here.
+                    if permissionState.status != .denied {
+                        try? await TasksComposition.makeOverdueDigestScheduler()
+                            .registerDailyDigest()
+                    }
                 }
                 .task {
                     if scenePhase == .active {

@@ -55,6 +55,24 @@ struct NotificationSnapshotEncoderTests {
         #expect(snapshot.entries.first?.effectiveTriggerAt == now.addingTimeInterval(3_600))
     }
 
+    @Test func includes_snoozed_task_without_dueAt() throws {
+        let context = try makeContext()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let snoozedNoDue = TaskItem(title: "snoozed no due")
+        snoozedNoDue.statusRaw = TaskStatus.snoozed.rawValue
+        snoozedNoDue.snoozedUntil = now.addingTimeInterval(3_600)
+        context.insert(snoozedNoDue)
+        try context.save()
+
+        let encoder = NotificationSnapshotEncoder(context: context)
+        let snapshot = encoder.encode(now: now, horizon: 24 * 3_600)
+
+        #expect(snapshot.entries.map(\.id) == [snoozedNoDue.id])
+        #expect(snapshot.entries.first?.dueAt == nil)
+        #expect(snapshot.entries.first?.effectiveTriggerAt == now.addingTimeInterval(3_600))
+    }
+
     @Test func sorts_entries_ascending_by_effective_trigger() throws {
         let context = try makeContext()
         let now = Date(timeIntervalSince1970: 1_700_000_000)

@@ -24,7 +24,6 @@ public struct NotificationSnapshotEncoder {
             predicate: #Predicate { task in
                 task.deletedAt == nil
                     && (task.statusRaw == openRaw || task.statusRaw == snoozedRaw)
-                    && task.dueAt != nil
             }
         )
         let tasks = (try? context.fetch(descriptor)) ?? []
@@ -32,13 +31,12 @@ public struct NotificationSnapshotEncoder {
         let entries =
             tasks
             .compactMap { task -> NotificationSnapshotEntry? in
-                guard let due = task.dueAt else { return nil }
-                let trigger = task.snoozedUntil ?? due
+                guard let trigger = task.snoozedUntil ?? task.dueAt else { return nil }
                 guard trigger >= now, trigger <= upper else { return nil }
                 return NotificationSnapshotEntry(
                     id: task.id,
                     title: task.title,
-                    dueAt: due,
+                    dueAt: task.dueAt,
                     projectName: nil,  // Phase 1 has no Project model yet.
                     snoozedUntil: task.snoozedUntil
                 )

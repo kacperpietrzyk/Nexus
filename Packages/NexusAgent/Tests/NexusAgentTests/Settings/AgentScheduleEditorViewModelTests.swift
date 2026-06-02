@@ -60,7 +60,7 @@ import Testing
     #expect(fetched.prompt == "new prompt")
     #expect(fetched.enabled == false)
     #expect(fetched.threadID == threadID)
-    #expect(fetched.modelHint == nil)
+    #expect(fetched.modelHint == "claude")
 }
 
 @MainActor
@@ -123,7 +123,7 @@ import Testing
     #expect(fetched.cronExpression == "0 9 * * *")
     #expect(fetched.prompt == "new prompt")
     #expect(fetched.enabled == false)
-    #expect(fetched.modelHint == nil)
+    #expect(fetched.modelHint == "local")
 }
 
 @MainActor

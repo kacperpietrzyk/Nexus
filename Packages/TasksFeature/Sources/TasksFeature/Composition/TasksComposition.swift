@@ -90,6 +90,17 @@ public enum TasksComposition {
         )
     }
 
+    /// Builds the production `OverdueDigestScheduler` wired to
+    /// `SystemNotificationCenter`. Apps call this once at launch (in the same
+    /// permission-gated `.task` as `makeNotificationScheduler`) and call
+    /// `registerDailyDigest()` so the daily 9:00 overdue-digest notification
+    /// arms. The scheduler is an `actor`, so this factory needs no isolation.
+    public static func makeOverdueDigestScheduler(
+        delivery: any NotificationDelivering = SystemNotificationCenter()
+    ) -> OverdueDigestScheduler {
+        OverdueDigestScheduler(delivery: delivery)
+    }
+
     /// Registers Tasks Inbox sources and command palette actions into the
     /// shared cross-module registries. Apps call this once from their
     /// composition root so the `InboxShell` and `CommandPaletteShell` UI gets

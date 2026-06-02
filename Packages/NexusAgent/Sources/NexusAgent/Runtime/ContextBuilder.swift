@@ -197,7 +197,7 @@ public final class ContextBuilder {
         Tools you call MUST come from the provided tool definitions. For any
         mutating tool, the dispatcher will record the call in AgentAuditLog and
         capture an inverseAction for undo. Reply in the user's language; default
-        to Polish if uncertain.
+        to English if uncertain.
         """
 
     private static func toolDefinitionsJSON(tools: [AgentTool]) -> Data {
