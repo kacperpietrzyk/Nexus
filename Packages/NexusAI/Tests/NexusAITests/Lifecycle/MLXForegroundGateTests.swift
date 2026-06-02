@@ -196,19 +196,20 @@ struct MLXForegroundGateTests {
         #expect(vector == [0.0, 1.0])
     }
 
-    // MARK: - Known limitation: idle-sweep then re-foreground does NOT re-warm
+    // MARK: - idle-sweep then re-foreground RE-WARMS the still-resident container
 
-    /// Pins the documented limitation (issue #51 PR note): the scenePhase
-    /// `.active` warmup fires `preload`, which after an idle sweep hits
-    /// `loadIfNeeded`'s cached-container fast path and does NOT
-    /// `markChatLoaded()` (re-warm must route through `reload()`). So a model
-    /// swept while backgrounded stays unavailable on return until relaunch —
-    /// the router falls back rather than re-warming on-device. This is a
-    /// PRE-EXISTING property (nothing re-warmed before either), not a
-    /// regression; the test exists so the limitation is asserted, not
-    /// rediscovered.
-    @Test("idle-swept chat is not re-warmed by a second foreground preload")
-    func idleSweptChatNotRewarmedByPreload() async throws {
+    /// Pins the recovery behavior: after an idle sweep empties the lifecycle
+    /// slot (while the engine `container` stays resident), the scenePhase
+    /// `.active` warmup fires `preload`, which hits `loadIfNeeded`'s
+    /// cached-container fast path and now re-`markChatLoaded()`, re-promoting the
+    /// still-resident container so `isChatAvailable` flips back true on the next
+    /// foreground return. Previously the slot stayed `.empty` and the router fell
+    /// back off-device until relaunch (silent on-device-AI outage after one
+    /// backgrounding). Safe w.r.t. issue #51: the fast path runs no GPU compute
+    /// (no `MLX.eval`/weight load), and `preload()` itself is still gated on
+    /// `isForegroundActive`, so nothing warms in the background.
+    @Test("idle-swept chat is re-warmed by a foreground preload")
+    func idleSweptChatRewarmedByPreload() async throws {
         let clock = Mutex(Date(timeIntervalSinceReferenceDate: 0))
         let ctrl = makeController(
             fn: #function,
@@ -225,15 +226,16 @@ struct MLXForegroundGateTests {
         try await engine.preload()
         #expect(ctrl.isChatAvailable)
 
-        // Background long enough for the idle sweep to empty the slot.
+        // Background long enough for the idle sweep to empty the slot (the
+        // container stays resident — the sweep only flips the slot flag).
         clock.withLock { $0 = $0.addingTimeInterval(0.2) }
         ctrl.tickIdleSweep()
         #expect(!ctrl.isChatAvailable)
 
         // Return to foreground: a second preload hits the cached-container fast
-        // path and does NOT re-mark — the slot stays empty (the limitation).
+        // path and re-marks the slot, re-promoting the resident container.
         try await engine.preload()
-        #expect(!ctrl.isChatAvailable)
+        #expect(ctrl.isChatAvailable)
     }
 
     // MARK: - No-gate path

@@ -147,6 +147,15 @@ public actor MLXEmbedderEngine {
     /// retry's slot.
     private func loadIfNeeded() async throws -> any MLXEmbedderGenerating {
         if let container {
+            // Fast path re-`markEmbedderLoaded()`: after an idle sweep (or
+            // memory-guard eviction) the lifecycle slot is `.empty` while
+            // `container` stays non-nil. Re-marking re-promotes the still-resident
+            // container so `isEmbedderAvailable` flips back true on the next
+            // ungated hit (e.g. `preload()` on foreground return), instead of
+            // leaving the embedder silently unavailable until model-reassign or
+            // app restart. Redundant-but-harmless when already `.loaded` (it only
+            // resets `idleSince`, same as the `touchEmbedder()` `embed` performs).
+            lifecycle?.markEmbedderLoaded()
             return container
         }
         if let loadingTask {
@@ -162,10 +171,12 @@ public actor MLXEmbedderEngine {
                 container = loaded
                 loadingTask = nil
                 // Notify the lifecycle controller that the embedder slot is live.
-                // Placed ONLY inside the winning (non-stale) branch — the `else`
+                // Placed inside the winning (non-stale) branch — the `else`
                 // branch below is the epoch-rejected/orphan path where the
-                // container is immediately unloaded without being cached;
-                // calling mark there would create phantom availability.
+                // container is immediately unloaded without being cached, so
+                // calling mark there would create phantom availability. (The
+                // cached-hit fast path above re-marks for the swept-then-re-hit
+                // case, but that path never reaches this stale `else`.)
                 lifecycle?.markEmbedderLoaded()
             } else {
                 // A superseding `unload()` ran mid-load: honor it.

@@ -49,11 +49,15 @@ public enum MarkdownExporter {
         folder: URL,
         counters: inout ExportCounters
     ) throws {
-        let items = try context.fetch(
-            FetchDescriptor<L>(
-                predicate: #Predicate { $0.deletedAt == nil }
-            )
-        )
+        // Fetch every row and filter `deletedAt == nil` in Swift rather than via a
+        // `#Predicate<L>`. A predicate built over the generic protocol type `L` synthesizes a
+        // keypath through the `Linkable` witness that SwiftData cannot match against the
+        // concrete model's registered schema keypath in optimized (Release) builds — it traps
+        // in `DataUtilities` with "Couldn't find \Model.<computed …>". Fetching all and
+        // filtering in memory avoids keypath translation entirely; tombstone volume is bounded
+        // by `TombstonePurger`, so the cost is negligible at single-user scale.
+        let items = try context.fetch(FetchDescriptor<L>())
+            .filter { $0.deletedAt == nil }
         for item in items {
             let outgoing = (linksByFromID[item.id] ?? []).map { link in
                 MarkdownDocument.LinkRef(

@@ -55,7 +55,7 @@ public enum TierDetector {
             if physicalMemoryGB >= 16 {
                 return DeviceTier(
                     recommendedChat: storageAllows(modelSizeGB: 3.2, availableGB: availableStorageGB)
-                        ? "qwen3.5-4b-instruct-4bit" : nil,
+                        ? "qwen3.5-4b-4bit" : nil,
                     recommendedEmbedder: embedderFits ? e5LargeID : nil)
             }
             return DeviceTier(
@@ -72,18 +72,18 @@ public enum TierDetector {
             let fits27b = storageAllows(modelSizeGB: 15.8, availableGB: availableStorageGB)
             if physicalMemoryGB >= 64, fits27b {
                 return DeviceTier(
-                    recommendedChat: "qwen3.5-27b-instruct-4bit",
+                    recommendedChat: "qwen3.5-27b-4bit",
                     recommendedEmbedder: e5LargeID)
             }
             let fits9b = storageAllows(modelSizeGB: 5.8, availableGB: availableStorageGB)
             if physicalMemoryGB >= 32, fits9b {
                 return DeviceTier(
-                    recommendedChat: "qwen3.5-9b-instruct-4bit",
+                    recommendedChat: "qwen3.5-9b-4bit",
                     recommendedEmbedder: e5LargeID)
             }
             if storageAllows(modelSizeGB: 3.2, availableGB: availableStorageGB) {
                 return DeviceTier(
-                    recommendedChat: "qwen3.5-4b-instruct-4bit",
+                    recommendedChat: "qwen3.5-4b-4bit",
                     recommendedEmbedder: e5LargeID)
             }
             return DeviceTier(
