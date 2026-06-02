@@ -187,6 +187,46 @@ struct MLXChatEngineLifecycleTests {
         )
     }
 
+    // MARK: swept-but-resident slot is re-promoted on the cached-hit fast path
+
+    @Test("preload re-marks a swept-but-still-resident chat slot loaded again")
+    func preloadRePromotesSweptResidentChatSlot() async throws {
+        let clock = Mutex(Date(timeIntervalSinceReferenceDate: 0))
+        let lifecycle = makeLifecycle(
+            fn: #function,
+            chatIdleTimeout: .milliseconds(200),
+            nowProvider: { clock.withLock { $0 } }
+        )
+
+        let engine = MLXChatEngine(
+            folder: URL(fileURLWithPath: "/dev/null"),
+            lifecycle: lifecycle
+        ) { _, _ in StubChat() }
+
+        // Cold load via generate so the container is cached and the slot loaded.
+        let warmStream = try await engine.generate(
+            messages: [MLXChatMessage(role: .user, text: "warm")],
+            tools: [],
+            params: .default
+        )
+        for try await _ in warmStream {}
+        #expect(lifecycle.isChatAvailable, "precondition: slot loaded after cold load")
+
+        // Advance past the idle timeout and sweep: the slot goes `.empty` while
+        // the engine's `container` stays resident (sweep mutates state only).
+        clock.withLock { $0 = $0.addingTimeInterval(0.3) }
+        lifecycle.tickIdleSweep()
+        #expect(!lifecycle.isChatAvailable, "precondition: slot swept to empty")
+
+        // An ungated `preload()` (e.g. on foreground return) hits the cached
+        // container fast path, which must re-promote the resident container.
+        try await engine.preload()
+        #expect(
+            lifecycle.isChatAvailable,
+            "cached-hit fast path must re-mark the swept-but-resident slot loaded"
+        )
+    }
+
     // MARK: existing call sites unaffected by nil-default lifecycle param
 
     @Test("engine with nil lifecycle (default) still generates correctly")
@@ -333,6 +373,42 @@ struct MLXEmbedderEngineLifecycleTests {
 
         // Verify the orphan was unloaded (existing engine invariant confirmed).
         #expect(orphan.unloadCount == 1, "orphan container must be unloaded")
+    }
+
+    // MARK: swept-but-resident slot is re-promoted on the cached-hit fast path
+
+    @Test("embed re-marks a swept-but-still-resident embedder slot loaded again")
+    func embedRePromotesSweptResidentEmbedderSlot() async throws {
+        let clock = Mutex(Date(timeIntervalSinceReferenceDate: 0))
+        let lifecycle = makeLifecycle(
+            fn: #function,
+            embedderIdleTimeout: .milliseconds(200),
+            nowProvider: { clock.withLock { $0 } }
+        )
+
+        let engine = MLXEmbedderEngine(
+            folder: URL(fileURLWithPath: "/tmp/nexus-embed-lc-\(#function)"),
+            lifecycle: lifecycle,
+            loader: { _ in StubEmbedder() }
+        )
+
+        // Cold load via embed so the container is cached and the slot loaded.
+        _ = try await engine.embed(text: "warm")
+        #expect(lifecycle.isEmbedderAvailable, "precondition: slot loaded after cold load")
+
+        // Advance past the idle timeout and sweep: the slot goes `.empty` while
+        // the engine's `container` stays resident (sweep mutates state only).
+        clock.withLock { $0 = $0.addingTimeInterval(0.3) }
+        lifecycle.tickIdleSweep()
+        #expect(!lifecycle.isEmbedderAvailable, "precondition: slot swept to empty")
+
+        // A subsequent embed hits the cached container fast path, which must
+        // re-promote the resident container so availability flips back true.
+        _ = try await engine.embed(text: "again")
+        #expect(
+            lifecycle.isEmbedderAvailable,
+            "cached-hit fast path must re-mark the swept-but-resident slot loaded"
+        )
     }
 
     // MARK: existing call sites unaffected by nil-default lifecycle param

@@ -29,19 +29,26 @@ public final class LinkableRepository<Item: Linkable> {
     }
 
     public func find(id: UUID) throws -> Item? {
-        let descriptor = FetchDescriptor<Item>(
-            predicate: #Predicate { $0.id == id }
-        )
-        return try context.fetch(descriptor).first
+        // Filter in Swift rather than via a `#Predicate<Item>`: an `$0.id == id` keypath
+        // built over the generic protocol type `Item` synthesizes a `\Item.id` keypath through
+        // the `Linkable` witness that SwiftData cannot match against the concrete model's
+        // registered schema keypath in optimized (Release) builds — same `DataUtilities` trap
+        // as `fetchAll()`. Fetching and matching in memory avoids keypath translation.
+        try context.fetch(FetchDescriptor<Item>()).first { $0.id == id }
     }
 
     /// Returns all live (non-tombstoned) items.
     public func fetchAll() throws -> [Item] {
-        let descriptor = FetchDescriptor<Item>(
-            predicate: #Predicate { $0.deletedAt == nil },
-            sortBy: [SortDescriptor(\Item.updatedAt, order: .reverse)]
-        )
-        return try context.fetch(descriptor)
+        // Fetch every row and filter/sort in Swift rather than via a `#Predicate<Item>` /
+        // generic `SortDescriptor`. A predicate or sort keypath built over the generic protocol
+        // type `Item` synthesizes a keypath through the `Linkable` witness that SwiftData cannot
+        // match against the concrete model's registered schema keypath in optimized (Release)
+        // builds — it traps in `DataUtilities` with "Couldn't find \Model.<computed …>". Fetching
+        // all and filtering/sorting in memory avoids keypath translation entirely; tombstone
+        // volume is bounded by `TombstonePurger`, so the cost is negligible at single-user scale.
+        try context.fetch(FetchDescriptor<Item>())
+            .filter { $0.deletedAt == nil }
+            .sorted { $0.updatedAt > $1.updatedAt }
     }
 
     /// Returns everything, including tombstones. Used by `TombstonePurger` and admin tools.

@@ -16,12 +16,12 @@ struct DownloadModelStepTests {
         defaults.removePersistentDomain(forName: #function)
         let state = WelcomeFlowState(defaults: defaults)
         let tier = DeviceTier(
-            recommendedChat: "qwen3.5-9b-instruct-4bit",
+            recommendedChat: "qwen3.5-9b-4bit",
             recommendedEmbedder: "multilingual-e5-large"
         )
         let view = try DownloadModelStep(state: state, tier: tier)
         view.applyDefaultRecommendation()
-        #expect(state.selectedChatModelID == "qwen3.5-9b-instruct-4bit")
+        #expect(state.selectedChatModelID == "qwen3.5-9b-4bit")
         #expect(state.selectedEmbedderID == "multilingual-e5-large")
         #expect(state.skipMLX == false)
     }
@@ -32,7 +32,7 @@ struct DownloadModelStepTests {
         defaults.removePersistentDomain(forName: #function)
         let state = WelcomeFlowState(defaults: defaults)
         let tier = DeviceTier(
-            recommendedChat: "qwen3.5-9b-instruct-4bit",
+            recommendedChat: "qwen3.5-9b-4bit",
             recommendedEmbedder: "multilingual-e5-large"
         )
         let view = try DownloadModelStep(state: state, tier: tier)

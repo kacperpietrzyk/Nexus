@@ -242,7 +242,9 @@ public actor MLXChatEngine {
 
     // Only reached from `generate`/`preload`, which hold the busy gate via
     // `enter()`, so concurrent cold loads cannot both reach the cache-commit
-    // line; markChatLoaded() therefore fires at most once per logical load.
+    // line; the cold-load markChatLoaded() therefore fires at most once per
+    // logical load. The cached-hit fast path additionally re-marks the slot so a
+    // swept-but-still-resident container is re-promoted to available.
     //
     // The post-await write is epoch-guarded against a concurrent `unload()`
     // (mirrors `MLXEmbedderEngine.loadIfNeeded`): `loader` suspends, and if
@@ -257,12 +259,19 @@ public actor MLXChatEngine {
         params: MLXGenerateParameters
     ) async throws -> any MLXChatGenerating {
         if let container {
-            // Fast path deliberately does NOT re-`markChatLoaded()`: after an
-            // idle sweep the lifecycle slot is `.empty` while `container` stays
-            // non-nil, so a future manual "re-warm chat" affordance MUST route
-            // through `reload()` (which `unload()`s first), NOT `preload()` —
-            // otherwise this cached hit returns without re-marking and MLX is
-            // silently unavailable.
+            // Fast path re-`markChatLoaded()`: after an idle sweep (or thermal /
+            // memory-guard eviction) the lifecycle slot is `.empty` while
+            // `container` stays non-nil. Re-marking re-promotes the still-resident
+            // container so `isChatAvailable` flips back true on the next ungated
+            // hit (e.g. `preload()` on foreground return), instead of leaving MLX
+            // silently unavailable until model-reassign or app restart.
+            //
+            // Safe in every state: in the already-`.loaded` case this only resets
+            // `idleSince` (same as the `touchChat()` `generate` already performs),
+            // and it cannot create phantom thermal availability because
+            // `isChatAvailable` stays gated by the separate `thermalDegraded`
+            // flag.
+            lifecycle?.markChatLoaded()
             return container
         }
         let generation = loadGeneration
@@ -270,11 +279,11 @@ public actor MLXChatEngine {
         if loadGeneration == generation {
             container = loaded
             // Notify the lifecycle controller that the chat slot is now live.
-            // Called only on the winning (non-stale) cold-load path after the
-            // cache is committed; the cached-hit fast path above deliberately
-            // does NOT call mark so a swept-then-re-hit slot is not
-            // phantom-promoted, and the stale `else` branch unloads the orphan
-            // without caching so it cannot create phantom availability.
+            // Called on the winning (non-stale) cold-load path after the cache is
+            // committed; the cached-hit fast path above also re-marks so a
+            // swept-then-re-hit slot is re-promoted, and the stale `else` branch
+            // unloads the orphan without caching so it cannot create phantom
+            // availability.
             lifecycle?.markChatLoaded()
         } else {
             // A superseding `unload()` ran mid-load: honor it.
