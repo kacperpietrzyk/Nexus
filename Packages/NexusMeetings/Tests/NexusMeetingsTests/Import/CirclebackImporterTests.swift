@@ -54,3 +54,27 @@ import Testing
     }
     #expect(!done.isEmpty)
 }
+
+/// A skipped meeting (here a bundle with no manifest) is surfaced in `errors`
+/// using the `path: reason` shape and never aborts `execute()` — the same
+/// skip-and-continue contract the per-meeting catch in the import loop relies on.
+@MainActor
+@Test func importerSurfacesSkipsInErrorsWithoutAborting() async throws {
+    let context = try MeetingsTestSupport.makeContext()
+    let importer = CirclebackImporter(
+        meetingRepository: MeetingRepository(context: context),
+        taskRepository: TaskItemRepository(context: context, scheduler: RRuleScheduler(), now: { .now }),
+        linkRepository: LinkRepository(context: context)
+    )
+    let emptyBundle = FileManager.default.temporaryDirectory
+        .appendingPathComponent("nexus-import-test-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: emptyBundle, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: emptyBundle) }
+
+    let result = try await importer.execute(bundleURL: emptyBundle, progress: { _ in })
+
+    #expect(result.importedCount == 0)
+    #expect(result.skippedCount == 1)
+    #expect(result.errors.count == 1)
+    #expect(result.errors.first?.contains(emptyBundle.path) == true)
+}

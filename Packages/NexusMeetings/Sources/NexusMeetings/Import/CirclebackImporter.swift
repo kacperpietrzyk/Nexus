@@ -51,10 +51,15 @@ public final class CirclebackImporter {
                 progress(Double(index + 1) / Double(total))
                 continue
             }
-            let (done, created) = try importMeeting(planned, existingTaskIDs: &existingTaskIDs)
-            actionItemCount += created
-            actionItemsAlreadyDone += done
-            importedCount += 1
+            do {
+                let (done, created) = try importMeeting(planned, existingTaskIDs: &existingTaskIDs)
+                actionItemCount += created
+                actionItemsAlreadyDone += done
+                importedCount += 1
+            } catch {
+                skippedCount += 1
+                errors.append("\(planned.sourceFilePath): \(error.localizedDescription)")
+            }
             progress(Double(index + 1) / Double(total))
         }
 

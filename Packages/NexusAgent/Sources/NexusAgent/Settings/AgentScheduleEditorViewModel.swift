@@ -33,7 +33,7 @@ public final class AgentScheduleEditorViewModel: ObservableObject {
                 cronExpression: cronExpression,
                 prompt: prompt,
                 threadID: threadID,
-                modelHint: nil,
+                modelHint: modelHint,
                 enabled: enabled
             ),
             id: id

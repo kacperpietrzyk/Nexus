@@ -86,9 +86,11 @@ final class WatchNotificationScheduler {
         content.title = entry.title
         content.categoryIdentifier = NotificationCategory.taskReminder.rawValue
         content.userInfo = [
-            "taskId": entry.id.uuidString,
-            "dueAt": entry.dueAt.timeIntervalSince1970,
+            "taskId": entry.id.uuidString
         ]
+        if let dueAt = entry.dueAt {
+            content.userInfo["dueAt"] = dueAt.timeIntervalSince1970
+        }
         if let projectName = entry.projectName {
             content.subtitle = projectName
         }
