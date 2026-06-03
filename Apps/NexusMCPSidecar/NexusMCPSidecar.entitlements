@@ -8,9 +8,5 @@
 	<array>
 		<string>group.com.kacperpietrzyk.Nexus</string>
 	</array>
-	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-	<array>
-		<string>$(TeamIdentifierPrefix)com.kacperpietrzyk.nexus.agent</string>
-	</array>
 </dict>
 </plist>
