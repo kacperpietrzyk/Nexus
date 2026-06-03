@@ -166,7 +166,30 @@ public struct ExternalAccessSection: View {
     }
 
     nonisolated static func claudeCodeArguments(sidecarPath: String) -> [String] {
-        ["claude", "mcp", "add", "--scope", "user", "nexus", sidecarPath]
+        ["mcp", "add", "--scope", "user", "nexus", sidecarPath]
+    }
+
+    /// Resolves an absolute path to the `claude` CLI. A GUI app launched from
+    /// Finder/Dock inherits launchd's minimal `PATH` (no `~/.local/bin`,
+    /// `~/.claude/local`, or Homebrew), so `/usr/bin/env claude` fails with
+    /// exit 127. We probe the locations the CLI actually installs into instead,
+    /// honouring a `CLAUDE_CLI_PATH` override first.
+    nonisolated static func claudeExecutableURL(
+        fileManager: FileManager = .default,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL? {
+        var candidates: [URL] = []
+        if let override = environment["CLAUDE_CLI_PATH"], !override.isEmpty {
+            candidates.append(URL(fileURLWithPath: override))
+        }
+        for relative in [".local/bin/claude", ".claude/local/claude", "bin/claude"] {
+            candidates.append(homeDirectory.appendingPathComponent(relative))
+        }
+        for absolute in ["/opt/homebrew/bin/claude", "/usr/local/bin/claude", "/usr/bin/claude"] {
+            candidates.append(URL(fileURLWithPath: absolute))
+        }
+        return candidates.first { fileManager.isExecutableFile(atPath: $0.path) }
     }
 
     nonisolated private static func addToClaudeCode(sidecarPath: String) async -> AddCLIStatus {
@@ -176,8 +199,12 @@ public struct ExternalAccessSection: View {
     }
 
     nonisolated private static func runClaudeCodeAdd(sidecarPath: String, timeout: TimeInterval = 10) -> AddCLIStatus {
+        guard let executableURL = claudeExecutableURL() else {
+            return .failed("Could not find the claude CLI. Install it, or set CLAUDE_CLI_PATH.")
+        }
+
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        task.executableURL = executableURL
         task.arguments = claudeCodeArguments(sidecarPath: sidecarPath)
 
         let standardError = Pipe()

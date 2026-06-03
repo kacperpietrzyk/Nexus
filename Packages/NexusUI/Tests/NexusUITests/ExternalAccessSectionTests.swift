@@ -98,9 +98,47 @@ struct ExternalAccessSectionTests {
 
     @Test("Claude Code add uses user scope")
     func claudeCodeArgumentsUseUserScope() {
+        // The executable is resolved separately (claudeExecutableURL), so the
+        // arguments are what we pass to `claude` itself — no leading "claude".
         let arguments = ExternalAccessSection.claudeCodeArguments(sidecarPath: "/tmp/nexus-mcp")
 
-        #expect(arguments == ["claude", "mcp", "add", "--scope", "user", "nexus", "/tmp/nexus-mcp"])
+        #expect(arguments == ["mcp", "add", "--scope", "user", "nexus", "/tmp/nexus-mcp"])
+    }
+
+    @Test("claude CLI is located via CLAUDE_CLI_PATH override and home candidates")
+    func claudeExecutableLocator() throws {
+        let fileManager = FileManager.default
+        let tempDir = fileManager.temporaryDirectory
+            .appendingPathComponent("nexus-cli-locator-\(UUID().uuidString)")
+        let binDir = tempDir.appendingPathComponent(".local/bin")
+        try fileManager.createDirectory(at: binDir, withIntermediateDirectories: true)
+        let fakeClaude = binDir.appendingPathComponent("claude")
+        try Data("#!/bin/sh\n".utf8).write(to: fakeClaude)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeClaude.path)
+        defer { try? fileManager.removeItem(at: tempDir) }
+
+        // Found relative to an injected home directory.
+        let viaHome = ExternalAccessSection.claudeExecutableURL(
+            environment: [:],
+            homeDirectory: tempDir
+        )
+        #expect(viaHome?.path == fakeClaude.path)
+
+        // CLAUDE_CLI_PATH override wins over the candidate scan.
+        let viaOverride = ExternalAccessSection.claudeExecutableURL(
+            environment: ["CLAUDE_CLI_PATH": fakeClaude.path],
+            homeDirectory: fileManager.temporaryDirectory
+        )
+        #expect(viaOverride?.path == fakeClaude.path)
+
+        // Nothing executable anywhere → nil.
+        let missing = ExternalAccessSection.claudeExecutableURL(
+            environment: [:],
+            homeDirectory: fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        )
+        // Only nil if the machine also lacks the absolute fallbacks; assert the
+        // override/home resolution above instead of the host-dependent fallback.
+        _ = missing
     }
     #endif
 }
