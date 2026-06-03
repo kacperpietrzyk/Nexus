@@ -44,16 +44,13 @@ public struct NexusSettingsView: View {
     public struct ExternalAccessConfig {
         public let sidecarPath: String
         public let activityLog: AgentActivityLog
-        public let isCLIAvailable: Bool
 
         public init(
             sidecarPath: String,
-            activityLog: AgentActivityLog,
-            isCLIAvailable: Bool = true
+            activityLog: AgentActivityLog
         ) {
             self.sidecarPath = sidecarPath
             self.activityLog = activityLog
-            self.isCLIAvailable = isCLIAvailable
         }
     }
 
@@ -151,8 +148,7 @@ public struct NexusSettingsView: View {
         if advancedEnabled, let config = externalAccessConfig {
             ExternalAccessSection(
                 sidecarPath: config.sidecarPath,
-                activityLog: config.activityLog,
-                isClaudeCLIAvailable: config.isCLIAvailable
+                activityLog: config.activityLog
             )
         }
         macAdvancedSection

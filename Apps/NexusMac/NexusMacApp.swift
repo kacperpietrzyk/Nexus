@@ -386,8 +386,7 @@ struct NexusMacApp: App {
                         sidecarPath: Bundle.main.bundleURL
                             .appendingPathComponent("Contents/MacOS/nexus-mcp")
                             .path,
-                        activityLog: agentActivityLog,
-                        isCLIAvailable: ExternalAccessSection.claudeExecutableURL() != nil
+                        activityLog: agentActivityLog
                     ),
                     agentSettingsContent: AnyView(
                         AgentSettingsView(context: agentComposition.settingsContext)
