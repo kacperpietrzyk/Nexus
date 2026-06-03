@@ -112,10 +112,71 @@ final class AgentSocketServer: @unchecked Sendable {
         switch request.op {
         case .ping:
             return encode(AgentSocketResponse(enabled: isEnabled(), version: appVersion))
-        case .manifest, .dispatch:
-            // Implemented in Task 4.
-            return encode(AgentSocketResponse(error: .init(code: -32_601, message: "not implemented")))
+        case .manifest:
+            guard isEnabled() else {
+                return encode(AgentSocketResponse(error: .init(code: -32_001, message: "mcp disabled")))
+            }
+            do {
+                let data = try JSONEncoder().encode(registry.manifest())
+                return encode(AgentSocketResponse(payload: data))
+            } catch {
+                return encode(AgentSocketResponse(error: .init(code: -32_603, message: "manifest encode failed")))
+            }
+        case .dispatch:
+            guard isEnabled() else {
+                return encode(AgentSocketResponse(error: .init(code: -32_001, message: "mcp disabled")))
+            }
+            guard let name = request.name else {
+                return encode(AgentSocketResponse(error: .init(code: -32_602, message: "missing tool name")))
+            }
+            return dispatchSync(name: name, argsJSON: request.argsJSON ?? Data("{}".utf8))
         }
+    }
+
+    /// Runs the tool on the main actor and blocks the socket worker thread until
+    /// it completes. The sidecar issues one request at a time per connection.
+    private func dispatchSync(name: String, argsJSON: Data) -> Data {
+        let started = Date()
+        let registry = self.registry
+        let context = self.context
+        let activityLog = self.activityLog
+        let argsPreview = argsJSON.agentRedactedPreviewString()
+
+        let semaphore = DispatchSemaphore(value: 0)
+        let box = ResultBox()
+        Task { @MainActor in
+            defer { semaphore.signal() }
+            do {
+                guard let tool = registry.tool(named: name) else {
+                    throw AgentError.notFound("no tool named \(name)")
+                }
+                let args: JSONValue
+                do { args = try JSONDecoder().decode(JSONValue.self, from: argsJSON) }
+                catch { throw AgentError.validation("Invalid JSON arguments") }
+                let result = try await tool.call(args: args, context: context)
+                box.data = try JSONEncoder().encode(result)
+                activityLog.record(.success(
+                    name: name, argsRedacted: argsPreview,
+                    durationMs: Int(Date().timeIntervalSince(started) * 1_000)))
+            } catch let agentError as AgentError {
+                box.agentError = agentError
+                activityLog.record(.failure(
+                    name: name, argsRedacted: argsPreview,
+                    code: agentError.jsonRPCCode,
+                    durationMs: Int(Date().timeIntervalSince(started) * 1_000)))
+            } catch {
+                let wrapped = AgentError.internalError("\(error)")
+                box.agentError = wrapped
+                activityLog.record(.failure(
+                    name: name, argsRedacted: argsPreview,
+                    code: wrapped.jsonRPCCode,
+                    durationMs: Int(Date().timeIntervalSince(started) * 1_000)))
+            }
+        }
+        semaphore.wait()
+        if let data = box.data { return encode(AgentSocketResponse(payload: data)) }
+        let err = box.agentError ?? AgentError.internalError("no result")
+        return encode(AgentSocketResponse(error: .init(code: err.jsonRPCCode, message: "\(err)")))
     }
 
     private func encode(_ response: AgentSocketResponse) -> Data {
@@ -127,5 +188,49 @@ final class AgentSocketServer: @unchecked Sendable {
         acceptSource = nil
         if listenerFD >= 0 { close(listenerFD); listenerFD = -1 }
         if let url = AgentServiceConstants.socketURL() { unlink(url.path) }
+    }
+}
+
+private final class ResultBox: @unchecked Sendable {
+    var data: Data?
+    var agentError: AgentError?
+}
+
+extension Data {
+    /// First 512 characters of pretty-printed JSON shape for the activity log preview.
+    fileprivate func agentRedactedPreviewString() -> String {
+        guard let object = try? JSONSerialization.jsonObject(with: self) else {
+            return "<invalid json: \(count) bytes>"
+        }
+        let redacted = Self.redactedJSONValue(object)
+        guard JSONSerialization.isValidJSONObject(redacted),
+            let pretty = try? JSONSerialization.data(
+                withJSONObject: redacted,
+                options: [.prettyPrinted, .sortedKeys]
+            ),
+            let string = String(data: pretty, encoding: .utf8)
+        else {
+            return "<unprintable json: \(count) bytes>"
+        }
+        return String(string.prefix(512))
+    }
+
+    private static func redactedJSONValue(_ value: Any) -> Any {
+        switch value {
+        case let object as [String: Any]:
+            return object.reduce(into: [String: Any]()) { result, entry in
+                result[entry.key] = redactedJSONValue(entry.value)
+            }
+        case let array as [Any]:
+            return array.map(redactedJSONValue)
+        case is String:
+            return "<redacted>"
+        case is NSNull:
+            return NSNull()
+        case let number as NSNumber:
+            return number
+        default:
+            return "<redacted>"
+        }
     }
 }
