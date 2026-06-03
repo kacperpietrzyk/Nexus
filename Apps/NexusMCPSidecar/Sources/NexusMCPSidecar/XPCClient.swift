@@ -1,5 +1,13 @@
 import Foundation
 
+// Compatibility shim — machServiceName() was previously a free function in
+// AgentServiceConstants.swift. Kept here so XPCClient compiles until Task 6
+// removes XPCClient entirely.
+private func machServiceName(from bundle: Bundle = .main) -> String {
+    let prefix = (bundle.infoDictionary?["TeamIdentifierPrefix"] as? String) ?? ""
+    return "\(prefix)com.kacperpietrzyk.nexus.agent"
+}
+
 /// Mirror of NexusAgentXPCProtocol. The sidecar cannot import NexusMac code.
 @objc protocol NexusAgentXPCProtocolMirror {
     func ping(reply: @escaping @Sendable (Bool, String) -> Void)
