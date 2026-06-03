@@ -27,12 +27,12 @@ public enum AgentFrameCodec {
 }
 
 public struct AgentSocketRequest: Codable, Sendable {
-    public enum Op: String, Codable, Sendable { case ping, manifest, dispatch }
-    public let op: Op
+    public enum Operation: String, Codable, Sendable { case ping, manifest, dispatch }
+    public let op: Operation
     public let name: String?
     public let argsJSON: Data?
 
-    public init(op: Op, name: String? = nil, argsJSON: Data? = nil) {
+    public init(op: Operation, name: String? = nil, argsJSON: Data? = nil) {
         self.op = op
         self.name = name
         self.argsJSON = argsJSON

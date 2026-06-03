@@ -106,8 +106,11 @@ final class AgentSocketServer: @unchecked Sendable {
 
     private func handle(_ frame: Data) -> Data {
         let request: AgentSocketRequest
-        do { request = try JSONDecoder().decode(AgentSocketRequest.self, from: frame) }
-        catch { return encode(AgentSocketResponse(error: .init(code: -32_700, message: "bad request frame"))) }
+        do {
+            request = try JSONDecoder().decode(AgentSocketRequest.self, from: frame)
+        } catch {
+            return encode(AgentSocketResponse(error: .init(code: -32_700, message: "bad request frame")))
+        }
 
         switch request.op {
         case .ping:
@@ -151,26 +154,32 @@ final class AgentSocketServer: @unchecked Sendable {
                     throw AgentError.notFound("no tool named \(name)")
                 }
                 let args: JSONValue
-                do { args = try JSONDecoder().decode(JSONValue.self, from: argsJSON) }
-                catch { throw AgentError.validation("Invalid JSON arguments") }
+                do {
+                    args = try JSONDecoder().decode(JSONValue.self, from: argsJSON)
+                } catch {
+                    throw AgentError.validation("Invalid JSON arguments")
+                }
                 let result = try await tool.call(args: args, context: context)
                 box.data = try JSONEncoder().encode(result)
-                activityLog.record(.success(
-                    name: name, argsRedacted: argsPreview,
-                    durationMs: Int(Date().timeIntervalSince(started) * 1_000)))
+                activityLog.record(
+                    .success(
+                        name: name, argsRedacted: argsPreview,
+                        durationMs: Int(Date().timeIntervalSince(started) * 1_000)))
             } catch let agentError as AgentError {
                 box.agentError = agentError
-                activityLog.record(.failure(
-                    name: name, argsRedacted: argsPreview,
-                    code: agentError.jsonRPCCode,
-                    durationMs: Int(Date().timeIntervalSince(started) * 1_000)))
+                activityLog.record(
+                    .failure(
+                        name: name, argsRedacted: argsPreview,
+                        code: agentError.jsonRPCCode,
+                        durationMs: Int(Date().timeIntervalSince(started) * 1_000)))
             } catch {
                 let wrapped = AgentError.internalError("\(error)")
                 box.agentError = wrapped
-                activityLog.record(.failure(
-                    name: name, argsRedacted: argsPreview,
-                    code: wrapped.jsonRPCCode,
-                    durationMs: Int(Date().timeIntervalSince(started) * 1_000)))
+                activityLog.record(
+                    .failure(
+                        name: name, argsRedacted: argsPreview,
+                        code: wrapped.jsonRPCCode,
+                        durationMs: Int(Date().timeIntervalSince(started) * 1_000)))
             }
         }
         semaphore.wait()
