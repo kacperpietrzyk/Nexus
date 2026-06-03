@@ -1,17 +1,17 @@
 import Foundation
 import MCP
 
-/// Bridges MCP stdio to the XPC service hosted by NexusMac.
+/// Bridges MCP stdio to the unix-domain socket service hosted by NexusMac.
 ///
 /// Swift MCP SDK 0.12 exposes tool support through `ListTools` and `CallTool`
 /// method handlers rather than per-tool registration. The data flow remains
 /// manifest-driven: the running app owns tool definitions and execution.
 actor MCPServer {
-    private let client: XPCClient
+    private let client: AgentSocketClient
     private var server: Server?
     private var cachedTools: [Tool]?
 
-    init(client: XPCClient) {
+    init(client: AgentSocketClient) {
         self.client = client
     }
 

@@ -1,28 +1,29 @@
 import Foundation
 
-/// Shared constants for the XPC bridge between Nexus.app and the nexus-mcp sidecar.
+/// Shared constants for the IPC bridge between Nexus.app and the nexus-mcp sidecar.
 public enum AgentServiceConstants {
-    /// Suffix appended after the team identifier prefix to form the Mach service name.
-    /// Full name: "<TeamID>.\(machServiceSuffix)" where TeamID is read at runtime.
-    public static let machServiceSuffix = "com.kacperpietrzyk.nexus.agent"
+    /// App Group shared by NexusMac and the sidecar. Both are members, so both can
+    /// reach files (incl. the unix-domain socket) inside its container.
+    public static let appGroupIdentifier = "group.com.kacperpietrzyk.Nexus"
 
-    /// Current XPC + tool-manifest protocol version. Sidecar checks at handshake.
-    /// Bump major when XPC interface changes incompatibly.
+    /// Unix-domain socket file name inside the App Group container. The running app
+    /// listens here; the sidecar connects. Kept short so the absolute path stays
+    /// within sockaddr_un.sun_path (104 bytes on Darwin).
+    public static let socketFileName = "agent.sock"
+
+    /// Current protocol version. Sidecar checks at handshake.
     public static let protocolVersion = "1.0"
 
     /// UserDefaults key gating the listener.
     public static let mcpEnabledKey = "nexus.mcp.enabled"
 
-    /// Computes the runtime Mach service name. NexusMac uses `Bundle.main` (its own
-    /// embedded provisioning); sidecar reads the team identifier prefix from its
-    /// own bundle which shares the team after codesign.
-    public static func machServiceName(from bundle: Bundle = .main) -> String {
-        let prefix = (bundle.infoDictionary?["TeamIdentifierPrefix"] as? String) ?? ""
-        return "\(prefix)\(machServiceSuffix)"
+    /// Absolute URL of the agent socket inside the App Group container, or nil if
+    /// the container is unavailable (e.g. entitlement missing).
+    public static func socketURL(
+        fileManager: FileManager = .default
+    ) -> URL? {
+        fileManager
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)?
+            .appendingPathComponent(socketFileName, isDirectory: false)
     }
-}
-
-/// Compatibility forwarding API for early scaffold callers.
-public func machServiceName(from bundle: Bundle = .main) -> String {
-    AgentServiceConstants.machServiceName(from: bundle)
 }

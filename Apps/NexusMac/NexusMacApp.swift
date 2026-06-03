@@ -50,8 +50,7 @@ struct NexusMacApp: App {
     private let meetingNavigationRouter: MeetingNavigationRouter
     private let meetingsHelperXPCClient: MeetingsHelperXPCClient
     private let helperToastBridge: HelperToastBridge
-    private let agentXPCListener: NSXPCListener
-    private let agentXPCService: NexusAgentXPCService
+    private let agentSocketServer: AgentSocketServer
     // Retained for the process lifetime — its kicked-off MLX downloads
     // (multi-GB) must outlive the welcome sheet.
     private let welcomeMLXDownloads: WelcomeMLXDownloadCoordinator
@@ -124,8 +123,7 @@ struct NexusMacApp: App {
             agentComposition: self.agentComposition
         )
         self.agentActivityLog = agentInfrastructure.activityLog
-        self.agentXPCService = agentInfrastructure.service
-        self.agentXPCListener = agentInfrastructure.listener
+        self.agentSocketServer = agentInfrastructure.server
         self._agentListenerActive = State(initialValue: agentInfrastructure.listenerActive)
         self._scheduler = State(initialValue: Scheduler())
         let router = self.aiRouter
@@ -453,10 +451,10 @@ struct NexusMacApp: App {
 
     private func syncAgentListener(enabled: Bool) {
         if enabled, !agentListenerActive {
-            agentXPCListener.resume()
+            agentSocketServer.start()
             agentListenerActive = true
         } else if !enabled, agentListenerActive {
-            agentXPCListener.suspend()
+            agentSocketServer.stop()
             agentListenerActive = false
         }
     }
@@ -577,23 +575,19 @@ struct NexusMacApp: App {
             heroBriefService: heroBriefService
         )
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
-        let service = NexusAgentXPCService(
+        let service = AgentSocketServer(
             registry: agentComposition.toolRegistry,
             context: agentContext,
             activityLog: log,
             appVersion: appVersion,
             isEnabled: { UserDefaults.standard.bool(forKey: AgentServiceConstants.mcpEnabledKey) }
         )
-        let listener = NSXPCListener(machServiceName: machServiceName())
-        listener.delegate = service
-        if UserDefaults.standard.bool(forKey: AgentServiceConstants.mcpEnabledKey) {
-            listener.resume()
-        }
+        let enabled = UserDefaults.standard.bool(forKey: AgentServiceConstants.mcpEnabledKey)
+        if enabled { service.start() }
         return AgentInfrastructure(
             activityLog: log,
-            service: service,
-            listener: listener,
-            listenerActive: UserDefaults.standard.bool(forKey: AgentServiceConstants.mcpEnabledKey)
+            server: service,
+            listenerActive: enabled
         )
     }
 
@@ -658,8 +652,7 @@ struct NexusMacApp: App {
 
 private struct AgentInfrastructure {
     let activityLog: AgentActivityLog
-    let service: NexusAgentXPCService
-    let listener: NSXPCListener
+    let server: AgentSocketServer
     let listenerActive: Bool
 }
 

@@ -3,7 +3,7 @@ import Foundation
 @main
 struct NexusMCPSidecarMain {
     static func main() async {
-        let client = XPCClient()
+        let client = AgentSocketClient()
         let server = MCPServer(client: client)
         do {
             try await server.start()

@@ -7,7 +7,7 @@ import Testing
 struct MCPServerSmokeTests {
     @Test("MCPServer initializes with a client")
     func initialize() {
-        let client = XPCClient()
+        let client = AgentSocketClient()
         let server = MCPServer(client: client)
 
         _ = server
