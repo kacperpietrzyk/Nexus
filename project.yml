@@ -352,7 +352,12 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kacperpietrzyk.Nexus.MCPSidecar
         INFOPLIST_FILE: Apps/NexusMCPSidecar/Info.plist
         CODE_SIGN_ENTITLEMENTS: Apps/NexusMCPSidecar/NexusMCPSidecar.entitlements
-        CREATE_INFOPLIST_SECTION_IN_BINARY: NO
+        # Must be YES: this is a sandboxed command-line `tool` (no bundle), so the
+        # App Sandbox initializer reads CFBundleIdentifier from the binary's embedded
+        # __TEXT,__info_plist section. With NO, the section is absent and libsecinit
+        # traps (EXC_BREAKPOINT in _libsecinit_appsandbox) before main() — the MCP
+        # stdio server crashes on launch and clients see JSON-RPC -32000.
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
         SKIP_INSTALL: YES
     dependencies:
       - package: mcp-swift-sdk
