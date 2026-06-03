@@ -174,7 +174,7 @@ public struct ExternalAccessSection: View {
     /// `~/.claude/local`, or Homebrew), so `/usr/bin/env claude` fails with
     /// exit 127. We probe the locations the CLI actually installs into instead,
     /// honouring a `CLAUDE_CLI_PATH` override first.
-    nonisolated static func claudeExecutableURL(
+    public nonisolated static func claudeExecutableURL(
         fileManager: FileManager = .default,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
