@@ -94,13 +94,21 @@ public struct MeetingDetailView: View {
 
     @ViewBuilder
     private var tabContent: some View {
+        // `.id(meetingID)` on every tab is load-bearing: without it SwiftUI reuses
+        // the same child instance across a selection change, so the child's
+        // `@StateObject` view-model (which captures `meetingID` in its initializer)
+        // keeps showing the FIRST meeting forever. Tying identity to `meetingID`
+        // forces a fresh view-model + `onAppear` reload whenever selection changes.
         switch selectedTab {
         case .transcript:
             TranscriptView(meetingID: meetingID, repository: composition.meetingRepository)
+                .id(meetingID)
         case .summary:
             SummaryView(meetingID: meetingID, repository: composition.meetingRepository)
+                .id(meetingID)
         case .actions:
             ActionItemsTabView(meetingID: meetingID, composition: composition)
+                .id(meetingID)
         case .audio:
             let storage = try? composition.audioStorageRepository.find(meetingID: meetingID)
             let folderURL = storage?.folderURL ?? URL(fileURLWithPath: "/tmp")
@@ -109,6 +117,7 @@ public struct MeetingDetailView: View {
                 othersURL: folderURL.appendingPathComponent("others.wav"),
                 hasAudio: storage?.hasAudio ?? false
             )
+            .id(meetingID)
         }
     }
 
