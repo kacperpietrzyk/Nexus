@@ -16,19 +16,28 @@ import SwiftUI
 struct OverlayScrollerConfigurator: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        scheduleApply(from: view, delays: [0.0, 0.2, 0.6])
+        scheduleApply(from: view, delays: [0.0, 0.3, 0.8, 1.5])
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        scheduleApply(from: nsView, delays: [0.0])
+        // Fires on every re-render (incl. navigation), so a list whose scroll
+        // view is built lazily after switching tabs is caught here too.
+        scheduleApply(from: nsView, delays: [0.0, 0.25])
     }
 
     private func scheduleApply(from view: NSView, delays: [TimeInterval]) {
         for delay in delays {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak view] in
-                guard let window = view?.window else { return }
-                Self.applyOverlayStyle(to: window.contentView)
+                // `.background` representables sometimes have a nil `window`, so
+                // fall back to the app's windows and style them all.
+                if let window = view?.window {
+                    Self.applyOverlayStyle(to: window.contentView)
+                } else {
+                    for window in NSApp.windows {
+                        Self.applyOverlayStyle(to: window.contentView)
+                    }
+                }
             }
         }
     }
