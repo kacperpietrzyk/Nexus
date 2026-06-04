@@ -384,12 +384,11 @@ public struct TodayDashboard: View {
             }
         case .tasks:
             // Freed column (the always-empty DAY rail is dropped for `.tasks`):
-            // left-aligned with the chrome, Linear-style full-width rows. The
-            // width cap is a comfortable reading measure (~1040): the previous
-            // 1280 let short titles drift ~900px from their right-aligned tags on
-            // a wide monitor, reading as sparse/disconnected. `.tasks` case only.
+            // Linear-style rows fill the full content width, scrollbar at the
+            // window edge. (An earlier width cap left a lopsided void + a
+            // floating scrollbar on wide monitors — worse than the drift it
+            // tried to fix.) `.tasks` case only.
             TaskListView(filter: taskFilter, onSelect: onOpenTask)
-                .frame(maxWidth: 1040, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 // Route gutter = chrome gutter (18); matches Today + Inbox (was 28).
                 .padding(.horizontal, 18)
