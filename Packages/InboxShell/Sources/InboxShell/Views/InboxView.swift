@@ -4,6 +4,7 @@ import SwiftUI
 
 public struct InboxView: View {
     private let registry: InboxSourceRegistry
+    private let readStateStore: InboxReadStateStore
     private let onUnreadCountChanged: @MainActor (Int) -> Void
     private let onOpen: @MainActor (InboxItem) -> Void
     private let onItemsChanged: @MainActor ([InboxItem]) -> Void
@@ -29,12 +30,14 @@ public struct InboxView: View {
 
     public init(
         registry: InboxSourceRegistry = .shared,
+        readStateStore: InboxReadStateStore = .shared,
         activeFilter: Binding<InboxFilter>? = nil,
         onUnreadCountChanged: @escaping @MainActor (Int) -> Void = { _ in },
         onItemsChanged: @escaping @MainActor ([InboxItem]) -> Void = { _ in },
         onOpen: @escaping @MainActor (InboxItem) -> Void
     ) {
         self.registry = registry
+        self.readStateStore = readStateStore
         self.externalActiveFilter = activeFilter
         self.onUnreadCountChanged = onUnreadCountChanged
         self.onItemsChanged = onItemsChanged
@@ -177,6 +180,16 @@ public struct InboxView: View {
             guard generation == reloadGeneration else { return }
             items = loaded
             error = nil
+            // Rehydrate read state from durable storage (survives the tab-switch
+            // remount that resets `@State`), merge any marks made this session,
+            // then prune to the currently-loaded ids so the set can't grow
+            // unbounded. `InboxItem.id` is stable (== underlying TaskItem.id),
+            // so persisted marks line up with reloaded items.
+            let loadedIDs = Set(loaded.map(\.id))
+            readItemIDs = readStateStore.load()
+                .union(readItemIDs)
+                .intersection(loadedIDs)
+            readStateStore.save(readItemIDs)
             reconcileSelection(selectFirstItem: selectFirstItem)
             // Only the winning reload publishes its set: a stale reload must
             // not call back at all (§5 — both writes after the stale-guard).
@@ -212,6 +225,7 @@ public struct InboxView: View {
     @MainActor
     private func markRead(_ item: InboxItem) {
         readItemIDs.insert(item.id)
+        readStateStore.save(readItemIDs)
     }
 
     // archive/snooze request `selectFirstItem: true`, but if a concurrent
@@ -237,6 +251,9 @@ public struct InboxView: View {
     @MainActor
     private func markAllRead() async {
         readItemIDs.formUnion(items.map(\.id))
+        // Persist immediately: the user may switch tabs (unmounting this view)
+        // before any reload/`didSave` would otherwise flush the set.
+        readStateStore.save(readItemIDs)
     }
 
     private var unreadCount: Int {
