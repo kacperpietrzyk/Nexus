@@ -74,6 +74,41 @@ private func makeRouter(
     #expect(emb.providerUsed == .appleIntelligence)
 }
 
+@Test func onDeviceGenerate_prefersReadyLocalModelOverAppleIntelligence() async throws {
+    // Composition (`AIComposition`) orders the loaded MLX chat model BEFORE
+    // Apple Intelligence so an assigned local model serves `.generate` — Apple
+    // FM's on-device guardrail false-positives on benign non-English prompts,
+    // and the user's downloaded model should win. With both ready, the router's
+    // `onDevice.first` pick must select MLX. Guards against reverting the order.
+    let mlx = FakeAIProvider(
+        id: .mlx,
+        capabilities: [.generate],
+        sendsDataExternally: false,
+        requiresNetwork: false
+    )
+    let apple = FakeAIProvider(
+        id: .appleIntelligence,
+        capabilities: [.generate, .embed],
+        sendsDataExternally: false,
+        requiresNetwork: false
+    )
+    let router = AIRouter(
+        providers: [mlx, apple],
+        consent: InMemoryConsentStore(),
+        quota: InMemoryQuotaTracker(),
+        secrets: InMemorySecretStore()
+    )
+
+    let gen = try await router.route(AIRequest(prompt: "hi", capability: .generate))
+    #expect(gen.providerUsed == .mlx)
+    #expect(apple.generateCallCount == 0)
+
+    // `.embed` is unaffected: MLX chat advertises only `.generate`, so embed
+    // still resolves to Apple Intelligence.
+    let emb = try await router.route(AIRequest(prompt: "hi", capability: .embed))
+    #expect(emb.providerUsed == .appleIntelligence)
+}
+
 @Test func imageAttachmentsHaveNoLocalOnlyProvider() async {
     let router = makeRouter()
 
