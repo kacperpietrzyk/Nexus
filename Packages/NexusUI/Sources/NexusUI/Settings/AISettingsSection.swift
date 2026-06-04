@@ -8,12 +8,6 @@ import NexusAI
 public struct AISettingsSection: View {
     private let liveData: AISettingsLiveData?
 
-    /// Self-contained — the download base + variant are deterministic, so the
-    /// row owns the coordinator directly with no app-root wiring. Reads the
-    /// already-downloaded state on init (so the button hides when the model is
-    /// present).
-    @State private var whisperDownloader = WhisperKitModelDownloadCoordinator()
-
     public init(liveData: AISettingsLiveData? = nil) {
         self.liveData = liveData
     }
@@ -86,7 +80,7 @@ public struct AISettingsSection: View {
 
                     if liveData != nil {
                         NexusSettingsDivider()
-                        whisperDownloadControl
+                        WhisperKitDownloadControl(onRefresh: { await liveData?.refresh() })
                             .padding(.horizontal, NexusSpacing.s4)
                             .padding(.vertical, NexusSpacing.s3)
                     }
@@ -94,61 +88,6 @@ public struct AISettingsSection: View {
                     WhisperKitPreloadToggle()
                         .padding(.horizontal, NexusSpacing.s4)
                         .padding(.vertical, NexusSpacing.s3)
-                }
-            }
-        }
-    }
-
-    /// Download button + progress for the WhisperKit transcription model. Driven
-    /// by the self-owned coordinator; hidden once the model is present (the row's
-    /// "Local" badge then communicates readiness).
-    @ViewBuilder
-    private var whisperDownloadControl: some View {
-        switch whisperDownloader.phase {
-        case .done:
-            EmptyView()
-        case .idle:
-            // The one genuine primary action in this group (gated by backend
-            // availability) — so it earns the lime primary treatment per the
-            // "lime only on primary action" rule.
-            NexusButton(variant: .primary, size: .sm) {
-                Task {
-                    await whisperDownloader.download()
-                    await liveData?.refresh()
-                }
-            } label: {
-                Text("Download transcription model (~1 GB)")
-            }
-        case .downloading(let fraction):
-            ProgressView(value: fraction) {
-                Text("Downloading transcription model… \(Int(fraction * 100))%")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.secondary)
-            }
-            .tint(NexusColor.Text.primary)
-        case .preparing:
-            ProgressView {
-                Text("Preparing transcription model…")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.secondary)
-            }
-            .tint(NexusColor.Text.primary)
-        case .failed(let message):
-            VStack(alignment: .leading, spacing: NexusSpacing.s2) {
-                Label("Download failed", systemImage: "exclamationmark.triangle")
-                    .font(NexusType.bodySmall.weight(.medium))
-                    .foregroundStyle(NexusColor.Text.primary)
-                Text(message)
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
-                    .textSelection(.enabled)
-                NexusButton(variant: .outline, size: .sm) {
-                    Task {
-                        await whisperDownloader.download()
-                        await liveData?.refresh()
-                    }
-                } label: {
-                    Text("Retry")
                 }
             }
         }
