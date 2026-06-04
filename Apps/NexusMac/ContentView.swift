@@ -245,6 +245,9 @@ struct ContentView: View {
             // returning the same singleton, and `AgentBottomInput` observes
             // it via `@ObservedObject`, so a `send` from the bottom bar
             // re-renders the message list and `isThinking` flows to both.
+            // Thread management on macOS: `AgentThreadRail` fronts the chat with
+            // a persistent, selectable/archivable thread list (see its doc for
+            // why this is an `HStack` rail, not a nested `NavigationSplitView`).
             NexusShell(
                 crumbs: ["Personal", shellTitle],
                 onOpenCommandPalette: { commandPalettePresented = true },
@@ -253,7 +256,7 @@ struct ContentView: View {
                 },
                 topControl: { AgentTopControl(viewModel: agentViewModel) },
                 bottomBar: { AgentBottomInput(viewModel: agentViewModel) },
-                content: { AgentChatView(viewModel: agentViewModel) }
+                content: { AgentThreadRail(viewModel: agentViewModel) }
             )
         } else {
             NexusShell(
