@@ -43,6 +43,8 @@ struct ContentView: View {
                 dashboardBody
             }
         }
+        // App-wide subtle, unified scrollbars (see `OverlayScrollerConfigurator`).
+        .background(OverlayScrollerConfigurator())
         .task { await observeMeetingNavigation() }
     }
 
