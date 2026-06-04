@@ -65,7 +65,10 @@ public struct AgentChatView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
         }
-        .onAppear { viewModel.refreshChatModelAvailability() }
+        .onAppear {
+            viewModel.refreshChatModelAvailability()
+            viewModel.warmChatModelIfNeeded()
+        }
     }
 
     private var regularBodyWithInlineInput: some View {
@@ -81,7 +84,10 @@ public struct AgentChatView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
         }
-        .onAppear { viewModel.refreshChatModelAvailability() }
+        .onAppear {
+            viewModel.refreshChatModelAvailability()
+            viewModel.warmChatModelIfNeeded()
+        }
     }
 
     // Proactive nudge (iOS): the agent's on-device brain is an MLX chat model that may

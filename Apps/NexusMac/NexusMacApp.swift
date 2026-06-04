@@ -102,6 +102,8 @@ struct NexusMacApp: App {
         self.helperToastBridge = meetingNavigation.bridge
         let heroBriefService = HeroBriefService(router: self.aiRouter)
         TaskIntentRuntime.configure(parser: self.taskParser, repository: self.taskRepository)
+        let agentRouter = self.aiRouter
+        let agentLifecycle = self.aiGraph.mlxLifecycle
         self.agentComposition = Self.makeAgentComposition(
             modelContext: made.mainContext,
             router: self.aiRouter,
@@ -110,7 +112,21 @@ struct NexusMacApp: App {
             nlParser: self.taskParser,
             heroBriefService: heroBriefService,
             meetingTools: self.meetingsComposition.agentTools(),
-            ocrPipeline: self.aiGraph.ocrPipeline
+            ocrPipeline: self.aiGraph.ocrPipeline,
+            // Lazy-warm the assigned chat model when the agent surface opens, so
+            // an assigned local model serves chat even with "preload on launch"
+            // off. Guarded to an assigned, on-disk, not-yet-loaded model (same
+            // checks as `preloadMLXIfRequested`) — never loads the `unknown`
+            // fallback and no-ops once warm. Foreground + user-initiated, so it
+            // does not reintroduce background MLX GPU work.
+            warmChatModel: {
+                let store = ModelManifestLocalState.Store()
+                let assigned =
+                    store.currentChatAssignment() != nil
+                    && FileManager.default.fileExists(atPath: agentLifecycle.chatFolderURL().path)
+                guard assigned, !agentLifecycle.isChatAvailable else { return }
+                try? await agentRouter.preloadMLXChat()
+            }
         )
         let handler = Self.installNotificationHandler(repository: self.taskRepository, scheduler: notifScheduler)
         self.actionHandler = handler
@@ -600,7 +616,8 @@ struct NexusMacApp: App {
         nlParser: CompositeNLParser,
         heroBriefService: HeroBriefService,
         meetingTools: [any AgentTool],
-        ocrPipeline: OCRPipeline
+        ocrPipeline: OCRPipeline,
+        warmChatModel: @escaping @MainActor () async -> Void
     ) -> AgentComposition {
         let additionalTools = NexusAgentToolsExtras.tools() + meetingTools
         let agentContext = AgentToolBootstrap.makeContext(
@@ -621,6 +638,7 @@ struct NexusMacApp: App {
                 agentContext: agentContext,
                 additionalTools: additionalTools,
                 ocrPipeline: ocrPipeline,
+                warmChatModel: warmChatModel,
                 legacyBrief: makeLegacyBrief(using: heroBriefService)
             )
         } catch {

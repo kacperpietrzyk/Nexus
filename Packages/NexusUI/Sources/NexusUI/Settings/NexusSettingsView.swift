@@ -308,6 +308,14 @@ public struct NexusSettingsView: View {
                     state: liveData?.whisperKitAvailability ?? .unavailable(reason: .modelNotAvailable)
                 )
                 NexusSettingsDivider()
+                // macOS previously lacked any download affordance, so transcription
+                // was stuck at "Not available on this device" with no way to fetch
+                // the model — iOS had the button via `AISettingsSection`. Same
+                // shared control here closes the gap.
+                WhisperKitDownloadControl(onRefresh: { await liveData?.refresh() })
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                NexusSettingsDivider()
                 NexusSettingsRow("Preload transcription model at launch") {
                     WhisperKitPreloadToggle()
                         .labelsHidden()

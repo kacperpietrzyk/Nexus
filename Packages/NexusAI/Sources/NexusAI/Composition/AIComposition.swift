@@ -118,10 +118,20 @@ public enum AIComposition {
             availabilityProbe: { [weak lifecycle] in lifecycle?.isEmbedderAvailable ?? false }
         )
 
+        // Order matters: the router picks `onDevice.first` among providers that are
+        // ready for the requested capability (see `AIRouter.selectProvider`). The
+        // user's explicitly-assigned, loaded MLX chat model must win over Apple
+        // Intelligence for `.generate` — otherwise a downloaded/assigned Qwen never
+        // serves chat (Apple FM is `isReady(.generate)` whenever Apple Intelligence
+        // is enabled) and benign prompts can hit Apple's guardrail false-positives.
+        // `mlxChat.isReady(.generate)` is false until it is preloaded, so Apple FM
+        // still serves as the on-device fallback when no local model is loaded.
+        // `.embed` is unaffected: `mlxChat` advertises only `.generate`, so embed
+        // routing still resolves to AppleIntelligence/`mlxEmbedder` as before.
         let providers: [any AIProvider] = [
+            mlxChat,
             AppleIntelligenceProvider(),
             WhisperKitProvider(),
-            mlxChat,
             mlxEmbedder,
         ]
         let router = AIRouter(

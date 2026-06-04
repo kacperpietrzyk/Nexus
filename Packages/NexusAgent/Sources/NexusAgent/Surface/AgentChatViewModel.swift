@@ -21,6 +21,7 @@ public final class AgentChatViewModel: ObservableObject {
     private let messageStore: AgentMessageStore
     private let memoryStore: AgentMemoryStore
     private let chatModelAvailabilityProbe: (@MainActor () -> Bool)?
+    private let warmChatModel: (@MainActor () async -> Void)?
 
     public init(
         runtime: AgentRuntime,
@@ -28,7 +29,8 @@ public final class AgentChatViewModel: ObservableObject {
         messageStore: AgentMessageStore,
         memoryStore: AgentMemoryStore,
         voiceCapture: AgentVoiceCapture? = nil,
-        chatModelAvailability: (@MainActor () -> Bool)? = nil
+        chatModelAvailability: (@MainActor () -> Bool)? = nil,
+        warmChatModel: (@MainActor () async -> Void)? = nil
     ) {
         self.runtime = runtime
         self.threadStore = threadStore
@@ -36,9 +38,22 @@ public final class AgentChatViewModel: ObservableObject {
         self.memoryStore = memoryStore
         self.voiceCapture = voiceCapture
         self.chatModelAvailabilityProbe = chatModelAvailability
+        self.warmChatModel = warmChatModel
         self.isChatModelAvailable = chatModelAvailability?() ?? true
 
         reloadThreads()
+    }
+
+    /// Warms the assigned on-device chat model if one is assigned but not yet
+    /// loaded. Call from the chat view's `onAppear` so an assigned local model
+    /// (e.g. Qwen) actually serves chat even when the "preload on launch" toggle
+    /// is off — otherwise a cold MLX provider stays invisible to the router and
+    /// every prompt dead-ends at Apple Intelligence (and its guardrail). No-op
+    /// when no warm closure was injected (iOS / tests). Fire-and-forget; the
+    /// injected closure owns the assigned-and-on-disk guard.
+    public func warmChatModelIfNeeded() {
+        guard let warmChatModel else { return }
+        Task { await warmChatModel() }
     }
 
     /// Re-evaluates whether the on-device chat model is present. A no-op when no probe

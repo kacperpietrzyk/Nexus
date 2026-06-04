@@ -8,6 +8,8 @@ import SwiftUI
 public final class TranscriptViewModel: ObservableObject {
     @Published public private(set) var segments: [MeetingSpeakerSegment] = []
     @Published public private(set) var participants: [MeetingParticipant] = []
+    /// Distinct names used in prior meetings, offered as rename suggestions.
+    @Published public private(set) var priorParticipantNames: [String] = []
 
     private let meetingID: UUID
     private let repository: MeetingRepository
@@ -22,6 +24,8 @@ public final class TranscriptViewModel: ObservableObject {
     }
 
     public func load() {
+        priorParticipantNames = (try? repository.distinctParticipantNames()) ?? []
+
         guard let meeting = try? repository.find(id: meetingID) else {
             segments = []
             participants = []
@@ -112,6 +116,7 @@ public struct TranscriptView: View {
                 speaker: renaming ?? "",
                 draft: $renameDraft,
                 errorMessage: renameError,
+                suggestions: viewModel.priorParticipantNames,
                 onCancel: {
                     renaming = nil
                     renameDraft = ""
@@ -195,11 +200,33 @@ private struct RenameSpeakerSheet: View {
     let speaker: String
     @Binding var draft: String
     let errorMessage: String?
+    let suggestions: [String]
     let onCancel: () -> Void
     let onSave: () -> Void
 
     private var trimmedDraft: String {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Names from prior meetings that match what the user is typing. An empty
+    /// draft shows the full roster; otherwise it's a case/diacritic-insensitive
+    /// substring match. The exact current value is dropped (nothing to pick when
+    /// the field already equals it). Capped so the sheet can't grow unbounded.
+    private var filteredSuggestions: [String] {
+        let needle = trimmedDraft
+        let matches: [String]
+        if needle.isEmpty {
+            matches = suggestions
+        } else {
+            matches = suggestions.filter { candidate in
+                candidate.caseInsensitiveCompare(needle) != .orderedSame
+                    && candidate.range(
+                        of: needle,
+                        options: [.caseInsensitive, .diacriticInsensitive]
+                    ) != nil
+            }
+        }
+        return Array(matches.prefix(6))
     }
 
     var body: some View {
@@ -213,6 +240,40 @@ private struct RenameSpeakerSheet: View {
 
             TextField("Display name", text: $draft)
                 .textFieldStyle(.roundedBorder)
+
+            if !filteredSuggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("From previous meetings")
+                        .font(.caption2)
+                        .foregroundStyle(NexusColor.Text.muted)
+
+                    ForEach(filteredSuggestions, id: \.self) { suggestion in
+                        Button {
+                            draft = suggestion
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.crop.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(NexusColor.Text.tertiary)
+                                Text(suggestion)
+                                    .font(.caption)
+                                    .foregroundStyle(NexusColor.Text.primary)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .background(
+                                NexusColor.Background.control,
+                                in: RoundedRectangle(cornerRadius: 6)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Use this name")
+                    }
+                }
+            }
 
             if let errorMessage {
                 Text(errorMessage)

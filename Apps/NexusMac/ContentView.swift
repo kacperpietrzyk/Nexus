@@ -245,6 +245,9 @@ struct ContentView: View {
             // returning the same singleton, and `AgentBottomInput` observes
             // it via `@ObservedObject`, so a `send` from the bottom bar
             // re-renders the message list and `isThinking` flows to both.
+            // Thread management on macOS: `AgentThreadRail` fronts the chat with
+            // a persistent, selectable/archivable thread list (see its doc for
+            // why this is an `HStack` rail, not a nested `NavigationSplitView`).
             NexusShell(
                 crumbs: ["Personal", shellTitle],
                 onOpenCommandPalette: { commandPalettePresented = true },
@@ -253,7 +256,7 @@ struct ContentView: View {
                 },
                 topControl: { AgentTopControl(viewModel: agentViewModel) },
                 bottomBar: { AgentBottomInput(viewModel: agentViewModel) },
-                content: { AgentChatView(viewModel: agentViewModel) }
+                content: { AgentThreadRail(viewModel: agentViewModel) }
             )
         } else {
             NexusShell(
@@ -515,7 +518,14 @@ struct ContentView: View {
 
     @MainActor
     private func reloadInboxCount() async {
-        inboxUnreadCount = (try? await InboxSourceRegistry.shared.allItems().count) ?? 0
+        // The sidebar badge is the UNREAD count, so it must subtract items the
+        // user has marked read — otherwise it re-shows the full total every time
+        // it recomputes (e.g. after navigating away from the Inbox), even though
+        // InboxView itself shows them read. Reads the same persisted store
+        // InboxView writes (id == stable TaskItem.id).
+        let items = (try? await InboxSourceRegistry.shared.allItems()) ?? []
+        let read = InboxReadStateStore.shared.load()
+        inboxUnreadCount = items.filter { !read.contains($0.id) }.count
     }
 
     @MainActor

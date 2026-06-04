@@ -68,12 +68,32 @@ public final class AppleIntelligenceProvider: AIProvider {
         }
 
         let session = LanguageModelSession()
-        let response = try await session.respond(to: request.prompt)
-        return AIResponse(
-            text: response.content,
-            providerUsed: .appleIntelligence,
-            citations: request.context
-        )
+        do {
+            let response = try await session.respond(to: request.prompt)
+            return AIResponse(
+                text: response.content,
+                providerUsed: .appleIntelligence,
+                citations: request.context
+            )
+        } catch let error as LanguageModelSession.GenerationError {
+            // Apple's on-device guardrail is known to false-positive on benign,
+            // non-English prompts and surfaces a bare "Detected content likely to
+            // be unsafe". Replace that with an actionable message that points the
+            // user at the real escape hatch: assigning a local MLX chat model
+            // (which the router then prefers over Apple Intelligence — see
+            // `AIComposition`). Other generation errors keep their own description.
+            if case .guardrailViolation = error {
+                throw AIRouterError.requestFailed(
+                    .appleIntelligence,
+                    """
+                    Apple Intelligence blocked this request with its on-device safety \
+                    filter — this commonly misfires on non-English text. Download and \
+                    assign a local model in Settings → Models to handle chat instead.
+                    """
+                )
+            }
+            throw AIRouterError.requestFailed(.appleIntelligence, error.localizedDescription)
+        }
     }
 
     public func transcribe(_ request: AIRequest) async throws -> AIResponse {

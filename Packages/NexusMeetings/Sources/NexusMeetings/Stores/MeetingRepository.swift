@@ -142,6 +142,25 @@ public final class MeetingRepository {
         }
     }
 
+    /// Distinct, user-assigned participant display names across all meetings,
+    /// sorted case/diacritic-insensitively. Powers the rename autocomplete so a
+    /// person named once can be picked again instead of retyped (Circleback
+    /// parity). Names left at their auto-generated `speakerID` default (e.g.
+    /// "Speaker 1") are skipped — only genuinely-named people are suggested.
+    public func distinctParticipantNames() throws -> [String] {
+        var unique: Set<String> = []
+        for meeting in try allChronological() {
+            let participants =
+                (try? MeetingParticipant.decode(meeting.participantsJSON ?? Data())) ?? []
+            for participant in participants {
+                let name = participant.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty, name != participant.speakerID else { continue }
+                unique.insert(name)
+            }
+        }
+        return unique.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     public func updateProcessingStatus(_ status: String, for meetingID: UUID) throws {
         guard let meeting = try find(id: meetingID) else { return }
         meeting.processingStatus = status
