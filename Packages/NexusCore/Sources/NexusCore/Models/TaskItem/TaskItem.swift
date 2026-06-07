@@ -8,7 +8,19 @@ public final class TaskItem: Searchable {
     public var id: UUID = UUID()
     public var kind: ItemKind = ItemKind.task
     public var title: String = ""
+    /// LEGACY — superseded by `noteRef` → `Note` (Notes content layer, spec
+    /// §4.2). The physical column is intentionally kept present (not deleted) so
+    /// the V8→V9 `body`→`Note` conversion can read existing content out of it to
+    /// create `Note`s; deleting the stored property would make the shared-model
+    /// versioned schema unable to read it during that conversion, silently losing
+    /// user content. (That conversion runs as post-open code, not a migration
+    /// stage — see `NexusModelContainer.migrateTaskBodiesToNotesIfNeeded`.) App
+    /// logic no longer reads this — all readers repoint onto `noteRef`. The
+    /// physical column is retired in a later schema once V9 migration is proven.
     public var body: String = ""
+    /// Pointer to the `Note` holding this task's rich content (lazy — only set
+    /// when content is non-empty; see spec §8 lifecycle). nil = no note.
+    public var noteRef: UUID?
     public var createdAt: Date = Date.now
     public var updatedAt: Date = Date.now
     public var deletedAt: Date?
@@ -57,6 +69,7 @@ public final class TaskItem: Searchable {
         id: UUID = UUID(),
         title: String,
         body: String = "",
+        noteRef: UUID? = nil,
         dueAt: Date? = nil,
         startAt: Date? = nil,
         endAt: Date? = nil,
@@ -76,6 +89,7 @@ public final class TaskItem: Searchable {
         self.kind = .task
         self.title = title
         self.body = body
+        self.noteRef = noteRef
         let now = Date.now
         self.createdAt = now
         self.updatedAt = now
@@ -119,12 +133,13 @@ public final class TaskItem: Searchable {
         }
     }
 
-    /// Flattens title + body + tags into a single string for FTS tokenization.
+    /// Flattens title + tags into a single string for FTS tokenization. Rich
+    /// content is no longer carried on the task (spec §4.2): it lives in a `Note`
+    /// referenced by `noteRef`, indexed independently as a `Note` that links back
+    /// to this task — so a search hit on note content still leads to the task via
+    /// the Link graph, without deserializing blocks per list row.
     public var searchableText: String {
         var parts: [String] = [title]
-        if !body.isEmpty {
-            parts.append(body)
-        }
         if !tags.isEmpty {
             parts.append(tags.joined(separator: " "))
         }

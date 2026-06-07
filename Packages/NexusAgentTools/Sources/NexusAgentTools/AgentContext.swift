@@ -15,6 +15,18 @@ public struct AgentContext: Sendable {
         CommentRepository(context: modelContext.context)
     }
 
+    /// On-demand `NoteRepository` backed by the same `ModelContext` as `taskRepository`.
+    /// The task repository is injected so the checkbox→Task seam (§7) drives the real
+    /// task lifecycle (recurrence, notifications) when a todo block is toggled via MCP,
+    /// rather than the pure-core direct-status-flip fallback.
+    @MainActor public var noteRepository: NoteRepository {
+        NoteRepository(
+            context: modelContext.context,
+            tasks: taskRepository.repository,
+            now: now
+        )
+    }
+
     /// TasksFeature-specific helpers (NL parser + hero brief). Only populated when
     /// the consumer links `NexusAgentToolsExtras`. Tools that need these check non-nil.
     public let nlParser: AnyNLParserRef?

@@ -7,6 +7,7 @@ import NexusMeetings
 import NexusSearch
 import NexusSync
 import NexusUI
+import NotesFeature
 import SwiftData
 import SwiftUI
 import TasksFeature
@@ -39,6 +40,7 @@ struct NexusiOSApp: App {
     private let aiGraph: AIComposition.AIGraph
     private let taskParser: CompositeNLParser
     private let taskRepository: TaskItemRepository
+    private let noteRepository: NoteRepository
     private let notificationScheduler: NotificationScheduler
     private let agentComposition: AgentComposition
     private let meetingsComposition: MeetingsComposition
@@ -81,6 +83,10 @@ struct NexusiOSApp: App {
             notifications: NotificationSchedulingAdapter(scheduler: notifScheduler),
             snapshotPusher: WCSessionWatchSnapshotPusher()
         )
+        // Notes content layer (spec §5). Shares the Tasks repository so the
+        // checkbox→Task seam (§7) drives the same lifecycle. `Note` is already a
+        // synced model in NexusSchemaV9 → the scene `.modelContainer` registers it.
+        self.noteRepository = NotesComposition.makeRepository(for: made.mainContext, tasks: self.taskRepository)
         self.meetingsComposition = Self.makeMeetingsComposition(
             context: made.mainContext,
             router: self.aiRouter,
@@ -192,6 +198,7 @@ struct NexusiOSApp: App {
                 aiRouter: aiRouter,
                 taskParser: taskParser,
                 taskRepository: taskRepository,
+                noteRepository: noteRepository,
                 notificationScheduler: notificationScheduler,
                 agentComposition: agentComposition,
                 meetingsComposition: meetingsComposition,
@@ -475,6 +482,7 @@ private struct NexusiOSRootView: View {
     let aiRouter: AIRouter
     let taskParser: CompositeNLParser
     let taskRepository: TaskItemRepository
+    let noteRepository: NoteRepository
     let notificationScheduler: NotificationScheduler
     let agentComposition: AgentComposition
     let meetingsComposition: MeetingsComposition
@@ -489,6 +497,7 @@ private struct NexusiOSRootView: View {
         aiRouter: AIRouter,
         taskParser: CompositeNLParser,
         taskRepository: TaskItemRepository,
+        noteRepository: NoteRepository,
         notificationScheduler: NotificationScheduler,
         agentComposition: AgentComposition,
         meetingsComposition: MeetingsComposition,
@@ -502,6 +511,7 @@ private struct NexusiOSRootView: View {
         self.aiRouter = aiRouter
         self.taskParser = taskParser
         self.taskRepository = taskRepository
+        self.noteRepository = noteRepository
         self.notificationScheduler = notificationScheduler
         self.agentComposition = agentComposition
         self.meetingsComposition = meetingsComposition
@@ -569,6 +579,7 @@ private struct NexusiOSRootView: View {
             .environment(\.aiRouter, aiRouter)
             .environment(\.taskParser, taskParser)
             .environment(\.taskRepository, taskRepository)
+            .environment(\.noteRepository, noteRepository)
             .environment(\.notificationScheduler, notificationScheduler)
             .environment(\.agentChatViewModel, agentComposition.chatViewModel)
             .environment(\.agentBriefService, agentComposition.briefService)

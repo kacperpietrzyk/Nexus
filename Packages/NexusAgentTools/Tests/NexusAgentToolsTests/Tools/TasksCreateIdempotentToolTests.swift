@@ -270,8 +270,11 @@ struct TasksCreateIdempotentToolTests {
             context: fixture.context
         )
 
-        let oldMatches = try await searchTasks(query: "oldalpha", context: fixture.context)
-        let newMatches = try await searchTasks(query: "newbeta", context: fixture.context)
+        // Task content (notes/body) is no longer indexed — it lives in a `Note`
+        // (spec §4.2/§13). Search TITLE tokens: the rerun replaced the title, so the
+        // old title is gone from the index and the new one is present.
+        let oldMatches = try await searchTasks(query: "Original", context: fixture.context)
+        let newMatches = try await searchTasks(query: "Updated", context: fixture.context)
         #expect(oldMatches.isEmpty)
         #expect(newMatches.map(\.title) == ["Updated title"])
     }

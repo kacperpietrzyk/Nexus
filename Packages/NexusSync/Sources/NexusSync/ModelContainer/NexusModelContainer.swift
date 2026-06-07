@@ -12,8 +12,8 @@ public protocol NexusEnvironmentProviding: Sendable {
 extension NexusEnvironment: NexusEnvironmentProviding {}
 
 /// Single source of truth for the SwiftData container the apps install via `.modelContainer(...)`.
-/// Currently bound to `NexusSchemaV8` (V7 + Comment entity + TaskItem.remindersData). CloudKit mirroring is gated by
-/// `NexusEnvironment.cloudKitEnabled` — when off, the container is local-only.
+/// Currently bound to `NexusSchemaV9` (V8 + the `Note` content layer + ref fields). CloudKit
+/// mirroring is gated by `NexusEnvironment.cloudKitEnabled` — when off, the container is local-only.
 public enum NexusModelContainer {
     public static let appGroupIdentifier = "group.com.kacperpietrzyk.Nexus"
     static let syncedConfigurationName = "NexusSynced"
@@ -68,7 +68,7 @@ public enum NexusModelContainer {
     ///     runtime; without activation, `containerURL(forSecurityApplicationGroupIdentifier:)`
     ///     returns nil and we fall back to the default Application Support path.
     ///   - extraModels: composition-time models from packages that cannot be imported by
-    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV8`.
+    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV9`.
     ///   - localOnlyExtraModels: composition-time models that must be present in the
     ///     container but excluded from CloudKit-backed configurations.
     public static func make(
@@ -96,11 +96,13 @@ public enum NexusModelContainer {
             cloudKitDatabase: cloudKitDatabase
         )
         try backfillLocalOnlyBaselineRowsIfNeeded(storeURL: url, extraModels: extraModels)
-        return try makeContainer(
+        let container = try makeContainer(
             for: configurationPlan.containerSchema,
             hasEffectiveExtraModels: configurationPlan.hasEffectiveExtraModels,
             configurations: configurationPlan.configurations
         )
+        try migrateTaskBodiesToNotesIfNeeded(container: container, storeURL: url)
+        return container
     }
 
     /// Baseline entities that live in the local-only (NON-CloudKit) configuration.
@@ -110,13 +112,11 @@ public enum NexusModelContainer {
     ///   `DefaultCatalog.json`. It carries ZERO per-device user state (download
     ///   status / assignment / on-disk paths live in `ModelManifestLocalState`,
     ///   which is UserDefaults-backed, not in this SwiftData entity). Syncing it
-    ///   via CloudKit was both POINTLESS and the cause of cross-device catalog
-    ///   duplication: each device/reinstall re-seeds its own copy and — because
-    ///   CloudKit forbids `@Attribute(.unique)` — CloudKit merges them into
-    ///   duplicate rows. Making it local-only ends that duplication at the root.
-    ///   NOTE: `ModelDownloadEvent` (telemetry) stays synced for now (out of
-    ///   scope here); it references `ModelManifest` only by a `String` id and has
-    ///   no `@Relationship`, so this split is unblocked.
+    ///   via CloudKit was POINTLESS and caused cross-device catalog duplication:
+    ///   each device/reinstall re-seeds its own copy and — because CloudKit forbids
+    ///   `@Attribute(.unique)` — they merge into duplicate rows. Local-only ends it.
+    ///   NOTE: `ModelDownloadEvent` (telemetry) stays synced for now; it references
+    ///   `ModelManifest` only by a `String` id (no `@Relationship`), so this is unblocked.
     static let localOnlyBaseline: [any PersistentModel.Type] = [
         ConflictLog.self,
         ModelManifest.self,
@@ -126,10 +126,10 @@ public enum NexusModelContainer {
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
     ) -> ModelPartitions {
-        let allModels = NexusSchemaV8.assembledModels(extraModels: extraModels + localOnlyExtraModels)
+        let allModels = NexusSchemaV9.assembledModels(extraModels: extraModels + localOnlyExtraModels)
         let localOnlyBaselineIDs = Set(localOnlyBaseline.map(ObjectIdentifier.init))
         let baselineSyncedIdentifiers = Set(
-            NexusSchemaV8.models
+            NexusSchemaV9.models
                 .filter { !localOnlyBaselineIDs.contains(ObjectIdentifier($0)) }
                 .map(ObjectIdentifier.init)
         )
@@ -146,7 +146,7 @@ public enum NexusModelContainer {
             containerModels: allModels,
             syncedModels: syncedModels,
             localOnlyModels: localOnlyModels,
-            hasEffectiveExtraModels: allModels.count > NexusSchemaV8.models.count
+            hasEffectiveExtraModels: allModels.count > NexusSchemaV9.models.count
         )
     }
 
@@ -161,8 +161,8 @@ public enum NexusModelContainer {
             extraModels: extraModels,
             localOnlyExtraModels: localOnlyExtraModels
         )
-        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV8.versionIdentifier)
-        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV8.versionIdentifier)
+        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV9.versionIdentifier)
+        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV9.versionIdentifier)
         let configurations: [ModelConfiguration]
 
         if isStoredInMemoryOnly {
@@ -201,7 +201,7 @@ public enum NexusModelContainer {
         }
 
         return ModelConfigurationPlan(
-            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV8.versionIdentifier),
+            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV9.versionIdentifier),
             configurations: configurations,
             partitions: partitions
         )

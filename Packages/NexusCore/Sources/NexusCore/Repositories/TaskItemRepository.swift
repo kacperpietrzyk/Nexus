@@ -451,9 +451,15 @@ public final class TaskItemRepository {
                 nil
             }
 
+        // Content lives in a `Note` referenced by `noteRef`, not on `body`
+        // (Notes content layer, spec §4.2) — no longer carried here.
+        // The next occurrence shares the parent's `noteRef` so the linked note
+        // stays reachable; proper per-occurrence note duplication is reconciler/
+        // repository territory (this is a pure, context-less factory).
+        // TODO(notes-reconciler): decide note duplication vs. sharing per recurrence.
         return TaskItem(
             title: task.title,
-            body: task.body,
+            noteRef: task.noteRef,
             dueAt: nextDate,
             startAt: nextStartAt,
             endAt: nextEndAt,
