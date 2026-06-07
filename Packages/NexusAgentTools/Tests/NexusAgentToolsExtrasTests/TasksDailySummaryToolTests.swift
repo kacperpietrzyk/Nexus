@@ -106,10 +106,11 @@ struct TasksDailySummaryToolTests {
     func registration() {
         let names = AgentToolsAll.tools().map(\.name)
 
-        #expect(names.count == 16)
+        #expect(names.count == 22)
         #expect(Set(names).count == names.count)
         #expect(names.contains("tasks.create_from_text"))
         #expect(names.contains("tasks.daily_summary"))
+        #expect(names.contains("note.create"))
     }
 
     @Test("extras-only registration does not include core task tools")

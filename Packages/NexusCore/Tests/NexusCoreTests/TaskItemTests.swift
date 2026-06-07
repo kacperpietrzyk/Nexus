@@ -24,12 +24,23 @@ struct TaskItemTests {
         #expect(task.kind == .task)
     }
 
-    @Test("Searchable combines title body and tags")
+    @Test("Searchable combines title and tags, excludes body")
     func searchableText() {
+        // Per spec §4.2 task content moved to a linked `Note`; body is no longer
+        // indexed on the task. searchableText = title + tags only.
         let task = TaskItem(title: "Buy milk", body: "From Lidl", tags: ["shopping", "weekly"])
         #expect(task.searchableText.contains("Buy milk"))
-        #expect(task.searchableText.contains("From Lidl"))
+        #expect(!task.searchableText.contains("From Lidl"))
         #expect(task.searchableText.contains("shopping weekly"))
+    }
+
+    @Test("noteRef defaults to nil and is settable")
+    func noteRefDefaultsAndSettable() {
+        let task = TaskItem(title: "With note")
+        #expect(task.noteRef == nil)
+        let ref = UUID()
+        task.noteRef = ref
+        #expect(task.noteRef == ref)
     }
 
     @MainActor

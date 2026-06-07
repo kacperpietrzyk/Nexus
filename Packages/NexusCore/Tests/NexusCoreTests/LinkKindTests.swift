@@ -10,6 +10,8 @@ import Testing
     #expect(LinkKind.child.rawValue == "child")
     #expect(LinkKind.source.rawValue == "source")
     #expect(LinkKind.attachment.rawValue == "attachment")
+    #expect(LinkKind.embed.rawValue == "embed")
+    #expect(LinkKind.containsTask.rawValue == "containsTask")
 }
 
 @Test func linkKind_isCodable() throws {

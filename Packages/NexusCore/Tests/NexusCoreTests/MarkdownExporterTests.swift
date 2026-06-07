@@ -88,7 +88,10 @@ import Testing
 }
 
 @MainActor
-@Test func markdownExporter_export_writesTaskItemBody() async throws {
+@Test func markdownExporter_export_writesTitle_andOmitsLegacyBody() async throws {
+    // Task content moved off `TaskItem.body` into a linked `Note` (spec §4.2).
+    // The exporter no longer reads `body`; emitting the linked Note's content as
+    // Markdown is the Notes serializer step (see MarkdownExporter.body TODO).
     let schema = Schema([TaskItem.self, Link.self])
     let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     let container = try ModelContainer(for: schema, configurations: [config])
@@ -109,7 +112,63 @@ import Testing
         encoding: .utf8
     )
     #expect(text.contains("Exported task"))
-    #expect(text.contains("Task body"))
+    #expect(!text.contains("Task body"))
+}
+
+@MainActor
+@Test func markdownExporter_export_emitsLinkedNoteContentAsBody() async throws {
+    // A task whose `noteRef` points at a `Note` exports that note's canonical
+    // `[Block]` content as the Markdown body (the Notes serializer wiring that
+    // retires the `MarkdownExporter.body` TODO).
+    let schema = Schema([TaskItem.self, Note.self, Link.self])
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+    let container = try ModelContainer(for: schema, configurations: [config])
+    let context = ModelContext(container)
+
+    let blocks = [
+        Block(kind: .heading(level: 2, runs: [InlineRun(text: "Plan")])),
+        Block(kind: .paragraph(runs: [InlineRun(text: "First", marks: [.bold])])),
+    ]
+    let note = Note(title: "Task note", contentData: try NoteContentCoder.encode(blocks))
+    let task = TaskItem(title: "Has a note", noteRef: note.id)
+    context.insert(note)
+    context.insert(task)
+    try context.save()
+
+    let folder = try makeTempFolder()
+    defer { try? FileManager.default.removeItem(at: folder) }
+
+    _ = try await MarkdownExporter.export(container: container, types: TaskItem.self, to: folder)
+    let text = try String(
+        contentsOf: folder.appendingPathComponent("\(task.id.uuidString).md"),
+        encoding: .utf8
+    )
+    #expect(text.contains("## Plan"))
+    #expect(text.contains("**First**"))
+}
+
+@MainActor
+@Test func markdownExporter_export_emitsNoteOwnContentAsBody() async throws {
+    // A `Note` exported as its own Linkable emits its blocks as the Markdown body.
+    let schema = Schema([Note.self, Link.self])
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+    let container = try ModelContainer(for: schema, configurations: [config])
+    let context = ModelContext(container)
+
+    let blocks = [Block(kind: .bulleted(runs: [InlineRun(text: "point")]))]
+    let note = Note(title: "Standalone", contentData: try NoteContentCoder.encode(blocks))
+    context.insert(note)
+    try context.save()
+
+    let folder = try makeTempFolder()
+    defer { try? FileManager.default.removeItem(at: folder) }
+
+    _ = try await MarkdownExporter.export(container: container, types: Note.self, to: folder)
+    let text = try String(
+        contentsOf: folder.appendingPathComponent("\(note.id.uuidString).md"),
+        encoding: .utf8
+    )
+    #expect(text.contains("- point"))
 }
 
 @MainActor

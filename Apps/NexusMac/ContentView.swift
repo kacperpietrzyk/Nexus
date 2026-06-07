@@ -4,10 +4,17 @@ import NexusAgent
 import NexusCore
 import NexusMeetings
 import NexusUI
+import NotesFeature
 import SwiftData
 import SwiftUI
 import TasksFeature
 
+// The Mac dashboard shell mounts one full-screen destination per feature
+// (Today/Inbox/Meetings/Tasks/Notes/Agent/Stats/Settings); it grows by a rail
+// item + a `dashboardShell` branch + a title case per feature by design — the
+// same structural per-feature growth that disables `file_length` on
+// `NexusMacApp`. The Notes mount crossed the 600-line threshold.
+// swiftlint:disable file_length
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.taskRepository) private var taskRepository
@@ -189,6 +196,7 @@ struct ContentView: View {
             .init(id: .inbox, systemImage: "tray", label: "Inbox", count: inboxUnreadCount),
             .init(id: .meetings, systemImage: "person.wave.2", label: "Meetings"),
             .init(id: .tasks, systemImage: "checkmark.square", label: "Tasks"),
+            .init(id: .notes, systemImage: "note.text", label: "Notes"),
             .init(id: .agent, systemImage: "sparkles", label: "Agent"),
             .init(id: .stats, systemImage: "chart.bar", label: "Stats"),
         ]
@@ -257,6 +265,19 @@ struct ContentView: View {
                 topControl: { AgentTopControl(viewModel: agentViewModel) },
                 bottomBar: { AgentBottomInput(viewModel: agentViewModel) },
                 content: { AgentThreadRail(viewModel: agentViewModel) }
+            )
+        } else if selection == .notes {
+            // Notes content layer (spec §5): a full shell destination mounting
+            // the NotesFeature list + block editor. `NotesListView` owns its own
+            // NavigationStack, so it slots straight into the shell content area.
+            NexusShell(
+                crumbs: ["Personal", shellTitle],
+                onOpenCommandPalette: { commandPalettePresented = true },
+                onOpenCapture: { mode in
+                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
+                },
+                topControl: { EmptyView() },
+                content: { NotesListView() }
             )
         } else {
             NexusShell(
@@ -330,6 +351,7 @@ struct ContentView: View {
         case .inbox: return "Inbox"
         case .meetings: return "Meetings"
         case .tasks: return "Tasks"
+        case .notes: return "Notes"
         // The oracle Agent top bar reads "Nexus"; crumbs are unused in
         // control mode anyway (no `NexusTopBar`), so this is defensive
         // plumbing parity only.

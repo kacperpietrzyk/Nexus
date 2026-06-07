@@ -9,6 +9,7 @@ import NexusMeetings
 import NexusSearch
 import NexusSync
 import NexusUI
+import NotesFeature
 import SwiftData
 import SwiftUI
 import TasksFeature
@@ -41,6 +42,7 @@ struct NexusMacApp: App {
     private let aiGraph: AIComposition.AIGraph
     private let taskParser: CompositeNLParser
     private let taskRepository: TaskItemRepository
+    private let noteRepository: NoteRepository
     private let notificationScheduler: NotificationScheduler
     // Strong ref — UNUserNotificationCenter does NOT retain its delegate.
     private let actionHandler: NotificationActionHandler
@@ -90,6 +92,14 @@ struct NexusMacApp: App {
         self.taskRepository = TasksComposition.makeRepository(
             for: made.mainContext,
             notifications: NotificationSchedulingAdapter(scheduler: notifScheduler)
+        )
+        // Notes content layer (spec §5). Shares the Tasks repository so the
+        // checkbox→Task seam (§7) drives the same task lifecycle as the Tasks
+        // surface. `Note` is already a synced model in NexusSchemaV9, so the
+        // main window + Settings `.modelContainer(container)` already register it.
+        self.noteRepository = NotesComposition.makeRepository(
+            for: made.mainContext,
+            tasks: self.taskRepository
         )
         self.meetingsComposition = Self.makeMeetingsComposition(
             context: made.mainContext,
@@ -207,6 +217,7 @@ struct NexusMacApp: App {
                 .environment(\.aiRouter, aiRouter)
                 .environment(\.taskParser, taskParser)
                 .environment(\.taskRepository, taskRepository)
+                .environment(\.noteRepository, noteRepository)
                 .environment(\.notificationScheduler, notificationScheduler)
                 .environment(\.agentActivityLog, agentActivityLog)
                 .environment(\.agentChatViewModel, agentComposition.chatViewModel)
