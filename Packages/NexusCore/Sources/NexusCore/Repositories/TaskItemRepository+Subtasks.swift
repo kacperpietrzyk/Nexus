@@ -14,6 +14,7 @@ extension TaskItemRepository {
             visited: &visited,
             deletedTaskIDs: &deletedTaskIDs
         )
+        try CommentRepository(context: context).softDeleteAll(for: task.id, kind: .task)
         try context.save()
         cancelNotificationsAndPushSnapshot(taskIDs: deletedTaskIDs)
     }
