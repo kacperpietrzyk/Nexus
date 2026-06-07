@@ -32,6 +32,7 @@ extension TaskDetailInspector {
                     recurrenceCard
                     linksCard
                     notesCard
+                    commentsCard
                 }
                 .padding(20)
             }
@@ -75,6 +76,7 @@ extension TaskDetailInspector {
                 notesCard
                 linksCompactCard
             }
+            commentsCard
         }
         .padding(20)
         .background(NexusWallpaper())
