@@ -37,6 +37,11 @@ enum TasksToolJSON {
         let data = try JSONEncoder().encode(value)
         return try JSONDecoder().decode(JSONValue.self, from: data)
     }
+
+    static func decode<T: Decodable>(_ type: T.Type, from value: JSONValue) throws -> T {
+        let data = try JSONEncoder().encode(value)
+        return try JSONDecoder().decode(type, from: data)
+    }
 }
 
 enum TasksToolArguments {

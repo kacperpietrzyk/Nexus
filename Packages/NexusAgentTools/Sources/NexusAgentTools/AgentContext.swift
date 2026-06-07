@@ -10,6 +10,11 @@ public struct AgentContext: Sendable {
     public let searchIndex: SearchIndex
     public let now: @Sendable () -> Date
 
+    /// On-demand `CommentRepository` backed by the same `ModelContext` as `taskRepository`.
+    @MainActor public var commentRepository: CommentRepository {
+        CommentRepository(context: modelContext.context)
+    }
+
     /// TasksFeature-specific helpers (NL parser + hero brief). Only populated when
     /// the consumer links `NexusAgentToolsExtras`. Tools that need these check non-nil.
     public let nlParser: AnyNLParserRef?
