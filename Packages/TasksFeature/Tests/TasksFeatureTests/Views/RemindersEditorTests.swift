@@ -25,4 +25,20 @@ import Testing
         let result = RemindersReducer.add(.relative(offset: -1800, anchor: .due), to: existing)
         #expect(result.count == 1)
     }
+
+    @Test func addAbsoluteAppendsAndDeduplicates() {
+        let when = Date(timeIntervalSince1970: 1_700_000_000)
+        var rules: [ReminderRule] = []
+        rules = RemindersReducer.add(.absolute(when), to: rules)
+        #expect(rules == [.absolute(when)])
+        // Identical rule should be deduped
+        rules = RemindersReducer.add(.absolute(when), to: rules)
+        #expect(rules.count == 1)
+    }
+
+    @Test @MainActor func describeAbsoluteReturnsFormattedNonEmptyString() {
+        let when = Date(timeIntervalSince1970: 1_700_000_000)
+        let label = RemindersEditor.describe(.absolute(when))
+        #expect(!label.isEmpty)
+    }
 }

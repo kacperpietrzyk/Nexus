@@ -23,6 +23,7 @@ enum RemindersReducer {
 /// inside an `inspectorCard` host — it does not supply its own card chrome.
 struct RemindersEditor: View {
     @Binding var reminders: [ReminderRule]
+    @State private var absoluteDate = Date().addingTimeInterval(3600)
 
     private static let relativeChoices: [(label: String, offset: TimeInterval)] = [
         ("30 min before", -1800),
@@ -56,6 +57,22 @@ struct RemindersEditor: View {
                         label: { Text(choice.label) }
                     )
                 }
+            }
+
+            HStack(spacing: 6) {
+                NexusDateField(
+                    date: $absoluteDate,
+                    components: [.date, .hourAndMinute],
+                    accessibilityLabel: "Reminder date and time"
+                )
+                NexusButton(
+                    variant: .outline,
+                    size: .sm,
+                    action: {
+                        reminders = RemindersReducer.add(.absolute(absoluteDate), to: reminders)
+                    },
+                    label: { Text("Add") }
+                )
             }
         }
     }
