@@ -77,7 +77,8 @@ struct CommentsSection: View {
 
     private func add() {
         guard let body = CommentsComposer.sanitized(draft) else { return }
-        try? repository.add(body: body, to: itemID, kind: itemKind)
+        // Keep the draft if the save fails so the user does not lose their text.
+        guard (try? repository.add(body: body, to: itemID, kind: itemKind)) != nil else { return }
         draft = ""
         reload()
     }
