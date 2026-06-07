@@ -74,4 +74,23 @@ struct CommentRepositoryTests {
         try taskRepo.softDelete(task)
         #expect(try commentRepo.comments(for: task.id, kind: .task).isEmpty)
     }
+
+    @MainActor
+    @Test("task soft delete cascades comments across full subtask subtree")
+    func taskSoftDeleteCascadesSubtaskComments() throws {
+        let context = try makeContext()
+        let taskRepo = TaskItemRepository(context: context, scheduler: RRuleScheduler(), now: { .now })
+        let commentRepo = CommentRepository(context: context)
+        let parent = TaskItem(title: "parent")
+        let subtask = TaskItem(title: "subtask", parentTaskID: parent.id)
+        try taskRepo.insert(parent)
+        try taskRepo.insert(subtask)
+        _ = try commentRepo.add(body: "parent note", to: parent.id, kind: .task)
+        _ = try commentRepo.add(body: "subtask note", to: subtask.id, kind: .task)
+
+        try taskRepo.softDelete(parent)
+
+        #expect(try commentRepo.comments(for: parent.id, kind: .task).isEmpty)
+        #expect(try commentRepo.comments(for: subtask.id, kind: .task).isEmpty)
+    }
 }
