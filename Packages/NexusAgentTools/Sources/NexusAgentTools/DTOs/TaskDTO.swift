@@ -11,18 +11,23 @@ public struct TaskDTO: Codable, Sendable, Equatable {
     public let priority: Int
     public let tags: [String]
     public let projectID: String?
+    public let sectionID: String?
+    public let parentID: String?
     public let state: String
     public let snoozeUntil: String?
     public let externalSourceID: String?
     public let recurrenceRule: String?
+    public let reminders: [ReminderDTO]?
     public let createdAt: String
     public let updatedAt: String
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, priority, tags, state
+        case id, title, notes, priority, tags, state, reminders
         case dueDate = "due_date"
         case deadlineDate = "deadline_date"
         case projectID = "project_id"
+        case sectionID = "section_id"
+        case parentID = "parent_id"
         case snoozeUntil = "snooze_until"
         case externalSourceID = "external_source_id"
         case recurrenceRule = "recurrence_rule"
@@ -39,10 +44,13 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         priority: Int,
         tags: [String],
         projectID: String?,
+        sectionID: String?,
+        parentID: String?,
         state: String,
         snoozeUntil: String?,
         externalSourceID: String?,
         recurrenceRule: String?,
+        reminders: [ReminderDTO]?,
         createdAt: String,
         updatedAt: String
     ) {
@@ -54,10 +62,13 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         self.priority = priority
         self.tags = tags
         self.projectID = projectID
+        self.sectionID = sectionID
+        self.parentID = parentID
         self.state = state
         self.snoozeUntil = snoozeUntil
         self.externalSourceID = externalSourceID
         self.recurrenceRule = recurrenceRule
+        self.reminders = reminders
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -79,11 +90,14 @@ public struct TaskDTO: Codable, Sendable, Equatable {
             deadlineDate: task.deadlineAt.map { Self.deadlineDateString(for: $0, calendar: deadlineCalendar) },
             priority: Self.priorityToInt(task.priority),
             tags: task.tags,
-            projectID: nil,
+            projectID: task.projectID?.uuidString,
+            sectionID: task.sectionID?.uuidString,
+            parentID: task.parentTaskID?.uuidString,
             state: Self.stateString(for: task),
             snoozeUntil: task.snoozedUntil.map { formatter.string(from: $0) },
             externalSourceID: task.externalSourceID,
             recurrenceRule: task.recurrenceRule,
+            reminders: task.reminders.isEmpty ? nil : task.reminders.map { ReminderDTO.from($0, formatter: formatter) },
             createdAt: formatter.string(from: task.createdAt),
             updatedAt: formatter.string(from: task.updatedAt)
         )
@@ -121,6 +135,41 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         switch task.status {
         case .done: return "done"
         case .open, .snoozed: return "open"
+        }
+    }
+}
+
+/// Wire shape for a single `ReminderRule`. Used in `TaskDTO.reminders`.
+public struct ReminderDTO: Codable, Sendable, Equatable {
+    /// "relative" or "absolute"
+    public let type: String
+    /// Relative only: seconds before (negative) or after the anchor.
+    public let offset: TimeInterval?
+    /// Relative only: "due" or "deadline".
+    public let anchor: String?
+    /// Absolute only: ISO8601 date string.
+    public let at: String?
+
+    @MainActor
+    static func from(_ rule: ReminderRule, formatter: ISO8601DateFormatter) -> ReminderDTO {
+        switch rule {
+        case .relative(let offset, let anchor):
+            return ReminderDTO(type: "relative", offset: offset, anchor: anchor.rawValue, at: nil)
+        case .absolute(let date):
+            return ReminderDTO(type: "absolute", offset: nil, anchor: nil, at: formatter.string(from: date))
+        }
+    }
+
+    func toRule() -> ReminderRule? {
+        switch type {
+        case "relative":
+            guard let offset, let anchorRaw = anchor, let anchor = ReminderAnchor(rawValue: anchorRaw) else { return nil }
+            return .relative(offset: offset, anchor: anchor)
+        case "absolute":
+            guard let at, let date = ISO8601DateFormatter().date(from: at) else { return nil }
+            return .absolute(date)
+        default:
+            return nil
         }
     }
 }
