@@ -166,8 +166,12 @@ public struct ReminderDTO: Codable, Sendable, Equatable {
             guard let offset, let anchorRaw = anchor, let anchor = ReminderAnchor(rawValue: anchorRaw) else { return nil }
             return .relative(offset: offset, anchor: anchor)
         case "absolute":
-            guard let at, let date = ISO8601DateFormatter().date(from: at) else { return nil }
-            return .absolute(date)
+            guard let at else { return nil }
+            let fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = fractional.date(from: at) { return .absolute(date) }
+            if let date = ISO8601DateFormatter().date(from: at) { return .absolute(date) }
+            return nil
         default:
             return nil
         }
