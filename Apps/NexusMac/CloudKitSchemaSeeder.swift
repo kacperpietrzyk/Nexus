@@ -20,7 +20,7 @@ import SwiftData
 ///   4. Relaunch with `NEXUS_CLOUDKIT_ENABLED=1 NEXUS_UNSEED_CLOUDKIT_SCHEMA=1` to
 ///      delete the marker records (the deletions sync out, removing them everywhere).
 ///
-/// The synced model set mirrors `NexusSchemaV7` (minus the local-only `ConflictLog`)
+/// The synced model set mirrors `NexusSchemaV8` (minus the local-only `ConflictLog`)
 /// plus `MeetingsComposition.extraModels`. Agent models are not part of the synced
 /// CloudKit configuration and are intentionally excluded.
 enum CloudKitSchemaSeeder {

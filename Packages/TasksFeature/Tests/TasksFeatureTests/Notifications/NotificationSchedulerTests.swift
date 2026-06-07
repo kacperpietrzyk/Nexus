@@ -147,7 +147,7 @@ struct NotificationSchedulerTests {
         #expect(pending[0].triggerMinute == 0)
     }
 
-    @Test("cancel removes the keyed identifier")
+    @Test("cancel removes the legacy id and all per-reminder ids up to r31")
     func cancelRemoves() async {
         let center = RecordingNotificationCenter()
         let scheduler = NotificationScheduler(
@@ -157,7 +157,12 @@ struct NotificationSchedulerTests {
         )
         let id = UUID()
         await scheduler.cancel(taskID: id)
-        #expect(center.removedIdentifiers == ["task-\(id.uuidString)"])
+        let base = "task-\(id.uuidString)"
+        // Legacy single id + r0…r31 = 33 identifiers.
+        #expect(center.removedIdentifiers.count == 33)
+        #expect(center.removedIdentifiers.first == base)
+        #expect(center.removedIdentifiers.contains("\(base)-r0"))
+        #expect(center.removedIdentifiers.contains("\(base)-r31"))
     }
 
     @Test("scheduleSnooze adds a request keyed task-<uuid> using the snooze target")
@@ -225,5 +230,43 @@ struct NotificationSchedulerTests {
         #expect(pending[0].triggerInterval != nil)
         // Window ends at 07:00 next day → ~7.5h out, well beyond the 5s minimum.
         #expect((pending[0].triggerInterval ?? 0) > 60)
+    }
+
+    @Test("schedule creates one request per reminder rule keyed task-<uuid>-r<index>")
+    func schedulesOneRequestPerReminder() async throws {
+        let center = RecordingNotificationCenter()
+        let now = date("2026-05-01T08:00:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center,
+            quietHours: { nil },
+            calendar: cal(),
+            now: { now }
+        )
+        let task = TaskItem(title: "multi", dueAt: date("2026-05-06T13:00:00Z"))
+        task.reminders = [
+            .relative(offset: -1800, anchor: .due),
+            .absolute(date("2026-05-06T15:00:00Z")),
+        ]
+        try await scheduler.schedule(task)
+        let pending = center.snapshots()
+        #expect(pending.count == 2)
+        #expect(pending.allSatisfy { $0.identifier.hasPrefix("task-\(task.id.uuidString)-r") })
+    }
+
+    @Test("empty reminders falls back to the legacy task-<uuid> request")
+    func emptyRemindersFallsBackToLegacyDueRequest() async throws {
+        let center = RecordingNotificationCenter()
+        let now = date("2026-05-01T08:00:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center,
+            quietHours: { nil },
+            calendar: cal(),
+            now: { now }
+        )
+        let task = TaskItem(title: "legacy", dueAt: date("2026-05-06T13:00:00Z"))
+        try await scheduler.schedule(task)
+        let pending = center.snapshots()
+        #expect(pending.count == 1)
+        #expect(pending.first?.identifier == "task-\(task.id.uuidString)")
     }
 }

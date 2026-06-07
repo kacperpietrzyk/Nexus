@@ -11,6 +11,9 @@ public enum ProjectSectionAssignmentError: Error, Equatable {
 public enum TaskItemRepositoryError: Error, Equatable {
     case parentHasOpenSubtasks(parentID: UUID, openCount: Int)
     case projectNotFound(projectID: UUID)
+    case parentNotFound(parentID: UUID)
+    case parentIsSelf(taskID: UUID)
+    case parentCycle(taskID: UUID, parentID: UUID)
 }
 
 struct TaskCompletionSideEffects {

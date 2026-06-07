@@ -142,6 +142,30 @@ struct TaskDTOTests {
         #expect(error["message"] as? String == "Title is required")
     }
 
+    @MainActor
+    @Test func dtoCarriesProjectSectionParentAndReminders() {
+        let task = TaskItem(title: "wired")
+        task.projectID = UUID()
+        task.sectionID = UUID()
+        task.parentTaskID = UUID()
+        task.reminders = [.relative(offset: -1800, anchor: .due)]
+        let dto = TaskDTO(from: task)
+        #expect(dto.projectID == task.projectID?.uuidString)
+        #expect(dto.sectionID == task.sectionID?.uuidString)
+        #expect(dto.parentID == task.parentTaskID?.uuidString)
+        #expect(dto.reminders?.count == 1)
+    }
+
+    @MainActor
+    @Test func reminderDTORoundTripsRelativeAndAbsolute() {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let relative = ReminderRule.relative(offset: -1800, anchor: .deadline)
+        #expect(ReminderDTO.from(relative, formatter: formatter).toRule() == relative)
+        let absolute = ReminderRule.absolute(Date(timeIntervalSince1970: 1_700_000_000))
+        #expect(ReminderDTO.from(absolute, formatter: formatter).toRule() == absolute)
+    }
+
     private func encodedObject(_ value: some Encodable) throws -> [String: Any] {
         let data = try JSONEncoder().encode(value)
         let object = try JSONSerialization.jsonObject(with: data)

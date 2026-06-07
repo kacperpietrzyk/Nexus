@@ -145,17 +145,116 @@ struct TasksListToolTests {
     }
 
     @MainActor
-    @Test("rejects reserved project id filter")
-    func rejectsReservedProjectIDFilter() async throws {
-        let task = TaskItem(title: "Unfiltered task")
-        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+    @Test("rejects malformed project_id filter")
+    func rejectsMalformedProjectIDFilter() async throws {
+        let fixture = try await InMemoryAgentContext.make()
 
-        await #expect(throws: AgentError.validation("project_id filter is reserved until Projects land")) {
+        await #expect(throws: AgentError.validation("filter.project_id must be a valid UUID")) {
             _ = try await TasksListTool().call(
-                args: .object(["filter": .object(["project_id": .string("project-1")])]),
+                args: .object(["filter": .object(["project_id": .string("not-a-uuid")])]),
                 context: fixture.context
             )
         }
+    }
+
+    @MainActor
+    @Test("filters by project_id")
+    func filtersByProject() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = Project(name: "Work")
+        fixture.repo.context.insert(project)
+        try fixture.repo.context.save()
+
+        let inProject = TaskItem(title: "in project")
+        let outOfProject = TaskItem(title: "out of project")
+        try fixture.repo.insert(inProject)
+        try fixture.repo.insert(outOfProject)
+        try fixture.repo.assign(inProject, toProject: project.id, section: nil)
+
+        let response = try await callList(
+            args: .object(["filter": .object(["project_id": .string(project.id.uuidString)])]),
+            context: fixture.context
+        )
+
+        #expect(response.total == 1)
+        #expect(response.tasks.map(\.title) == ["in project"])
+    }
+
+    @MainActor
+    @Test("filters by overdue")
+    func filtersByOverdue() async throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let yesterday = now.addingTimeInterval(-86_400)
+        let tomorrow = now.addingTimeInterval(86_400)
+        let tasks = [
+            TaskItem(title: "Overdue", dueAt: yesterday),
+            TaskItem(title: "Future", dueAt: tomorrow),
+            TaskItem(title: "No due"),
+        ]
+        let fixture = try await InMemoryAgentContext.make(tasks: tasks, now: { now })
+
+        let response = try await callList(
+            args: .object(["filter": .object(["overdue": .bool(true)])]),
+            context: fixture.context
+        )
+
+        #expect(response.total == 1)
+        #expect(response.tasks.map(\.title) == ["Overdue"])
+    }
+
+    @MainActor
+    @Test("filters by priority_at_least")
+    func filtersByPriorityAtLeast() async throws {
+        let high = TaskItem(title: "High")
+        high.priorityRaw = TaskPriority.high.rawValue
+        let medium = TaskItem(title: "Medium")
+        medium.priorityRaw = TaskPriority.medium.rawValue
+        let low = TaskItem(title: "Low")
+        low.priorityRaw = TaskPriority.low.rawValue
+        let none = TaskItem(title: "None")
+        none.priorityRaw = TaskPriority.none.rawValue
+
+        let fixture = try await InMemoryAgentContext.make(tasks: [high, medium, low, none])
+
+        // MCP priority_at_least: 2 = "medium or better" → returns high + medium
+        let response = try await callList(
+            args: .object(["filter": .object(["priority_at_least": .int(2)])]),
+            context: fixture.context
+        )
+
+        #expect(response.total == 2)
+        #expect(Set(response.tasks.map(\.title)) == ["High", "Medium"])
+    }
+
+    @MainActor
+    @Test("project filter works with state=any")
+    func projectFilterWorksWithStateAny() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = Project(name: "Mixed")
+        fixture.repo.context.insert(project)
+        try fixture.repo.context.save()
+
+        let openTask = TaskItem(title: "Open in project")
+        let doneTask = TaskItem(title: "Done in project", status: .done)
+        let outTask = TaskItem(title: "Open out of project")
+        try fixture.repo.insert(openTask)
+        try fixture.repo.insert(doneTask)
+        try fixture.repo.insert(outTask)
+        try fixture.repo.assign(openTask, toProject: project.id, section: nil)
+        try fixture.repo.assign(doneTask, toProject: project.id, section: nil)
+
+        let response = try await callList(
+            args: .object([
+                "filter": .object([
+                    "project_id": .string(project.id.uuidString),
+                    "state": .string("any"),
+                ])
+            ]),
+            context: fixture.context
+        )
+
+        #expect(response.total == 2)
+        #expect(Set(response.tasks.map(\.title)) == ["Open in project", "Done in project"])
     }
 
     @MainActor

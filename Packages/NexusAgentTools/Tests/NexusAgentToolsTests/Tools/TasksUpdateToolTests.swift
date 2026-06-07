@@ -24,7 +24,6 @@ struct TasksUpdateToolTests {
                     "deadline_date": .string("2026-05-10"),
                     "priority": .int(1),
                     "tags": .array([.string(" Work "), .string("q2")]),
-                    "project_id": .string(UUID().uuidString),
                 ]),
             ]),
             context: fixture.context
@@ -36,7 +35,6 @@ struct TasksUpdateToolTests {
         #expect(dto.priority == 1)
         #expect(dto.tags == ["work", "q2"])
         #expect(dto.deadlineDate == "2026-05-10")
-        #expect(dto.projectID == nil)
     }
 
     @MainActor
@@ -245,6 +243,83 @@ struct TasksUpdateToolTests {
 
         #expect(try await searchTitles("oldtoken", context: fixture.context).isEmpty)
         #expect(try await searchTitles("newtoken", context: fixture.context) == ["Indexed"])
+    }
+
+    @MainActor
+    @Test("update assigns project, recurrence, and reminders")
+    func updateAssignsProjectAndSetsRecurrenceAndReminders() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = Project(name: "Target Project")
+        fixture.repo.context.insert(project)
+        try fixture.repo.context.save()
+        let task = TaskItem(title: "movable")
+        try fixture.repo.insert(task)
+
+        let dto = try await callUpdate(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object([
+                    "project_id": .string(project.id.uuidString),
+                    "recurrence_rule": .string("FREQ=WEEKLY"),
+                    "reminders": .array([
+                        .object([
+                            "type": .string("absolute"), "at": .string("2026-07-01T09:00:00Z"),
+                        ])
+                    ]),
+                ]),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(dto.projectID == project.id.uuidString)
+        #expect(dto.recurrenceRule == "FREQ=WEEKLY")
+        #expect(dto.reminders?.count == 1)
+    }
+
+    @MainActor
+    @Test("update with project_id only preserves existing section")
+    func updateWithProjectOnlyPreservesExistingSection() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = Project(name: "Section Project")
+        let section = Section(projectID: project.id, name: "Doing")
+        fixture.repo.context.insert(project)
+        fixture.repo.context.insert(section)
+        try fixture.repo.context.save()
+        let task = TaskItem(title: "sectioned")
+        try fixture.repo.insert(task)
+        // Pre-assign task to both project and section.
+        try fixture.repo.assign(task, toProject: project.id, section: section.id)
+
+        // Patch with project_id only — section must be preserved, not clobbered.
+        let dto = try await callUpdate(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object([
+                    "project_id": .string(project.id.uuidString)
+                ]),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(dto.projectID == project.id.uuidString)
+        #expect(dto.sectionID == section.id.uuidString)
+    }
+
+    @MainActor
+    @Test("unknown project_id on update throws validation")
+    func unknownProjectIDOnUpdateThrows() async throws {
+        let task = TaskItem(title: "Task")
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+
+        await #expect(throws: AgentError.self) {
+            _ = try await TasksUpdateTool().call(
+                args: .object([
+                    "task_id": .string(task.id.uuidString),
+                    "patch": .object(["project_id": .string(UUID().uuidString)]),
+                ]),
+                context: fixture.context
+            )
+        }
     }
 
     private func callUpdate(args: JSONValue, context: AgentContext) async throws -> TaskDTO {

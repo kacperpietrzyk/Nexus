@@ -28,7 +28,9 @@ struct TasksCreateToolTests {
     @Test("creates structured fields")
     func createsStructuredFields() async throws {
         let fixture = try await InMemoryAgentContext.make()
-        let projectID = UUID()
+        let project = Project(name: "Deck Project")
+        fixture.repo.context.insert(project)
+        try fixture.repo.context.save()
 
         let dto = try await callCreate(
             args: .object([
@@ -39,7 +41,7 @@ struct TasksCreateToolTests {
                 "deadline_date": .string("2026-05-10"),
                 "priority": .int(1),
                 "tags": .array([.string(" Work "), .string("Q2"), .string("work")]),
-                "project_id": .string(projectID.uuidString),
+                "project_id": .string(project.id.uuidString),
             ]),
             context: fixture.context
         )
@@ -94,20 +96,56 @@ struct TasksCreateToolTests {
     }
 
     @MainActor
-    @Test("accepts opaque project_id without persisting it")
-    func acceptsOpaqueProjectIDWithoutPersistingIt() async throws {
+    @Test("rejects unknown project_id")
+    func rejectsUnknownProjectID() async throws {
         let fixture = try await InMemoryAgentContext.make()
+
+        await #expect(throws: AgentError.self) {
+            _ = try await TasksCreateTool().call(
+                args: .object([
+                    "title": .string("orphan"),
+                    "project_id": .string(UUID().uuidString),
+                ]),
+                context: fixture.context
+            )
+        }
+    }
+
+    @MainActor
+    @Test("persists project, section, parent, recurrence, and reminders")
+    func createPersistsProjectSectionParentRecurrenceReminders() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = Project(name: "Test Project")
+        let section = Section(projectID: project.id, name: "Test Section")
+        fixture.repo.context.insert(project)
+        fixture.repo.context.insert(section)
+        try fixture.repo.context.save()
+        let parent = TaskItem(title: "parent")
+        try fixture.repo.insert(parent)
 
         let dto = try await callCreate(
             args: .object([
-                "title": .string("Future linked task"),
-                "project_id": .string(UUID().uuidString),
+                "title": .string("child"),
+                "project_id": .string(project.id.uuidString),
+                "section_id": .string(section.id.uuidString),
+                "parent_id": .string(parent.id.uuidString),
+                "recurrence_rule": .string("FREQ=DAILY"),
+                "reminders": .array([
+                    .object([
+                        "type": .string("relative"),
+                        "offset": .double(-1800),
+                        "anchor": .string("due"),
+                    ])
+                ]),
             ]),
             context: fixture.context
         )
 
-        #expect(dto.title == "Future linked task")
-        #expect(dto.projectID == nil)
+        #expect(dto.projectID == project.id.uuidString)
+        #expect(dto.sectionID == section.id.uuidString)
+        #expect(dto.parentID == parent.id.uuidString)
+        #expect(dto.recurrenceRule == "FREQ=DAILY")
+        #expect(dto.reminders?.count == 1)
     }
 
     @MainActor

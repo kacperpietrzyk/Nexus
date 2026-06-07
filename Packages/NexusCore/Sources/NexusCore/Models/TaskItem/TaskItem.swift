@@ -48,6 +48,11 @@ public final class TaskItem: Searchable {
     /// Used for conflict detection and re-migration.
     public var externalSourceMetadata: Data?
 
+    /// JSON-encoded `[ReminderRule]`. `Data?`-backed (like
+    /// `externalSourceMetadata`) to avoid SwiftData/CloudKit mirroring sharp
+    /// edges with arrays of custom Codable structs. nil = no reminders.
+    public var remindersData: Data?
+
     public init(
         id: UUID = UUID(),
         title: String,
@@ -99,6 +104,19 @@ public final class TaskItem: Searchable {
 
     public var priority: TaskPriority {
         TaskPriority(rawValue: priorityRaw) ?? .none
+    }
+
+    /// Decoded view over `remindersData`. Setting to an empty array clears the
+    /// stored blob. SwiftData persists only `remindersData`; this computed
+    /// property is not part of the schema.
+    public var reminders: [ReminderRule] {
+        get {
+            guard let remindersData else { return [] }
+            return (try? JSONDecoder().decode([ReminderRule].self, from: remindersData)) ?? []
+        }
+        set {
+            remindersData = newValue.isEmpty ? nil : try? JSONEncoder().encode(newValue)
+        }
     }
 
     /// Flattens title + body + tags into a single string for FTS tokenization.
