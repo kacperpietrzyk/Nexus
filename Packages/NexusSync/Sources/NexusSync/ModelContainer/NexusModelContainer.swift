@@ -458,7 +458,7 @@ extension NexusModelContainer {
 
         // Open the source (synced) store with the SAME assembled schema production uses for it —
         // including composition-time synced entities like Meeting (passed via extraModels). The
-        // old `Schema(versionedSchema: NexusSchemaV8.self)` omitted Meeting, which the synced
+        // old single-version `Schema(versionedSchema:)` form omitted Meeting, which the synced
         // store physically contains (ZMEETING), so SwiftData saw an entity "removed" on open and
         // could throw or migrate destructively. With extraModels == [] this is identical to the
         // previous schema, so callers that don't supply them are unchanged.
