@@ -66,6 +66,13 @@ public struct TasksCreateTool: AgentTool {
         task.reminders = reminders
 
         let repo = context.taskRepository.repository
+        if let parentID {
+            do {
+                try repo.validateParentAssignment(taskID: task.id, proposedParentID: parentID)
+            } catch {
+                throw AgentError.validation("parent_id validation failed: \(error)")
+            }
+        }
         try repo.insert(task)
         if projectID != nil || sectionID != nil {
             do {

@@ -100,6 +100,13 @@ public struct TasksCreateIdempotentTool: AgentTool {
         task.reminders = write.reminders
         task.externalSourceID = write.externalSourceID
         task.externalSourceMetadata = write.metadata
+        if let parentID = write.parentID {
+            do {
+                try repo.validateParentAssignment(taskID: task.id, proposedParentID: parentID)
+            } catch {
+                throw AgentError.validation("parent_id validation failed: \(error)")
+            }
+        }
         try repo.insert(task)
         try assignIfNeeded(task, projectID: write.projectID, sectionID: write.sectionID, repo: repo)
         await context.searchIndex.upsert(IndexedDocument(task))
@@ -129,6 +136,14 @@ public struct TasksCreateIdempotentTool: AgentTool {
         let recurrence = write.recurrence
         let reminders = write.reminders
         let metadata = write.metadata
+        // Validate parent assignment before entering the non-throwing update closure.
+        if args["parent_id"] != nil, let proposedParentID = parentID {
+            do {
+                try repo.validateParentAssignment(taskID: existing.id, proposedParentID: proposedParentID)
+            } catch {
+                throw AgentError.validation("parent_id validation failed: \(error)")
+            }
+        }
         try repo.update(existing) { task in
             task.title = fields.title
             if args["notes"] != nil { task.body = fields.notes ?? "" }

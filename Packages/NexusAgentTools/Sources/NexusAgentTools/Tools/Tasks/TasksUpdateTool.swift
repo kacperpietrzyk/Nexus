@@ -53,6 +53,17 @@ public struct TasksUpdateTool: AgentTool {
 
         let mutations = try TasksUpdatePatch.parse(patch)
         let task = try TasksMutationToolSupport.liveTask(id: id, context: context)
+        // Validate parent assignment before entering the non-throwing update closure.
+        // mutations.parentID is UUID?? — only validate when a non-nil UUID is proposed.
+        if let outerParentID = mutations.parentID, let proposedParentID = outerParentID {
+            do {
+                try context.taskRepository.repository.validateParentAssignment(
+                    taskID: task.id, proposedParentID: proposedParentID
+                )
+            } catch {
+                throw AgentError.validation("parent_id validation failed: \(error)")
+            }
+        }
         try context.taskRepository.repository.update(task) { task in
             mutations.apply(to: task)
         }
