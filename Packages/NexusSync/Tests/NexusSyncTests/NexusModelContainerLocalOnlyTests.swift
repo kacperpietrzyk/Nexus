@@ -200,7 +200,7 @@ import Testing
 }
 
 private func copiedConflictLogIDs(at localOnlyURL: URL) throws -> [UUID] {
-    let schema = Schema([ConflictLog.self], version: NexusSchemaV7.versionIdentifier)
+    let schema = Schema([ConflictLog.self], version: NexusSchemaV8.versionIdentifier)
     let container = try ModelContainer(
         for: schema,
         configurations: [ModelConfiguration(schema: schema, url: localOnlyURL, cloudKitDatabase: .none)]
@@ -209,8 +209,8 @@ private func copiedConflictLogIDs(at localOnlyURL: URL) throws -> [UUID] {
 }
 
 private func appendConflictLog(to sourceURL: URL, conflictID: UUID, summary: String) throws {
-    // The backfill's reopen migrated the on-disk store to V7, so append on V7.
-    let schema = NexusSchemaV7.schema()
+    // The backfill's reopen migrated the on-disk store to V8, so append on V8.
+    let schema = NexusSchemaV8.schema()
     let container = try ModelContainer(
         for: schema,
         migrationPlan: NexusMigrationPlan.self,
@@ -246,7 +246,7 @@ private func appendConflictLog(to sourceURL: URL, conflictID: UUID, summary: Str
         extraModels: [StubSyncedExtra.self]
     )
 
-    let localOnlySchema = Schema([ConflictLog.self], version: NexusSchemaV7.versionIdentifier)
+    let localOnlySchema = Schema([ConflictLog.self], version: NexusSchemaV8.versionIdentifier)
     let localOnlyContainer = try ModelContainer(
         for: localOnlySchema,
         configurations: [
@@ -257,7 +257,7 @@ private func appendConflictLog(to sourceURL: URL, conflictID: UUID, summary: Str
     #expect(copied.map(\.id).contains(conflictID))
 
     // The extra entity's rows survive in the source (no destructive migration on reopen).
-    let sourceSchema = NexusSchemaV7.schema(extraModels: [StubSyncedExtra.self])
+    let sourceSchema = NexusSchemaV8.schema(extraModels: [StubSyncedExtra.self])
     let sourceContainer = try ModelContainer(
         for: sourceSchema,
         migrationPlan: NexusMigrationPlan.self,
@@ -447,7 +447,7 @@ final class StubSyncedExtra {
 /// extra entity (`StubSyncedExtra`), mirroring a real synced store with `Meeting` present.
 @MainActor
 private func seedSyncedStoreWithExtraEntity(at url: URL, conflictID: UUID) throws {
-    let schema = NexusSchemaV7.schema(extraModels: [StubSyncedExtra.self])
+    let schema = NexusSchemaV8.schema(extraModels: [StubSyncedExtra.self])
     let container = try ModelContainer(
         for: schema,
         migrationPlan: NexusMigrationPlan.self,
@@ -468,12 +468,12 @@ private func seedSyncedStoreWithExtraEntity(at url: URL, conflictID: UUID) throw
     try context.save()
 }
 
-/// Seeds the pre-move synced layout: a single monolithic V7 store on the MAIN
+/// Seeds the pre-move synced layout: a single monolithic V8 store on the MAIN
 /// URL holding BOTH a `TaskItem` and a `ModelManifest`, mirroring a synced store
 /// from before `ModelManifest` was moved to the local-only configuration.
 @MainActor
 private func seedMonolithicStoreWithTaskAndModelManifest(at url: URL, taskID: UUID) throws {
-    let schema = NexusSchemaV7.schema()
+    let schema = NexusSchemaV8.schema()
     let container = try ModelContainer(
         for: schema,
         migrationPlan: NexusMigrationPlan.self,

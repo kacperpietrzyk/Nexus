@@ -12,7 +12,7 @@ public protocol NexusEnvironmentProviding: Sendable {
 extension NexusEnvironment: NexusEnvironmentProviding {}
 
 /// Single source of truth for the SwiftData container the apps install via `.modelContainer(...)`.
-/// Currently bound to `NexusSchemaV7` (V6 + MLX model catalog entities). CloudKit mirroring is gated by
+/// Currently bound to `NexusSchemaV8` (V7 + Comment entity + TaskItem.remindersData). CloudKit mirroring is gated by
 /// `NexusEnvironment.cloudKitEnabled` — when off, the container is local-only.
 public enum NexusModelContainer {
     public static let appGroupIdentifier = "group.com.kacperpietrzyk.Nexus"
@@ -37,7 +37,7 @@ public enum NexusModelContainer {
     ///
     /// `extraModels` lets composition packages add their own SwiftData entities
     /// without making NexusSync import them. Duplicate entries are accepted and
-    /// deduplicated by `NexusSchemaV7`.
+    /// deduplicated by `NexusSchemaV8`.
     public static func makeInMemory(
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
@@ -68,7 +68,7 @@ public enum NexusModelContainer {
     ///     runtime; without activation, `containerURL(forSecurityApplicationGroupIdentifier:)`
     ///     returns nil and we fall back to the default Application Support path.
     ///   - extraModels: composition-time models from packages that cannot be imported by
-    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV7`.
+    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV8`.
     ///   - localOnlyExtraModels: composition-time models that must be present in the
     ///     container but excluded from CloudKit-backed configurations.
     public static func make(
@@ -126,10 +126,10 @@ public enum NexusModelContainer {
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
     ) -> ModelPartitions {
-        let allModels = NexusSchemaV7.assembledModels(extraModels: extraModels + localOnlyExtraModels)
+        let allModels = NexusSchemaV8.assembledModels(extraModels: extraModels + localOnlyExtraModels)
         let localOnlyBaselineIDs = Set(localOnlyBaseline.map(ObjectIdentifier.init))
         let baselineSyncedIdentifiers = Set(
-            NexusSchemaV7.models
+            NexusSchemaV8.models
                 .filter { !localOnlyBaselineIDs.contains(ObjectIdentifier($0)) }
                 .map(ObjectIdentifier.init)
         )
@@ -146,7 +146,7 @@ public enum NexusModelContainer {
             containerModels: allModels,
             syncedModels: syncedModels,
             localOnlyModels: localOnlyModels,
-            hasEffectiveExtraModels: allModels.count > NexusSchemaV7.models.count
+            hasEffectiveExtraModels: allModels.count > NexusSchemaV8.models.count
         )
     }
 
@@ -161,8 +161,8 @@ public enum NexusModelContainer {
             extraModels: extraModels,
             localOnlyExtraModels: localOnlyExtraModels
         )
-        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV7.versionIdentifier)
-        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV7.versionIdentifier)
+        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV8.versionIdentifier)
+        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV8.versionIdentifier)
         let configurations: [ModelConfiguration]
 
         if isStoredInMemoryOnly {
@@ -201,7 +201,7 @@ public enum NexusModelContainer {
         }
 
         return ModelConfigurationPlan(
-            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV7.versionIdentifier),
+            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV8.versionIdentifier),
             configurations: configurations,
             partitions: partitions
         )
@@ -458,11 +458,11 @@ extension NexusModelContainer {
 
         // Open the source (synced) store with the SAME assembled schema production uses for it —
         // including composition-time synced entities like Meeting (passed via extraModels). The
-        // old `Schema(versionedSchema: NexusSchemaV7.self)` omitted Meeting, which the synced
+        // old `Schema(versionedSchema: NexusSchemaV8.self)` omitted Meeting, which the synced
         // store physically contains (ZMEETING), so SwiftData saw an entity "removed" on open and
         // could throw or migrate destructively. With extraModels == [] this is identical to the
         // previous schema, so callers that don't supply them are unchanged.
-        let legacySchema = NexusSchemaV7.schema(extraModels: extraModels)
+        let legacySchema = NexusSchemaV8.schema(extraModels: extraModels)
         let legacyContainer = try ModelContainer(
             for: legacySchema,
             migrationPlan: NexusMigrationPlan.self,
@@ -483,7 +483,7 @@ extension NexusModelContainer {
             return
         }
 
-        let localOnlySchema = Schema([ConflictLog.self], version: NexusSchemaV7.versionIdentifier)
+        let localOnlySchema = Schema([ConflictLog.self], version: NexusSchemaV8.versionIdentifier)
         let localOnlyContainer = try ModelContainer(
             for: localOnlySchema,
             configurations: [

@@ -12,6 +12,7 @@ import SwiftData
 /// - V5 -> V6 lightweight (additive: task hierarchy/deadline/project fields and
 ///   Project/Section/SavedFilter entities).
 /// - V6 -> V7 lightweight (additive: ModelManifest, ModelDownloadEvent).
+/// - V7 -> V8 lightweight (additive: Comment entity; TaskItem.remindersData).
 public enum NexusMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
         [
@@ -22,6 +23,7 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             NexusSchemaV5.self,
             NexusSchemaV6.self,
             NexusSchemaV7.self,
+            NexusSchemaV8.self,
         ]
     }
 
@@ -50,6 +52,10 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             MigrationStage.lightweight(
                 fromVersion: NexusSchemaV6.self,
                 toVersion: NexusSchemaV7.self
+            ),
+            MigrationStage.lightweight(
+                fromVersion: NexusSchemaV7.self,
+                toVersion: NexusSchemaV8.self
             ),
         ]
     }
