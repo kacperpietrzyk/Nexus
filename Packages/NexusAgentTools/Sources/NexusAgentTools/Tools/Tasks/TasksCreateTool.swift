@@ -46,7 +46,6 @@ public struct TasksCreateTool: AgentTool {
 
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
-        try TasksStructuredCreateArguments.rejectReservedFields(args)
         let fields = try TasksStructuredCreateArguments.parse(args)
         let projectID = try TasksStructuredCreateArguments.optionalProjectID(args["project_id"])
         let sectionID = try TasksStructuredCreateArguments.optionalUUID(args["section_id"], field: "section_id")
@@ -106,7 +105,6 @@ enum TasksStructuredCreateArguments {
         let notes = try optionalString(args["notes"], field: "notes")
         _ = try optionalString(args["due_string"], field: "due_string")
         let deadlineAt = try optionalDeadlineAt(args["deadline_date"])
-        _ = try optionalProjectID(args["project_id"])
         let dueDate = try optionalDate(args["due_date"], field: "due_date")
         let priority = try optionalPriority(args["priority"])
         let tags = try optionalTags(args["tags"])
@@ -118,10 +116,6 @@ enum TasksStructuredCreateArguments {
             priority: priority,
             tags: tags
         )
-    }
-
-    static func rejectReservedFields(_ args: JSONValue) throws {
-        _ = args
     }
 
     static func trimmedRequiredString(_ value: JSONValue?, field: String) throws -> String {

@@ -62,7 +62,6 @@ public struct TasksCreateIdempotentTool: AgentTool {
 
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
-        try TasksStructuredCreateArguments.rejectReservedFields(args)
         let write = try IdempotentWriteParams(
             args: args,
             fields: TasksStructuredCreateArguments.parse(args),
@@ -142,7 +141,17 @@ public struct TasksCreateIdempotentTool: AgentTool {
             if args["reminders"] != nil { task.reminders = reminders }
             if task.externalSourceMetadata == nil { task.externalSourceMetadata = metadata }
         }
-        try assignIfNeeded(existing, projectID: write.projectID, sectionID: write.sectionID, repo: repo)
+        // `repo.assign` sets BOTH projectID and sectionID, so an omitted arg must fall back to
+        // the task's existing value rather than clobbering it to nil (mirrors the omit-≠-clear
+        // invariant the field updates above honor). Only re-assign when at least one of the two
+        // args is actually present.
+        let hasProject = args["project_id"] != nil
+        let hasSection = args["section_id"] != nil
+        if hasProject || hasSection {
+            let effectiveProject = hasProject ? write.projectID : existing.projectID
+            let effectiveSection = hasSection ? write.sectionID : existing.sectionID
+            try assign(existing, projectID: effectiveProject, sectionID: effectiveSection, repo: repo)
+        }
         await TasksToolSearchIndexing.reflect(existing, in: context.searchIndex)
         let response = IdempotentResponseDTO(task: TaskDTO(from: existing), wasCreated: false)
         return try TasksToolJSON.encode(response)
@@ -153,6 +162,13 @@ public struct TasksCreateIdempotentTool: AgentTool {
         _ task: TaskItem, projectID: UUID?, sectionID: UUID?, repo: TaskItemRepository
     ) throws {
         guard projectID != nil || sectionID != nil else { return }
+        try assign(task, projectID: projectID, sectionID: sectionID, repo: repo)
+    }
+
+    @MainActor
+    private func assign(
+        _ task: TaskItem, projectID: UUID?, sectionID: UUID?, repo: TaskItemRepository
+    ) throws {
         do {
             try repo.assign(task, toProject: projectID, section: sectionID)
         } catch {

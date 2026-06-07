@@ -5,6 +5,7 @@ import Testing
 
 @testable import NexusAgentTools
 
+// swiftlint:disable type_body_length
 @Suite("TasksCreateIdempotentTool")
 struct TasksCreateIdempotentToolTests {
     @MainActor
@@ -146,6 +147,44 @@ struct TasksCreateIdempotentToolTests {
         #expect(response.task.projectID == project.id.uuidString)
         #expect(response.task.recurrenceRule == "FREQ=DAILY")
         #expect(response.task.reminders?.count == 1)
+    }
+
+    @MainActor
+    @Test("update with project_id only preserves existing section")
+    func idempotentUpdateWithProjectOnlyPreservesExistingSection() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = Project(name: "Section Project")
+        let section = Section(projectID: project.id, name: "Doing")
+        fixture.repo.context.insert(project)
+        fixture.repo.context.insert(section)
+        try fixture.repo.context.save()
+
+        // First idempotent call assigns the task to BOTH project and section.
+        let created = try await callIdempotent(
+            args: .object([
+                "external_source_id": .string("todoist:preserve-section"),
+                "title": .string("original"),
+                "project_id": .string(project.id.uuidString),
+                "section_id": .string(section.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+        #expect(created.task.sectionID == section.id.uuidString)
+
+        // Re-import sends project_id but NOT section_id; the existing section must survive.
+        let response = try await callIdempotent(
+            args: .object([
+                "external_source_id": .string("todoist:preserve-section"),
+                "title": .string("updated"),
+                "project_id": .string(project.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(!response.wasCreated)
+        #expect(response.task.title == "updated")
+        #expect(response.task.projectID == project.id.uuidString)
+        #expect(response.task.sectionID == section.id.uuidString)
     }
 
     @MainActor
@@ -426,3 +465,4 @@ struct TasksCreateIdempotentToolTests {
         return try JSONDecoder().decode([TaskDTO].self, from: data)
     }
 }
+// swiftlint:enable type_body_length
