@@ -520,7 +520,7 @@ extension TaskDetailInspector {
     }
 
     @MainActor
-    fileprivate func saveDeadlineChange() {
+    func saveDeadlineChange() {
         if let repository {
             try? repository.update(task) { _ in }
         } else {

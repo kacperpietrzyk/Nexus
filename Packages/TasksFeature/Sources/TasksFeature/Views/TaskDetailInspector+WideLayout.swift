@@ -28,6 +28,7 @@ extension TaskDetailInspector {
                     aiAssistCard
                     scheduleCard
                     deadlineCard
+                    remindersCard
                     recurrenceCard
                     linksCard
                     notesCard
@@ -64,6 +65,7 @@ extension TaskDetailInspector {
                 VStack(alignment: .leading, spacing: 16) {
                     aiAssistCard
                     deadlineCard
+                    remindersCard
                     recurrenceCard
                 }
             }
