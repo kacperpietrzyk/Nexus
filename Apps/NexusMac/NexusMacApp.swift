@@ -227,6 +227,7 @@ struct NexusMacApp: App {
                 .environment(\.focusModeState, focusModeState)
                 #if canImport(EventKit) && !os(watchOS)
             .environment(\.calendarEventProvider, EventKitCalendarProvider.shared)
+            .environment(\.calendarEventWriter, EventKitCalendarProvider.shared)
                 #endif
                 // Cheap insurance for non-dashboard states (Focus mode, future
                 // sheets) where `NexusWallpaper` is not painted; wallpaper-bearing
@@ -469,6 +470,9 @@ struct NexusMacApp: App {
     private func bootstrapScheduler() async {
         let job = TombstonePurgeJob.make(container: container, linkableTypes: [TaskItem.self])
         await scheduler.register(job)
+        // Calendar/Motion-AI daily auto-rollover (spec §10).
+        let madeContainer = container
+        await scheduler.register(DailyRolloverJob.makeJob(containerProvider: { madeContainer }))
         await scheduler.runDue()
         // Foreground tick — Timer is fine for a single-job, single-window app.
         Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { _ in
@@ -630,7 +634,9 @@ struct NexusMacApp: App {
         ocrPipeline: OCRPipeline,
         warmChatModel: @escaping @MainActor () async -> Void
     ) -> AgentComposition {
-        let additionalTools = NexusAgentToolsExtras.tools() + meetingTools
+        let additionalTools =
+            NexusAgentToolsExtras.tools() + meetingTools
+            + CalendarAgentTools.tools(provider: EventKitCalendarProvider.shared)
         let agentContext = AgentToolBootstrap.makeContext(
             modelContext: modelContext,
             taskRepository: taskRepository,

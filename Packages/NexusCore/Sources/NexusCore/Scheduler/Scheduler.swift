@@ -7,6 +7,7 @@ public enum JobID: String, Sendable, Hashable, CaseIterable {
     case indexBuilder  // reserved — used in 0d follow-up
     case dailyBriefing  // reserved — used in 0e/Phase 1
     case orderRebalance
+    case dailyRollover  // Calendar/Motion-AI: roll unfinished due-today/overdue forward (spec §10)
 }
 
 /// One scheduled unit of work. `run` is `@Sendable` because the scheduler may invoke it from any

@@ -7,6 +7,7 @@ public enum WatchPayload {
     public static let promptKey = "prompt"
     public static let idKey = "id"
     public static let taskIDKey = "taskID"
+    public static let blockIDKey = "blockID"
     public static let snoozeUntilKey = "until"
     public static let snapshotPayloadKey = "payload"
 
@@ -17,4 +18,7 @@ public enum WatchPayload {
     public static let reloadComplicationsType = "reload-complications"
     public static let notifSnapshotType = "notif-snapshot"
     public static let snoozeActionType = "snooze-action"
+    /// Watch accepts a proposed `ScheduledBlock` → relayed to iPhone, which
+    /// materializes the mirror event (spec §7 / §11 — Watch has no EventKit).
+    public static let acceptBlockType = "accept-block"
 }

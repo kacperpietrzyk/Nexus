@@ -1,3 +1,4 @@
+import CalendarFeature
 import CommandPaletteShell
 import InboxShell
 import NexusAgent
@@ -10,11 +11,12 @@ import SwiftUI
 import TasksFeature
 
 // The Mac dashboard shell mounts one full-screen destination per feature
-// (Today/Inbox/Meetings/Tasks/Notes/Agent/Stats/Settings); it grows by a rail
-// item + a `dashboardShell` branch + a title case per feature by design — the
+// (Today/Inbox/Meetings/Tasks/Notes/Calendar/Agent/Stats/Settings); it grows by a
+// rail item + a `dashboardShell` branch + a title case per feature by design — the
 // same structural per-feature growth that disables `file_length` on
-// `NexusMacApp`. The Notes mount crossed the 600-line threshold.
+// `NexusMacApp`. The Calendar mount crossed the type_body_length threshold.
 // swiftlint:disable file_length
+// swiftlint:disable:next type_body_length
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.taskRepository) private var taskRepository
@@ -41,6 +43,10 @@ struct ContentView: View {
     // renders (handed up via `InboxView.onItemsChanged`) — no new query.
     @State private var inboxActiveFilter: InboxFilter = .all
     @State private var inboxItems: [InboxItem] = []
+    // Calendar/Motion-AI surface (spec §9). Lazily built once from the live
+    // container + the shared EventKit provider so its scope/anchor state survives
+    // rail switches.
+    @State private var calendarViewModel: CalendarViewModel?
 
     var body: some View {
         Group {
@@ -197,6 +203,7 @@ struct ContentView: View {
             .init(id: .meetings, systemImage: "person.wave.2", label: "Meetings"),
             .init(id: .tasks, systemImage: "checkmark.square", label: "Tasks"),
             .init(id: .notes, systemImage: "note.text", label: "Notes"),
+            .init(id: .calendar, systemImage: "calendar", label: "Calendar"),
             .init(id: .agent, systemImage: "sparkles", label: "Agent"),
             .init(id: .stats, systemImage: "chart.bar", label: "Stats"),
         ]
@@ -279,6 +286,19 @@ struct ContentView: View {
                 topControl: { EmptyView() },
                 content: { NotesListView() }
             )
+        } else if selection == .calendar {
+            // Calendar/Motion-AI surface (spec §9): the full Month/Week/Day grid +
+            // event editor + multi-cal Settings, mounted directly in the shell
+            // content slot. `CalendarView` owns its own header/navigation.
+            NexusShell(
+                crumbs: ["Personal", shellTitle],
+                onOpenCommandPalette: { commandPalettePresented = true },
+                onOpenCapture: { mode in
+                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
+                },
+                topControl: { EmptyView() },
+                content: { calendarContent }
+            )
         } else {
             NexusShell(
                 crumbs: ["Personal", shellTitle],
@@ -345,6 +365,26 @@ struct ContentView: View {
         NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)
     }
 
+    @ViewBuilder
+    private var calendarContent: some View {
+        if let calendarViewModel {
+            CalendarView(viewModel: calendarViewModel)
+        } else {
+            Color.clear
+                .onAppear {
+                    #if canImport(EventKit) && !os(watchOS)
+                    let provider = EventKitCalendarProvider.shared
+                    calendarViewModel = CalendarViewModel(
+                        context: modelContext,
+                        reader: provider,
+                        writer: provider,
+                        listing: provider
+                    )
+                    #endif
+                }
+        }
+    }
+
     private var shellTitle: String {
         switch selection {
         case .today: return "Today"
@@ -352,6 +392,7 @@ struct ContentView: View {
         case .meetings: return "Meetings"
         case .tasks: return "Tasks"
         case .notes: return "Notes"
+        case .calendar: return "Calendar"
         // The oracle Agent top bar reads "Nexus"; crumbs are unused in
         // control mode anyway (no `NexusTopBar`), so this is defensive
         // plumbing parity only.

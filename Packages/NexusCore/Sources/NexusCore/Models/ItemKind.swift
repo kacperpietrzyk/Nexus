@@ -11,6 +11,8 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
     case savedFilter
     case debug
     case agentMemory
+    /// A proposed/accepted scheduler time block for a task (Calendar module).
+    case scheduledBlock
 
     public var displayName: String {
         switch self {
@@ -22,6 +24,7 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
         case .savedFilter: return "Saved Filter"
         case .debug: return "Debug"
         case .agentMemory: return "Agent Memory"
+        case .scheduledBlock: return "Scheduled Block"
         }
     }
 }

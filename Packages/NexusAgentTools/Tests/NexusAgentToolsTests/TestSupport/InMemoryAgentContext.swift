@@ -11,7 +11,10 @@ enum InMemoryAgentContext {
         tasks: [TaskItem] = [],
         now: @escaping @Sendable () -> Date = { Date(timeIntervalSince1970: 1_700_000_000) }
     ) async throws -> (context: AgentContext, container: ModelContainer, repo: TaskItemRepository) {
-        let schema = Schema([Link.self, DebugItem.self, QuotaLog.self, TaskItem.self, Project.self, Section.self, Comment.self, Note.self])
+        let schema = Schema([
+            Link.self, DebugItem.self, QuotaLog.self, TaskItem.self, Project.self,
+            Section.self, Comment.self, Note.self, ScheduledBlock.self,
+        ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])
         let modelContext = ModelContext(container)

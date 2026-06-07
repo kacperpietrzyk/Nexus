@@ -107,6 +107,42 @@ struct ScheduleGroupingTests {
         #expect(result.slots.first?.1.count == 2)
     }
 
+    @Test("Scheduled blocks render as block items, excluding soft-deleted ones")
+    func blocksGrouped() throws {
+        let calendar = testCalendar
+        let ten = try #require(date(hour: 10, minute: 0, calendar: calendar))
+        let eleven = try #require(date(hour: 11, minute: 0, calendar: calendar))
+
+        let live = ScheduledBlock(
+            taskID: UUID(),
+            start: ten,
+            end: ten.addingTimeInterval(3600),
+            title: "Deep work",
+            status: .proposed
+        )
+        let deleted = ScheduledBlock(
+            taskID: UUID(),
+            start: eleven,
+            end: eleven.addingTimeInterval(3600),
+            title: "Gone",
+            status: .proposed
+        )
+        deleted.deletedAt = ten
+
+        let result = ScheduleGrouping.group(
+            tasks: [],
+            events: [],
+            blocks: [live, deleted],
+            now: ten,
+            calendar: calendar
+        )
+
+        let allItems = result.slots.flatMap(\.1)
+        let blockItems = allItems.filter { if case .block = $0 { return true } else { return false } }
+        #expect(blockItems.count == 1)
+        #expect(blockItems.first?.id == "block:\(live.id.uuidString)")
+    }
+
     private var testCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current

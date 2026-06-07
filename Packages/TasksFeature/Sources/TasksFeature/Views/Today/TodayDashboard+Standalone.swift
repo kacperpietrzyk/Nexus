@@ -87,7 +87,12 @@ extension TodayDashboard {
     var todayContent: some View {
         VStack(alignment: .leading, spacing: 18) {
             let now = Date.now
-            let schedule = ScheduleGrouping.group(tasks: scheduleTasks, events: todaysEvents, now: now)
+            let schedule = ScheduleGrouping.group(
+                tasks: scheduleTasks,
+                events: todaysEvents,
+                blocks: scheduleBlocks,
+                now: now
+            )
             let activeTasks = scheduleTasks.filter { $0.deletedAt == nil }
             let summary = Self.dayProgressSummary(tasks: activeTasks)
 

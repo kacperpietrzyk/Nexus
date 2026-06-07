@@ -100,7 +100,7 @@ struct NexusiOSApp: App {
                 searchIndex: self.search.searchIndex,
                 taskRepository: self.taskRepository,
                 heroBriefService: heroBriefService,
-                meetingTools: self.meetingsComposition.agentTools(),
+                meetingTools: self.meetingsComposition.agentTools() + CalendarAgentTools.tools(provider: EventKitCalendarProvider.shared),
                 ocrPipeline: graph.ocrPipeline,
                 mlxLifecycle: graph.mlxLifecycle
             )
@@ -587,6 +587,7 @@ private struct NexusiOSRootView: View {
             .environment(\.focusModeState, focusModeState)
             #if canImport(EventKit) && !os(watchOS)
         .environment(\.calendarEventProvider, EventKitCalendarProvider.shared)
+        .environment(\.calendarEventWriter, EventKitCalendarProvider.shared)
             #endif
     }
 
@@ -622,6 +623,9 @@ private struct TombstonePurgeLifecycleModifier: ViewModifier {
                     linkableTypes: [TaskItem.self]
                 )
                 await scheduler.register(job)
+                // Calendar/Motion-AI daily auto-rollover (spec §10).
+                let madeContainer = container
+                await scheduler.register(DailyRolloverJob.makeJob(containerProvider: { madeContainer }))
                 await scheduler.runDue()
                 NexusiOSApp.scheduleNextBGTask()
             }
@@ -740,7 +744,8 @@ private struct WatchRelayLifecycleModifier: ViewModifier {
                 let handler = WatchPayloadHandler(
                     parser: taskParser,
                     repository: taskRepository,
-                    agentPromptHandler: watchAgentPromptHandler
+                    agentPromptHandler: watchAgentPromptHandler,
+                    blockAcceptHandler: watchBlockAcceptHandler
                 )
                 let relay = WatchConnectivityRelay(handler: handler)
                 relay.activate()
@@ -753,6 +758,27 @@ private struct WatchRelayLifecycleModifier: ViewModifier {
         return { prompt in
             (try await watchHandler.handle(prompt: prompt)).text
         }
+    }
+
+    /// Accept a proposed block relayed from the Watch (spec §7 / §11): the iPhone
+    /// owns EventKit, so it materializes the mirror event via the reconciler.
+    private var watchBlockAcceptHandler: WatchBlockAcceptHandling? {
+        #if canImport(EventKit) && !os(watchOS)
+        let context = taskRepository.context
+        return { blockID in
+            let blocks = ScheduledBlockRepository(context: context)
+            guard let block = try? blocks.find(blockID) else { return false }
+            let reconciler = CalendarSyncReconciler(context: context, writer: EventKitCalendarProvider.shared)
+            do {
+                _ = try await reconciler.accept(block)
+                return true
+            } catch {
+                return false
+            }
+        }
+        #else
+        return nil
+        #endif
     }
 }
 

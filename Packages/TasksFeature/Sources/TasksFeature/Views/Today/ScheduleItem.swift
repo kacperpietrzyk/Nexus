@@ -4,6 +4,10 @@ import NexusCore
 public enum ScheduleItem: Identifiable, @unchecked Sendable {
     case task(TaskItem)
     case meeting(CalendarEvent)
+    /// A Calendar/Motion-AI `ScheduledBlock` (proposed or accepted, spec §7 / §10)
+    /// rendered on the Today rail. TasksFeature reads `ScheduledBlock` from
+    /// NexusCore — it never imports CalendarFeature.
+    case block(ScheduledBlock)
 
     public var id: String {
         switch self {
@@ -11,6 +15,8 @@ public enum ScheduleItem: Identifiable, @unchecked Sendable {
             return "task:\(task.id.uuidString)"
         case .meeting(let event):
             return "meeting:\(event.id)"
+        case .block(let block):
+            return "block:\(block.id.uuidString)"
         }
     }
 
@@ -20,6 +26,8 @@ public enum ScheduleItem: Identifiable, @unchecked Sendable {
             return task.startAt
         case .meeting(let event):
             return event.start
+        case .block(let block):
+            return block.start
         }
     }
 
@@ -29,6 +37,8 @@ public enum ScheduleItem: Identifiable, @unchecked Sendable {
             return task.endAt ?? task.dueAt
         case .meeting(let event):
             return event.end
+        case .block(let block):
+            return block.end
         }
     }
 }
@@ -37,6 +47,7 @@ public enum ScheduleGrouping {
     public static func group(
         tasks: [TaskItem],
         events: [CalendarEvent],
+        blocks: [ScheduledBlock] = [],
         now: Date,
         calendar: Calendar = .current
     ) -> (slots: [(Date, [ScheduleItem])], unscheduled: [TaskItem]) {
@@ -70,6 +81,14 @@ public enum ScheduleGrouping {
             let visibleStart = max(event.start, dayStart)
             guard let key = minuteStart(for: visibleStart, calendar: calendar) else { continue }
             byMinute[key, default: []].append(.meeting(event))
+        }
+
+        for block in blocks where block.deletedAt == nil {
+            guard overlapsDay(start: block.start, end: block.end, dayStart: dayStart, dayEnd: dayEnd) else { continue }
+
+            let visibleStart = max(block.start, dayStart)
+            guard let key = minuteStart(for: visibleStart, calendar: calendar) else { continue }
+            byMinute[key, default: []].append(.block(block))
         }
 
         let slots = byMinute.keys.sorted().map { key in

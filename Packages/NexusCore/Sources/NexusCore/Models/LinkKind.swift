@@ -14,4 +14,7 @@ public enum LinkKind: String, Codable, Sendable, CaseIterable {
     /// A todo-block in a Note "contains" a `TaskItem`. Dedicated edge — does NOT
     /// overload `child` (reserved for subtask/hierarchy).
     case containsTask
+    /// A `TaskItem` is scheduled as a `ScheduledBlock` (task → block edge,
+    /// Calendar module). Distinct from `child`/`containsTask`.
+    case scheduledAs
 }
