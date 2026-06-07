@@ -93,4 +93,48 @@ struct CommentRepositoryTests {
         #expect(try commentRepo.comments(for: parent.id, kind: .task).isEmpty)
         #expect(try commentRepo.comments(for: subtask.id, kind: .task).isEmpty)
     }
+
+    @MainActor
+    @Test("add with same external source id updates in place (no duplicate)")
+    func addWithSameExternalSourceIDUpdatesInPlace() throws {
+        let context = try makeContext()
+        let repo = CommentRepository(context: context)
+        let taskID = UUID()
+        let first = try repo.add(body: "a", to: taskID, kind: .task, externalSourceID: "x")
+        let second = try repo.add(body: "b", to: taskID, kind: .task, externalSourceID: "x")
+
+        let listed = try repo.comments(for: taskID, kind: .task)
+        #expect(listed.count == 1)
+        #expect(listed.first?.body == "b")
+        #expect(first.id == second.id)
+    }
+
+    @MainActor
+    @Test("add with nil external source id always inserts")
+    func addWithNilExternalSourceIDAlwaysInserts() throws {
+        let context = try makeContext()
+        let repo = CommentRepository(context: context)
+        let taskID = UUID()
+        _ = try repo.add(body: "same", to: taskID, kind: .task)
+        _ = try repo.add(body: "same", to: taskID, kind: .task)
+
+        #expect(try repo.comments(for: taskID, kind: .task).count == 2)
+    }
+
+    @MainActor
+    @Test("re-import of a soft-deleted external id creates a fresh live row")
+    func addAfterSoftDeleteCreatesFreshRow() throws {
+        let context = try makeContext()
+        let repo = CommentRepository(context: context)
+        let taskID = UUID()
+        let original = try repo.add(body: "a", to: taskID, kind: .task, externalSourceID: "x")
+        try repo.softDelete(original)
+
+        let reimported = try repo.add(body: "b", to: taskID, kind: .task, externalSourceID: "x")
+
+        #expect(reimported.id != original.id)
+        let listed = try repo.comments(for: taskID, kind: .task)
+        #expect(listed.count == 1)
+        #expect(listed.first?.id == reimported.id)
+    }
 }

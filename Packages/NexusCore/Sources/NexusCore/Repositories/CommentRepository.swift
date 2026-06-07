@@ -20,6 +20,14 @@ public struct CommentRepository {
         return try context.fetch(descriptor).filter { $0.itemKind == kind }
     }
 
+    /// Inserts a comment, or — when `externalSourceID` is non-nil and matches a
+    /// LIVE existing comment — upserts that row in place (updates its body) so a
+    /// re-import lands 1:1 without duplicating. Mirrors
+    /// `tasks.create_idempotent`'s `existingTask` lookup, including its
+    /// tombstone semantics: a soft-deleted comment with the same external id is
+    /// NOT matched, so re-importing after a delete creates a fresh live row
+    /// rather than resurrecting the user's deleted comment. Anonymous comments
+    /// (`externalSourceID == nil`) are never deduped — they always insert.
     @discardableResult
     public func add(
         body: String,
@@ -27,6 +35,12 @@ public struct CommentRepository {
         kind: ItemKind,
         externalSourceID: String? = nil
     ) throws -> Comment {
+        if let externalSourceID, let existing = try liveComment(externalSourceID: externalSourceID) {
+            existing.body = body
+            existing.updatedAt = .now
+            try context.save()
+            return existing
+        }
         let comment = Comment(
             itemID: itemID,
             itemKind: kind,
@@ -36,6 +50,16 @@ public struct CommentRepository {
         context.insert(comment)
         try context.save()
         return comment
+    }
+
+    /// Fetches a LIVE (non-soft-deleted) comment matching `externalSourceID`.
+    /// Keys like "todoist-comment:<id>" are globally unique, so a match on the
+    /// external id alone is sufficient — no need to also scope by item.
+    private func liveComment(externalSourceID: String) throws -> Comment? {
+        let descriptor = FetchDescriptor<Comment>(
+            predicate: #Predicate { $0.externalSourceID == externalSourceID && $0.deletedAt == nil }
+        )
+        return try context.fetch(descriptor).first
     }
 
     public func edit(_ comment: Comment, body: String) throws {
