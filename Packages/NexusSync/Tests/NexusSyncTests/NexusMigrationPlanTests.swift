@@ -8,7 +8,7 @@ import Testing
 @Suite("NexusMigrationPlan")
 struct NexusMigrationPlanTests {
 
-    @Test("plan declares V1 through V9 schemas in order")
+    @Test("plan declares V1 through V10 schemas in order")
     func schemaOrder() {
         let names = NexusMigrationPlan.schemas.map { String(describing: $0) }
         #expect(
@@ -22,12 +22,13 @@ struct NexusMigrationPlanTests {
                 "NexusSchemaV7",
                 "NexusSchemaV8",
                 "NexusSchemaV9",
+                "NexusSchemaV10",
             ])
     }
 
-    @Test("plan has eight lightweight stages")
+    @Test("plan has nine lightweight stages")
     func stages() {
-        #expect(NexusMigrationPlan.stages.count == 8)
+        #expect(NexusMigrationPlan.stages.count == 9)
         // MigrationStage doesn't expose `.kind` publicly, but we can encode-check via debug repr.
         let descriptions = NexusMigrationPlan.stages.map { String(describing: $0) }
         #expect(descriptions.allSatisfy { $0.contains("lightweight") })

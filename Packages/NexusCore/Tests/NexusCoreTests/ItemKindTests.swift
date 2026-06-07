@@ -12,17 +12,22 @@ import Testing
     #expect(ItemKind.savedFilter.rawValue == "savedFilter")
     #expect(ItemKind.debug.rawValue == "debug")
     #expect(ItemKind.agentMemory.rawValue == "agentMemory")
+    #expect(ItemKind.scheduledBlock.rawValue == "scheduledBlock")
 }
 
 @Test func itemKind_isCodable() throws {
-    let items: [ItemKind] = [.note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory]
+    let items: [ItemKind] = [.note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock]
     let encoded = try JSONEncoder().encode(items)
     let decoded = try JSONDecoder().decode([ItemKind].self, from: encoded)
-    #expect(decoded == [ItemKind.note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory])
+    #expect(
+        decoded == [
+            ItemKind.note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock,
+        ]
+    )
 }
 
 @Test func itemKind_allCases_haveStableOrder() {
-    let expected: [ItemKind] = [.note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory]
+    let expected: [ItemKind] = [.note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock]
     #expect(ItemKind.allCases == expected)
 }
 
@@ -35,7 +40,15 @@ import Testing
     #expect(ItemKind.agentMemory.displayName == "Agent Memory")
 }
 
+@Test func scheduledBlockCaseExists() {
+    #expect(ItemKind.scheduledBlock.rawValue == "scheduledBlock")
+}
+
+@Test func scheduledBlockDisplayName() {
+    #expect(ItemKind.scheduledBlock.displayName == "Scheduled Block")
+}
+
 @Test func allItemKindsExhaustive() {
-    let all: [ItemKind] = [.note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory]
+    let all: [ItemKind] = [.note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock]
     #expect(Set(ItemKind.allCases) == Set(all))
 }

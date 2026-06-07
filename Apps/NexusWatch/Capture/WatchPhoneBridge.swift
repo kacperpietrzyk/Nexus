@@ -119,6 +119,21 @@ final class WatchPhoneBridge: NSObject {
         try await shared.sendSnoozeAction(taskID: taskID, until: until)
     }
 
+    /// Relay a proposed-block accept to iPhone (spec §7 / §11). The Watch has no
+    /// EventKit, so the iPhone materializes the mirror event.
+    static func sendAcceptBlock(blockID: UUID) async throws {
+        try await shared.sendAcceptBlock(blockID: blockID)
+    }
+
+    func sendAcceptBlock(blockID: UUID) async throws {
+        let message: [String: Any] = [
+            WatchPayload.typeKey: WatchPayload.acceptBlockType,
+            WatchPayload.blockIDKey: blockID.uuidString,
+            WatchPayload.idKey: UUID().uuidString,
+        ]
+        try await sendMessageOrTransferUserInfo(message)
+    }
+
     func sendSnoozeAction(taskID: UUID, until: Date) async throws {
         let message: [String: Any] = [
             WatchPayload.typeKey: WatchPayload.snoozeActionType,
