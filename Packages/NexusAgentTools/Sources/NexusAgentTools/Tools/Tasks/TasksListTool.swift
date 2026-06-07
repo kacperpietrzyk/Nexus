@@ -19,7 +19,25 @@ public struct TasksListTool: AgentTool {
                         description: "Task lifecycle state. Defaults to open. any includes deleted rows."
                     ),
                     "tag": .string(description: "Tag to match."),
-                    "project_id": .string(description: "Reserved project identifier filter."),
+                    "project_id": .string(
+                        description: "Filter by project UUID. Only tasks assigned to this project are returned."
+                    ),
+                    "section_id": .string(
+                        description: "Filter by section UUID. Only tasks assigned to this section are returned."
+                    ),
+                    "overdue": .boolean(
+                        description: "If true, only return tasks whose due date is in the past."
+                    ),
+                    "deadline_within": .integer(
+                        minimum: 1,
+                        maximum: nil,
+                        description: "Only return tasks whose deadline falls within this many days from now."
+                    ),
+                    "priority_at_least": .integer(
+                        minimum: 1,
+                        maximum: 4,
+                        description: "MCP priority floor: 1=high, 2=medium, 3=low, 4=none. Returns tasks at or above this priority."
+                    ),
                 ],
                 required: [],
                 description: "Optional task filters."
@@ -49,10 +67,17 @@ public struct TasksListTool: AgentTool {
         let sort = try Sort(rawValue: sortValue)
             .unwrapValidation("Invalid sort")
         let tag = try trimmedOptionalString(filter["tag"], field: "filter.tag")
-        let projectID = try trimmedOptionalString(filter["project_id"], field: "filter.project_id")
-        if projectID != nil {
-            throw AgentError.validation("project_id filter is reserved until Projects land")
-        }
+        let projectID = try TasksStructuredCreateArguments.optionalUUID(
+            filter["project_id"],
+            field: "filter.project_id"
+        )
+        let sectionID = try TasksStructuredCreateArguments.optionalUUID(
+            filter["section_id"],
+            field: "filter.section_id"
+        )
+        let overdueOnly = filter["overdue"]?.boolValue ?? false
+        let deadlineWithinDays = filter["deadline_within"]?.intValue
+        let priorityAtLeast = try priorityFloor(filter["priority_at_least"])
         let limit = try TasksToolArguments.boundedInt(
             args["limit"],
             field: "limit",
@@ -76,6 +101,11 @@ public struct TasksListTool: AgentTool {
             matches(task, state: state)
                 && matches(task, bucket: bucket, startOfTomorrow: startOfTomorrow)
                 && matches(task, tag: tag)
+                && matches(task, projectID: projectID)
+                && matches(task, sectionID: sectionID)
+                && matchesOverdue(task, overdueOnly: overdueOnly, now: now)
+                && matchesDeadlineWithin(task, days: deadlineWithinDays, now: now)
+                && matchesPriorityAtLeast(task, floor: priorityAtLeast)
         }
         tasks.sort { lhs, rhs in
             compare(lhs, rhs, sort: sort)
@@ -140,6 +170,41 @@ public struct TasksListTool: AgentTool {
         guard let tag, !tag.isEmpty else { return true }
         let normalized = tag.lowercased()
         return task.tags.contains { $0.lowercased() == normalized }
+    }
+
+    private func matches(_ task: TaskItem, projectID: UUID?) -> Bool {
+        guard let projectID else { return true }
+        return task.projectID == projectID
+    }
+
+    private func matches(_ task: TaskItem, sectionID: UUID?) -> Bool {
+        guard let sectionID else { return true }
+        return task.sectionID == sectionID
+    }
+
+    private func matchesOverdue(_ task: TaskItem, overdueOnly: Bool, now: Date) -> Bool {
+        guard overdueOnly else { return true }
+        guard let due = task.dueAt else { return false }
+        return due < now
+    }
+
+    private func matchesDeadlineWithin(_ task: TaskItem, days: Int?, now: Date) -> Bool {
+        guard let days else { return true }
+        guard let deadline = task.deadlineAt else { return false }
+        let limit = Calendar.current.date(byAdding: .day, value: days, to: now) ?? now
+        return deadline <= limit
+    }
+
+    private func matchesPriorityAtLeast(_ task: TaskItem, floor: TaskPriority?) -> Bool {
+        guard let floor else { return true }
+        return task.priority.rawValue >= floor.rawValue
+    }
+
+    /// Maps an optional MCP priority integer (1=high … 4=none) to a `TaskPriority`.
+    /// Returns nil when the value is absent (no floor applied).
+    private func priorityFloor(_ value: JSONValue?) throws -> TaskPriority? {
+        guard let raw = value?.intValue else { return nil }
+        return try TasksStructuredCreateArguments.optionalPriority(.int(raw))
     }
 
     private func compare(_ lhs: TaskItem, _ rhs: TaskItem, sort: Sort) -> Bool {
