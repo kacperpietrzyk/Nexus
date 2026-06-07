@@ -36,31 +36,43 @@ public final class NotificationScheduler {
         self.now = now
     }
 
-    /// Adds a `UNNotificationRequest` for an open, non-deleted task with a
-    /// `dueAt`. No-op for tasks without `dueAt` or for done/deleted tasks.
-    /// If `dueAt` falls inside the configured quiet window, the trigger is
+    /// Adds `UNNotificationRequest`s for an open, non-deleted task.
+    /// When `reminders` is non-empty, schedules one request per rule keyed
+    /// `task-<uuid>-r<index>`. Falls back to the legacy single `task-<uuid>`
+    /// request (from `dueAt`) when `reminders` is empty.
+    /// If a fire date falls inside the configured quiet window, the trigger is
     /// deferred to `QuietHours.nextActive(after:)`.
     public func schedule(_ task: TaskItem) async throws {
-        guard task.status == .open, task.deletedAt == nil, let due = task.dueAt else { return }
+        guard task.status == .open, task.deletedAt == nil else { return }
 
-        let content = UNMutableNotificationContent()
-        content.title = task.title
-        content.categoryIdentifier = NotificationCategory.taskReminder.rawValue
-        content.userInfo = ["taskId": task.id.uuidString]
+        let rules = task.reminders
+        guard !rules.isEmpty else {
+            try await scheduleLegacyDueReminder(task)
+            return
+        }
 
-        let request = UNNotificationRequest(
-            identifier: identifier(for: task.id),
-            content: content,
-            trigger: trigger(firingAt: due)
-        )
-        try await delivery.add(request)
+        for (index, rule) in rules.enumerated() {
+            guard let fireDate = resolve(rule, for: task) else { continue }
+            let content = UNMutableNotificationContent()
+            content.title = task.title
+            content.categoryIdentifier = NotificationCategory.taskReminder.rawValue
+            content.userInfo = ["taskId": task.id.uuidString]
+            let request = UNNotificationRequest(
+                identifier: "\(identifier(for: task.id))-r\(index)",
+                content: content,
+                trigger: trigger(firingAt: fireDate)
+            )
+            try await delivery.add(request)
+        }
     }
 
-    /// Removes the pending request keyed `task-<uuid>`.
+    /// Removes all pending requests for the given task: the legacy single id
+    /// `task-<uuid>` plus per-reminder ids `task-<uuid>-r0…r31`.
+    /// Removing non-existent identifiers is a no-op in UserNotifications.
     public func cancel(taskID: UUID) async {
-        await delivery.removePendingNotificationRequests(
-            withIdentifiers: [identifier(for: taskID)]
-        )
+        let base = identifier(for: taskID)
+        let ids = [base] + (0..<32).map { "\(base)-r\($0)" }
+        await delivery.removePendingNotificationRequests(withIdentifiers: ids)
     }
 
     /// Cancel + schedule. Use after edits that may change `dueAt` or status.
@@ -88,6 +100,33 @@ public final class NotificationScheduler {
             trigger: trigger(firingAt: until)
         )
         try await delivery.add(request)
+    }
+
+    /// Pre-reminders behavior: a single request keyed `task-<uuid>` fired at `dueAt`.
+    private func scheduleLegacyDueReminder(_ task: TaskItem) async throws {
+        guard let due = task.dueAt else { return }
+        let content = UNMutableNotificationContent()
+        content.title = task.title
+        content.categoryIdentifier = NotificationCategory.taskReminder.rawValue
+        content.userInfo = ["taskId": task.id.uuidString]
+        let request = UNNotificationRequest(
+            identifier: identifier(for: task.id),
+            content: content,
+            trigger: trigger(firingAt: due)
+        )
+        try await delivery.add(request)
+    }
+
+    /// Resolves a reminder rule to a concrete fire date, or nil if unresolvable
+    /// (relative rule whose anchor date is not set).
+    private func resolve(_ rule: ReminderRule, for task: TaskItem) -> Date? {
+        switch rule {
+        case .absolute(let date):
+            return date
+        case .relative(let offset, let anchor):
+            let base: Date? = (anchor == .due) ? task.dueAt : task.deadlineAt
+            return base.map { $0.addingTimeInterval(offset) }
+        }
     }
 
     /// Builds the trigger for a requested fire date, applying quiet hours.
