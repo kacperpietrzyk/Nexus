@@ -1,3 +1,4 @@
+import CalendarFeature
 import CommandPaletteShell
 import InboxShell
 import NexusAI
@@ -20,7 +21,7 @@ import UIKit
 struct ContentView: View {
 
     fileprivate enum NexusTab: Hashable {
-        case today, inbox, tasks, notes, meetings, agent, settings
+        case today, inbox, tasks, notes, calendar, meetings, agent, settings
     }
 
     let cloudKitEnabled: Bool
@@ -40,6 +41,9 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var selectedTab: NexusTab = .today
+    // Calendar/Motion-AI surface (spec §9), regular-width only on iOS. Lazily
+    // built once so scope/anchor state survives tab switches.
+    @State private var calendarViewModel: CalendarViewModel?
     // Internal (not private) so the `ContentView+CaptureAndPeek` extension file
     // can drive the regular-width task-detail peek + Quick Capture overlays.
     @State var selectedTask: TaskItem?
@@ -219,6 +223,11 @@ struct ContentView: View {
             AgentTab(viewModel: agentViewModel)
                 .tag(NexusTab.agent)
                 .tabItem { Label("Agent", systemImage: "sparkles") }
+            if horizontalSizeClass == .regular {
+                calendarDetail
+                    .tag(NexusTab.calendar)
+                    .tabItem { Label("Calendar", systemImage: "calendar") }
+            }
             if horizontalSizeClass == .regular, let meetingsComposition {
                 iOSMeetingsHostResolver(composition: meetingsComposition)
                     .tag(NexusTab.meetings)
@@ -253,6 +262,11 @@ struct ContentView: View {
     private func resolveUnavailableTab() {
         if selectedTab == .meetings && horizontalSizeClass != .regular {
             selectedTab = .settings
+        }
+        // Calendar is regular-width only (the compact tab bar has no room for the
+        // grid); fall back to Today if the user narrows while on it.
+        if selectedTab == .calendar && horizontalSizeClass != .regular {
+            selectedTab = .today
         }
     }
 
@@ -532,6 +546,8 @@ extension ContentView {
             )
         case .notes:
             NotesListView()
+        case .calendar:
+            calendarDetail
         case .agent:
             AgentTab(viewModel: agentViewModel)
         case .meetings:
@@ -544,6 +560,26 @@ extension ContentView {
             }
         case .settings:
             settingsTab
+        }
+    }
+
+    @ViewBuilder
+    fileprivate var calendarDetail: some View {
+        if let calendarViewModel {
+            CalendarView(viewModel: calendarViewModel)
+        } else {
+            Color.clear
+                .onAppear {
+                    #if canImport(EventKit) && !os(watchOS)
+                    let provider = EventKitCalendarProvider.shared
+                    calendarViewModel = CalendarViewModel(
+                        context: modelContext,
+                        reader: provider,
+                        writer: provider,
+                        listing: provider
+                    )
+                    #endif
+                }
         }
     }
 
@@ -568,6 +604,7 @@ extension ContentView {
             RegularNavigationItem(tab: .inbox, title: "Inbox", systemImage: "tray"),
             RegularNavigationItem(tab: .tasks, title: "Tasks", systemImage: "checkmark.square"),
             RegularNavigationItem(tab: .notes, title: "Notes", systemImage: "note.text"),
+            RegularNavigationItem(tab: .calendar, title: "Calendar", systemImage: "calendar"),
             RegularNavigationItem(tab: .agent, title: "Agent", systemImage: "sparkles"),
         ]
         if meetingsComposition != nil {

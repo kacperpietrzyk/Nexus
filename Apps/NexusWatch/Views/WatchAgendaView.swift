@@ -25,6 +25,14 @@ struct WatchAgendaView: View {
     )
     private var completed: [TaskItem]
 
+    // Calendar/Motion-AI scheduled blocks (spec §11 Watch glance): proposed +
+    // accepted, CloudKit-mirrored so the Watch reads them directly (no EventKit).
+    @Query(
+        filter: #Predicate<ScheduledBlock> { $0.deletedAt == nil },
+        sort: \ScheduledBlock.start
+    )
+    private var allBlocks: [ScheduledBlock]
+
     @State private var selected: TaskItem?
     @State private var actions: WatchTaskActions?
     @State private var pendingUndo: PendingUndo?
@@ -101,6 +109,18 @@ struct WatchAgendaView: View {
                                     }
                                 }
                             }
+                            let blocks = todaysBlocks(now: now)
+                            if !blocks.isEmpty {
+                                Section("Schedule") {
+                                    ForEach(blocks, id: \.id) { block in
+                                        WatchBlockRow(
+                                            block: block,
+                                            onAccept: { acceptBlock($0) }
+                                        )
+                                    }
+                                }
+                            }
+
                             if !result.recentlyDone.isEmpty {
                                 Section("Done today") {
                                     ForEach(result.recentlyDone, id: \.id) { task in
@@ -193,6 +213,23 @@ struct WatchAgendaView: View {
         )
     }
 
+    private func todaysBlocks(now: Date) -> [ScheduledBlock] {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: now)
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        return allBlocks.filter { $0.start >= startOfDay && $0.start < startOfTomorrow }
+    }
+
+    private func acceptBlock(_ block: ScheduledBlock) {
+        // Watch has no EventKit; relay the accept to iPhone, which materializes
+        // the mirror event (spec §11). Optimistically nothing changes locally —
+        // the accepted state syncs back via CloudKit.
+        let blockID = block.id
+        _Concurrency.Task {
+            try? await WatchPhoneBridge.sendAcceptBlock(blockID: blockID)
+        }
+    }
+
     private func handleMarkedDone(_ task: TaskItem, now: Date) {
         let stamp = now.addingTimeInterval(5)
         withAnimation(NexusMotion.standard) {
@@ -283,6 +320,60 @@ private struct WatchAgendaSummary: View {
         }
         return "Capture is one tap away"
     }
+}
+
+/// A single scheduled block on the Watch agenda (spec §11). Proposed blocks carry
+/// an accept button that relays to iPhone; accepted blocks read as a lime-edged row.
+private struct WatchBlockRow: View {
+    let block: ScheduledBlock
+    let onAccept: (ScheduledBlock) -> Void
+
+    private var isProposed: Bool { block.status == .proposed }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(isProposed ? NexusColor.Text.tertiary : NexusColor.Accent.lime)
+                .frame(width: 3, height: 28)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(block.title.isEmpty ? "Scheduled" : block.title)
+                    .font(NexusType.bodySmall)
+                    .foregroundStyle(NexusColor.Text.primary)
+                    .lineLimit(1)
+                Text(timeRange)
+                    .font(NexusType.caption)
+                    .foregroundStyle(NexusColor.Text.tertiary)
+            }
+
+            Spacer(minLength: 4)
+
+            if isProposed {
+                Button {
+                    onAccept(block)
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(NexusColor.Accent.limeInk)
+                        .frame(width: 26, height: 26)
+                        .background(NexusColor.Accent.lime, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Accept block \(block.title)")
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var timeRange: String {
+        "\(Self.formatter.string(from: block.start))–\(Self.formatter.string(from: block.end))"
+    }
+
+    private static let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 }
 
 private struct WatchQuickActions: View {

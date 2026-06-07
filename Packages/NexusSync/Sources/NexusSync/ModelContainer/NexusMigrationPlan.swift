@@ -16,6 +16,9 @@ import SwiftData
 /// - V8 -> V9 lightweight (additive schema: `Note`, `TaskItem.noteRef`,
 ///   `Project.canonicalNoteRef`). The associated `TaskItem.body` -> `Note` DATA
 ///   move (spec §15) is NOT a migration stage — see below.
+/// - V9 -> V10 lightweight (additive schema: `ScheduledBlock` entity +
+///   `TaskItem.estimatedDurationSeconds` / `TaskItem.durationSourceRaw`; Calendar /
+///   Motion-AI scheduler, spec §3/§4.1/§5). Pure additive — no data move.
 ///
 /// WHY the body -> Note move is NOT a `.custom` migration stage (a deliberate
 /// deviation from the spec's "custom stage" wording, forced by this codebase's
@@ -47,6 +50,7 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             NexusSchemaV7.self,
             NexusSchemaV8.self,
             NexusSchemaV9.self,
+            NexusSchemaV10.self,
         ]
     }
 
@@ -83,6 +87,10 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             MigrationStage.lightweight(
                 fromVersion: NexusSchemaV8.self,
                 toVersion: NexusSchemaV9.self
+            ),
+            MigrationStage.lightweight(
+                fromVersion: NexusSchemaV9.self,
+                toVersion: NexusSchemaV10.self
             ),
         ]
     }

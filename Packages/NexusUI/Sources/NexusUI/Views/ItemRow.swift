@@ -71,6 +71,7 @@ public struct ItemRow: View {
         case .savedFilter: return "line.3.horizontal.decrease.circle"
         case .debug: return "ladybug"
         case .agentMemory: return "brain.head.profile"
+        case .scheduledBlock: return "calendar.badge.clock"
         }
     }
 

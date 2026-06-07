@@ -12,6 +12,7 @@ import Testing
     #expect(LinkKind.attachment.rawValue == "attachment")
     #expect(LinkKind.embed.rawValue == "embed")
     #expect(LinkKind.containsTask.rawValue == "containsTask")
+    #expect(LinkKind.scheduledAs.rawValue == "scheduledAs")
 }
 
 @Test func linkKind_isCodable() throws {

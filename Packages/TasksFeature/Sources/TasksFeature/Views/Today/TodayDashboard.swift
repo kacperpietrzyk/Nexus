@@ -12,6 +12,7 @@ public enum TodayNavSelection: Hashable, Sendable {
     case meetings
     case tasks
     case notes
+    case calendar
     case agent
     case stats
     case settings
@@ -35,10 +36,9 @@ enum TodayDashboardContentRoute: Equatable {
             return .meetings
         case .tasks:
             return .tasks
-        case .agent, .notes:
-            // Agent + Notes are full shell destinations mounted directly in the
-            // app shell (`ContentView` swaps in `AgentChatView` / `NotesListView`);
-            // this router is never reached on those paths — defensive map only.
+        case .agent, .notes, .calendar:
+            // Agent/Notes/Calendar are full shell destinations mounted directly in
+            // the app shell; this router is never reached on those paths.
             return .today
         case .stats:
             return .productivity
@@ -100,12 +100,13 @@ extension Notification.Name {
 }
 
 public struct TodayDashboard: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(\.modelContext) var modelContext
     // Internal (not `private`): read from the `+EmbeddedToday` extension file.
     @Environment(\.taskRepository) var taskRepository
     @Environment(\.aiRouter) private var aiRouter
     @Environment(\.agentBriefService) private var agentBriefService
-    @Environment(\.calendarEventProvider) private var calendarProvider
+    @Environment(\.calendarEventProvider) var calendarProvider
+    @Environment(\.calendarEventWriter) var calendarWriter
     // The embedded-Today NowCard "Focus" pill routes to this existing
     // focus-mode entry (`FocusModeState.enter(taskID:)` — the same state
     // `ContentView.activeFocusState` reads and the ⌘. menu command drives
@@ -118,7 +119,7 @@ public struct TodayDashboard: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
-    @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) private var calendarEventsEnabled = false
+    @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) var calendarEventsEnabled = false
     @AppStorage(NexusPreferences.Keys.agentEnabled) private var agentEnabled = true
     // Internal (not `private`): read from the `+Standalone` extension file.
     @AppStorage(NexusPreferences.Keys.workspaceDisplayName) var workspaceDisplayName: String = ""
@@ -164,6 +165,8 @@ public struct TodayDashboard: View {
     @State var embeddedCascadePrompt: CascadeCompletionPrompt?
     // Internal (not `private`): read from the `+Standalone` extension file.
     @State var todaysEvents: [CalendarEvent] = []
+    // Calendar/Motion-AI blocks for today (spec §7), read via NexusCore.
+    @State var scheduleBlocks: [ScheduledBlock] = []
     @State private var digestText: String = ""
     @State private var digestTimestamp: Date = .now
     @State private var heroService: HeroBriefService?
@@ -448,13 +451,12 @@ public struct TodayDashboard: View {
         case .tasks:
             return taskFilterTitle
         case .agent:
-            // Unreached on the app path (Agent is mounted directly in the
-            // app-level shell content slot, not via this router); the oracle
-            // top bar reads "Nexus" — defensive parity, never displayed here.
-            return "Nexus"
+            return "Nexus"  // Unreached on the app path (Agent mounted in the shell).
         case .notes:
             // Unreached on the app path (Notes mounted directly in the shell).
             return "Notes"
+        case .calendar:
+            return "Calendar"  // Unreached on the app path (Calendar mounted in the shell).
         case .stats:
             return "Stats"
         case .settings:
@@ -529,7 +531,7 @@ public struct TodayDashboard: View {
     }
 
     @MainActor
-    private func reloadScheduleData() async {
+    func reloadScheduleData() async {
         reloadGeneration += 1
         let generation = reloadGeneration
         let now = Date.now
@@ -541,22 +543,20 @@ public struct TodayDashboard: View {
         do {
             let input = try Self.digestInput(now: now, modelContext: modelContext)
             let sections = try Self.embeddedTodaySections(now: now, modelContext: modelContext)
-            // A9: the digest text (AI brief) drives `rightRail`, which is
-            // mounted ONLY in `standaloneRegularBody` (TodayDashboard+Standalone.swift,
-            // `chrome == .standalone`, Mac/iPad regular width). iOS-compact renders
-            // `compactBody` → `embeddedTodayContent` and never mounts `rightRail`;
-            // the Mac embedded path likewise uses `embeddedTimelineRail` which reads
-            // `scheduleTasks` / `todaysEvents`, not `digestText`. Skip the async AI
-            // call when `chrome == .embedded` to avoid wasted work; every
-            // non-embedded path (including iOS-compact) is unchanged.
+            // A9: the digest (AI brief) drives `rightRail`, mounted ONLY in
+            // `standaloneRegularBody` (Mac/iPad regular). Embedded/iOS-compact
+            // paths read `scheduleTasks`/`todaysEvents`, not `digestText`, so the
+            // async AI call is skipped when `chrome == .embedded` (no behaviour change).
             let digest: String
             if chrome != .embedded {
                 digest = await digestText(input: input, now: now)
             } else {
                 digest = digestText  // preserve prior value; never displayed
             }
+            let blocks = Self.scheduledBlocks(now: now, modelContext: modelContext)
             guard generation == reloadGeneration else { return }
             scheduleTasks = input.today
+            scheduleBlocks = blocks
             embeddedTodayTasks = sections.today
             embeddedAwaiting = sections.awaiting
             embeddedLaterTasks = sections.later

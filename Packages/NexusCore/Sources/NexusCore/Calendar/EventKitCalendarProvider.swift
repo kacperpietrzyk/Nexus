@@ -15,6 +15,25 @@ public final class EventKitCalendarProvider: CalendarEventProviding, @unchecked 
         self.storeBox = EventKitStoreBox(store: store)
     }
 
+    /// The underlying store, exposed for the `EKEventStoreChanged` observer
+    /// registration (`observeStoreChanges`). Mutations go through `onStore`.
+    var eventStore: EKEventStore { store }
+
+    /// Run `body` against the store on the serial event queue. Centralizes the
+    /// off-main, serialized EventKit access used by the write surface so CRUD ops
+    /// never race the read path.
+    func onStore<Value: Sendable>(_ body: @escaping @Sendable (EKEventStore) throws -> Value) async throws -> Value {
+        try await withCheckedThrowingContinuation { continuation in
+            eventQueryQueue.async { [storeBox] in
+                do {
+                    continuation.resume(returning: try body(storeBox.store))
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
     public func authorizationStatus() -> CalendarAuthorizationStatus {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .notDetermined:

@@ -108,4 +108,27 @@ extension TodayDashboard {
         guard enabled else { return [] }
         return (try? await provider.eventsToday(now: now)) ?? []
     }
+
+    /// Task universe for the evening-shutdown summary (spec §10): non-deleted
+    /// tasks with a recent completion or a due date. The pure
+    /// `EveningShutdownSummary` filters down to done-today vs remaining.
+    @MainActor
+    static func shutdownTasks(now: Date, modelContext: ModelContext) -> [TaskItem] {
+        let descriptor = FetchDescriptor<TaskItem>(
+            predicate: #Predicate { $0.deletedAt == nil && ($0.dueAt != nil || $0.lastCompletedAt != nil) }
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    /// Today's Calendar/Motion-AI scheduled blocks (proposed + accepted, spec §7).
+    /// Reads `ScheduledBlock` via the NexusCore repository so the Today rail can
+    /// render blocks without importing CalendarFeature.
+    @MainActor
+    static func scheduledBlocks(now: Date, modelContext: ModelContext) -> [ScheduledBlock] {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: now)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let repository = ScheduledBlockRepository(context: modelContext)
+        return (try? repository.blocks(from: dayStart, to: dayEnd)) ?? []
+    }
 }

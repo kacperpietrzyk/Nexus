@@ -14,6 +14,11 @@ public enum WatchPayloadOutcome: Sendable, Equatable {
 
 public typealias WatchAgentPromptHandling = @MainActor @Sendable (String) async throws -> String
 
+/// Accept a proposed `ScheduledBlock` by id (spec §7 / §11). Injected by the
+/// composition root, which owns the `CalendarSyncReconciler` (and thus EventKit);
+/// the Watch relay never touches EventKit. Returns true when a block was accepted.
+public typealias WatchBlockAcceptHandling = @MainActor @Sendable (UUID) async -> Bool
+
 /// Pure entry point for Watch payloads. The platform-specific relay handles
 /// WCSession and delegates parsing plus persistence here so unit tests can run
 /// on the macOS host.
@@ -24,17 +29,20 @@ public final class WatchPayloadHandler {
     private let logger = Logger(subsystem: "com.kacperpietrzyk.Nexus", category: "WatchPayloadHandler")
     private let nowProvider: @Sendable () -> Date
     private let agentPromptHandler: WatchAgentPromptHandling?
+    private let blockAcceptHandler: WatchBlockAcceptHandling?
 
     public init(
         parser: any NLParser,
         repository: TaskItemRepository,
         now: @escaping @Sendable () -> Date = { .now },
-        agentPromptHandler: WatchAgentPromptHandling? = nil
+        agentPromptHandler: WatchAgentPromptHandling? = nil,
+        blockAcceptHandler: WatchBlockAcceptHandling? = nil
     ) {
         self.parser = parser
         self.repository = repository
         self.nowProvider = now
         self.agentPromptHandler = agentPromptHandler
+        self.blockAcceptHandler = blockAcceptHandler
     }
 
     public func handle(payload: [String: String]) async -> WatchPayloadOutcome {
@@ -51,9 +59,22 @@ public final class WatchPayloadHandler {
             return handleSnoozeAction(payload: payload)
         case WatchPayload.askNexusType:
             return await handleAskNexus(payload: payload)
+        case WatchPayload.acceptBlockType:
+            return await handleAcceptBlock(payload: payload)
         default:
             return .ignored
         }
+    }
+
+    private func handleAcceptBlock(payload: [String: String]) async -> WatchPayloadOutcome {
+        guard let handler = blockAcceptHandler else { return .ignored }
+        guard
+            let idString = payload[WatchPayload.blockIDKey],
+            let blockID = UUID(uuidString: idString)
+        else {
+            return .ignored
+        }
+        return await handler(blockID) ? .updated : .ignored
     }
 
     private func handleCapture(payload: [String: String]) async -> WatchPayloadOutcome {

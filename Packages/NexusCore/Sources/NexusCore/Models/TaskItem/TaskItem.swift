@@ -65,6 +65,17 @@ public final class TaskItem: Searchable {
     /// edges with arrays of custom Codable structs. nil = no reminders.
     public var remindersData: Data?
 
+    /// Estimated duration in seconds (Calendar / Motion-AI module, spec §4.2).
+    /// nil = no estimate. The scheduler uses this to size a `ScheduledBlock`;
+    /// `startAt`/`endAt` stay generic (recurrence/deadline) and are NOT
+    /// repurposed for scheduling.
+    public var estimatedDurationSeconds: Int?
+
+    /// Provenance of `estimatedDurationSeconds` (`DurationSource` raw). nil = no
+    /// estimate yet. Read via the `durationSource` accessor. Governs the
+    /// override cascade: `.explicit` always wins and feeds the history corpus.
+    public var durationSourceRaw: String?
+
     public init(
         id: UUID = UUID(),
         title: String,
@@ -83,7 +94,9 @@ public final class TaskItem: Searchable {
         projectID: UUID? = nil,
         sectionID: UUID? = nil,
         orderIndex: Double? = nil,
-        pinnedAsFocus: Bool = false
+        pinnedAsFocus: Bool = false,
+        estimatedDurationSeconds: Int? = nil,
+        durationSource: DurationSource? = nil
     ) {
         self.id = id
         self.kind = .task
@@ -110,6 +123,8 @@ public final class TaskItem: Searchable {
         self.sectionID = sectionID
         self.orderIndex = orderIndex
         self.pinnedAsFocus = pinnedAsFocus
+        self.estimatedDurationSeconds = estimatedDurationSeconds
+        self.durationSourceRaw = durationSource?.rawValue
     }
 
     public var status: TaskStatus {
@@ -118,6 +133,12 @@ public final class TaskItem: Searchable {
 
     public var priority: TaskPriority {
         TaskPriority(rawValue: priorityRaw) ?? .none
+    }
+
+    /// Get-only view over `durationSourceRaw` (mirrors `status`/`priority`).
+    /// nil when no estimate has been recorded or the raw value is unknown.
+    public var durationSource: DurationSource? {
+        durationSourceRaw.flatMap(DurationSource.init(rawValue:))
     }
 
     /// Decoded view over `remindersData`. Setting to an empty array clears the
