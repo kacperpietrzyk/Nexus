@@ -50,7 +50,10 @@ struct TasksCompleteToolTests {
         let firstRows = try fixture.repo.context.fetch(FetchDescriptor<TaskItem>())
         _ = try await callComplete(taskID: task.id, context: fixture.context)
         let secondRows = try fixture.repo.context.fetch(FetchDescriptor<TaskItem>())
-        let response = try await search("done-idempotent-token", context: fixture.context)
+        // Task content (body) is no longer indexed — it lives in a `Note`
+        // (spec §4.2/§13). Search the shared TITLE token; the parent + its recurring
+        // spawn both carry it, so the idempotent re-complete still yields 2 rows.
+        let response = try await search("recurring", context: fixture.context)
 
         #expect(firstRows.count == 2)
         #expect(secondRows.count == 2)
@@ -102,7 +105,10 @@ struct TasksCompleteToolTests {
 
         _ = try await callComplete(taskID: task.id, context: fixture.context)
 
-        let response = try await search("mobility", context: fixture.context)
+        // Task content (body) is no longer indexed — it lives in a `Note`
+        // (spec §4.2/§13). Search the shared TITLE token; both the completed parent
+        // and its freshly spawned open instance carry it.
+        let response = try await search("stretch", context: fixture.context)
         #expect(response.count == 2)
         #expect(response.contains { $0.id == task.id.uuidString && $0.state == "done" })
         #expect(response.contains { $0.id != task.id.uuidString && $0.state == "open" })

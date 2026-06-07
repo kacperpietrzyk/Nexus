@@ -5,15 +5,22 @@ import NexusAgent
 import NexusCore
 import NexusMeetings
 import NexusUI
+import NotesFeature
 import SwiftData
 import SwiftUI
 import TasksFeature
 import UIKit
 
+// The iOS root shell mounts one tab/destination per feature
+// (Today/Inbox/Tasks/Notes/Agent/Meetings/Settings) in both the compact tab bar
+// and the regular-width split; it grows by a tab + a `regularDetail` case + a
+// nav item per feature by design — the same structural per-feature growth that
+// disables `file_length` on `NexusiOSApp`. The Notes mount crossed 600 lines.
+// swiftlint:disable file_length
 struct ContentView: View {
 
     fileprivate enum NexusTab: Hashable {
-        case today, inbox, tasks, meetings, agent, settings
+        case today, inbox, tasks, notes, meetings, agent, settings
     }
 
     let cloudKitEnabled: Bool
@@ -206,6 +213,9 @@ struct ContentView: View {
             )
             .tag(NexusTab.tasks)
             .tabItem { Label("Tasks", systemImage: "checkmark.square") }
+            NotesListView()
+                .tag(NexusTab.notes)
+                .tabItem { Label("Notes", systemImage: "note.text") }
             AgentTab(viewModel: agentViewModel)
                 .tag(NexusTab.agent)
                 .tabItem { Label("Agent", systemImage: "sparkles") }
@@ -520,6 +530,8 @@ extension ContentView {
                 onOpenCommandPalette: { commandPalettePresented = true },
                 showsToolbarActions: false
             )
+        case .notes:
+            NotesListView()
         case .agent:
             AgentTab(viewModel: agentViewModel)
         case .meetings:
@@ -555,6 +567,7 @@ extension ContentView {
             RegularNavigationItem(tab: .today, title: "Today", systemImage: "circle.dotted"),
             RegularNavigationItem(tab: .inbox, title: "Inbox", systemImage: "tray"),
             RegularNavigationItem(tab: .tasks, title: "Tasks", systemImage: "checkmark.square"),
+            RegularNavigationItem(tab: .notes, title: "Notes", systemImage: "note.text"),
             RegularNavigationItem(tab: .agent, title: "Agent", systemImage: "sparkles"),
         ]
         if meetingsComposition != nil {

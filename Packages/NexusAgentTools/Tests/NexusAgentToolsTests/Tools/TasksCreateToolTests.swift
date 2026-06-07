@@ -86,8 +86,11 @@ struct TasksCreateToolTests {
             context: fixture.context
         )
 
+        // Search the TITLE token: task content (notes/body) is no longer indexed —
+        // it now lives in a `Note` (spec §4.2/§13). This test pins index-reflection
+        // timing, not body indexing.
         let result = try await TasksSearchTool().call(
-            args: .object(["query": .string("needle-token")]),
+            args: .object(["query": .string("Searchable")]),
             context: fixture.context
         )
         let data = try JSONEncoder().encode(result)

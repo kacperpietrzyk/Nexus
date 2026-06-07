@@ -49,6 +49,9 @@ public enum MarkdownExporter {
         folder: URL,
         counters: inout ExportCounters
     ) throws {
+        // Cache of Note id → serialized Markdown body so each note is decoded at
+        // most once even if several items reference it (e.g. transcluded task).
+        var noteBodyCache: [UUID: String] = [:]
         // Fetch every row and filter `deletedAt == nil` in Swift rather than via a
         // `#Predicate<L>`. A predicate built over the generic protocol type `L` synthesizes a
         // keypath through the `Linkable` witness that SwiftData cannot match against the
@@ -74,7 +77,7 @@ public enum MarkdownExporter {
                 updatedAt: item.updatedAt,
                 deletedAt: item.deletedAt,
                 outgoingLinks: outgoing,
-                body: body(for: item)
+                body: body(for: item, in: context, noteBodyCache: &noteBodyCache)
             )
             let path = folder.appendingPathComponent(
                 uniqueFilename(for: doc, used: &counters.usedFilenames)
@@ -105,11 +108,48 @@ public enum MarkdownExporter {
         return candidate
     }
 
-    private static func body<L: Linkable>(for item: L) -> String {
-        if let task = item as? TaskItem {
-            return task.body
+    /// Resolve a Linkable's Markdown body. Task content moved off `TaskItem.body`
+    /// into a `Note` (`TaskItem.noteRef`), and a `Project` gains an optional
+    /// canonical page (`Project.canonicalNoteRef`) — per the Notes content layer
+    /// (spec §4.2). Only those two types carry a note ref, so only they are
+    /// special-cased; every other Linkable has no inline body to export here.
+    ///
+    /// The note's canonical `[Block]` content is decoded from `contentData` and
+    /// serialized via `BlockMarkdownSerializer`. A `Note` exported as its own
+    /// Linkable also emits its body the same way.
+    @MainActor
+    private static func body<L: Linkable>(
+        for item: L,
+        in context: ModelContext,
+        noteBodyCache: inout [UUID: String]
+    ) -> String {
+        let noteRef: UUID?
+        switch item {
+        case let task as TaskItem: noteRef = task.noteRef
+        case let project as Project: noteRef = project.canonicalNoteRef
+        case let note as Note: return markdownBody(of: note)
+        default: noteRef = nil
         }
-        return ""
+        guard let noteRef else { return "" }
+        if let cached = noteBodyCache[noteRef] { return cached }
+        let body = resolveNoteBody(id: noteRef, in: context)
+        noteBodyCache[noteRef] = body
+        return body
+    }
+
+    @MainActor
+    private static func resolveNoteBody(id: UUID, in context: ModelContext) -> String {
+        var descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        guard let note = try? context.fetch(descriptor).first, note.deletedAt == nil else {
+            return ""
+        }
+        return markdownBody(of: note)
+    }
+
+    private static func markdownBody(of note: Note) -> String {
+        guard let blocks = try? NoteContentCoder.decode(note.contentData) else { return "" }
+        return BlockMarkdownSerializer.markdown(for: blocks)
     }
 
     private struct ExportCounters {

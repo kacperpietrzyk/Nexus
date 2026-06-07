@@ -230,19 +230,21 @@ struct TasksUpdateToolTests {
     @MainActor
     @Test("updates search index immediately")
     func updatesSearchIndexImmediately() async throws {
-        let task = TaskItem(title: "Indexed", body: "oldtoken")
+        // Task content (notes/body) is no longer indexed — it lives in a `Note`
+        // (spec §4.2/§13). This test pins that a TITLE change re-indexes immediately.
+        let task = TaskItem(title: "oldtitletoken", body: "irrelevant")
         let fixture = try await InMemoryAgentContext.make(tasks: [task])
 
         _ = try await callUpdate(
             args: .object([
                 "task_id": .string(task.id.uuidString),
-                "patch": .object(["notes": .string("newtoken")]),
+                "patch": .object(["title": .string("newtitletoken")]),
             ]),
             context: fixture.context
         )
 
-        #expect(try await searchTitles("oldtoken", context: fixture.context).isEmpty)
-        #expect(try await searchTitles("newtoken", context: fixture.context) == ["Indexed"])
+        #expect(try await searchTitles("oldtitletoken", context: fixture.context).isEmpty)
+        #expect(try await searchTitles("newtitletoken", context: fixture.context) == ["newtitletoken"])
     }
 
     @MainActor

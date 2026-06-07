@@ -7,11 +7,14 @@ import Testing
 @Suite("TasksSearchTool")
 struct TasksSearchToolTests {
     @MainActor
-    @Test("query matches title and body")
-    func queryMatchesTitleAndBody() async throws {
+    @Test("query matches title and tags")
+    func queryMatchesTitleAndTags() async throws {
+        // Task content (body) is no longer indexed — it lives in a `Note`
+        // (spec §4.2/§13). Search now spans title + tags only: one task matches by
+        // title, another by tag.
         let tasks = [
             TaskItem(title: "Plan workshop"),
-            TaskItem(title: "Send notes", body: "Workshop follow-up"),
+            TaskItem(title: "Send notes", tags: ["workshop"]),
             TaskItem(title: "Buy milk"),
         ]
         let fixture = try await InMemoryAgentContext.make(tasks: tasks)

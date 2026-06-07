@@ -11,6 +11,9 @@ public final class Project: Searchable {
     /// `nexusProjectGlyph(named:)` in TasksFeature; no color is rendered from it.
     public var color: String = "azure"
     public var parentProjectID: UUID?
+    /// Pointer to the project's canonical page `Note` (`role == .projectPage`).
+    /// nil = no page yet (Notes content layer, spec §4.2). Additive/optional.
+    public var canonicalNoteRef: UUID?
     public var archivedAt: Date?
     public var createdAt: Date = Date.now
     public var updatedAt: Date = Date.now

@@ -110,11 +110,14 @@ struct TasksReopenToolTests {
             args: .object(["task_id": .string(task.id.uuidString)]),
             context: fixture.context
         )
-        #expect(try await search("recurrence-token", context: fixture.context).count == 2)
+        // Task content (body) is no longer indexed — it lives in a `Note`
+        // (spec §4.2/§13). Search the shared TITLE token; complete spawns a sibling
+        // (2 rows), reopen removes the spawn (back to 1 row).
+        #expect(try await search("review", context: fixture.context).count == 2)
 
         _ = try await callReopen(taskID: task.id, context: fixture.context)
 
-        let response = try await search("recurrence-token", context: fixture.context)
+        let response = try await search("review", context: fixture.context)
         #expect(response.count == 1)
         #expect(response.first?.id == task.id.uuidString)
         #expect(response.first?.state == "open")

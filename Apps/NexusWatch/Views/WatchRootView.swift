@@ -8,6 +8,7 @@ extension UUID: @retroactive Identifiable {
 struct WatchRootView: View {
     @State private var captureSheetPresented = false
     @State private var askNexusSheetPresented = false
+    @State private var notesSheetPresented = false
     @State private var customSnoozeTaskID: UUID?
 
     let actionHandler: WatchNotificationActionHandler?
@@ -39,9 +40,22 @@ struct WatchRootView: View {
                         Label("Capture", systemImage: "mic.fill")
                     }
                 }
+
+                ToolbarItem(placement: .bottomBar) {
+                    Button {
+                        notesSheetPresented = true
+                    } label: {
+                        Label("Notes", systemImage: "note.text")
+                    }
+                }
             }
             .sheet(isPresented: $captureSheetPresented) {
                 WatchCaptureView()
+            }
+            .sheet(isPresented: $notesSheetPresented) {
+                NavigationStack {
+                    WatchNotesView()
+                }
             }
             .sheet(isPresented: $askNexusSheetPresented) {
                 AskNexusInputView()

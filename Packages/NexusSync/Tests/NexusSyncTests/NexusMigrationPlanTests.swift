@@ -8,7 +8,7 @@ import Testing
 @Suite("NexusMigrationPlan")
 struct NexusMigrationPlanTests {
 
-    @Test("plan declares V1 through V8 schemas in order")
+    @Test("plan declares V1 through V9 schemas in order")
     func schemaOrder() {
         let names = NexusMigrationPlan.schemas.map { String(describing: $0) }
         #expect(
@@ -21,12 +21,13 @@ struct NexusMigrationPlanTests {
                 "NexusSchemaV6",
                 "NexusSchemaV7",
                 "NexusSchemaV8",
+                "NexusSchemaV9",
             ])
     }
 
-    @Test("plan has seven lightweight stages")
+    @Test("plan has eight lightweight stages")
     func stages() {
-        #expect(NexusMigrationPlan.stages.count == 7)
+        #expect(NexusMigrationPlan.stages.count == 8)
         // MigrationStage doesn't expose `.kind` publicly, but we can encode-check via debug repr.
         let descriptions = NexusMigrationPlan.stages.map { String(describing: $0) }
         #expect(descriptions.allSatisfy { $0.contains("lightweight") })
@@ -42,6 +43,17 @@ struct NexusMigrationPlanTests {
     /// reaches the split container — so this fails loudly to force the author to
     /// also wire the plan into `makeContainer`'s split path and verify it with a
     /// real on-disk migration before shipping.
+    ///
+    /// NOTE (V8 -> V9, Notes content layer): the `TaskItem.body` -> `Note` data
+    /// move is intentionally NOT a `.custom` stage. The V8 -> V9 *schema* delta is
+    /// lightweight-additive (Note table + two `UUID?` ref fields), and the data
+    /// move runs as plain, idempotent, marker-gated code over the already-open
+    /// container in `NexusModelContainer.migrateTaskBodiesToNotesIfNeeded` — proven
+    /// end-to-end by `SchemaV9MigrationTests.splitContainerMigratesTaskBodiesToNotesOnDisk`.
+    /// A `.custom` stage was infeasible: it could not run on the split inference
+    /// path, and a plan-driven pre-pass throws "unknown coordinator model version"
+    /// on any store carrying composition extras (Meeting, never in the plan's
+    /// schemas due to the package cycle). So this guard is preserved as-is.
     @Test("every stage is lightweight — custom stages would not run in the production split container")
     func everyStageIsLightweightOrTheSplitContainerMustBeRewired() {
         let nonLightweight = NexusMigrationPlan.stages

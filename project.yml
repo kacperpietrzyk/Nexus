@@ -34,6 +34,8 @@ packages:
     path: Packages/NexusSearch
   TasksFeature:
     path: Packages/TasksFeature
+  NotesFeature:
+    path: Packages/NotesFeature
   InboxShell:
     path: Packages/InboxShell
   CommandPaletteShell:
@@ -160,6 +162,7 @@ targets:
       - package: NexusUI
       - package: NexusSearch
       - package: TasksFeature
+      - package: NotesFeature
       - package: InboxShell
       - package: CommandPaletteShell
       - package: NexusAgentTools
@@ -204,6 +207,7 @@ targets:
       - package: NexusUI
       - package: NexusSearch
       - package: TasksFeature
+      - package: NotesFeature
       - package: InboxShell
       - package: CommandPaletteShell
       - package: NexusAgentTools

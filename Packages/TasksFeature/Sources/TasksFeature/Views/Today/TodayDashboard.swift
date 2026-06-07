@@ -11,6 +11,7 @@ public enum TodayNavSelection: Hashable, Sendable {
     case inbox
     case meetings
     case tasks
+    case notes
     case agent
     case stats
     case settings
@@ -34,12 +35,10 @@ enum TodayDashboardContentRoute: Equatable {
             return .meetings
         case .tasks:
             return .tasks
-        case .agent:
-            // The Agent surface is a full shell destination mounted directly
-            // in the app-level shell content slot (`ContentView` swaps in
-            // `AgentChatView` for `.agent`); `TodayDashboard`'s internal
-            // content router is never reached on that path. This defensive
-            // map keeps the enum + content switch unchanged — no dead branch.
+        case .agent, .notes:
+            // Agent + Notes are full shell destinations mounted directly in the
+            // app shell (`ContentView` swaps in `AgentChatView` / `NotesListView`);
+            // this router is never reached on those paths — defensive map only.
             return .today
         case .stats:
             return .productivity
@@ -453,6 +452,9 @@ public struct TodayDashboard: View {
             // app-level shell content slot, not via this router); the oracle
             // top bar reads "Nexus" — defensive parity, never displayed here.
             return "Nexus"
+        case .notes:
+            // Unreached on the app path (Notes mounted directly in the shell).
+            return "Notes"
         case .stats:
             return "Stats"
         case .settings:
