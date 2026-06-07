@@ -2,6 +2,19 @@ import Foundation
 import NexusCore
 import SwiftData
 
+/// Bundles all write parameters for the idempotent upsert to avoid long parameter lists.
+private struct IdempotentWriteParams {
+    let args: JSONValue
+    let fields: TasksStructuredCreateFields
+    let externalSourceID: String
+    let metadata: Data?
+    let projectID: UUID?
+    let sectionID: UUID?
+    let parentID: UUID?
+    let recurrence: String?
+    let reminders: [ReminderRule]
+}
+
 public struct TasksCreateIdempotentTool: AgentTool {
     public let name = "tasks.create_idempotent"
     public let description =
@@ -23,7 +36,24 @@ public struct TasksCreateIdempotentTool: AgentTool {
                 description: "Priority: 1 high, 2 medium, 3 low, 4 none/default."
             ),
             "tags": .array(items: .string(description: "Tag"), description: "Optional task tags."),
-            "project_id": .string(description: "Optional opaque project UUID; accepted but not persisted yet."),
+            "project_id": .string(description: "Project UUID to assign the task to."),
+            "section_id": .string(description: "Section UUID within the project."),
+            "parent_id": .string(description: "Parent task UUID for a subtask."),
+            "recurrence_rule": .string(description: "RFC 5545 RRULE subset, e.g. FREQ=DAILY."),
+            "reminders": .array(
+                items: .object(
+                    properties: [
+                        "type": .string(description: "relative | absolute"),
+                        "offset": .integer(
+                            description: "relative: seconds before/after anchor (negative = before)"
+                        ),
+                        "anchor": .string(description: "relative: due | deadline"),
+                        "at": .string(description: "absolute: ISO8601 timestamp"),
+                    ],
+                    required: ["type"]
+                ),
+                description: "Optional reminders."
+            ),
         ],
         required: ["external_source_id", "title"]
     )
@@ -33,61 +63,101 @@ public struct TasksCreateIdempotentTool: AgentTool {
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         try TasksStructuredCreateArguments.rejectReservedFields(args)
-        let externalSourceID = try TasksStructuredCreateArguments.trimmedRequiredString(
-            args["external_source_id"],
-            field: "external_source_id"
+        let write = try IdempotentWriteParams(
+            args: args,
+            fields: TasksStructuredCreateArguments.parse(args),
+            externalSourceID: TasksStructuredCreateArguments.trimmedRequiredString(
+                args["external_source_id"],
+                field: "external_source_id"
+            ),
+            metadata: metadata(from: args["external_source_metadata"]),
+            projectID: TasksStructuredCreateArguments.optionalProjectID(args["project_id"]),
+            sectionID: TasksStructuredCreateArguments.optionalUUID(
+                args["section_id"], field: "section_id"
+            ),
+            parentID: TasksStructuredCreateArguments.optionalUUID(
+                args["parent_id"], field: "parent_id"
+            ),
+            recurrence: TasksStructuredCreateArguments.optionalRecurrenceRule(args["recurrence_rule"]),
+            reminders: TasksStructuredCreateArguments.optionalReminders(args["reminders"])
         )
-        let metadata = try metadata(from: args["external_source_metadata"])
-        let fields = try TasksStructuredCreateArguments.parse(args)
 
-        if let existing = try existingTask(externalSourceID: externalSourceID, context: context) {
-            if let oldMetadata = existing.externalSourceMetadata, let metadata {
-                if oldMetadata != metadata {
-                    throw AgentError.conflict("external_source_metadata mismatch for \(externalSourceID)")
-                }
-            }
+        let repo = context.taskRepository.repository
 
-            try context.taskRepository.repository.update(existing) { task in
-                task.title = fields.title
-                if args["notes"] != nil {
-                    task.body = fields.notes ?? ""
-                }
-                if args["due_date"] != nil {
-                    task.dueAt = fields.dueDate
-                }
-                if args["deadline_date"] != nil {
-                    task.deadlineAt = fields.deadlineAt
-                }
-                if args["priority"] != nil {
-                    task.priorityRaw = fields.priority.rawValue
-                }
-                if args["tags"] != nil {
-                    task.tags = fields.tags
-                }
-                if task.externalSourceMetadata == nil {
-                    task.externalSourceMetadata = metadata
-                }
-            }
-            await TasksToolSearchIndexing.reflect(existing, in: context.searchIndex)
-            let response = IdempotentResponseDTO(task: TaskDTO(from: existing), wasCreated: false)
-            return try TasksToolJSON.encode(response)
+        if let existing = try existingTask(externalSourceID: write.externalSourceID, context: context) {
+            return try await updateExisting(existing, write: write, repo: repo, context: context)
         }
 
         let task = TaskItem(
-            title: fields.title,
-            body: fields.notes ?? "",
-            dueAt: fields.dueDate,
-            deadlineAt: fields.deadlineAt,
-            priority: fields.priority,
-            tags: fields.tags
+            title: write.fields.title,
+            body: write.fields.notes ?? "",
+            dueAt: write.fields.dueDate,
+            deadlineAt: write.fields.deadlineAt,
+            priority: write.fields.priority,
+            tags: write.fields.tags,
+            recurrenceRule: write.recurrence,
+            parentTaskID: write.parentID
         )
-        task.externalSourceID = externalSourceID
-        task.externalSourceMetadata = metadata
-        try context.taskRepository.repository.insert(task)
+        task.reminders = write.reminders
+        task.externalSourceID = write.externalSourceID
+        task.externalSourceMetadata = write.metadata
+        try repo.insert(task)
+        try assignIfNeeded(task, projectID: write.projectID, sectionID: write.sectionID, repo: repo)
         await context.searchIndex.upsert(IndexedDocument(task))
 
         let response = IdempotentResponseDTO(task: TaskDTO(from: task), wasCreated: true)
         return try TasksToolJSON.encode(response)
+    }
+
+    @MainActor
+    private func updateExisting(
+        _ existing: TaskItem,
+        write: IdempotentWriteParams,
+        repo: TaskItemRepository,
+        context: AgentContext
+    ) async throws -> JSONValue {
+        if let oldMetadata = existing.externalSourceMetadata, let incomingMetadata = write.metadata {
+            if oldMetadata != incomingMetadata {
+                throw AgentError.conflict(
+                    "external_source_metadata mismatch for \(write.externalSourceID)"
+                )
+            }
+        }
+
+        let args = write.args
+        let fields = write.fields
+        let parentID = write.parentID
+        let recurrence = write.recurrence
+        let reminders = write.reminders
+        let metadata = write.metadata
+        try repo.update(existing) { task in
+            task.title = fields.title
+            if args["notes"] != nil { task.body = fields.notes ?? "" }
+            if args["due_date"] != nil { task.dueAt = fields.dueDate }
+            if args["deadline_date"] != nil { task.deadlineAt = fields.deadlineAt }
+            if args["priority"] != nil { task.priorityRaw = fields.priority.rawValue }
+            if args["tags"] != nil { task.tags = fields.tags }
+            if args["parent_id"] != nil { task.parentTaskID = parentID }
+            if args["recurrence_rule"] != nil { task.recurrenceRule = recurrence }
+            if args["reminders"] != nil { task.reminders = reminders }
+            if task.externalSourceMetadata == nil { task.externalSourceMetadata = metadata }
+        }
+        try assignIfNeeded(existing, projectID: write.projectID, sectionID: write.sectionID, repo: repo)
+        await TasksToolSearchIndexing.reflect(existing, in: context.searchIndex)
+        let response = IdempotentResponseDTO(task: TaskDTO(from: existing), wasCreated: false)
+        return try TasksToolJSON.encode(response)
+    }
+
+    @MainActor
+    private func assignIfNeeded(
+        _ task: TaskItem, projectID: UUID?, sectionID: UUID?, repo: TaskItemRepository
+    ) throws {
+        guard projectID != nil || sectionID != nil else { return }
+        do {
+            try repo.assign(task, toProject: projectID, section: sectionID)
+        } catch {
+            throw AgentError.validation("project/section assignment failed: \(error)")
+        }
     }
 
     @MainActor

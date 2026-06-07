@@ -20,7 +20,24 @@ public struct TasksCreateTool: AgentTool {
                 description: "Priority: 1 high, 2 medium, 3 low, 4 none/default."
             ),
             "tags": .array(items: .string(description: "Tag"), description: "Optional task tags."),
-            "project_id": .string(description: "Reserved until Projects land."),
+            "project_id": .string(description: "Project UUID to assign the task to."),
+            "section_id": .string(description: "Section UUID within the project."),
+            "parent_id": .string(description: "Parent task UUID for a subtask."),
+            "recurrence_rule": .string(description: "RFC 5545 RRULE subset, e.g. FREQ=DAILY."),
+            "reminders": .array(
+                items: .object(
+                    properties: [
+                        "type": .string(description: "relative | absolute"),
+                        "offset": .integer(
+                            description: "relative: seconds before/after anchor (negative = before)"
+                        ),
+                        "anchor": .string(description: "relative: due | deadline"),
+                        "at": .string(description: "absolute: ISO8601 timestamp"),
+                    ],
+                    required: ["type"]
+                ),
+                description: "Optional reminders."
+            ),
         ],
         required: ["title"]
     )
@@ -31,16 +48,33 @@ public struct TasksCreateTool: AgentTool {
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         try TasksStructuredCreateArguments.rejectReservedFields(args)
         let fields = try TasksStructuredCreateArguments.parse(args)
+        let projectID = try TasksStructuredCreateArguments.optionalProjectID(args["project_id"])
+        let sectionID = try TasksStructuredCreateArguments.optionalUUID(args["section_id"], field: "section_id")
+        let parentID = try TasksStructuredCreateArguments.optionalUUID(args["parent_id"], field: "parent_id")
+        let recurrence = try TasksStructuredCreateArguments.optionalRecurrenceRule(args["recurrence_rule"])
+        let reminders = try TasksStructuredCreateArguments.optionalReminders(args["reminders"])
+
         let task = TaskItem(
             title: fields.title,
             body: fields.notes ?? "",
             dueAt: fields.dueDate,
             deadlineAt: fields.deadlineAt,
             priority: fields.priority,
-            tags: fields.tags
+            tags: fields.tags,
+            recurrenceRule: recurrence,
+            parentTaskID: parentID
         )
+        task.reminders = reminders
 
-        try context.taskRepository.repository.insert(task)
+        let repo = context.taskRepository.repository
+        try repo.insert(task)
+        if projectID != nil || sectionID != nil {
+            do {
+                try repo.assign(task, toProject: projectID, section: sectionID)
+            } catch {
+                throw AgentError.validation("project/section assignment failed: \(error)")
+            }
+        }
         await context.searchIndex.upsert(IndexedDocument(task))
         return try TasksToolJSON.encode(TaskDTO(from: task))
     }
@@ -159,6 +193,42 @@ enum TasksStructuredCreateArguments {
             throw AgentError.validation("project_id must be a valid UUID")
         }
         return id
+    }
+
+    static func optionalUUID(_ value: JSONValue?, field: String) throws -> UUID? {
+        guard let value else { return nil }
+        guard let text = value.stringValue, let id = UUID(uuidString: text) else {
+            throw AgentError.validation("\(field) must be a valid UUID")
+        }
+        return id
+    }
+
+    static func optionalRecurrenceRule(_ value: JSONValue?) throws -> String? {
+        guard let value else { return nil }
+        guard let text = value.stringValue else {
+            throw AgentError.validation("recurrence_rule must be a string")
+        }
+        do {
+            _ = try RRuleParser.parse(text)
+        } catch {
+            throw AgentError.validation("recurrence_rule is not a valid RRULE: \(text)")
+        }
+        return text
+    }
+
+    static func optionalReminders(_ value: JSONValue?) throws -> [ReminderRule] {
+        guard let value else { return [] }
+        guard value.arrayValue != nil else {
+            throw AgentError.validation("reminders must be an array")
+        }
+        let data = try JSONEncoder().encode(value)
+        let dtos = try JSONDecoder().decode([ReminderDTO].self, from: data)
+        return try dtos.map { dto in
+            guard let rule = dto.toRule() else {
+                throw AgentError.validation("invalid reminder entry")
+            }
+            return rule
+        }
     }
 
     static func optionalPriority(_ value: JSONValue?) throws -> TaskPriority {
