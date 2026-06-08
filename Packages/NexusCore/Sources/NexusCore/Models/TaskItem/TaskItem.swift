@@ -52,6 +52,18 @@ public final class TaskItem: Searchable {
     public var orderIndex: Double?
     public var pinnedAsFocus: Bool = false
 
+    /// Optional tracker state machine (Projects tier, spec §4.2). `nil` = a plain
+    /// GTD task that runs purely on `status` (invariant I7). When non-nil it
+    /// deterministically drives `status` via `TaskItemRepository` reconciliation
+    /// (spec §5). Read through the `workflowState` accessor. Stored as `String?`
+    /// because SwiftData + CloudKit reject enum-typed properties. Additive/optional.
+    public var workflowStateRaw: String?
+
+    /// Agent this task is assigned to (Projects tier, spec §4.5 / §8;
+    /// `AgentAssignee` raw). `nil` = self. Pure metadata — never affects
+    /// scheduling/visibility (invariant I8). Read through the `agent` accessor.
+    public var assignedAgent: String?
+
     /// External system identifier for idempotent imports.
     /// Format convention: "<source>:<id>" e.g. "todoist:8237162", "linear:KP-100".
     public var externalSourceID: String?
@@ -95,6 +107,8 @@ public final class TaskItem: Searchable {
         sectionID: UUID? = nil,
         orderIndex: Double? = nil,
         pinnedAsFocus: Bool = false,
+        workflowState: WorkflowState? = nil,
+        assignedAgent: AgentAssignee? = nil,
         estimatedDurationSeconds: Int? = nil,
         durationSource: DurationSource? = nil
     ) {
@@ -123,6 +137,8 @@ public final class TaskItem: Searchable {
         self.sectionID = sectionID
         self.orderIndex = orderIndex
         self.pinnedAsFocus = pinnedAsFocus
+        self.workflowStateRaw = workflowState?.rawValue
+        self.assignedAgent = assignedAgent?.rawValue
         self.estimatedDurationSeconds = estimatedDurationSeconds
         self.durationSourceRaw = durationSource?.rawValue
     }
@@ -133,6 +149,19 @@ public final class TaskItem: Searchable {
 
     public var priority: TaskPriority {
         TaskPriority(rawValue: priorityRaw) ?? .none
+    }
+
+    /// Get-only view over `workflowStateRaw` (Projects tier, spec §4.2). `nil` =
+    /// GTD task (machine inactive) OR an unknown stored raw. Mutating the machine
+    /// goes through `TaskItemRepository` reconciliation, never a raw setter.
+    public var workflowState: WorkflowState? {
+        workflowStateRaw.flatMap(WorkflowState.init(rawValue:))
+    }
+
+    /// Get-only view over `assignedAgent` (Projects tier, spec §4.5). `nil` =
+    /// self, or an unknown stored raw.
+    public var agent: AgentAssignee? {
+        assignedAgent.flatMap(AgentAssignee.init(rawValue:))
     }
 
     /// Get-only view over `durationSourceRaw` (mirrors `status`/`priority`).

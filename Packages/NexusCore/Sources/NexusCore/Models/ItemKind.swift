@@ -13,6 +13,9 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
     case agentMemory
     /// A proposed/accepted scheduler time block for a task (Calendar module).
     case scheduledBlock
+    /// A structural `Label` entity (Projects tier, spec §4.4). Labels hang off
+    /// tasks and projects via the `Link` graph (`LinkKind.labeled`).
+    case label
 
     public var displayName: String {
         switch self {
@@ -25,6 +28,7 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
         case .debug: return "Debug"
         case .agentMemory: return "Agent Memory"
         case .scheduledBlock: return "Scheduled Block"
+        case .label: return "Label"
         }
     }
 }

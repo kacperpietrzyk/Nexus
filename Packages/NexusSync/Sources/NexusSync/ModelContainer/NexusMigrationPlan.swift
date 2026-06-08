@@ -19,6 +19,12 @@ import SwiftData
 /// - V9 -> V10 lightweight (additive schema: `ScheduledBlock` entity +
 ///   `TaskItem.estimatedDurationSeconds` / `TaskItem.durationSourceRaw`; Calendar /
 ///   Motion-AI scheduler, spec §3/§4.1/§5). Pure additive — no data move.
+/// - V10 -> V11 lightweight (additive schema: `Label` entity + `Project.statusRaw`
+///   + `TaskItem.workflowStateRaw` / `TaskItem.assignedAgent`; Projects tier, spec
+///   §4.4/§12). Pure additive — no data move. The system-label SEED is NOT a
+///   migration stage (same reasoning as the body -> Note move below): it runs as
+///   plain, idempotent, marker-gated post-open code in
+///   `NexusModelContainer.seedSystemLabelsIfNeeded`.
 ///
 /// WHY the body -> Note move is NOT a `.custom` migration stage (a deliberate
 /// deviation from the spec's "custom stage" wording, forced by this codebase's
@@ -51,6 +57,7 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             NexusSchemaV8.self,
             NexusSchemaV9.self,
             NexusSchemaV10.self,
+            NexusSchemaV11.self,
         ]
     }
 
@@ -92,6 +99,10 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
                 fromVersion: NexusSchemaV9.self,
                 toVersion: NexusSchemaV10.self
             ),
+            MigrationStage.lightweight(
+                fromVersion: NexusSchemaV10.self,
+                toVersion: NexusSchemaV11.self
+            ),
         ]
     }
 
@@ -125,6 +136,45 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             )
             context.insert(note)
             task.noteRef = note.id
+            didInsert = true
+        }
+
+        if didInsert {
+            try context.save()
+        }
+    }
+
+    /// V10 -> V11 system-label seed (spec §7/§12). Idempotently inserts the
+    /// canonical `SystemLabel` set (feature/bug/infra/security in `domain`;
+    /// needsDecision/decided in `gate`) with `isSystem = true`.
+    ///
+    /// Mirrors the data-safety logic of `LabelRepository.seedSystemLabels` but is
+    /// NON-isolated (a plain static, like `migrateTaskBodiesToNotes`) so it can run
+    /// from the off-`MainActor` post-open path in `NexusModelContainer.make`. It does
+    /// NOT depend on `LabelRepository` (which is `@MainActor`); it touches only
+    /// non-isolated `NexusCore` value/model types.
+    ///
+    /// Idempotent: each `SystemLabel` is matched case-insensitively by name against
+    /// the existing non-soft-deleted `Label` rows (CloudKit forbids
+    /// `@Attribute(.unique)`), and only the missing ones are created. A re-run, or a
+    /// partially-completed prior run, never double-creates. A store already carrying
+    /// the full set yields no work and no save.
+    static func seedSystemLabels(in context: ModelContext) throws {
+        let existing = try context.fetch(
+            FetchDescriptor<Label>(predicate: #Predicate { label in label.deletedAt == nil })
+        )
+        var presentNames = Set(existing.map { $0.name.lowercased() })
+        var didInsert = false
+
+        for system in SystemLabel.allCases where !presentNames.contains(system.name.lowercased()) {
+            let label = Label(
+                name: system.name,
+                glyphKey: system.glyphKey,
+                group: system.group,
+                isSystem: true
+            )
+            context.insert(label)
+            presentNames.insert(system.name.lowercased())
             didInsert = true
         }
 

@@ -17,4 +17,8 @@ public enum LinkKind: String, Codable, Sendable, CaseIterable {
     /// A `TaskItem` is scheduled as a `ScheduledBlock` (task → block edge,
     /// Calendar module). Distinct from `child`/`containsTask`.
     case scheduledAs
+    /// A task or project (`from`) carries a `Label` (`to`) — the many-to-many
+    /// edge for the Projects-tier label graph (spec §4.4). Single-select per
+    /// label group is enforced in `LabelRepository`, not on the edge.
+    case labeled
 }

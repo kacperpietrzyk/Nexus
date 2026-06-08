@@ -210,6 +210,13 @@ public final class TaskItemRepository {
         if task.recurrenceRule != nil {
             removedSpawnID = try removeSpawnedNextOccurrence(after: task)
         }
+        // Reopen on a project task lands in `.todo` (spec §5.3; user may bump to
+        // inProgress manually). This covers every non-nil terminal state — `done`
+        // AND `canceled`/`duplicate` — so I1 never leaves `status=open` paired
+        // with a terminal `workflowState`. GTD tasks (nil) are untouched (I7).
+        if task.workflowState != nil {
+            task.workflowStateRaw = WorkflowState.todo.rawValue
+        }
         task.statusRaw = TaskStatus.open.rawValue
         task.lastCompletedAt = nil
         task.updatedAt = now()
@@ -244,6 +251,11 @@ public final class TaskItemRepository {
             return
         }
 
+        // Project tasks (`workflowState != nil`) complete by advancing the
+        // machine to `.done` (spec §5.3); GTD tasks (nil) stay nil so I7 holds.
+        if task.workflowState != nil {
+            task.workflowStateRaw = WorkflowState.done.rawValue
+        }
         task.statusRaw = TaskStatus.done.rawValue
         task.lastCompletedAt = stamp
         task.updatedAt = stamp
@@ -457,6 +469,15 @@ public final class TaskItemRepository {
         // stays reachable; proper per-occurrence note duplication is reconciler/
         // repository territory (this is a pure, context-less factory).
         // TODO(notes-reconciler): decide note duplication vs. sharing per recurrence.
+        // Recurrence-reopen (spec §5.2 I3): a recurring *project* task
+        // (`workflowState != nil`) spawns its next occurrence in `.todo` (not
+        // `.backlog`). A recurring *GTD* task (`workflowState == nil`) must spawn
+        // a `nil`-workflow child — preserving 100% of pre-Projects behavior
+        // (invariant I7). `.todo.forcedStatus == .open`, so `status: .open` here
+        // already reconciles with the spawned workflow for both branches.
+        let nextWorkflowState: WorkflowState? = task.workflowState == nil ? nil : .todo
+        // `agent` assignment is pure metadata (I8) and carries to the next
+        // occurrence so the queue assignment survives a recurrence.
         return TaskItem(
             title: task.title,
             noteRef: task.noteRef,
@@ -469,7 +490,9 @@ public final class TaskItemRepository {
             recurrenceRule: recurrenceRule,
             recurrenceParentId: parentID,
             orderIndex: task.orderIndex,
-            pinnedAsFocus: task.pinnedAsFocus
+            pinnedAsFocus: task.pinnedAsFocus,
+            workflowState: nextWorkflowState,
+            assignedAgent: task.agent
         )
     }
 }

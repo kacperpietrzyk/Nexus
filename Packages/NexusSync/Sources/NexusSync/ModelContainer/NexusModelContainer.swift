@@ -12,7 +12,8 @@ public protocol NexusEnvironmentProviding: Sendable {
 extension NexusEnvironment: NexusEnvironmentProviding {}
 
 /// Single source of truth for the SwiftData container the apps install via `.modelContainer(...)`.
-/// Currently bound to `NexusSchemaV10` (V9 + `ScheduledBlock` + additive `TaskItem` duration fields).
+/// Currently bound to `NexusSchemaV11` (V10 + `Label` + additive `Project.statusRaw` /
+/// `TaskItem.workflowStateRaw` / `TaskItem.assignedAgent`).
 /// CloudKit mirroring is gated by `NexusEnvironment.cloudKitEnabled` — when off, local-only.
 public enum NexusModelContainer {
     public static let appGroupIdentifier = "group.com.kacperpietrzyk.Nexus"
@@ -68,7 +69,7 @@ public enum NexusModelContainer {
     ///     runtime; without activation, `containerURL(forSecurityApplicationGroupIdentifier:)`
     ///     returns nil and we fall back to the default Application Support path.
     ///   - extraModels: composition-time models from packages that cannot be imported by
-    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV10`.
+    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV11`.
     ///   - localOnlyExtraModels: composition-time models that must be present in the
     ///     container but excluded from CloudKit-backed configurations.
     public static func make(
@@ -102,6 +103,7 @@ public enum NexusModelContainer {
             configurations: configurationPlan.configurations
         )
         try migrateTaskBodiesToNotesIfNeeded(container: container, storeURL: url)
+        try seedSystemLabelsIfNeeded(container: container, storeURL: url)
         return container
     }
 
@@ -126,10 +128,10 @@ public enum NexusModelContainer {
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
     ) -> ModelPartitions {
-        let allModels = NexusSchemaV10.assembledModels(extraModels: extraModels + localOnlyExtraModels)
+        let allModels = NexusSchemaV11.assembledModels(extraModels: extraModels + localOnlyExtraModels)
         let localOnlyBaselineIDs = Set(localOnlyBaseline.map(ObjectIdentifier.init))
         let baselineSyncedIdentifiers = Set(
-            NexusSchemaV10.models
+            NexusSchemaV11.models
                 .filter { !localOnlyBaselineIDs.contains(ObjectIdentifier($0)) }
                 .map(ObjectIdentifier.init)
         )
@@ -146,7 +148,7 @@ public enum NexusModelContainer {
             containerModels: allModels,
             syncedModels: syncedModels,
             localOnlyModels: localOnlyModels,
-            hasEffectiveExtraModels: allModels.count > NexusSchemaV10.models.count
+            hasEffectiveExtraModels: allModels.count > NexusSchemaV11.models.count
         )
     }
 
@@ -161,8 +163,8 @@ public enum NexusModelContainer {
             extraModels: extraModels,
             localOnlyExtraModels: localOnlyExtraModels
         )
-        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV10.versionIdentifier)
-        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV10.versionIdentifier)
+        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV11.versionIdentifier)
+        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV11.versionIdentifier)
         let configurations: [ModelConfiguration]
 
         if isStoredInMemoryOnly {
@@ -201,7 +203,7 @@ public enum NexusModelContainer {
         }
 
         return ModelConfigurationPlan(
-            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV10.versionIdentifier),
+            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV11.versionIdentifier),
             configurations: configurations,
             partitions: partitions
         )
@@ -579,22 +581,5 @@ extension NexusModelContainer {
     private static func storeFileSize(at storeURL: URL) -> Int64 {
         let attributes = try? FileManager.default.attributesOfItem(atPath: storeURL.path)
         return attributes?[.size] as? Int64 ?? 0
-    }
-}
-
-struct ModelPartitions {
-    let containerModels: [any PersistentModel.Type]
-    let syncedModels: [any PersistentModel.Type]
-    let localOnlyModels: [any PersistentModel.Type]
-    let hasEffectiveExtraModels: Bool
-}
-
-struct ModelConfigurationPlan {
-    let containerSchema: Schema
-    let configurations: [ModelConfiguration]
-    let partitions: ModelPartitions
-
-    var hasEffectiveExtraModels: Bool {
-        partitions.hasEffectiveExtraModels
     }
 }

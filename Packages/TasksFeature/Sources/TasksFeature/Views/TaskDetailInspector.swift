@@ -33,6 +33,11 @@ public struct TaskDetailInspector: View {
     @State var subtaskActionError: String?
     @State var parentPickerPresented = false
     @State var blockPickerPresented = false
+    @State var assignedLabels: [TaskLabel] = []
+    @State var availableLabels: [TaskLabel] = []
+    @State var newLabelDraft: String = ""
+    @State var promoteConfirmation = false
+    @State var promoteError: String?
 
     public init(task: TaskItem, onClose: (() -> Void)? = nil, layout: Layout = .column) {
         self._task = Bindable(task)
@@ -554,47 +559,5 @@ struct TaskDetailInspectorBlocksActions {
         let outgoing = try linkRepository.outgoingBlocks(from: (.task, task.id))
         guard let link = outgoing.first(where: { $0.id == linkID }) else { return }
         try linkRepository.delete(link)
-    }
-}
-
-private struct TagsEditor: View {
-    @Binding var tags: [String]
-    let onChange: () -> Void
-
-    @State private var draft: String = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                ForEach(tags, id: \.self) { tag in
-                    NexusChip("#\(tag)", systemImage: "xmark.circle.fill")
-                        .onTapGesture {
-                            tags.removeAll { $0 == tag }
-                            onChange()
-                        }
-                }
-            }
-            HStack {
-                tagDraftField
-                Button("Add") {
-                    let cleaned = draft.trimmingCharacters(in: .whitespaces).lowercased()
-                    guard !cleaned.isEmpty, !tags.contains(cleaned) else { return }
-                    tags.append(cleaned)
-                    draft = ""
-                    onChange()
-                }
-                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var tagDraftField: some View {
-        #if os(iOS)
-        TextField("New tag", text: $draft)
-            .textInputAutocapitalization(.never)
-        #else
-        TextField("New tag", text: $draft)
-        #endif
     }
 }

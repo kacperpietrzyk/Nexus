@@ -13,7 +13,7 @@ enum InMemoryAgentContext {
     ) async throws -> (context: AgentContext, container: ModelContainer, repo: TaskItemRepository) {
         let schema = Schema([
             Link.self, DebugItem.self, QuotaLog.self, TaskItem.self, Project.self,
-            Section.self, Comment.self, Note.self, ScheduledBlock.self,
+            Section.self, Comment.self, Note.self, ScheduledBlock.self, Label.self,
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])
