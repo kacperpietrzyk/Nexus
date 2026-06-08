@@ -583,6 +583,7 @@ struct NexusMacApp: App {
                 router: router,
                 rootAudioFolder: meetingsRootFolder(),
                 calendarProvider: EventKitCalendarProvider.shared,
+                dateExtractor: NLParserDateExtractor(),
                 taskRepository: taskRepository
             )
             composition.registerInboxSource()

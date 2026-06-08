@@ -21,7 +21,12 @@ public struct MeetingsListView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             searchField
-            filterMenu
+            HStack(spacing: 8) {
+                filterMenu
+                if !viewModel.speakerOptions.isEmpty {
+                    speakerFilterMenu
+                }
+            }
 
             Rectangle()
                 .fill(NexusColor.Line.hairline)
@@ -115,6 +120,48 @@ public struct MeetingsListView: View {
                     .foregroundStyle(NexusColor.Text.muted)
             }
             .foregroundStyle(NexusColor.Text.secondary)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(NexusColor.Background.control.opacity(0.72))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+    }
+
+    private var speakerFilterMenu: some View {
+        Menu {
+            Button("Any speaker") {
+                viewModel.speakerFilter = nil
+                viewModel.reload()
+                publishItemsState()
+            }
+            ForEach(viewModel.speakerOptions, id: \.self) { name in
+                Button(name) {
+                    viewModel.speakerFilter = name
+                    viewModel.reload()
+                    publishItemsState()
+                }
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "person.wave.2")
+                    .font(.system(size: 12, weight: .medium))
+                Text(viewModel.speakerFilter ?? "Any speaker")
+                    .font(NexusType.meta)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(NexusColor.Text.muted)
+            }
+            .foregroundStyle(
+                viewModel.speakerFilter == nil ? NexusColor.Text.secondary : NexusColor.Text.primary
+            )
             .padding(.horizontal, 10)
             .frame(height: 28)
             .background {

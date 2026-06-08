@@ -101,8 +101,13 @@ public struct MeetingDetailView: View {
         // forces a fresh view-model + `onAppear` reload whenever selection changes.
         switch selectedTab {
         case .transcript:
-            TranscriptView(meetingID: meetingID, repository: composition.meetingRepository)
-                .id(meetingID)
+            TranscriptView(
+                meetingID: meetingID,
+                repository: composition.meetingRepository,
+                peopleLinker: composition.peopleLinker,
+                attendeeSeedProvider: { await composition.calendarAttendeeNames(for: $0) }
+            )
+            .id(meetingID)
         case .summary:
             SummaryView(meetingID: meetingID, repository: composition.meetingRepository)
                 .id(meetingID)

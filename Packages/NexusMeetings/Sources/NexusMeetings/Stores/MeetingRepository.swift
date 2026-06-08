@@ -70,7 +70,24 @@ public final class MeetingRepository {
         return try context.fetch(descriptor)
     }
 
-    public func search(query: String, limit: Int, batchSize: Int = 200) throws -> [Meeting] {
+    /// Searches non-deleted meetings for `query`, newest first.
+    ///
+    /// `speaker == nil` (default) keeps today's behaviour exactly: a substring,
+    /// case/diacritic-insensitive match over `searchableText` (title + transcript
+    /// + summary).
+    ///
+    /// `speaker != nil` (spec §6) narrows to meetings where at least one of *that
+    /// speaker's* segments contains the query. The corpus deliberately shifts from
+    /// `searchableText` to per-speaker segment text, so a hit means the named
+    /// speaker actually said the query — not merely that they were present.
+    /// `speaker` matches either the raw diarized token (`Speaker_N`, `Me`) or the
+    /// user-assigned `displayName` (see `MergeStage.segments(_:forSpeaker:participants:)`).
+    public func search(
+        query: String,
+        limit: Int,
+        speaker: String? = nil,
+        batchSize: Int = 200
+    ) throws -> [Meeting] {
         guard limit > 0 else { return [] }
 
         let pageSize = max(limit, batchSize)
@@ -90,11 +107,7 @@ public final class MeetingRepository {
             let page = try context.fetch(descriptor)
             guard !page.isEmpty else { break }
 
-            for meeting in page
-            where meeting.searchableText.range(
-                of: query,
-                options: [.caseInsensitive, .diacriticInsensitive]
-            ) != nil {
+            for meeting in page where Self.meeting(meeting, matches: query, speaker: speaker) {
                 matches.append(meeting)
                 if matches.count == limit { break }
             }
@@ -104,6 +117,22 @@ public final class MeetingRepository {
         }
 
         return matches
+    }
+
+    private static func meeting(_ meeting: Meeting, matches query: String, speaker: String?) -> Bool {
+        guard let speaker else {
+            return meeting.searchableText.range(
+                of: query,
+                options: [.caseInsensitive, .diacriticInsensitive]
+            ) != nil
+        }
+
+        let segments = (try? MeetingSpeakerSegment.decode(meeting.segmentsJSON)) ?? []
+        let participants = (try? MeetingParticipant.decode(meeting.participantsJSON ?? Data())) ?? []
+        return MergeStage.segments(segments, forSpeaker: speaker, participants: participants)
+            .contains {
+                $0.text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            }
     }
 
     public func range(from start: Date, to end: Date) throws -> [Meeting] {

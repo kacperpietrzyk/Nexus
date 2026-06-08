@@ -38,6 +38,10 @@ public struct MeetingsSettingsSection: View {
                 MeetingsRetentionSettingsView(composition: composition)
                 MeetingsProviderSettingsView(composition: composition)
                 MeetingsPromptSettingsView(composition: composition)
+                #if os(macOS)
+                MeetingsVocabularySettingsView()
+                MeetingsScreenOCRSettingsView()
+                #endif
                 MeetingsImportSettingsView(composition: composition)
                 #if os(iOS)
                 if horizontalSizeClass != .regular {

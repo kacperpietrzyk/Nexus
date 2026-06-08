@@ -11,16 +11,33 @@ public final class WhisperKitMeetingProvider: MeetingTranscriptionProvider, @unc
 
     private let engine: WhisperKitMeetingProviderEngine
 
-    public init() {
+    /// - Parameter vocabularyProvider: returns the user's custom vocabulary, used
+    ///   to *bias* transcription via WhisperKit's prompt tokens (best-effort —
+    ///   requires the loaded tokenizer; an empty list leaves decoding unchanged).
+    ///   The deterministic post-merge replacement (see `CustomVocabularyReplacer`)
+    ///   is what actually enforces canonical spelling; this only nudges the ASR.
+    public init(
+        vocabularyProvider: @escaping @Sendable () -> [CustomVocabularyEntry] = {
+            UserDefaultsCustomVocabularyStore.shared.load()
+        }
+    ) {
         self.engine = WhisperKitMeetingProviderEngine(
             resolveModelFolder: { WhisperKitProvider.defaultLocalModelFolder() },
-            tokenizerFolder: WhisperKitProvider.defaultDownloadBase()
+            tokenizerFolder: WhisperKitProvider.defaultDownloadBase(),
+            vocabularyProvider: vocabularyProvider
         )
     }
 
-    init(localModelFolder: URL?, loader: @escaping WhisperKitMeetingProviderEngine.Loader) {
+    init(
+        localModelFolder: URL?,
+        vocabularyProvider: @escaping @Sendable () -> [CustomVocabularyEntry] = { [] },
+        loader: @escaping WhisperKitMeetingProviderEngine.Loader
+    ) {
         self.engine = WhisperKitMeetingProviderEngine(
-            resolveModelFolder: { localModelFolder }, loader: loader)
+            resolveModelFolder: { localModelFolder },
+            vocabularyProvider: vocabularyProvider,
+            loader: loader
+        )
     }
 
     public func transcribe(
@@ -41,6 +58,14 @@ public final class WhisperKitMeetingProvider: MeetingTranscriptionProvider, @unc
 
 protocol WhisperKitMeetingTranscribing: Sendable {
     func transcribe(audioPath: String, decodeOptions: DecodingOptions) async throws -> [WhisperKitMeetingRawResult]
+    /// Encodes a prompt string to decoder token IDs using the loaded tokenizer,
+    /// or `nil` when no tokenizer is available. Used to bias decoding toward
+    /// custom-vocabulary spellings (best-effort).
+    func promptTokens(for text: String) -> [Int]?
+}
+
+extension WhisperKitMeetingTranscribing {
+    func promptTokens(for text: String) -> [Int]? { nil }
 }
 
 struct WhisperKitMeetingRawResult: Sendable {
@@ -77,6 +102,13 @@ final class LiveWhisperKitMeetingTranscriber: WhisperKitMeetingTranscribing, @un
         self.whisperKit = try await WhisperKit(config)
     }
 
+    func promptTokens(for text: String) -> [Int]? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false, let tokenizer = whisperKit.tokenizer else { return nil }
+        let tokens = tokenizer.encode(text: " " + trimmed).filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+        return tokens.isEmpty ? nil : tokens
+    }
+
     func transcribe(audioPath: String, decodeOptions: DecodingOptions) async throws -> [WhisperKitMeetingRawResult] {
         let results = try await whisperKit.transcribe(audioPath: audioPath, decodeOptions: decodeOptions)
         return results.map { result in
@@ -106,6 +138,7 @@ actor WhisperKitMeetingProviderEngine {
     typealias Loader = @Sendable (URL) async throws -> any WhisperKitMeetingTranscribing
 
     private let resolveModelFolder: @Sendable () -> URL?
+    private let vocabularyProvider: @Sendable () -> [CustomVocabularyEntry]
     private let loader: Loader
     private var transcriber: (any WhisperKitMeetingTranscribing)?
     private var busy = false
@@ -114,9 +147,11 @@ actor WhisperKitMeetingProviderEngine {
     init(
         resolveModelFolder: @escaping @Sendable () -> URL?,
         tokenizerFolder: URL? = nil,
+        vocabularyProvider: @escaping @Sendable () -> [CustomVocabularyEntry] = { [] },
         loader: Loader? = nil
     ) {
         self.resolveModelFolder = resolveModelFolder
+        self.vocabularyProvider = vocabularyProvider
         self.loader =
             loader
             ?? { folder in
@@ -140,7 +175,14 @@ actor WhisperKitMeetingProviderEngine {
         let normalizedLanguageHint = WhisperKitMeetingProviderMapping.normalizedDecodingLanguage(
             from: languageHint
         )
-        let options = WhisperKitMeetingProviderMapping.decodingOptions(languageHint: normalizedLanguageHint)
+        // Best-effort: bias decoding toward custom-vocabulary spellings. Empty
+        // vocabulary or a missing tokenizer leaves decoding unchanged.
+        let promptTokens = WhisperKitMeetingProviderMapping.vocabularyPrompt(vocabularyProvider())
+            .flatMap { transcriber.promptTokens(for: $0) }
+        let options = WhisperKitMeetingProviderMapping.decodingOptions(
+            languageHint: normalizedLanguageHint,
+            promptTokens: promptTokens
+        )
         let results = try await transcriber.transcribe(audioPath: audioURL.path, decodeOptions: options)
 
         await progress(1.0)
@@ -191,12 +233,35 @@ enum WhisperKitMeetingProviderMapping {
         TranscriptionLanguageHint.normalize(languageHint)
     }
 
-    static func decodingOptions(languageHint: String?) -> DecodingOptions {
+    static func decodingOptions(languageHint: String?, promptTokens: [Int]? = nil) -> DecodingOptions {
+        // `usePrefillPrompt` stays at WhisperKit's default (true) so the no-vocab
+        // path is byte-identical to before (a `false` here would silently flip
+        // `detectLanguage` on). Prompt tokens are prepended regardless when set.
         DecodingOptions(
             language: languageHint,
             withoutTimestamps: false,
-            wordTimestamps: true
+            wordTimestamps: true,
+            promptTokens: promptTokens
         )
+    }
+
+    /// Builds a single prompt string from the user's custom vocabulary, biasing
+    /// the decoder toward the canonical replacement spellings (the form we want
+    /// in the output). Returns `nil` for an empty vocabulary so decoding is left
+    /// untouched.
+    static func vocabularyPrompt(_ entries: [CustomVocabularyEntry]) -> String? {
+        let terms =
+            entries
+            .filter(\.isUsable)
+            .map { entry -> String in
+                let replacement = entry.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+                return replacement.isEmpty
+                    ? entry.term.trimmingCharacters(in: .whitespacesAndNewlines)
+                    : replacement
+            }
+            .filter { $0.isEmpty == false }
+        guard terms.isEmpty == false else { return nil }
+        return terms.joined(separator: ", ")
     }
 
     static func map(
