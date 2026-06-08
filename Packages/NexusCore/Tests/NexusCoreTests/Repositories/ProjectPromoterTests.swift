@@ -10,7 +10,10 @@ import Testing
 struct ProjectPromoterTests {
     @MainActor
     private func makeContext() throws -> ModelContext {
-        let schema = Schema([Label.self, Link.self, TaskItem.self, Project.self, Note.self])
+        let schema = Schema([
+            Label.self, Link.self, TaskItem.self, Project.self, Note.self,
+            Comment.self, ScheduledBlock.self,
+        ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])
         return ModelContext(container)
@@ -123,6 +126,69 @@ struct ProjectPromoterTests {
 
         #expect(try labelRepo.labels(for: (.task, task.id)).isEmpty)
         #expect(try labelRepo.labels(for: (.project, project.id)).contains { $0.id == label.id })
+    }
+
+    @MainActor
+    @Test("promoting a task with a noteRef note reuses it: no dup containsTask edge, no orphan (P2)")
+    func reusesExistingNoteWithoutDupEdges() throws {
+        let context = try makeContext()
+        // Note A with a checkbox -> reconcile mints T1 + a single containsTask edge.
+        let notes = NoteRepository(context: context)
+        let noteA = try notes.create(
+            title: "Detail",
+            blocks: MarkdownBlockParser.parse("- [ ] todo one"),
+            role: .free
+        )
+        let links = LinkRepository(context: context)
+        let containsBefore = try links.outgoing(from: (.note, noteA.id)).filter { $0.linkKind == .containsTask }
+        #expect(containsBefore.count == 1)
+        let t1ID = try #require(containsBefore.first?.toID)
+
+        let task = insertTask(context, title: "Promote me")
+        task.noteRef = noteA.id
+        try context.save()
+
+        let project = try ProjectPromoter(context: context).promoteToProject(task)
+
+        // Note A is reused as the project page — not orphaned, not duplicated.
+        #expect(project.canonicalNoteRef == noteA.id)
+        #expect(noteA.deletedAt == nil)
+        #expect(noteA.role == .projectPage)
+        // Exactly ONE containsTask edge to T1 (the bug minted a second from a fresh note).
+        let containsAfter = try context.fetch(FetchDescriptor<Link>())
+            .filter { $0.linkKind == .containsTask && $0.toID == t1ID }
+        #expect(containsAfter.count == 1)
+        // No second project-page note was created.
+        let projectPages = try context.fetch(FetchDescriptor<Note>())
+            .filter { $0.role == .projectPage && $0.deletedAt == nil }
+        #expect(projectPages.count == 1)
+    }
+
+    @MainActor
+    @Test("promotion cascades the task's comments and scheduled blocks (P3)")
+    func cascadesCommentsAndBlocks() throws {
+        let context = try makeContext()
+        let task = insertTask(context, title: "Promote me")
+        try context.save()
+
+        let comment = try CommentRepository(context: context).add(body: "note this", to: task.id, kind: .task)
+        let block = try ScheduledBlockRepository(context: context).create(
+            taskID: task.id,
+            start: .now,
+            end: Date.now.addingTimeInterval(1_800),
+            status: .accepted,
+            externalEventID: "evt-1"
+        )
+
+        _ = try ProjectPromoter(context: context).promoteToProject(task)
+
+        #expect(comment.deletedAt != nil)
+        #expect(block.deletedAt != nil)
+        // The block's scheduledAs edge is gone — the graph no longer points at it.
+        let blockID = block.id
+        let edges = try context.fetch(FetchDescriptor<Link>())
+            .filter { $0.toID == blockID && $0.linkKind == .scheduledAs }
+        #expect(edges.isEmpty)
     }
 
     @MainActor

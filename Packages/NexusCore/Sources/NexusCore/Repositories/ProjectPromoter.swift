@@ -6,13 +6,16 @@ import SwiftData
 /// dissolves into a `Project` + its backing note:
 ///
 /// 1. create a `Project` (`name = task.title`, `status = .planned`);
-/// 2. create the canonical backing **note** from the task body (Notes content
-///    layer) and wire `Project.canonicalNoteRef`;
+/// 2. adopt the canonical backing **note**: reuse the task's existing detail note
+///    when it has one (so its todos aren't double-`containsTask`-linked and the
+///    note isn't orphaned, P2), else create one from the task body; wire
+///    `Project.canonicalNoteRef`;
 /// 3. re-parent the task's direct children onto the new project (they become the
 ///    project's phases) and detach their `parentTaskID`;
 /// 4. **repoint** the original task's graph edges (`blocks` in/out, `mentions`,
 ///    `labeled`) onto the `Project` endpoint;
-/// 5. soft-delete the original task.
+/// 5. cascade the task's dependent rows (comments + scheduled blocks, P3) and
+///    soft-delete the original task.
 ///
 /// Atomic per invariant I6: every mutation runs on one `ModelContext` and is
 /// committed by a single terminal `context.save()`. If any step throws, nothing
@@ -51,18 +54,33 @@ public struct ProjectPromoter {
         project.updatedAt = stamp
         context.insert(project)
 
-        // 2. Backing note from the task body (title → note title, body markdown →
-        //    blocks). Inserted directly (not via NoteRepository) so the whole
-        //    promotion shares this method's single terminal save (atomicity, I6).
-        let blocks = try MarkdownBlockParser.parse(TaskNoteContent.markdown(for: task, in: context))
-        let note = Note(
-            title: task.title,
-            contentData: try NoteContentCoder.encode(blocks),
-            role: .projectPage
-        )
-        note.createdAt = stamp
-        note.updatedAt = stamp
-        context.insert(note)
+        // 2. Backing note. Prefer the task's existing detail note as the canonical
+        //    project page: re-serializing it into a fresh note would mint a SECOND
+        //    `containsTask` edge to every todo it already owns and leave the
+        //    original note orphaned (P2). Only when the task has no note do we
+        //    create one from its body. Either way the note is mutated/inserted
+        //    directly (not via NoteRepository) so the whole promotion shares this
+        //    method's single terminal save (atomicity, I6).
+        let note: Note
+        if let existingNote = try TaskNoteContent.note(for: task, in: context) {
+            existingNote.title = task.title
+            existingNote.role = .projectPage
+            existingNote.updatedAt = stamp
+            // The dead task must no longer point at what is now the project page.
+            task.noteRef = nil
+            note = existingNote
+        } else {
+            let blocks = MarkdownBlockParser.parse(task.body.trimmingCharacters(in: .whitespacesAndNewlines))
+            let created = Note(
+                title: task.title,
+                contentData: try NoteContentCoder.encode(blocks),
+                role: .projectPage
+            )
+            created.createdAt = stamp
+            created.updatedAt = stamp
+            context.insert(created)
+            note = created
+        }
         // Wire `canonicalNoteRef` BEFORE reconcile: the reconciler mints a
         // `TaskItem` for every unbound checkbox in the body and routes it via
         // `NoteReconciler.projectContext`, which queries `canonicalNoteRef ==
@@ -87,12 +105,55 @@ public struct ProjectPromoter {
         // 4. Repoint the task's graph edges onto the project endpoint.
         try repointEdges(from: task, to: project)
 
-        // 5. Soft-delete the original task.
+        // 5. Cascade the task's dependent rows, then soft-delete it.
+        try cascadeDependents(of: task, stamp: stamp)
         task.deletedAt = stamp
         task.updatedAt = stamp
 
         try context.save()
         return project
+    }
+
+    /// Soft-deletes the rows that hang off the dissolving task: its comments and
+    /// scheduled blocks (P3). Without this they stay anchored to a dead task —
+    /// invisible but live. Inlined rather than calling the repos' `softDeleteAll`
+    /// (which each issue their own `context.save()`) so the cascade lands in this
+    /// method's single terminal save (I6).
+    ///
+    /// NOTE: a mirror EventKit event for an *accepted* block is NOT removed here —
+    /// the promoter is pure-core with no calendar writer (same limitation as
+    /// `schedule.reject_block`, A3). Cleaning that up is a known follow-up.
+    private func cascadeDependents(of task: TaskItem, stamp: Date) throws {
+        let taskID = task.id
+
+        // Comments are keyed by (itemID, itemKind) fields, not graph edges; the
+        // enum can't be matched in #Predicate, so filter kind in-memory (mirrors
+        // CommentRepository.comments(for:kind:)).
+        let comments = try context.fetch(
+            FetchDescriptor<Comment>(predicate: #Predicate { $0.itemID == taskID && $0.deletedAt == nil })
+        )
+        .filter { $0.itemKind == .task }
+        for comment in comments {
+            comment.deletedAt = stamp
+        }
+
+        // Scheduled blocks carry their own `.scheduledAs` edge; drop it so the
+        // graph no longer points at a dead block (mirrors ScheduledBlockRepository).
+        let blocks = try context.fetch(
+            FetchDescriptor<ScheduledBlock>(predicate: #Predicate { $0.taskID == taskID && $0.deletedAt == nil })
+        )
+        for block in blocks {
+            block.deletedAt = stamp
+            block.updatedAt = stamp
+            let blockID = block.id
+            let edges = try context.fetch(
+                FetchDescriptor<Link>(predicate: #Predicate { $0.toID == blockID })
+            )
+            .filter { $0.toKind == .scheduledBlock && $0.linkKind == .scheduledAs }
+            for edge in edges {
+                context.delete(edge)
+            }
+        }
     }
 
     private func directChildren(of task: TaskItem) throws -> [TaskItem] {
