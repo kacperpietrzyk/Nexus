@@ -194,15 +194,46 @@ struct LabelRepositoryTests {
     }
 
     @MainActor
-    @Test("seed does not duplicate a pre-existing same-name label")
-    func seedRespectsExistingName() throws {
+    @Test("seed does not duplicate a pre-existing SYSTEM label of the same identity (legacy)")
+    func seedRespectsExistingSystemLabel() throws {
         let (repo, _) = try makeRepo()
-        _ = try repo.create(name: "bug", group: .domain, isSystem: false)
+        // A legacy system "bug" seeded before stable ids (random id, isSystem=true).
+        _ = try repo.create(name: "bug", group: .domain, isSystem: true)
         try repo.seedSystemLabels()
         let bugs = try repo.allActive().filter { $0.name.lowercased() == "bug" }
         #expect(bugs.count == 1)
-        // Total = the one pre-existing + the rest of the system set.
         #expect(try repo.allActive().count == SystemLabel.allCases.count)
+    }
+
+    @MainActor
+    @Test("a user's same-named free label does NOT block the canonical system label (P4)")
+    func seedIsNotBlockedByUserLabel() throws {
+        let (repo, _) = try makeRepo()
+        // A user's own "bug" label (not a system label) must not suppress the
+        // canonical system "bug" + its stable id (which suggestedAgent keys on).
+        _ = try repo.create(name: "bug", group: .free, isSystem: false)
+        try repo.seedSystemLabels()
+
+        let systemBug = try repo.allActive().first { $0.id == SystemLabel.bug.id }
+        #expect(systemBug != nil)
+        #expect(systemBug?.isSystem == true)
+        // Both the user's bug and the system bug now exist.
+        #expect(try repo.allActive().filter { $0.name.lowercased() == "bug" }.count == 2)
+        #expect(try repo.allActive().count == SystemLabel.allCases.count + 1)
+    }
+
+    @MainActor
+    @Test("a soft-deleted system label does not re-seed as a duplicate (P4)")
+    func seedDoesNotDuplicateTombstonedSystemLabel() throws {
+        let (repo, context) = try makeRepo()
+        try repo.seedSystemLabels()
+        let bug = try #require(try repo.allActive().first { $0.id == SystemLabel.bug.id })
+        try repo.softDelete(bug)
+
+        try repo.seedSystemLabels()
+        // Counting ALL rows (incl. the tombstone): still exactly one bug-id row.
+        let bugRows = try context.fetch(FetchDescriptor<Label>()).filter { $0.id == SystemLabel.bug.id }
+        #expect(bugRows.count == 1)
     }
 
     // MARK: - Agent queue (spec §8)
