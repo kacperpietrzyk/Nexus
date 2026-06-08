@@ -25,12 +25,15 @@ extension TaskDetailInspector {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     headerCard
+                    workflowCard
+                    labelsCard
                     aiAssistCard
                     scheduleCard
                     deadlineCard
                     remindersCard
                     recurrenceCard
                     linksCard
+                    promoteCard
                     notesCard
                     commentsCard
                 }
@@ -61,6 +64,8 @@ extension TaskDetailInspector {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 16) {
                     headerCard
+                    workflowCard
+                    labelsCard
                     scheduleCard
                 }
                 VStack(alignment: .leading, spacing: 16) {
@@ -68,6 +73,7 @@ extension TaskDetailInspector {
                     deadlineCard
                     remindersCard
                     recurrenceCard
+                    promoteCard
                 }
             }
             // Notes + Links share a bottom row (side by side) so the dialog stays

@@ -14,6 +14,12 @@ public struct TaskDTO: Codable, Sendable, Equatable {
     public let sectionID: String?
     public let parentID: String?
     public let state: String
+    /// Projects-tier optional tracker state (`backlog`/`todo`/`inProgress`/`inReview`/
+    /// `done`/`canceled`/`duplicate`). `nil` = a plain GTD task not on the machine
+    /// (spec §4.2). Additive: `state` (open/done) stays the canonical truth (I7).
+    public let workflowState: String?
+    /// Projects-tier agent assignment (`codex`/`claude`). `nil` = self (spec §4.5).
+    public let assignedAgent: String?
     public let snoozeUntil: String?
     public let externalSourceID: String?
     public let recurrenceRule: String?
@@ -28,6 +34,8 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         case projectID = "project_id"
         case sectionID = "section_id"
         case parentID = "parent_id"
+        case workflowState = "workflow_state"
+        case assignedAgent = "assigned_agent"
         case snoozeUntil = "snooze_until"
         case externalSourceID = "external_source_id"
         case recurrenceRule = "recurrence_rule"
@@ -47,6 +55,8 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         sectionID: String?,
         parentID: String?,
         state: String,
+        workflowState: String?,
+        assignedAgent: String?,
         snoozeUntil: String?,
         externalSourceID: String?,
         recurrenceRule: String?,
@@ -65,6 +75,8 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         self.sectionID = sectionID
         self.parentID = parentID
         self.state = state
+        self.workflowState = workflowState
+        self.assignedAgent = assignedAgent
         self.snoozeUntil = snoozeUntil
         self.externalSourceID = externalSourceID
         self.recurrenceRule = recurrenceRule
@@ -94,6 +106,8 @@ public struct TaskDTO: Codable, Sendable, Equatable {
             sectionID: task.sectionID?.uuidString,
             parentID: task.parentTaskID?.uuidString,
             state: Self.stateString(for: task),
+            workflowState: task.workflowState?.rawValue,
+            assignedAgent: task.assignedAgent,
             snoozeUntil: task.snoozedUntil.map { formatter.string(from: $0) },
             externalSourceID: task.externalSourceID,
             recurrenceRule: task.recurrenceRule,

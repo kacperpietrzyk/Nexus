@@ -211,9 +211,18 @@ extension TaskDetailInspector {
             newSubtaskSection
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Blocks")
-                    .nexusType(.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
+                HStack(spacing: 6) {
+                    Text("Blocks")
+                        .nexusType(.caption)
+                        .foregroundStyle(NexusColor.Text.muted)
+                    if !outgoingBlockedTasks.isEmpty {
+                        // Blocked count (spec §9): how many tasks this one blocks.
+                        Text("\(outgoingBlockedTasks.count)")
+                            .nexusType(.caption)
+                            .foregroundStyle(NexusColor.Text.tertiary)
+                            .accessibilityLabel("Blocks \(outgoingBlockedTasks.count) tasks")
+                    }
+                }
                 outgoingBlocksList
                 blockSearchField
             }
@@ -363,6 +372,7 @@ extension TaskDetailInspector {
     func loadLinkState() {
         loadBlocks()
         loadParentTask()
+        loadLabels()
     }
 
     @MainActor

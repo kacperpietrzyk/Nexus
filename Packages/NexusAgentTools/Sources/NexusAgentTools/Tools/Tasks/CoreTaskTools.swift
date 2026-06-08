@@ -1,7 +1,8 @@
 import Foundation
 
 /// Convenience builder for all core tools that do not depend on TasksFeature.
-/// Includes `tasks.*`, `comments.*`, and `note.*` tools.
+/// Includes `tasks.*`, `comments.*`, `note.*`, and the Projects-tier `projects.*`,
+/// `labels.*`, `agents.*`, `blocks.*` tools (spec §10).
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
         [
@@ -25,6 +26,19 @@ public enum CoreTaskTools {
             NotesListTool(),
             NotesSearchTool(),
             NotesLinkTool(),
+            // Projects tier (spec §10)
+            ProjectsGetTool(),
+            ProjectsSetStatusTool(),
+            TasksSetWorkflowStateTool(),
+            TasksAssignAgentTool(),
+            AgentsQueueTool(),
+            LabelsListAllTool(),
+            LabelsListForTool(),
+            LabelsAssignTool(),
+            LabelsRemoveTool(),
+            BlocksListTool(),
+            BlocksAddTool(),
+            BlocksRemoveTool(),
         ]
     }
 }
