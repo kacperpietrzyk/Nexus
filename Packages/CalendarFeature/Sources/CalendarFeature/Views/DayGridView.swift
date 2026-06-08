@@ -22,18 +22,58 @@ struct DayGridView: View {
     private let endHour = 23
     private let hourHeight: CGFloat = 56
     private let gutter: CGFloat = 52
+    /// Right-edge breathing room for the item area, and the gap between adjacent
+    /// overlap columns (S3b).
+    private let trailingInset: CGFloat = 8
+    private let columnSpacing: CGFloat = 4
 
     private var axisHeight: CGFloat { CGFloat(endHour - startHour) * hourHeight }
 
     var body: some View {
-        ScrollView {
-            ZStack(alignment: .topLeading) {
-                hourRuler
-                nowLine
-                placedItems
+        VStack(spacing: 0) {
+            allDayBanner
+            ScrollView {
+                ZStack(alignment: .topLeading) {
+                    hourRuler
+                    nowLine
+                    placedItems
+                }
+                .frame(height: axisHeight)
+                .padding(.vertical, 8)
             }
-            .frame(height: axisHeight)
+        }
+    }
+
+    /// Pinned all-day row above the hour axis (S3a). All-day events are no longer
+    /// laid out as full-height timed blocks; they sit here, tappable, and never
+    /// scroll away with the timed grid.
+    @ViewBuilder
+    private var allDayBanner: some View {
+        let allDay = DayTimelineLayout.allDayItems(items)
+        if !allDay.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(allDay) { item in
+                    Button { onTapItem(item) } label: {
+                        HStack(spacing: 8) {
+                            Text("all-day")
+                                .font(NexusType.caption)
+                                .foregroundStyle(NexusColor.Text.muted)
+                                .frame(width: gutter - 12, alignment: .trailing)
+                            Text(item.title)
+                                .font(NexusType.bodySmall)
+                                .foregroundStyle(NexusColor.Text.primary)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
             .padding(.vertical, 8)
+            .padding(.trailing, trailingInset)
+            Rectangle()
+                .fill(NexusColor.Line.hairline)
+                .frame(height: 1)
         }
     }
 
@@ -77,18 +117,26 @@ struct DayGridView: View {
             metrics: AxisMetrics(startHour: startHour, endHour: endHour, hourHeight: hourHeight),
             calendar: calendar
         )
-        return ForEach(positioned) { placed in
-            TimelineItemView(
-                positioned: placed,
-                onAccept: { if let id = placed.item.blockID { onAccept(id) } },
-                onReject: { if let id = placed.item.blockID { onReject(id) } },
-                onTap: { onTapItem(placed.item) }
-            )
-            .frame(height: placed.height)
-            .padding(.leading, gutter)
-            .padding(.trailing, 8)
-            .offset(y: placed.yOffset + (dragOffsets[placed.id] ?? 0))
-            .gesture(dragGesture(for: placed))
+        // The hour ruler reserves `gutter` on the left; items share the rest. When
+        // a cluster overlaps, each item takes 1/columnCount of that width, offset by
+        // its columnIndex, so overlapping events sit side-by-side (S3b).
+        return GeometryReader { proxy in
+            let itemArea = max(0, proxy.size.width - gutter - trailingInset)
+            ForEach(positioned) { placed in
+                let columnWidth = itemArea / CGFloat(placed.columnCount)
+                TimelineItemView(
+                    positioned: placed,
+                    onAccept: { if let id = placed.item.blockID { onAccept(id) } },
+                    onReject: { if let id = placed.item.blockID { onReject(id) } },
+                    onTap: { onTapItem(placed.item) }
+                )
+                .frame(width: max(0, columnWidth - columnSpacing), height: placed.height, alignment: .topLeading)
+                .offset(
+                    x: gutter + columnWidth * CGFloat(placed.columnIndex),
+                    y: placed.yOffset + (dragOffsets[placed.id] ?? 0)
+                )
+                .gesture(dragGesture(for: placed))
+            }
         }
     }
 
