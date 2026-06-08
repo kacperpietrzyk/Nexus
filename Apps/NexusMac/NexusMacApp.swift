@@ -564,7 +564,7 @@ struct NexusMacApp: App {
             try NexusModelContainer.migrateDefaultStoreToAppGroupIfNeeded(
                 extraModels: MeetingsComposition.extraModels
             )
-            return try NexusModelContainer.make(
+            let container = try NexusModelContainer.make(
                 environment: environment,
                 groupContainerIdentifier: NexusModelContainer.appGroupIdentifier,
                 extraModels: MeetingsComposition.extraModels,
@@ -574,6 +574,15 @@ struct NexusMacApp: App {
                 localOnlyExtraModels: MeetingsComposition.localOnlyExtraModels
                     + AgentComposition.localOnlyExtraModels
             )
+            // M1: seed People/.attendee edges from historical meetings. Needs the
+            // concrete Meeting type so it can't live in make(); best-effort so a
+            // failure never blocks launch (marker stays unset → retries next time).
+            do {
+                try MeetingsComposition.backfillPeopleIfNeeded(container: container)
+            } catch {
+                print("People backfill failed (will retry next launch): \(error)")
+            }
+            return container
         } catch {
             fatalError("Failed to make NexusModelContainer: \(error)")
         }

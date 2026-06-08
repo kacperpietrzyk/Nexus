@@ -3,12 +3,29 @@ import InboxShell
 import NexusAI
 import NexusAgentTools
 import NexusCore
+import NexusSync
 import SwiftData
 
 @MainActor
 public final class MeetingsComposition {
     public static let extraModels: [any PersistentModel.Type] = [Meeting.self]
     public static let localOnlyExtraModels: [any PersistentModel.Type] = [MeetingAudioStorage.self]
+
+    /// V11 -> V12 People backfill (spec §8 / M1): seeds `Person` records and
+    /// `.attendee` edges from existing meetings' `participantsJSON`. Wires the
+    /// concrete `Meeting` type into the generic, marker-gated backfill in
+    /// NexusSync (which can't import `Meeting`). Call ONCE per launch from the
+    /// full apps (iOS/Mac) right after `NexusModelContainer.make`, NOT in
+    /// extensions. Idempotent and best-effort: a throw leaves the marker unset so
+    /// it retries next launch.
+    public static func backfillPeopleIfNeeded(container: ModelContainer) throws {
+        try NexusModelContainer.backfillPeopleFromMeetingsIfNeeded(
+            meetingType: Meeting.self,
+            participantsKeyPath: \Meeting.participantsJSON,
+            idKeyPath: \Meeting.id,
+            container: container
+        )
+    }
 
     public let meetingRepository: MeetingRepository
     public let audioStorageRepository: MeetingAudioStorageRepository
