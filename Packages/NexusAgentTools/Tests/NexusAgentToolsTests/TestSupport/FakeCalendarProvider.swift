@@ -82,7 +82,7 @@ final class FakeCalendarProvider: CalendarEventProviding, CalendarEventWriting, 
         }
     }
 
-    func updateEvent(id: String, with draft: EventDraft) async throws {
+    func updateEvent(id: String, with draft: EventDraft, span: CalendarEventSpan) async throws {
         locked {
             updatedDrafts.append(draft)
             updatedIDs.append(id)
@@ -96,7 +96,7 @@ final class FakeCalendarProvider: CalendarEventProviding, CalendarEventWriting, 
         }
     }
 
-    func deleteEvent(id: String) async throws {
+    func deleteEvent(id: String, span: CalendarEventSpan) async throws {
         if let deleteEventError = locked({ deleteEventError }) {
             throw deleteEventError
         }
@@ -112,6 +112,10 @@ final class FakeCalendarProvider: CalendarEventProviding, CalendarEventWriting, 
                 .filter { $0.calendarID == calendarID && $0.start < end && $0.end > start }
                 .sorted { $0.eventID < $1.eventID }
         }
+    }
+
+    func eventSnapshot(id: String) async throws -> CalendarEventSnapshot? {
+        locked { store[id] }
     }
 
     private func locked<Value>(_ body: () -> Value) -> Value {

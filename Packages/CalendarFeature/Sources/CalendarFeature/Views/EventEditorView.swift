@@ -17,8 +17,8 @@ public struct EventEditorView: View {
 
     let mode: Mode
     let calendars: [CalendarInfo]
-    let onSave: (EventDraft) -> Void
-    let onDelete: (() -> Void)?
+    let onSave: (EventDraft, CalendarEventSpan) -> Void
+    let onDelete: ((CalendarEventSpan) -> Void)?
     let onCancel: () -> Void
 
     @State private var title: String
@@ -30,6 +30,16 @@ public struct EventEditorView: View {
     @State private var attendees: [String]
     @State private var recurrence: RecurrenceChoice
     @State private var alarmChoice: AlarmChoice
+    /// Drives the span confirmation dialog for a recurring event (R2/R3): a Save
+    /// or Delete on an event that already recurs must ask whether it applies to
+    /// this occurrence only or this-and-future, mirroring Apple Calendar.
+    @State private var spanPrompt: SpanPrompt?
+
+    private enum SpanPrompt: Identifiable {
+        case save
+        case delete
+        var id: Int { self == .save ? 0 : 1 }
+    }
 
     /// Original rich values carried verbatim through the lossy preset pickers.
     /// When the matching choice is `.custom` (the preset round-trip would lose
@@ -42,8 +52,8 @@ public struct EventEditorView: View {
         mode: Mode,
         calendars: [CalendarInfo],
         initial: EventDraft? = nil,
-        onSave: @escaping (EventDraft) -> Void,
-        onDelete: (() -> Void)? = nil,
+        onSave: @escaping (EventDraft, CalendarEventSpan) -> Void,
+        onDelete: ((CalendarEventSpan) -> Void)? = nil,
         onCancel: @escaping () -> Void
     ) {
         self.mode = mode
@@ -120,13 +130,38 @@ public struct EventEditorView: View {
             Section {
                 Button("Save", action: save)
                     .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || calendarID.isEmpty)
-                if case .edit = mode, let onDelete {
-                    Button("Delete event", role: .destructive, action: onDelete)
+                if case .edit = mode, onDelete != nil {
+                    Button("Delete event", role: .destructive, action: requestDelete)
                 }
                 Button("Cancel", role: .cancel, action: onCancel)
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog(
+            spanPrompt == .delete ? "Delete recurring event" : "Save recurring event",
+            isPresented: spanPromptBinding,
+            titleVisibility: .visible,
+            presenting: spanPrompt
+        ) { prompt in
+            spanDialogButtons(for: prompt)
+        }
+    }
+
+    @ViewBuilder
+    private func spanDialogButtons(for prompt: SpanPrompt) -> some View {
+        switch prompt {
+        case .save:
+            Button("Save This Event") { commit(prompt, span: .thisEvent) }
+            Button("Save Future Events") { commit(prompt, span: .futureEvents) }
+        case .delete:
+            Button("Delete This Event", role: .destructive) { commit(prompt, span: .thisEvent) }
+            Button("Delete Future Events", role: .destructive) { commit(prompt, span: .futureEvents) }
+        }
+        Button("Cancel", role: .cancel) { spanPrompt = nil }
+    }
+
+    private var spanPromptBinding: Binding<Bool> {
+        Binding(get: { spanPrompt != nil }, set: { if !$0 { spanPrompt = nil } })
     }
 
     private var dateComponents: DatePickerComponents {
@@ -143,8 +178,15 @@ public struct EventEditorView: View {
         AlarmChoice.presets + (AlarmChoice.forOriginal(originalAlarmOffsets) == .custom ? [.custom] : [])
     }
 
-    private func save() {
-        let draft = EventDraft(
+    /// Whether the event being edited already recurs — only then does an EventKit
+    /// span apply, so only then do we ask the user (R2/R3).
+    private var editsRecurringEvent: Bool {
+        if case .edit = mode { return originalRecurrence != nil }
+        return false
+    }
+
+    private func makeDraft() -> EventDraft {
+        EventDraft(
             calendarID: calendarID,
             title: title.trimmingCharacters(in: .whitespaces),
             start: start,
@@ -155,7 +197,30 @@ public struct EventEditorView: View {
             recurrence: Self.resolvedRecurrence(choice: recurrence, original: originalRecurrence),
             alarmOffsets: Self.resolvedAlarms(choice: alarmChoice, original: originalAlarmOffsets)
         )
-        onSave(draft)
+    }
+
+    private func save() {
+        if editsRecurringEvent {
+            spanPrompt = .save
+        } else {
+            onSave(makeDraft(), .thisEvent)
+        }
+    }
+
+    private func requestDelete() {
+        if editsRecurringEvent {
+            spanPrompt = .delete
+        } else {
+            onDelete?(.thisEvent)
+        }
+    }
+
+    private func commit(_ prompt: SpanPrompt, span: CalendarEventSpan) {
+        spanPrompt = nil
+        switch prompt {
+        case .save: onSave(makeDraft(), span)
+        case .delete: onDelete?(span)
+        }
     }
 
     /// F2/F3 merge: a `.custom` choice re-emits the original rich `RRule`
