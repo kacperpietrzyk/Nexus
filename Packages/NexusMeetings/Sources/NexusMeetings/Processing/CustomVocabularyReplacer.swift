@@ -98,10 +98,11 @@ public struct CustomVocabularyReplacer: Sendable {
                 guard needle.isEmpty == false else { continue }
                 let lastIndex = index + needle.count - 1
                 guard lastIndex < folded.count else { continue }
-                if matches(needle: needle, in: folded, at: index),
-                    isBoundary(folded, before: index),
-                    isBoundary(folded, after: lastIndex)
-                {
+                let isWholeWordMatch =
+                    matches(needle: needle, in: folded, at: index)
+                    && isBoundary(folded, before: index)
+                    && isBoundary(folded, after: lastIndex)
+                if isWholeWordMatch {
                     output.append(contentsOf: entries[entryIndex].replacement)
                     index += needle.count
                     continue outer
