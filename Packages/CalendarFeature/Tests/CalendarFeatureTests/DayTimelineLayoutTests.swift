@@ -127,4 +127,95 @@ struct DayTimelineLayoutTests {
         )
         #expect(result[0].height == 22)
     }
+
+    // MARK: - Overlap columns (S3b)
+
+    private func timed(_ id: String, _ startHour: Double, _ endHour: Double) -> TimelineItem {
+        TimelineItem(
+            id: id,
+            title: id,
+            start: dayStart.addingTimeInterval(startHour * 3600),
+            end: dayStart.addingTimeInterval(endHour * 3600),
+            kind: .event
+        )
+    }
+
+    private func layout(_ items: [TimelineItem]) -> [PositionedTimelineItem] {
+        DayTimelineLayout.layout(
+            items,
+            forDay: dayStart,
+            metrics: AxisMetrics(startHour: 8, endHour: 18, hourHeight: 60),
+            calendar: calendar
+        )
+    }
+
+    @Test("Non-overlapping items each get a single full-width column")
+    func nonOverlappingSingleColumn() {
+        let result = layout([timed("a", 9, 10), timed("b", 11, 12)])
+        #expect(result.allSatisfy { $0.columnCount == 1 && $0.columnIndex == 0 })
+    }
+
+    @Test("Two overlapping items split into two side-by-side columns")
+    func twoOverlapTwoColumns() {
+        let result = layout([timed("a", 9, 10.5), timed("b", 10, 11)])
+        #expect(result.count == 2)
+        #expect(result.allSatisfy { $0.columnCount == 2 })
+        #expect(Set(result.map(\.columnIndex)) == [0, 1])
+    }
+
+    @Test("Three mutually overlapping items use three columns")
+    func threeMutualOverlap() {
+        let result = layout([timed("a", 9, 11), timed("b", 9.5, 11), timed("c", 10, 11)])
+        #expect(result.allSatisfy { $0.columnCount == 3 })
+        #expect(Set(result.map(\.columnIndex)) == [0, 1, 2])
+    }
+
+    @Test("A freed column is reused within a cluster (chain stays at 2 columns)")
+    func chainReusesColumn() {
+        // a 9–10, b 9:30–10:30, c 10:15–11. Max concurrency in the cluster is 2;
+        // c reuses a's freed column → columnCount 2 for the whole cluster.
+        let result = layout([timed("a", 9, 10), timed("b", 9.5, 10.5), timed("c", 10.25, 11)])
+        #expect(result.allSatisfy { $0.columnCount == 2 })
+        let byID = Dictionary(uniqueKeysWithValues: result.map { ($0.item.id, $0.columnIndex) })
+        #expect(byID["a"] == 0)
+        #expect(byID["b"] == 1)
+        #expect(byID["c"] == 0)  // reuses a's column
+    }
+
+    // MARK: - All-day banner (S3a)
+
+    @Test("All-day events are excluded from the hour axis and surfaced separately")
+    func allDayExcludedFromAxis() {
+        let cal = calendar
+        let allDay = CalendarEvent(
+            id: "holiday",
+            title: "Holiday",
+            start: dayStart,
+            end: dayStart.addingTimeInterval(86_400),
+            isAllDay: true
+        )
+        let timedEvent = CalendarEvent(
+            id: "standup",
+            title: "Standup",
+            start: dayStart.addingTimeInterval(9 * 3600),
+            end: dayStart.addingTimeInterval(9 * 3600 + 1800)
+        )
+        let items = DayTimelineLayout.items(forDay: dayStart, events: [allDay, timedEvent], blocks: [], calendar: cal)
+
+        // The all-day flag round-trips, the banner sees only it, and the hour axis
+        // never lays it out (no more 24h block).
+        #expect(DayTimelineLayout.allDayItems(items).map(\.id) == ["event-holiday"])
+        let positioned = layout(items)
+        #expect(positioned.map(\.item.id) == ["event-standup"])
+    }
+
+    @Test("Separate overlap clusters get independent column counts")
+    func independentClusters() {
+        // Cluster 1: a+b overlap (2 cols). Gap. Cluster 2: c alone (1 col).
+        let result = layout([timed("a", 9, 10), timed("b", 9.5, 10.5), timed("c", 14, 15)])
+        let byID = Dictionary(uniqueKeysWithValues: result.map { ($0.item.id, $0.columnCount) })
+        #expect(byID["a"] == 2)
+        #expect(byID["b"] == 2)
+        #expect(byID["c"] == 1)
+    }
 }
