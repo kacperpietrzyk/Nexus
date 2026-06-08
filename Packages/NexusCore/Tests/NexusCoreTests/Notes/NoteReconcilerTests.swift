@@ -232,6 +232,27 @@ struct NoteReconcilerTests {
         #expect(changed)
     }
 
+    @Test func dailyNoteTodoDoesNotMintTaskOrEdge() throws {
+        // SW1: a .dailyNote checkbox must stay an inert checkbox — no TaskItem, no
+        // containsTask edge — so re-rendering a brief never spawns duplicate tasks.
+        let context = try makeContext()
+        let placeholder = UUID()
+        let note = try insertNote(
+            context,
+            blocks: [Block(kind: .todo(taskRef: placeholder, runs: [InlineRun(text: "Follow up")]))],
+            role: .dailyNote
+        )
+
+        _ = try NoteReconciler(context: context).reconcile(note)
+        try context.save()
+
+        #expect(try context.fetch(FetchDescriptor<TaskItem>()).isEmpty)
+        #expect(try outgoing(context, from: note.id).contains { $0.linkKind == .containsTask } == false)
+        // The block is left a todo (still renders as a checkbox).
+        let blocks = try decode(note)
+        guard case .todo = blocks[0].kind else { Issue.record("daily-note checkbox was rewritten"); return }
+    }
+
     @Test func newTodoOnProjectPageLandsInProject() throws {
         let context = try makeContext()
         let project = Project(name: "P")
