@@ -12,11 +12,12 @@ public final class MergeStage: Sendable {
             MeetingSpeakerSegment(startMs: $0.startMs, endMs: $0.endMs, speaker: "Me", text: $0.text)
         }
         let othersSegments = others.segments.map { seg -> MeetingSpeakerSegment in
-            let speaker =
-                othersDiarization
-                .first(where: { $0.startMs <= seg.startMs && $0.endMs >= seg.endMs })?.speakerID
-                ?? bestOverlapSpeaker(for: seg, diarization: othersDiarization)
-                ?? "Speaker_1"
+            // A fully-containing diarization turn yields the maximal possible
+            // overlap, so `bestOverlapSpeaker` already selects it — and does so
+            // deterministically. Picking `first(where: containment)` separately
+            // would let array order decide between two turns that both contain the
+            // segment (ME3); fold it into the single deterministic selection.
+            let speaker = bestOverlapSpeaker(for: seg, diarization: othersDiarization) ?? "Speaker_1"
 
             return MeetingSpeakerSegment(
                 startMs: seg.startMs,
@@ -88,20 +89,24 @@ public final class MergeStage: Sendable {
         return map
     }
 
+    /// Picks the diarization turn that best labels `seg`: largest temporal overlap
+    /// wins, ties broken deterministically by earliest start, then earliest end,
+    /// then `speakerID`. Returns nil when no turn overlaps at all.
     private func bestOverlapSpeaker(
         for seg: TranscriptionSegment,
         diarization: [DiarizationSegment]
     ) -> String? {
-        let bestMatch = diarization.max { lhs, rhs in
-            let lhsOverlap = overlap(seg, lhs)
-            let rhsOverlap = overlap(seg, rhs)
-            if lhsOverlap == rhsOverlap {
-                return diarizationSort(lhs, rhs)
-            }
-            return lhsOverlap < rhsOverlap
-        }
-        guard let bestMatch, overlap(seg, bestMatch) > 0 else { return nil }
-        return bestMatch.speakerID
+        diarization
+            .filter { overlap(seg, $0) > 0 }
+            .min { lhs, rhs in
+                let lhsOverlap = overlap(seg, lhs)
+                let rhsOverlap = overlap(seg, rhs)
+                if lhsOverlap != rhsOverlap { return lhsOverlap > rhsOverlap }
+                if lhs.startMs != rhs.startMs { return lhs.startMs < rhs.startMs }
+                if lhs.endMs != rhs.endMs { return lhs.endMs < rhs.endMs }
+                return lhs.speakerID < rhs.speakerID
+            }?
+            .speakerID
     }
 
     private func overlap(_ seg: TranscriptionSegment, _ diar: DiarizationSegment) -> Int {
@@ -115,16 +120,6 @@ public final class MergeStage: Sendable {
                     return lhs.text < rhs.text
                 }
                 return lhs.speaker < rhs.speaker
-            }
-            return lhs.endMs < rhs.endMs
-        }
-        return lhs.startMs < rhs.startMs
-    }
-
-    private func diarizationSort(_ lhs: DiarizationSegment, _ rhs: DiarizationSegment) -> Bool {
-        if lhs.startMs == rhs.startMs {
-            if lhs.endMs == rhs.endMs {
-                return lhs.speakerID < rhs.speakerID
             }
             return lhs.endMs < rhs.endMs
         }
