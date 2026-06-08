@@ -163,6 +163,35 @@ struct PeopleToolsTests {
         #expect(Set(names) == ["Alice", "Zoe"])
     }
 
+    @MainActor
+    @Test("list limit is clamped into [1, max]; negative never traps prefix (A5)")
+    func listLimitIsClamped() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        for name in ["Alice", "Bob", "Charlie"] {
+            _ = try await PeopleCreateTool().call(
+                args: .object(["display_name": .string(name)]), context: fixture.context
+            )
+        }
+
+        // Zero clamps up to the schema minimum (1), never 0 or "all".
+        let zero = try await PeopleListTool().call(
+            args: .object(["limit": .int(0)]), context: fixture.context
+        )
+        #expect(try TasksToolJSON.decode([PersonDTO].self, from: zero).count == 1)
+
+        // Negative must not trap `prefix(_:)`; it clamps to 1.
+        let negative = try await PeopleListTool().call(
+            args: .object(["limit": .int(-5)]), context: fixture.context
+        )
+        #expect(try TasksToolJSON.decode([PersonDTO].self, from: negative).count == 1)
+
+        // An over-large value clamps to max and still returns everything available.
+        let huge = try await PeopleListTool().call(
+            args: .object(["limit": .int(9_999_999)]), context: fixture.context
+        )
+        #expect(try TasksToolJSON.decode([PersonDTO].self, from: huge).count == 3)
+    }
+
     // MARK: - people.link — single-user boundary (invariant I1)
 
     @MainActor
