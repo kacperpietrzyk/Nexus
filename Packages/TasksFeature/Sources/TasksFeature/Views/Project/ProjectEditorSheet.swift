@@ -59,8 +59,25 @@ public struct ProjectEditorSheet: View {
 
             statusSection
 
-            if let project {
-                ProjectLabelsSection(projectID: project.id)
+            ForEach(ProjectEditorAccessorySection.sections(for: project), id: \.self) { section in
+                switch section {
+                case .labels(let projectID):
+                    ProjectLabelsSection(projectID: projectID)
+                case .comments(let projectID):
+                    VStack(alignment: .leading, spacing: 10) {
+                        if let title = section.editorTitle {
+                            Text(title)
+                                .nexusType(.eyebrow)
+                                .foregroundStyle(NexusColor.Text.muted)
+                        }
+
+                        CommentsSection(
+                            itemID: projectID,
+                            itemKind: .project,
+                            repository: CommentRepository(context: modelContext)
+                        )
+                    }
+                }
             }
 
             if let error {
@@ -190,6 +207,28 @@ public struct ProjectEditorSheet: View {
         } catch {
             self.error = String(describing: error)
         }
+    }
+}
+
+enum ProjectEditorAccessorySection: Hashable {
+    case labels(UUID)
+    case comments(UUID)
+
+    var editorTitle: String? {
+        switch self {
+        case .labels:
+            return nil
+        case .comments:
+            return "Comments"
+        }
+    }
+
+    static func sections(for project: Project?) -> [ProjectEditorAccessorySection] {
+        guard let project else { return [] }
+        return [
+            .labels(project.id),
+            .comments(project.id),
+        ]
     }
 }
 

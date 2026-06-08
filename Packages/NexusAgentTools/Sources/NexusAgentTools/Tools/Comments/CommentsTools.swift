@@ -17,6 +17,35 @@ private func parseItem(_ args: JSONValue) throws -> (UUID, ItemKind) {
     return (id, kind)
 }
 
+private func optionalTrimmedString(_ value: JSONValue?, field: String) throws -> String? {
+    guard let value else { return nil }
+    guard let text = value.stringValue else {
+        throw AgentError.validation("\(field) must be a string")
+    }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+        throw AgentError.validation("\(field) cannot be empty")
+    }
+    return trimmed
+}
+
+@MainActor
+private func validateCommentTarget(id: UUID, kind: ItemKind, context: AgentContext) throws {
+    switch kind {
+    case .task:
+        _ = try TasksMutationToolSupport.liveTask(id: id, context: context)
+    case .project:
+        guard
+            let project = try context.projectRepository.find(id: id),
+            project.deletedAt == nil
+        else {
+            throw AgentError.notFound("Project not found: \(id.uuidString)")
+        }
+    default:
+        throw AgentError.validation("item_kind must be 'task' or 'project'")
+    }
+}
+
 // MARK: - comments.list
 
 public struct CommentsListTool: AgentTool {
@@ -25,7 +54,7 @@ public struct CommentsListTool: AgentTool {
     public let inputSchema: JSONSchema = .object(
         properties: [
             "item_id": .string(description: "Owning task or project UUID."),
-            "item_kind": .string(description: "task | project"),
+            "item_kind": .string(enumValues: ["task", "project"], description: "task | project"),
         ],
         required: ["item_id", "item_kind"]
     )
@@ -35,6 +64,7 @@ public struct CommentsListTool: AgentTool {
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let (id, kind) = try parseItem(args)
+        try validateCommentTarget(id: id, kind: kind, context: context)
         let comments = try context.commentRepository.comments(for: id, kind: kind)
         return try TasksToolJSON.encode(comments.map { CommentDTO(from: $0) })
     }
@@ -48,7 +78,7 @@ public struct CommentsAddTool: AgentTool {
     public let inputSchema: JSONSchema = .object(
         properties: [
             "item_id": .string(description: "Owning task or project UUID."),
-            "item_kind": .string(description: "task | project"),
+            "item_kind": .string(enumValues: ["task", "project"], description: "task | project"),
             "body": .string(description: "Comment text."),
             "external_source_id": .string(description: "Optional idempotent import key."),
         ],
@@ -66,7 +96,8 @@ public struct CommentsAddTool: AgentTool {
         else {
             throw AgentError.validation("body cannot be empty")
         }
-        let external = args["external_source_id"]?.stringValue
+        try validateCommentTarget(id: id, kind: kind, context: context)
+        let external = try optionalTrimmedString(args["external_source_id"], field: "external_source_id")
         let comment = try context.commentRepository.add(body: body, to: id, kind: kind, externalSourceID: external)
         return try TasksToolJSON.encode(CommentDTO(from: comment))
     }
@@ -92,8 +123,11 @@ public struct CommentsEditTool: AgentTool {
         guard let idText = args["id"]?.stringValue, let id = UUID(uuidString: idText) else {
             throw AgentError.validation("id must be a valid UUID")
         }
-        guard let body = args["body"]?.stringValue else {
-            throw AgentError.validation("body required")
+        guard
+            let body = args["body"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !body.isEmpty
+        else {
+            throw AgentError.validation("body cannot be empty")
         }
         guard let comment = try context.commentRepository.find(id) else {
             throw AgentError.notFound("comment not found: \(idText)")

@@ -95,6 +95,21 @@ struct CommentRepositoryTests {
     }
 
     @MainActor
+    @Test("project soft delete cascades comments")
+    func projectSoftDeleteCascadesComments() throws {
+        let context = try makeContext()
+        let projectRepo = ProjectRepository(context: context)
+        let commentRepo = CommentRepository(context: context)
+        let project = try projectRepo.create(name: "commented project")
+        _ = try commentRepo.add(body: "project note", to: project.id, kind: .project)
+
+        try projectRepo.softDelete(project)
+
+        #expect(project.deletedAt != nil)
+        #expect(try commentRepo.comments(for: project.id, kind: .project).isEmpty)
+    }
+
+    @MainActor
     @Test("add with same external source id updates in place (no duplicate)")
     func addWithSameExternalSourceIDUpdatesInPlace() throws {
         let context = try makeContext()
@@ -107,6 +122,23 @@ struct CommentRepositoryTests {
         #expect(listed.count == 1)
         #expect(listed.first?.body == "b")
         #expect(first.id == second.id)
+    }
+
+    @MainActor
+    @Test("add with same external source id updates target anchor")
+    func addWithSameExternalSourceIDUpdatesTargetAnchor() throws {
+        let context = try makeContext()
+        let repo = CommentRepository(context: context)
+        let oldTaskID = UUID()
+        let newTaskID = UUID()
+        let first = try repo.add(body: "old", to: oldTaskID, kind: .task, externalSourceID: "x")
+        let second = try repo.add(body: "new", to: newTaskID, kind: .task, externalSourceID: "x")
+
+        #expect(first.id == second.id)
+        #expect(try repo.comments(for: oldTaskID, kind: .task).isEmpty)
+        let listed = try repo.comments(for: newTaskID, kind: .task)
+        #expect(listed.map(\.id) == [first.id])
+        #expect(listed.map(\.body) == ["new"])
     }
 
     @MainActor

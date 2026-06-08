@@ -71,6 +71,26 @@ struct TasksCreateIdempotentToolTests {
     }
 
     @MainActor
+    @Test("rejects unknown project_id without inserting task")
+    func rejectsUnknownProjectIDWithoutInsertingTask() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+
+        await #expect(throws: AgentError.self) {
+            _ = try await TasksCreateIdempotentTool().call(
+                args: .object([
+                    "external_source_id": .string("todoist:orphan"),
+                    "title": .string("orphan"),
+                    "project_id": .string(UUID().uuidString),
+                ]),
+                context: fixture.context
+            )
+        }
+
+        let rows = try fixture.repo.context.fetch(FetchDescriptor<TaskItem>())
+        #expect(rows.isEmpty)
+    }
+
+    @MainActor
     @Test("persists project, section, parent, recurrence, and reminders on create")
     func idempotentCreatePersistsAllFields() async throws {
         let fixture = try await InMemoryAgentContext.make()
@@ -150,6 +170,46 @@ struct TasksCreateIdempotentToolTests {
     }
 
     @MainActor
+    @Test("rerun rejects unknown project_id without mutating existing task")
+    func rerunRejectsUnknownProjectIDWithoutMutatingExistingTask() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+
+        _ = try await callIdempotent(
+            args: .object([
+                "external_source_id": .string("todoist:atomic-update"),
+                "title": .string("original"),
+                "recurrence_rule": .string("FREQ=WEEKLY"),
+            ]),
+            context: fixture.context
+        )
+
+        await #expect(throws: AgentError.self) {
+            _ = try await TasksCreateIdempotentTool().call(
+                args: .object([
+                    "external_source_id": .string("todoist:atomic-update"),
+                    "title": .string("changed"),
+                    "recurrence_rule": .string("FREQ=DAILY"),
+                    "reminders": .array([
+                        .object([
+                            "type": .string("relative"),
+                            "offset": .double(-900),
+                            "anchor": .string("due"),
+                        ])
+                    ]),
+                    "project_id": .string(UUID().uuidString),
+                ]),
+                context: fixture.context
+            )
+        }
+
+        let task = try #require(try fixture.repo.context.fetch(FetchDescriptor<TaskItem>()).first)
+        #expect(task.title == "original")
+        #expect(task.recurrenceRule == "FREQ=WEEKLY")
+        #expect(task.reminders.isEmpty)
+        #expect(task.projectID == nil)
+    }
+
+    @MainActor
     @Test("update with project_id only preserves existing section")
     func idempotentUpdateWithProjectOnlyPreservesExistingSection() async throws {
         let fixture = try await InMemoryAgentContext.make()
@@ -185,6 +245,43 @@ struct TasksCreateIdempotentToolTests {
         #expect(response.task.title == "updated")
         #expect(response.task.projectID == project.id.uuidString)
         #expect(response.task.sectionID == section.id.uuidString)
+    }
+
+    @MainActor
+    @Test("rerun moving to another project without section_id clears old section")
+    func rerunMovingToAnotherProjectWithoutSectionClearsOldSection() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let oldProject = Project(name: "Old Project")
+        let oldSection = Section(projectID: oldProject.id, name: "Doing")
+        let newProject = Project(name: "New Project")
+        fixture.repo.context.insert(oldProject)
+        fixture.repo.context.insert(oldSection)
+        fixture.repo.context.insert(newProject)
+        try fixture.repo.context.save()
+
+        let created = try await callIdempotent(
+            args: .object([
+                "external_source_id": .string("todoist:move-project"),
+                "title": .string("original"),
+                "project_id": .string(oldProject.id.uuidString),
+                "section_id": .string(oldSection.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+        #expect(created.task.sectionID == oldSection.id.uuidString)
+
+        let response = try await callIdempotent(
+            args: .object([
+                "external_source_id": .string("todoist:move-project"),
+                "title": .string("moved"),
+                "project_id": .string(newProject.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(!response.wasCreated)
+        #expect(response.task.projectID == newProject.id.uuidString)
+        #expect(response.task.sectionID == nil)
     }
 
     @MainActor

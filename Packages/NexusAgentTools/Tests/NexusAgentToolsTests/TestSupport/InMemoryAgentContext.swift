@@ -9,7 +9,8 @@ enum InMemoryAgentContext {
     // swiftlint:disable large_tuple
     static func make(
         tasks: [TaskItem] = [],
-        now: @escaping @Sendable () -> Date = { Date(timeIntervalSince1970: 1_700_000_000) }
+        now: @escaping @Sendable () -> Date = { Date(timeIntervalSince1970: 1_700_000_000) },
+        notifications: any NotificationScheduling = NoopNotificationScheduler()
     ) async throws -> (context: AgentContext, container: ModelContainer, repo: TaskItemRepository) {
         let schema = Schema([
             Link.self, DebugItem.self, QuotaLog.self, TaskItem.self, Project.self,
@@ -22,7 +23,8 @@ enum InMemoryAgentContext {
         let repo = TaskItemRepository(
             context: modelContext,
             scheduler: RRuleScheduler(),
-            now: now
+            now: now,
+            notifications: notifications
         )
 
         for task in tasks {

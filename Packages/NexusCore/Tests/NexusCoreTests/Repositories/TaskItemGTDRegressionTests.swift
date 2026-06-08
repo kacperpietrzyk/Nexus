@@ -115,6 +115,90 @@ struct TaskItemGTDRegressionTests {
     }
 
     @MainActor
+    @Test("I7: recurring GTD task spawn carries reminder rules")
+    func gtdRecurrenceSpawnCarriesReminders() throws {
+        let now = Self.fixedNow
+        let (repo, context) = try makeRepo(now: { now })
+        let task = TaskItem(title: "morning brief", dueAt: now, recurrenceRule: "FREQ=DAILY")
+        task.reminders = [.relative(offset: -1_800, anchor: .due)]
+        try repo.insert(task)
+
+        try repo.markDone(task)
+
+        let all = try context.fetch(FetchDescriptor<TaskItem>())
+        let spawn = try #require(all.first { $0.id != task.id })
+        #expect(spawn.reminders == task.reminders)
+    }
+
+    @MainActor
+    @Test("I7: recurring GTD task spawn does not carry absolute one-off reminders")
+    func gtdRecurrenceSpawnDropsAbsoluteReminders() throws {
+        let now = Self.fixedNow
+        let (repo, context) = try makeRepo(now: { now })
+        let task = TaskItem(title: "morning brief", dueAt: now, recurrenceRule: "FREQ=DAILY")
+        task.reminders = [.absolute(now.addingTimeInterval(600))]
+        try repo.insert(task)
+
+        try repo.markDone(task)
+
+        let all = try context.fetch(FetchDescriptor<TaskItem>())
+        let spawn = try #require(all.first { $0.id != task.id })
+        #expect(spawn.reminders.isEmpty)
+    }
+
+    @MainActor
+    @Test("I7: recurring GTD task spawn preserves placement and deadline")
+    func gtdRecurrenceSpawnPreservesPlacementAndDeadline() throws {
+        let now = Self.fixedNow
+        let (repo, context) = try makeRepo(now: { now })
+        let projectID = UUID()
+        let sectionID = UUID()
+        let parentID = UUID()
+        let deadline = now.addingTimeInterval(3_600)
+        let task = TaskItem(
+            title: "weekly review",
+            dueAt: now,
+            deadlineAt: deadline,
+            recurrenceRule: "FREQ=DAILY",
+            parentTaskID: parentID,
+            projectID: projectID,
+            sectionID: sectionID
+        )
+        try repo.insert(task)
+
+        try repo.markDone(task)
+
+        let all = try context.fetch(FetchDescriptor<TaskItem>())
+        let spawn = try #require(all.first { $0.id != task.id })
+        #expect(spawn.projectID == projectID)
+        #expect(spawn.sectionID == sectionID)
+        #expect(spawn.parentTaskID == parentID)
+        #expect(spawn.deadlineAt == deadline.addingTimeInterval(86_400))
+    }
+
+    @MainActor
+    @Test("I7: recurring GTD task spawn preserves scheduler duration metadata")
+    func gtdRecurrenceSpawnPreservesSchedulerDuration() throws {
+        let now = Self.fixedNow
+        let (repo, context) = try makeRepo(now: { now })
+        let task = TaskItem(
+            title: "deep work",
+            dueAt: now,
+            recurrenceRule: "FREQ=DAILY",
+            estimatedDurationSeconds: 3_600,
+            durationSource: .explicit
+        )
+        try repo.insert(task)
+
+        try repo.markDone(task)
+
+        let all = try context.fetch(FetchDescriptor<TaskItem>())
+        let spawn = try #require(all.first { $0.id != task.id })
+        #expect(spawn.estimatedDurationSeconds == 3_600)
+        #expect(spawn.durationSource == .explicit)
+    }
+
+    @MainActor
     @Test("I7: recurring GTD task that is reopened removes the spawn, workflow stays nil")
     func gtdRecurrenceReopenStaysNil() throws {
         let now = Self.fixedNow

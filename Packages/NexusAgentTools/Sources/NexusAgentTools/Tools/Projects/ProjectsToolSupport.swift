@@ -34,6 +34,29 @@ enum ProjectsToolSupport {
         default: throw AgentError.validation("item_kind must be 'task' or 'project'")
         }
     }
+
+    static func trimmedRequiredString(_ value: JSONValue?, field: String) throws -> String {
+        guard let text = value?.stringValue else {
+            throw AgentError.validation("Missing required string field: \(field)")
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else {
+            throw AgentError.validation("\(field) cannot be empty")
+        }
+        return trimmed
+    }
+
+    static func optionalTrimmedString(_ value: JSONValue?, field: String) throws -> String? {
+        guard let value else { return nil }
+        guard let text = value.stringValue else {
+            throw AgentError.validation("\(field) must be a string")
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else {
+            throw AgentError.validation("\(field) cannot be empty")
+        }
+        return trimmed
+    }
 }
 
 extension LabelEndpointKind {
