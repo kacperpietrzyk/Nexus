@@ -203,6 +203,33 @@ struct ScheduleToolsTests {
         #expect(try blocks.find(block.id) == nil)
     }
 
+    @MainActor
+    @Test("schedule.rejectBlock surfaces a mirror-event delete failure instead of orphaning it (A3)")
+    func rejectAcceptedSurfacesDeleteFailure() async throws {
+        let task = TaskItem(title: "accepted reject")
+        let fixture = try await InMemoryAgentContext.make(tasks: [task], now: Self.now)
+        let blocks = ScheduledBlockRepository(context: fixture.context.modelContext.context, now: Self.now)
+        let block = try blocks.create(
+            taskID: task.id,
+            start: Self.fixedNow,
+            end: Self.fixedNow.addingTimeInterval(1800),
+            status: .accepted,
+            externalEventID: "evt-99"
+        )
+        let provider = FakeCalendarProvider()
+        provider.deleteEventError = .accessDenied
+
+        await #expect(throws: AgentError.self) {
+            _ = try await ScheduleRejectBlockTool(writer: provider).call(
+                args: .object(["block_id": .string(block.id.uuidString)]),
+                context: fixture.context
+            )
+        }
+        // The block must NOT be soft-deleted: rejecting it would orphan the mirror
+        // event we couldn't delete.
+        #expect(try blocks.find(block.id) != nil)
+    }
+
     // MARK: - schedule.deadlineRisks
 
     @MainActor
