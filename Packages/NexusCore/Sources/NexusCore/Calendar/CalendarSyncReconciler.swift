@@ -89,9 +89,16 @@ public struct CalendarSyncReconciler {
 
             if let snapshot = snapshotsByID[eventID] {
                 try apply(snapshot, to: block)
+            } else if let surviving = try await writer.eventSnapshot(id: eventID) {
+                // Absent from the window-scoped Nexus fetch but still resolvable by
+                // identifier → NOT deleted: the user moved it to another calendar
+                // (or shifted its times outside the window). Apply its current state
+                // rather than returning the task to the pool (R1). Absence-from-Nexus
+                // alone must never be read as deletion.
+                try apply(surviving, to: block)
             } else {
-                // The mirror event is gone from the (window-scoped) Nexus calendar →
-                // the user deleted the plan in Apple Calendar. Soft-delete the block.
+                // Truly gone from EventKit (no event under this identifier anywhere)
+                // → the user deleted the plan in Apple Calendar. Soft-delete the block.
                 try blocks.softDelete(block)
             }
         }

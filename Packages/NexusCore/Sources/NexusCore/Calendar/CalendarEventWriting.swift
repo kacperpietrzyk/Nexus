@@ -99,4 +99,11 @@ public protocol CalendarEventWriting: Sendable {
     /// Read events in a single calendar overlapping `[start, end)`. The reconciler
     /// diffs only the "Nexus" calendar — never the read-everything `eventsBetween`.
     func events(inCalendar calendarID: String, start: Date, end: Date) async throws -> [CalendarEventSnapshot]
+
+    /// Look up a single event by identifier across ALL calendars, or nil if it no
+    /// longer exists anywhere. Lets the reconciler distinguish a genuine deletion
+    /// from a move to another calendar: a moved event leaves the window-scoped
+    /// Nexus fetch but survives globally under the same identifier (R1). The
+    /// returned snapshot's `calendarID` reflects the event's current calendar.
+    func eventSnapshot(id: String) async throws -> CalendarEventSnapshot?
 }
