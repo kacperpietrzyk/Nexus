@@ -101,12 +101,16 @@ struct NexusMacApp: App {
         // main window + Settings `.modelContainer(container)` already register it.
         self.noteRepository = NotesComposition.makeRepository(
             for: made.mainContext,
-            tasks: self.taskRepository
+            tasks: self.taskRepository,
+            observers: self.search.observers
         )
         // People / Contacts (spec §6). `Person` is already a synced model in
         // NexusSchemaV12, so the main window + Settings `.modelContainer(container)`
         // already register it — no separate container registration is needed.
-        self.personRepository = PeopleComposition.makeRepository(for: made.mainContext)
+        self.personRepository = PeopleComposition.makeRepository(
+            for: made.mainContext,
+            observers: self.search.observers
+        )
         self.meetingsComposition = Self.makeMeetingsComposition(
             context: made.mainContext,
             router: self.aiRouter,
@@ -545,7 +549,10 @@ struct NexusMacApp: App {
         // Rebuild the index from the live store on launch. D-0d-7: index is reproducible.
         _Concurrency.Task { @MainActor in
             do {
-                try await index.rebuild(from: context, types: TaskItem.self)
+                try await index.rebuild(
+                    from: context,
+                    types: TaskItem.self, Note.self, Label.self, Person.self
+                )
             } catch {
                 print("SearchIndex.rebuild failed on launch: \(error)")
             }

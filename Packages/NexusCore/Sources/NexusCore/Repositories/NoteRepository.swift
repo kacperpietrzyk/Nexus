@@ -26,16 +26,36 @@ public final class NoteRepository {
     /// content can omit it; `toggleTodo` then mutates the task status directly.
     private let tasks: TaskItemRepository?
     private let now: () -> Date
+    /// Search/Spotlight observers (mirrors `LinkableRepository`). When non-empty, the
+    /// repo fires `didUpsert` after any op that changes the note's indexed text
+    /// (`plainText`/`title`) and `didSoftDelete` after `delete`. Default empty so
+    /// pure-core callers and tests are unaffected.
+    private let observers: [any LinkableObserver]
 
     public init(
         context: ModelContext,
         tasks: TaskItemRepository? = nil,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        observers: [any LinkableObserver] = []
     ) {
         self.context = context
         self.reconciler = NoteReconciler(context: context)
         self.tasks = tasks
         self.now = now
+        self.observers = observers
+    }
+
+    /// Fans out an upsert for `note` to every observer. The `Sendable`
+    /// `IndexedDocument` snapshot is built here on `@MainActor` (where the row is
+    /// safe to read), then awaited into each observer's actor via a detached `Task`
+    /// so the repo's `@MainActor` context is never blocked. Mirrors
+    /// `LinkableRepository.broadcastUpsert`.
+    private func broadcastUpsert(for note: Note) {
+        guard !observers.isEmpty else { return }
+        let document = IndexedDocument(note)
+        for observer in observers {
+            _Concurrency.Task { await observer.didUpsert(document) }
+        }
     }
 
     // MARK: - CRUD
@@ -57,6 +77,7 @@ public final class NoteRepository {
         context.insert(note)
         try reconciler.reconcile(note)
         try context.save()
+        broadcastUpsert(for: note)
         return note
     }
 
@@ -72,6 +93,7 @@ public final class NoteRepository {
         note.updatedAt = now()
         try reconciler.reconcile(note)
         try context.save()
+        broadcastUpsert(for: note)
     }
 
     /// Update scalar fields (title/tags/role); content is untouched. Still drives
@@ -88,6 +110,7 @@ public final class NoteRepository {
         note.updatedAt = now()
         try reconciler.reconcile(note)
         try context.save()
+        broadcastUpsert(for: note)
     }
 
     /// Recompute-on-load (spec §6.2): repair any blob↔graph drift from a crash
@@ -100,6 +123,7 @@ public final class NoteRepository {
         if changed {
             note.updatedAt = now()
             try context.save()
+            broadcastUpsert(for: note)
         }
         return changed
     }
@@ -139,6 +163,10 @@ public final class NoteRepository {
         note.deletedAt = stamp
         note.updatedAt = stamp
         try context.save()
+        let id = note.id
+        for observer in observers {
+            _Concurrency.Task { await observer.didSoftDelete(kind: .note, id: id) }
+        }
     }
 
     // MARK: - Checkbox → Task seam (§7)
@@ -165,6 +193,7 @@ public final class NoteRepository {
 
         try reconciler.reconcile(note)
         try context.save()
+        broadcastUpsert(for: note)
     }
 
     /// Editor toggles a checkbox: complete (when opening→done) or reopen the

@@ -29,11 +29,31 @@ public final class LabelRepository {
     public let context: ModelContext
     public let now: () -> Date
     private let links: LinkRepository
+    /// Search/Spotlight observers (mirrors `LinkableRepository`). When non-empty, the
+    /// repo fires `didUpsert` after create/rename (the indexed `name` changes) and
+    /// `didSoftDelete` after `softDelete`. Default empty so existing callers and tests
+    /// are unaffected. Assign/remove edge ops don't touch `name`, so they don't fan out.
+    private let observers: [any LinkableObserver]
 
-    public init(context: ModelContext, now: @escaping () -> Date = { .now }) {
+    public init(
+        context: ModelContext,
+        now: @escaping () -> Date = { .now },
+        observers: [any LinkableObserver] = []
+    ) {
         self.context = context
         self.now = now
         self.links = LinkRepository(context: context)
+        self.observers = observers
+    }
+
+    /// Fans out an upsert for `label` (snapshot built on `@MainActor`, awaited into
+    /// each observer's actor via detached `Task`). Mirrors `LinkableRepository`.
+    private func broadcastUpsert(for label: Label) {
+        guard !observers.isEmpty else { return }
+        let document = IndexedDocument(label)
+        for observer in observers {
+            _Concurrency.Task { await observer.didUpsert(document) }
+        }
     }
 
     // MARK: - CRUD
@@ -51,6 +71,7 @@ public final class LabelRepository {
         label.updatedAt = stamp
         context.insert(label)
         try context.save()
+        broadcastUpsert(for: label)
         return label
     }
 
@@ -58,6 +79,7 @@ public final class LabelRepository {
         label.name = name
         label.updatedAt = now()
         try context.save()
+        broadcastUpsert(for: label)
     }
 
     /// Soft-deletes a label (`deletedAt` stamped). Does NOT remove `.labeled`
@@ -67,6 +89,10 @@ public final class LabelRepository {
         label.deletedAt = now()
         label.updatedAt = now()
         try context.save()
+        let id = label.id
+        for observer in observers {
+            _Concurrency.Task { await observer.didSoftDelete(kind: .label, id: id) }
+        }
     }
 
     public func find(id: UUID) throws -> Label? {
