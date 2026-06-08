@@ -1,6 +1,7 @@
 import Foundation
 import NexusAgentTools
 import NexusCore
+import SwiftData
 
 public struct TasksDailySummaryTool: AgentTool {
     public let name = "tasks.daily_summary"
@@ -45,9 +46,9 @@ public struct TasksDailySummaryTool: AgentTool {
 
         let summary = DailySummaryDTO(
             heroBrief: heroBrief,
-            today: todayTasks.map(TaskDTO.init(from:)),
-            upcoming: upcoming.map(TaskDTO.init(from:)),
-            focusBuckets: focusBuckets(from: todayTasks)
+            today: try todayTasks.map { try TaskDTO(from: $0, modelContext: modelContext) },
+            upcoming: try upcoming.map { try TaskDTO(from: $0, modelContext: modelContext) },
+            focusBuckets: try focusBuckets(from: todayTasks, modelContext: modelContext)
         )
         return try encode(summary)
     }
@@ -91,13 +92,13 @@ public struct TasksDailySummaryTool: AgentTool {
     }
 
     @MainActor
-    private func focusBuckets(from tasks: [TaskItem]) -> FocusBucketsDTO {
+    private func focusBuckets(from tasks: [TaskItem], modelContext: ModelContext) throws -> FocusBucketsDTO {
         var am: [TaskDTO] = []
         var pm: [TaskDTO] = []
         var evening: [TaskDTO] = []
 
         for task in tasks {
-            let dto = TaskDTO(from: task)
+            let dto = try TaskDTO(from: task, modelContext: modelContext)
             guard let dueAt = task.dueAt else {
                 am.append(dto)
                 continue

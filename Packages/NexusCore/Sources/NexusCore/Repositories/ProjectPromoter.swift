@@ -54,7 +54,7 @@ public struct ProjectPromoter {
         // 2. Backing note from the task body (title → note title, body markdown →
         //    blocks). Inserted directly (not via NoteRepository) so the whole
         //    promotion shares this method's single terminal save (atomicity, I6).
-        let blocks = MarkdownBlockParser.parse(task.body)
+        let blocks = try MarkdownBlockParser.parse(TaskNoteContent.markdown(for: task, in: context))
         let note = Note(
             title: task.title,
             contentData: try NoteContentCoder.encode(blocks),

@@ -100,4 +100,24 @@ struct MarkdownRoundTripTests {
         let md2 = BlockMarkdownSerializer.markdown(for: MarkdownBlockParser.parse(md1))
         #expect(md1 == md2)
     }
+
+    @Test("task ref marker preserves todo identity when requested")
+    func todoTaskRefMarkerRoundTripsWhenRequested() throws {
+        let taskID = UUID()
+        let blocks = [
+            Block(kind: .todo(taskRef: taskID, runs: [InlineRun(text: "do it")]))
+        ]
+
+        let markdown = BlockMarkdownSerializer.markdown(for: blocks, options: .mcpRoundTrip)
+        #expect(markdown == "- [ ] do it <!-- nexus-task:\(taskID.uuidString) -->")
+
+        let reparsed = MarkdownBlockParser.parse(markdown)
+        let reparsedKind = try #require(reparsed.first?.kind)
+        guard case .todo(let reparsedTaskID, let runs) = reparsedKind else {
+            Issue.record("Expected a todo block")
+            return
+        }
+        #expect(reparsedTaskID == taskID)
+        #expect(runs == [InlineRun(text: "do it")])
+    }
 }

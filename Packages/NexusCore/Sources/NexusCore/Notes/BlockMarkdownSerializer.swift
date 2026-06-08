@@ -15,7 +15,18 @@ import Foundation
 /// - `![[id]]`      → embed            - `| a | b |` → table
 /// - `**`/`*`/`` ` ``/`~~` → marks     - `[[t]]`/`[t](url)` → link
 public enum BlockMarkdownSerializer {
-    public static func markdown(for blocks: [Block]) -> String {
+    public struct Options: Sendable, Equatable {
+        public var includeTaskRefs: Bool
+
+        public init(includeTaskRefs: Bool = false) {
+            self.includeTaskRefs = includeTaskRefs
+        }
+
+        public static let plain = Options()
+        public static let mcpRoundTrip = Options(includeTaskRefs: true)
+    }
+
+    public static func markdown(for blocks: [Block], options: Options = .plain) -> String {
         var out = ""
         for (index, block) in blocks.enumerated() {
             if index > 0 {
@@ -27,7 +38,7 @@ public enum BlockMarkdownSerializer {
                 let tight = isListType(previous) && isListType(block.kind)
                 out += tight ? "\n" : "\n\n"
             }
-            out += markdown(for: block)
+            out += markdown(for: block, options: options)
         }
         return out
     }
@@ -39,17 +50,17 @@ public enum BlockMarkdownSerializer {
         }
     }
 
-    private static func markdown(for block: Block) -> String {
+    private static func markdown(for block: Block, options: Options) -> String {
         switch block.kind {
         case .paragraph(let runs):
             return inlineMarkdown(runs)
         case .heading(let level, let runs):
             let clamped = min(max(level, 1), 6)
             return String(repeating: "#", count: clamped) + " " + inlineMarkdown(runs)
-        case .todo(_, let runs):
-            // taskRef does not round-trip through markdown — the parser mints a
-            // placeholder and the reconciler binds the real TaskItem.
-            return "- [ ] " + inlineMarkdown(runs)
+        case .todo(let taskRef, let runs):
+            let body = "- [ ] " + inlineMarkdown(runs)
+            guard options.includeTaskRefs else { return body }
+            return body + " <!-- nexus-task:\(taskRef.uuidString) -->"
         case .bulleted(let runs):
             return "- " + inlineMarkdown(runs)
         case .numbered(let runs):
