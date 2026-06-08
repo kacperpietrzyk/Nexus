@@ -205,8 +205,16 @@ public final class CalendarViewModel {
 
     public func reject(blockID: UUID) {
         guard let block = try? blockRepository.find(blockID) else { return }
+        // Tear down the mirror event for an accepted block (it carries an
+        // `externalEventID`) so rejecting it never orphans an event in the "Nexus"
+        // calendar — mirrors `ScheduleRejectBlockTool`. Best-effort, like the agent
+        // path; the soft-delete proceeds regardless.
+        let eventID = block.externalEventID
         try? blockRepository.softDelete(block)
         reloadBlocks()
+        if let eventID, let writer {
+            _Concurrency.Task { @MainActor in try? await writer.deleteEvent(id: eventID) }
+        }
     }
 
     /// Drag-to-adjust = implicit accept + estimate override (spec §7). Reschedules
