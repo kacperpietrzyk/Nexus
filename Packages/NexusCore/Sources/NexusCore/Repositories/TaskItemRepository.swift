@@ -499,7 +499,12 @@ public final class TaskItemRepository {
             tags: task.tags,
             recurrenceRule: recurrenceRule,
             recurrenceParentId: parentID,
-            parentTaskID: task.parentTaskID,
+            // A recurring SUBTASK spawns its next occurrence at top level rather
+            // than back under the same parent (T2): otherwise the parent can never
+            // `markDoneStrict` (a fresh open subtask reappears), and a
+            // `cascadeComplete` snapshot leaves the new occurrence orphaned-open.
+            // Project/section placement is still carried below.
+            parentTaskID: nil,
             projectID: task.projectID,
             sectionID: task.sectionID,
             orderIndex: task.orderIndex,
