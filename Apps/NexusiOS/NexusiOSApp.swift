@@ -227,6 +227,10 @@ struct NexusiOSApp: App {
                 welcomeMLXDownloads: welcomeMLXDownloads,
                 mlxLifecycle: aiGraph.mlxLifecycle
             )
+            // Pin the whole window to dark — set here at the scene root so the
+            // welcome `fullScreenCover` (presented above ContentView) also opens
+            // dark on a fresh install, not just the main shell.
+            .preferredColorScheme(.dark)
         }
         .modelContainer(container)
     }
