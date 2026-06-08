@@ -36,6 +36,8 @@ public struct CommentRepository {
         externalSourceID: String? = nil
     ) throws -> Comment {
         if let externalSourceID, let existing = try liveComment(externalSourceID: externalSourceID) {
+            existing.itemID = itemID
+            existing.itemKind = kind
             existing.body = body
             existing.updatedAt = .now
             try context.save()

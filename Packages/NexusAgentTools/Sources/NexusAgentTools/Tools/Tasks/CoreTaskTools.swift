@@ -28,6 +28,8 @@ public enum CoreTaskTools {
             NotesSearchTool(),
             NotesLinkTool(),
             // Projects tier (spec §10)
+            ProjectsCreateTool(),
+            SectionsCreateTool(),
             ProjectsGetTool(),
             ProjectsSetStatusTool(),
             TasksSetWorkflowStateTool(),

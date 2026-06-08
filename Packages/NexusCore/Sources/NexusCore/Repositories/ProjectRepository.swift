@@ -62,6 +62,24 @@ public final class ProjectRepository {
         try context.save()
     }
 
+    public func softDelete(_ project: Project, cascade: Bool = true) throws {
+        let stamp = now()
+        var visited = Set<UUID>()
+        var deletedProjectIDs = Set<UUID>()
+        try softDelete(
+            project,
+            cascade: cascade,
+            at: stamp,
+            visited: &visited,
+            deletedProjectIDs: &deletedProjectIDs
+        )
+        let commentRepository = CommentRepository(context: context)
+        for projectID in deletedProjectIDs {
+            try commentRepository.softDeleteAll(for: projectID, kind: .project)
+        }
+        try context.save()
+    }
+
     public func allActive() throws -> [Project] {
         let descriptor = FetchDescriptor<Project>(
             predicate: #Predicate { project in
@@ -106,6 +124,39 @@ public final class ProjectRepository {
         )
         for child in try context.fetch(descriptor) {
             try archive(child, at: stamp, visited: &visited)
+        }
+    }
+
+    private func softDelete(
+        _ project: Project,
+        cascade: Bool,
+        at stamp: Date,
+        visited: inout Set<UUID>,
+        deletedProjectIDs: inout Set<UUID>
+    ) throws {
+        guard !visited.contains(project.id) else { return }
+        visited.insert(project.id)
+
+        project.deletedAt = stamp
+        project.updatedAt = stamp
+        deletedProjectIDs.insert(project.id)
+
+        guard cascade else { return }
+
+        let projectID = project.id
+        let descriptor = FetchDescriptor<Project>(
+            predicate: #Predicate { child in
+                child.parentProjectID == projectID && child.deletedAt == nil
+            }
+        )
+        for child in try context.fetch(descriptor) {
+            try softDelete(
+                child,
+                cascade: true,
+                at: stamp,
+                visited: &visited,
+                deletedProjectIDs: &deletedProjectIDs
+            )
         }
     }
 }

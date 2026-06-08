@@ -165,6 +165,30 @@ struct NotificationSchedulerTests {
         #expect(center.removedIdentifiers.contains("\(base)-r31"))
     }
 
+    @Test("cancel removes scheduled reminder ids beyond r31")
+    func cancelRemovesScheduledReminderIDsBeyondR31() async throws {
+        let center = RecordingNotificationCenter()
+        let now = date("2026-05-01T08:00:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center,
+            quietHours: { nil },
+            calendar: cal(),
+            now: { now }
+        )
+        let task = TaskItem(title: "many reminders")
+        task.reminders = (0..<34).map { index in
+            .absolute(now.addingTimeInterval(TimeInterval(index + 1) * 3_600))
+        }
+
+        try await scheduler.schedule(task)
+        await scheduler.cancel(taskID: task.id)
+
+        let base = "task-\(task.id.uuidString)"
+        #expect(center.removedIdentifiers.contains("\(base)-r31"))
+        #expect(center.removedIdentifiers.contains("\(base)-r32"))
+        #expect(center.removedIdentifiers.contains("\(base)-r33"))
+    }
+
     @Test("scheduleSnooze adds a request keyed task-<uuid> using the snooze target")
     func scheduleSnoozeUsesUntilDate() async throws {
         let center = RecordingNotificationCenter()
@@ -251,6 +275,27 @@ struct NotificationSchedulerTests {
         let pending = center.snapshots()
         #expect(pending.count == 2)
         #expect(pending.allSatisfy { $0.identifier.hasPrefix("task-\(task.id.uuidString)-r") })
+    }
+
+    @Test("configured reminders with past fire dates are skipped")
+    func configuredPastRemindersAreSkipped() async throws {
+        let center = RecordingNotificationCenter()
+        let now = date("2026-05-01T08:00:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center,
+            quietHours: { nil },
+            calendar: cal(),
+            now: { now }
+        )
+        let task = TaskItem(title: "past configured reminders", dueAt: date("2026-05-01T07:45:00Z"))
+        task.reminders = [
+            .relative(offset: -1800, anchor: .due),
+            .absolute(date("2026-05-01T07:30:00Z")),
+        ]
+
+        try await scheduler.schedule(task)
+
+        #expect(center.snapshots().isEmpty)
     }
 
     @Test("empty reminders falls back to the legacy task-<uuid> request")

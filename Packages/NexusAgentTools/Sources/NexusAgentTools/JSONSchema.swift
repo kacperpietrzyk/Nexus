@@ -9,10 +9,12 @@ public indirect enum JSONSchema: Sendable, Codable {
     case number(description: String? = nil)
     case boolean(description: String? = nil)
     case array(items: JSONSchema, description: String? = nil)
+    case null(description: String? = nil)
+    case anyOf([JSONSchema], description: String? = nil)
     case anyValue(description: String? = nil)
 
     private enum CodingKeys: String, CodingKey {
-        case type, properties, required, items, description
+        case type, properties, required, items, description, anyOf
         case enumValues = "enum"
         case minimum, maximum
     }
@@ -45,6 +47,12 @@ public indirect enum JSONSchema: Sendable, Codable {
         case .array(let items, let description):
             try container.encode("array", forKey: .type)
             try container.encode(items, forKey: .items)
+            try container.encodeIfPresent(description, forKey: .description)
+        case .null(let description):
+            try container.encode("null", forKey: .type)
+            try container.encodeIfPresent(description, forKey: .description)
+        case .anyOf(let schemas, let description):
+            try container.encode(schemas, forKey: .anyOf)
             try container.encodeIfPresent(description, forKey: .description)
         case .anyValue(let description):
             try container.encodeIfPresent(description, forKey: .description)

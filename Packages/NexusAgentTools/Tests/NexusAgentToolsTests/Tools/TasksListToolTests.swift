@@ -81,16 +81,16 @@ struct TasksListToolTests {
     }
 
     @MainActor
-    @Test("filters by tag")
-    func filtersByTag() async throws {
+    @Test("filters by tag using core tag canonicalization")
+    func filtersByTagUsingCoreCanonicalization() async throws {
         let tasks = [
-            TaskItem(title: "Work item", tags: ["work"]),
+            TaskItem(title: "Work item", tags: [" Work "]),
             TaskItem(title: "Home item", tags: ["home"]),
         ]
         let fixture = try await InMemoryAgentContext.make(tasks: tasks)
 
         let response = try await callList(
-            args: .object(["filter": .object(["tag": .string("work")])]),
+            args: .object(["filter": .object(["tag": .string("WORK")])]),
             context: fixture.context
         )
 
@@ -158,6 +158,40 @@ struct TasksListToolTests {
     }
 
     @MainActor
+    @Test("rejects malformed richer filters")
+    func rejectsMalformedRicherFilters() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+
+        await #expect(throws: AgentError.validation("filter.overdue must be a boolean")) {
+            _ = try await TasksListTool().call(
+                args: .object(["filter": .object(["overdue": .string("yes")])]),
+                context: fixture.context
+            )
+        }
+
+        await #expect(throws: AgentError.validation("filter.deadline_within must be an integer")) {
+            _ = try await TasksListTool().call(
+                args: .object(["filter": .object(["deadline_within": .string("soon")])]),
+                context: fixture.context
+            )
+        }
+
+        await #expect(throws: AgentError.validation("filter.deadline_within must be >= 1")) {
+            _ = try await TasksListTool().call(
+                args: .object(["filter": .object(["deadline_within": .int(0)])]),
+                context: fixture.context
+            )
+        }
+
+        await #expect(throws: AgentError.validation("filter.priority_at_least must be an integer from 1 to 4")) {
+            _ = try await TasksListTool().call(
+                args: .object(["filter": .object(["priority_at_least": .string("high")])]),
+                context: fixture.context
+            )
+        }
+    }
+
+    @MainActor
     @Test("filters by project_id")
     func filtersByProject() async throws {
         let fixture = try await InMemoryAgentContext.make()
@@ -178,6 +212,38 @@ struct TasksListToolTests {
 
         #expect(response.total == 1)
         #expect(response.tasks.map(\.title) == ["in project"])
+    }
+
+    @MainActor
+    @Test("filters by section_id")
+    func filtersBySection() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = Project(name: "Work")
+        let targetSection = Section(projectID: project.id, name: "Doing")
+        let otherSection = Section(projectID: project.id, name: "Later")
+        fixture.repo.context.insert(project)
+        fixture.repo.context.insert(targetSection)
+        fixture.repo.context.insert(otherSection)
+        try fixture.repo.context.save()
+
+        let inSection = TaskItem(title: "in section", tags: ["doing"])
+        let inOtherSection = TaskItem(title: "in other section", tags: ["doing"])
+        let unsectioned = TaskItem(title: "unsectioned", tags: ["doing"])
+        try fixture.repo.insert(inSection)
+        try fixture.repo.insert(inOtherSection)
+        try fixture.repo.insert(unsectioned)
+        try fixture.repo.assign(inSection, toProject: project.id, section: targetSection.id)
+        try fixture.repo.assign(inOtherSection, toProject: project.id, section: otherSection.id)
+        try fixture.repo.assign(unsectioned, toProject: project.id, section: nil)
+
+        let response = try await callList(
+            args: .object(["filter": .object(["section_id": .string(targetSection.id.uuidString)])]),
+            context: fixture.context
+        )
+
+        #expect(response.total == 1)
+        #expect(response.tasks.map(\.title) == ["in section"])
+        #expect(response.tasks.first?.sectionID == targetSection.id.uuidString)
     }
 
     @MainActor
@@ -224,6 +290,30 @@ struct TasksListToolTests {
 
         #expect(response.total == 2)
         #expect(Set(response.tasks.map(\.title)) == ["High", "Medium"])
+    }
+
+    @MainActor
+    @Test("deadline_within matches core filter semantics")
+    func deadlineWithinMatchesCoreFilterSemantics() async throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let overdue = TaskItem(title: "Overdue deadline")
+        overdue.deadlineAt = now.addingTimeInterval(-86_400)
+        let inWindow = TaskItem(title: "In window")
+        inWindow.deadlineAt = now.addingTimeInterval(2 * 86_400)
+        let beyondWindow = TaskItem(title: "Beyond window")
+        beyondWindow.deadlineAt = now.addingTimeInterval(5 * 86_400)
+        let fixture = try await InMemoryAgentContext.make(
+            tasks: [overdue, inWindow, beyondWindow],
+            now: { now }
+        )
+
+        let response = try await callList(
+            args: .object(["filter": .object(["deadline_within": .int(3)])]),
+            context: fixture.context
+        )
+
+        #expect(response.total == 2)
+        #expect(Set(response.tasks.map(\.title)) == ["Overdue deadline", "In window"])
     }
 
     @MainActor

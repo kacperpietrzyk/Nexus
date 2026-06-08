@@ -13,10 +13,17 @@ public struct TasksUpdateTool: AgentTool {
             "patch": .object(
                 properties: [
                     "title": .string(description: "Task title."),
-                    "notes": .anyValue(description: "Task notes string, or null to clear."),
+                    "notes": .anyOf(
+                        [.string(description: "Task notes."), .null(description: "Clear task notes.")],
+                        description: "Task notes string, or null to clear."
+                    ),
                     "due_string": .string(description: "Optional source due text; accepted but not persisted."),
-                    "due_date": .anyValue(description: "ISO8601 due timestamp string, or null to clear."),
-                    "deadline_date": .anyValue(
+                    "due_date": .anyOf(
+                        [.string(description: "ISO8601 due timestamp."), .null(description: "Clear due date.")],
+                        description: "ISO8601 due timestamp string, or null to clear."
+                    ),
+                    "deadline_date": .anyOf(
+                        [.string(description: "YYYY-MM-DD hard external deadline."), .null(description: "Clear deadline.")],
                         description: "YYYY-MM-DD hard external deadline string, or null to clear."
                     ),
                     "priority": .integer(
@@ -24,16 +31,50 @@ public struct TasksUpdateTool: AgentTool {
                         maximum: 4,
                         description: "Priority: 1 high, 2 medium, 3 low, 4 none/default."
                     ),
-                    "tags": .anyValue(description: "Array of task tag strings, or null to clear."),
-                    "project_id": .anyValue(description: "Project UUID; null to clear."),
-                    "section_id": .anyValue(description: "Section UUID within the project; null to clear."),
-                    "parent_id": .anyValue(description: "Parent task UUID for a subtask; null to clear."),
-                    "recurrence_rule": .anyValue(
+                    "tags": .anyOf(
+                        [.array(items: .string(description: "Tag")), .null(description: "Clear tags.")],
+                        description: "Array of task tag strings, or null to clear."
+                    ),
+                    "project_id": .anyOf(
+                        [.string(description: "Project UUID."), .null(description: "Clear project and section.")],
+                        description: "Project UUID; null to clear."
+                    ),
+                    "section_id": .anyOf(
+                        [.string(description: "Section UUID within the project."), .null(description: "Clear section.")],
+                        description: "Section UUID within the project; null to clear."
+                    ),
+                    "parent_id": .anyOf(
+                        [.string(description: "Parent task UUID for a subtask."), .null(description: "Clear parent.")],
+                        description: "Parent task UUID for a subtask; null to clear."
+                    ),
+                    "recurrence_rule": .anyOf(
+                        [.string(description: "RFC 5545 RRULE subset, e.g. FREQ=DAILY."), .null(description: "Clear recurrence.")],
                         description: "RFC 5545 RRULE subset, e.g. FREQ=DAILY; null to clear."
                     ),
-                    "reminders": .anyValue(
-                        description: "Array of reminder objects; null to clear. Each reminder: "
-                            + "{type: relative|absolute, offset: seconds, anchor: due|deadline, at: ISO8601}."
+                    "reminders": .anyOf(
+                        [
+                            .array(
+                                items: .object(
+                                    properties: [
+                                        "type": .string(
+                                            enumValues: ["relative", "absolute"],
+                                            description: "relative | absolute"
+                                        ),
+                                        "offset": .integer(
+                                            description: "relative: seconds before/after anchor (negative = before)"
+                                        ),
+                                        "anchor": .string(
+                                            enumValues: ["due", "deadline"],
+                                            description: "relative: due | deadline"
+                                        ),
+                                        "at": .string(description: "absolute: ISO8601 timestamp"),
+                                    ],
+                                    required: ["type"]
+                                )
+                            ),
+                            .null(description: "Clear all reminders."),
+                        ],
+                        description: "Array of reminder objects, or null to clear."
                     ),
                 ],
                 required: []
@@ -64,16 +105,48 @@ public struct TasksUpdateTool: AgentTool {
                 throw AgentError.validation("parent_id validation failed: \(error)")
             }
         }
+        let assignment = try assignmentIfNeeded(
+            patch: patch,
+            task: task,
+            parentID: mutations.parentID,
+            context: context
+        )
         try context.taskRepository.repository.update(task) { task in
             mutations.apply(to: task)
+        }
+        if let notes = mutations.notes {
+            try TaskNotesContentStore.replaceNotes(notes, for: task, context: context)
         }
 
         // project/section assignment must happen after repo.update (needs repo.assign, not the closure).
         // repo.assign sets BOTH projectID and sectionID unconditionally, so we use effective-value
         // resolution: an omitted arg falls back to the task's existing value rather than clobbering it.
         // A present null clears the field; a present UUID string sets it; absent preserves existing.
+        if let assignment {
+            do {
+                try context.taskRepository.repository.assign(
+                    task, toProject: assignment.projectID, section: assignment.sectionID
+                )
+            } catch {
+                throw AgentError.validation("project/section assignment failed: \(error)")
+            }
+        }
+
+        await TasksToolSearchIndexing.reflect(task, in: context.searchIndex)
+        return try TasksToolJSON.encode(TaskNotesContentStore.dto(for: task, context: context))
+    }
+
+    @MainActor
+    private func assignmentIfNeeded(
+        patch: [String: JSONValue],
+        task: TaskItem,
+        parentID: UUID??,
+        context: AgentContext
+    ) throws -> (projectID: UUID?, sectionID: UUID?)? {
         let hasProject = patch["project_id"] != nil
         let hasSection = patch["section_id"] != nil
+        let repo = context.taskRepository.repository
+
         if hasProject || hasSection {
             let effectiveProject: UUID?
             if hasProject {
@@ -84,26 +157,35 @@ public struct TasksUpdateTool: AgentTool {
             } else {
                 effectiveProject = task.projectID
             }
+
             let effectiveSection: UUID?
             if hasSection {
                 effectiveSection =
                     patch["section_id"] == .null
                     ? nil
                     : try TasksStructuredCreateArguments.optionalUUID(patch["section_id"], field: "section_id")
+            } else if hasProject {
+                effectiveSection = effectiveProject == task.projectID ? task.sectionID : nil
             } else {
                 effectiveSection = task.sectionID
             }
-            do {
-                try context.taskRepository.repository.assign(
-                    task, toProject: effectiveProject, section: effectiveSection
-                )
-            } catch {
-                throw AgentError.validation("project/section assignment failed: \(error)")
-            }
+
+            try TasksMutationToolSupport.validateProjectSectionAssignment(
+                projectID: effectiveProject,
+                sectionID: effectiveSection,
+                repo: repo
+            )
+            return (effectiveProject, effectiveSection)
         }
 
-        await TasksToolSearchIndexing.reflect(task, in: context.searchIndex)
-        return try TasksToolJSON.encode(TaskDTO(from: task))
+        guard let parentID, let proposedParentID = parentID else { return nil }
+        let parent = try TasksMutationToolSupport.liveTask(id: proposedParentID, context: context)
+        try TasksMutationToolSupport.validateProjectSectionAssignment(
+            projectID: parent.projectID,
+            sectionID: parent.sectionID,
+            repo: repo
+        )
+        return (parent.projectID, parent.sectionID)
     }
 }
 
@@ -146,9 +228,6 @@ private struct TasksUpdatePatch {
     func apply(to task: TaskItem) {
         if let title {
             task.title = title ?? task.title
-        }
-        if let notes {
-            task.body = notes ?? ""
         }
         if let dueDate {
             task.dueAt = dueDate
