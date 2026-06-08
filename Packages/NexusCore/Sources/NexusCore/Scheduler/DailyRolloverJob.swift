@@ -1,9 +1,12 @@
 import Foundation
 import SwiftData
 
-/// Daily auto-rollover (spec §10): unfinished due-today / overdue open tasks have
-/// their `dueAt` pushed to the next workday (à la Linear), and dead `proposed`
-/// blocks (past, never accepted) are swept. Mirrors the `OrderRebalanceJob`
+/// Daily auto-rollover (spec §10): genuinely overdue open tasks (due before today)
+/// have their `dueAt` pushed to the next workday (à la Linear), and dead `proposed`
+/// blocks (past, never accepted) are swept. A task still due *later today* is left
+/// alone — the job can fire at any clock time (incl. pre-dawn), so rolling a
+/// due-today task would push it off the user's plate before the day starts (S1).
+/// Mirrors the `OrderRebalanceJob`
 /// pattern: a fresh `ModelContext` per run, no long-lived container reference.
 ///
 /// Gated by `CalendarPreferences.rolloverEnabled`; when disabled the run is a
@@ -39,11 +42,10 @@ public enum DailyRolloverJob {
     @MainActor
     static func rollover(in container: ModelContainer, now: Date, calendar: Calendar) async throws {
         let context = ModelContext(container)
-        let startOfTomorrow =
-            calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
-            ?? calendar.startOfDay(for: now)
+        let startOfToday = calendar.startOfDay(for: now)
 
-        // Open tasks due before tomorrow (overdue + due-today) roll to the next workday.
+        // Only GENUINELY overdue open tasks (due before today) roll forward; a task
+        // still due later today is left alone (S1 — the job's fire time is arbitrary).
         let openRaw = TaskStatus.open.rawValue
         let dueDescriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { task in
@@ -53,7 +55,7 @@ public enum DailyRolloverJob {
             }
         )
         let target = nextWorkday(after: now, calendar: calendar)
-        let dueTasks = try context.fetch(dueDescriptor).filter { ($0.dueAt ?? .distantFuture) < startOfTomorrow }
+        let dueTasks = try context.fetch(dueDescriptor).filter { ($0.dueAt ?? .distantFuture) < startOfToday }
         for task in dueTasks {
             // Preserve the original time-of-day on the new date.
             let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: task.dueAt ?? now)
@@ -69,7 +71,6 @@ public enum DailyRolloverJob {
 
         // Sweep dead proposed blocks: past, never accepted (orphaned suggestions).
         let proposedRaw = ScheduledBlockStatus.proposed.rawValue
-        let startOfToday = calendar.startOfDay(for: now)
         let staleDescriptor = FetchDescriptor<ScheduledBlock>(
             predicate: #Predicate { block in
                 block.deletedAt == nil
