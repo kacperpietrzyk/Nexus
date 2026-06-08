@@ -34,14 +34,7 @@ struct TasksTab: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("", selection: $filter) {
-                    ForEach(Filter.allCases) { filter in
-                        Text(filter.rawValue).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                filterBar
 
                 TaskListView(filter: filter.toTaskFilter(), onSelect: onOpenTask)
                     .padding(.top, 4)
@@ -69,5 +62,47 @@ struct TasksTab: View {
                 }
             }
         }
+    }
+
+    /// Equal-width, theme-native filter selector. Replaces `.pickerStyle(.segmented)`
+    /// — the UIKit segmented control's light track is the one bright element on the
+    /// dark Tasks surface and resists full appearance theming.
+    private var filterBar: some View {
+        HStack(spacing: 2) {
+            ForEach(Filter.allCases) { item in
+                Button {
+                    filter = item
+                } label: {
+                    Text(item.rawValue)
+                        .font(NexusType.bodySmall.weight(item == filter ? .semibold : .medium))
+                        .foregroundStyle(
+                            item == filter ? NexusColor.Text.primary : NexusColor.Text.tertiary
+                        )
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background(
+                            item == filter ? NexusColor.Background.controlHover : Color.clear,
+                            in: RoundedRectangle(cornerRadius: NexusRadius.r2, style: .continuous)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(item == filter ? [.isSelected, .isButton] : .isButton)
+            }
+        }
+        .padding(3)
+        .background(
+            NexusColor.Background.panel,
+            in: RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+                .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .animation(NexusMotion.standard, value: filter)
     }
 }

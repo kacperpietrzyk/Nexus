@@ -108,6 +108,12 @@ struct ContentView: View {
             captureOverlay
         }
         .animation(NexusMotion.standard, value: capturePresented)
+        // Nexus is a dark-only design. Force it at the shell root so EVERY tab —
+        // not just Today and the iPad split — paints dark; otherwise, on a
+        // light-mode device, unstyled system surfaces (segmented-control tracks,
+        // navigation/grouped backgrounds, the Tasks filter strip) render light
+        // and tear holes in the dark theme.
+        .preferredColorScheme(.dark)
         .sheet(item: $customSnoozeTask) { task in
             CustomSnoozeSheet(task: task)
                 .presentationDetents([.medium])
