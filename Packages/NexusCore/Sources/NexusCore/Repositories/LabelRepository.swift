@@ -158,40 +158,14 @@ public final class LabelRepository {
 
     // MARK: - Seed
 
-    /// Idempotently seeds the system labels (spec §7). Each `SystemLabel` is created
-    /// with its DETERMINISTIC stable `id` (`SystemLabel.id`) so the seed converges
-    /// across devices — CloudKit forbids `@Attribute(.unique)`, so a fresh `UUID()`
-    /// per launch would let two first-launching devices double-seed by name; a fixed
-    /// id makes the two inserts merge into one record. A row is skipped if either its
-    /// stable id OR (legacy) its case-insensitive name already exists. Missing ones
-    /// are created with `isSystem = true`. Safe to run repeatedly (V11 migration step).
+    /// Idempotently seeds the system labels (spec §7) via the shared
+    /// `SystemLabelSeeder`, which both this @MainActor path and the non-isolated
+    /// V11 migration delegate to so they can't drift (P4). A `SystemLabel` is
+    /// skipped only when its stable id already exists (live or tombstoned) or a
+    /// live *system* label shares its `(group, name)` — a user's same-named free
+    /// label no longer blocks it. Safe to run repeatedly.
     public func seedSystemLabels() throws {
-        let existing = try allActive()
-        var byID: [UUID: Label] = [:]
-        var byName: [String: Label] = [:]
-        for label in existing {
-            byID[label.id] = label
-            byName[label.name.lowercased()] = label
-        }
-        let stamp = now()
-        var didInsert = false
-        for system in SystemLabel.allCases
-        where byID[system.id] == nil && byName[system.name.lowercased()] == nil {
-            let label = Label(
-                id: system.id,
-                name: system.name,
-                glyphKey: system.glyphKey,
-                group: system.group,
-                isSystem: true
-            )
-            label.createdAt = stamp
-            label.updatedAt = stamp
-            context.insert(label)
-            didInsert = true
-        }
-        if didInsert {
-            try context.save()
-        }
+        try SystemLabelSeeder.seed(in: context, now: now)
     }
 
     // MARK: - Agent queue (spec §8 / §10)
