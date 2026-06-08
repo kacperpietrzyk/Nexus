@@ -35,6 +35,12 @@ struct TasksUpdateToolTests {
         #expect(dto.priority == 1)
         #expect(dto.tags == ["work", "q2"])
         #expect(dto.deadlineDate == "2026-05-10")
+
+        let stored = try TasksMutationToolSupport.liveTask(id: task.id, context: fixture.context)
+        #expect(stored.body.isEmpty)
+        let noteID = try #require(stored.noteRef)
+        let note = try #require(try fixture.repo.context.fetch(FetchDescriptor<Note>()).first { $0.id == noteID })
+        #expect(note.plainText == "new notes")
     }
 
     @MainActor
@@ -127,6 +133,9 @@ struct TasksUpdateToolTests {
         #expect(dto.notes == nil)
         #expect(dto.dueDate == nil)
         #expect(dto.tags.isEmpty)
+        let stored = try TasksMutationToolSupport.liveTask(id: task.id, context: fixture.context)
+        #expect(stored.body.isEmpty)
+        #expect(stored.noteRef == nil)
     }
 
     @MainActor
@@ -138,11 +147,10 @@ struct TasksUpdateToolTests {
         let patch = try #require(properties["patch"] as? [String: Any])
         let patchProperties = try #require(patch["properties"] as? [String: Any])
 
-        for field in ["notes", "due_date", "deadline_date", "tags"] {
-            let fieldSchema = try #require(patchProperties[field] as? [String: Any])
-            #expect(fieldSchema["type"] == nil)
-            #expect(fieldSchema["description"] != nil)
+        for field in ["notes", "due_date", "deadline_date", "project_id", "section_id", "parent_id", "recurrence_rule"] {
+            try expectAnyOfTypes(["string", "null"], for: field, in: patchProperties)
         }
+        try expectAnyOfTypes(["array", "null"], for: "tags", in: patchProperties)
     }
 
     @MainActor
@@ -308,6 +316,62 @@ struct TasksUpdateToolTests {
     }
 
     @MainActor
+    @Test("project_id null clears project and section")
+    func projectIDNullClearsProjectAndSection() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = Project(name: "Section Project")
+        let section = Section(projectID: project.id, name: "Doing")
+        fixture.repo.context.insert(project)
+        fixture.repo.context.insert(section)
+        try fixture.repo.context.save()
+        let task = TaskItem(title: "sectioned")
+        try fixture.repo.insert(task)
+        try fixture.repo.assign(task, toProject: project.id, section: section.id)
+
+        let dto = try await callUpdate(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object(["project_id": .null]),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(dto.projectID == nil)
+        #expect(dto.sectionID == nil)
+        #expect(task.projectID == nil)
+        #expect(task.sectionID == nil)
+    }
+
+    @MainActor
+    @Test("moving to another project without section_id clears old section")
+    func movingToAnotherProjectWithoutSectionClearsOldSection() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let oldProject = Project(name: "Old Project")
+        let oldSection = Section(projectID: oldProject.id, name: "Doing")
+        let newProject = Project(name: "New Project")
+        fixture.repo.context.insert(oldProject)
+        fixture.repo.context.insert(oldSection)
+        fixture.repo.context.insert(newProject)
+        try fixture.repo.context.save()
+        let task = TaskItem(title: "sectioned")
+        try fixture.repo.insert(task)
+        try fixture.repo.assign(task, toProject: oldProject.id, section: oldSection.id)
+
+        let dto = try await callUpdate(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object(["project_id": .string(newProject.id.uuidString)]),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(dto.projectID == newProject.id.uuidString)
+        #expect(dto.sectionID == nil)
+        #expect(task.projectID == newProject.id)
+        #expect(task.sectionID == nil)
+    }
+
+    @MainActor
     @Test("unknown project_id on update throws validation")
     func unknownProjectIDOnUpdateThrows() async throws {
         let task = TaskItem(title: "Task")
@@ -324,6 +388,40 @@ struct TasksUpdateToolTests {
         }
     }
 
+    @MainActor
+    @Test("unknown project_id on update does not persist earlier patch fields")
+    func unknownProjectIDOnUpdateDoesNotPersistEarlierPatchFields() async throws {
+        let task = TaskItem(title: "Original", recurrenceRule: "FREQ=WEEKLY")
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+
+        await #expect(throws: AgentError.self) {
+            _ = try await TasksUpdateTool().call(
+                args: .object([
+                    "task_id": .string(task.id.uuidString),
+                    "patch": .object([
+                        "title": .string("Changed"),
+                        "recurrence_rule": .string("FREQ=DAILY"),
+                        "reminders": .array([
+                            .object([
+                                "type": .string("relative"),
+                                "offset": .double(-900),
+                                "anchor": .string("due"),
+                            ])
+                        ]),
+                        "project_id": .string(UUID().uuidString),
+                    ]),
+                ]),
+                context: fixture.context
+            )
+        }
+
+        let stored = try TasksMutationToolSupport.liveTask(id: task.id, context: fixture.context)
+        #expect(stored.title == "Original")
+        #expect(stored.recurrenceRule == "FREQ=WEEKLY")
+        #expect(stored.reminders.isEmpty)
+        #expect(stored.projectID == nil)
+    }
+
     private func callUpdate(args: JSONValue, context: AgentContext) async throws -> TaskDTO {
         let result = try await TasksUpdateTool().call(args: args, context: context)
         let data = try JSONEncoder().encode(result)
@@ -337,5 +435,16 @@ struct TasksUpdateToolTests {
         )
         let data = try JSONEncoder().encode(result)
         return try JSONDecoder().decode([TaskDTO].self, from: data).map(\.title)
+    }
+
+    private func expectAnyOfTypes(
+        _ expectedTypes: [String],
+        for field: String,
+        in properties: [String: Any]
+    ) throws {
+        let fieldSchema = try #require(properties[field] as? [String: Any])
+        let alternatives = try #require(fieldSchema["anyOf"] as? [[String: Any]])
+        #expect(alternatives.compactMap { $0["type"] as? String } == expectedTypes)
+        #expect(fieldSchema["description"] != nil)
     }
 }

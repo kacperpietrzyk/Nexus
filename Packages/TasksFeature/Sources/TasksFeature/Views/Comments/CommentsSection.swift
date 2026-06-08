@@ -10,6 +10,43 @@ enum CommentsComposer {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
+
+    static func addResult(draft: String, save: (String) throws -> Void) -> CommentsComposerResult {
+        guard let body = sanitized(draft) else {
+            return CommentsComposerResult(draft: draft, errorMessage: nil, shouldReload: false)
+        }
+        do {
+            try save(body)
+            return CommentsComposerResult(draft: "", errorMessage: nil, shouldReload: true)
+        } catch {
+            return CommentsComposerResult(
+                draft: draft,
+                errorMessage: "Could not add comment.",
+                shouldReload: false
+            )
+        }
+    }
+}
+
+struct CommentsComposerResult: Equatable {
+    let draft: String
+    let errorMessage: String?
+    let shouldReload: Bool
+}
+
+enum CommentsLoader {
+    static func reloadResult(existing: [Comment], load: () throws -> [Comment]) -> CommentsReloadResult {
+        do {
+            return CommentsReloadResult(comments: try load(), errorMessage: nil)
+        } catch {
+            return CommentsReloadResult(comments: existing, errorMessage: "Could not load comments.")
+        }
+    }
+}
+
+struct CommentsReloadResult {
+    let comments: [Comment]
+    let errorMessage: String?
 }
 
 /// Reusable comment thread for any item (task or project). Loads via the
@@ -22,6 +59,7 @@ struct CommentsSection: View {
 
     @State private var comments: [Comment] = []
     @State private var draft: String = ""
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -55,10 +93,20 @@ struct CommentsSection: View {
                 )
                 .disabled(CommentsComposer.sanitized(draft) == nil)
             }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(NexusType.caption)
+                    .foregroundStyle(NexusColor.Text.primary)
+            }
         }
         // Reload when item identity changes (inspector reuses the view across
         // task-selection swaps; `.onAppear` would not re-fire in that case).
-        .task(id: itemID) { reload() }
+        .task(id: itemID) {
+            comments = []
+            errorMessage = nil
+            reload()
+        }
     }
 
     @ViewBuilder
@@ -72,14 +120,21 @@ struct CommentsSection: View {
     }
 
     private func reload() {
-        comments = (try? repository.comments(for: itemID, kind: itemKind)) ?? []
+        let result = CommentsLoader.reloadResult(existing: comments) {
+            try repository.comments(for: itemID, kind: itemKind)
+        }
+        comments = result.comments
+        errorMessage = result.errorMessage
     }
 
     private func add() {
-        guard let body = CommentsComposer.sanitized(draft) else { return }
-        // Keep the draft if the save fails so the user does not lose their text.
-        guard (try? repository.add(body: body, to: itemID, kind: itemKind)) != nil else { return }
-        draft = ""
-        reload()
+        let result = CommentsComposer.addResult(draft: draft) { body in
+            _ = try repository.add(body: body, to: itemID, kind: itemKind)
+        }
+        draft = result.draft
+        errorMessage = result.errorMessage
+        if result.shouldReload {
+            reload()
+        }
     }
 }

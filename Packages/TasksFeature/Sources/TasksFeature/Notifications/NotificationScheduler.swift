@@ -51,8 +51,10 @@ public final class NotificationScheduler {
             return
         }
 
+        let currentDate = now()
         for (index, rule) in rules.enumerated() {
             guard let fireDate = resolve(rule, for: task) else { continue }
+            guard fireDate > currentDate else { continue }
             let content = UNMutableNotificationContent()
             content.title = task.title
             content.categoryIdentifier = NotificationCategory.taskReminder.rawValue
@@ -71,7 +73,13 @@ public final class NotificationScheduler {
     /// Removing non-existent identifiers is a no-op in UserNotifications.
     public func cancel(taskID: UUID) async {
         let base = identifier(for: taskID)
-        let ids = [base] + (0..<32).map { "\(base)-r\($0)" }
+        var ids = [base] + (0..<32).map { "\(base)-r\($0)" }
+        let pendingIDs = await delivery.pendingNotificationRequests()
+            .map(\.identifier)
+            .filter { $0 == base || $0.hasPrefix("\(base)-r") }
+        for id in pendingIDs where !ids.contains(id) {
+            ids.append(id)
+        }
         await delivery.removePendingNotificationRequests(withIdentifiers: ids)
     }
 

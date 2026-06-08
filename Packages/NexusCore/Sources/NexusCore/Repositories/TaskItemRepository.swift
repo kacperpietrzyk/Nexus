@@ -135,6 +135,16 @@ public final class TaskItemRepository {
     }
 
     public func assign(_ task: TaskItem, toProject projectID: UUID?, section sectionID: UUID? = nil) throws {
+        try validateProjectSectionAssignment(toProject: projectID, section: sectionID)
+        task.projectID = projectID
+        task.sectionID = sectionID
+        task.updatedAt = now()
+        try context.save()
+        let pusher = snapshotPusher
+        Task { @MainActor in await pusher() }
+    }
+
+    public func validateProjectSectionAssignment(toProject projectID: UUID?, section sectionID: UUID? = nil) throws {
         if let projectID {
             let descriptor = FetchDescriptor<Project>(
                 predicate: #Predicate { project in
@@ -146,12 +156,6 @@ public final class TaskItemRepository {
             }
         }
         try ProjectSectionAssignmentValidator.validate(sectionID: sectionID, belongsTo: projectID, in: context)
-        task.projectID = projectID
-        task.sectionID = sectionID
-        task.updatedAt = now()
-        try context.save()
-        let pusher = snapshotPusher
-        Task { @MainActor in await pusher() }
     }
 
     public func tasks(in projectID: UUID, section sectionID: UUID? = nil) throws -> [TaskItem] {
@@ -462,6 +466,7 @@ public final class TaskItemRepository {
             } else {
                 nil
             }
+        let nextDeadlineAt = task.deadlineAt?.addingTimeInterval(intervalDelta)
 
         // Content lives in a `Note` referenced by `noteRef`, not on `body`
         // (Notes content layer, spec §4.2) — no longer carried here.
@@ -476,23 +481,35 @@ public final class TaskItemRepository {
         // (invariant I7). `.todo.forcedStatus == .open`, so `status: .open` here
         // already reconciles with the spawned workflow for both branches.
         let nextWorkflowState: WorkflowState? = task.workflowState == nil ? nil : .todo
+        let carriedReminders = task.reminders.compactMap { rule -> ReminderRule? in
+            if case .relative = rule { return rule }
+            return nil
+        }
         // `agent` assignment is pure metadata (I8) and carries to the next
         // occurrence so the queue assignment survives a recurrence.
-        return TaskItem(
+        let next = TaskItem(
             title: task.title,
             noteRef: task.noteRef,
             dueAt: nextDate,
             startAt: nextStartAt,
             endAt: nextEndAt,
+            deadlineAt: nextDeadlineAt,
             priority: task.priority,
             status: .open,
             tags: task.tags,
             recurrenceRule: recurrenceRule,
             recurrenceParentId: parentID,
+            parentTaskID: task.parentTaskID,
+            projectID: task.projectID,
+            sectionID: task.sectionID,
             orderIndex: task.orderIndex,
             pinnedAsFocus: task.pinnedAsFocus,
             workflowState: nextWorkflowState,
-            assignedAgent: task.agent
+            assignedAgent: task.agent,
+            estimatedDurationSeconds: task.estimatedDurationSeconds,
+            durationSource: task.durationSource
         )
+        next.reminders = carriedReminders
+        return next
     }
 }

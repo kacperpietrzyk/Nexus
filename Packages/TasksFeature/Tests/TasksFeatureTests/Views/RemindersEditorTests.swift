@@ -26,6 +26,19 @@ import Testing
         #expect(result.count == 1)
     }
 
+    @Test func relativeQuickChoicesIncludeDueAndDeadlineAnchors() {
+        let choices = ReminderQuickChoice.relativeChoices
+        #expect(
+            choices.map(\.rule) == [
+                .relative(offset: -1800, anchor: .due),
+                .relative(offset: -3600, anchor: .due),
+                .relative(offset: -86400, anchor: .due),
+                .relative(offset: -1800, anchor: .deadline),
+                .relative(offset: -3600, anchor: .deadline),
+                .relative(offset: -86400, anchor: .deadline),
+            ])
+    }
+
     @Test func addAbsoluteAppendsAndDeduplicates() {
         let when = Date(timeIntervalSince1970: 1_700_000_000)
         var rules: [ReminderRule] = []

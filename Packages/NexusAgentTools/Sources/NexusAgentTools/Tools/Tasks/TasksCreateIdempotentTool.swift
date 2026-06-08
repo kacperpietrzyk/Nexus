@@ -43,11 +43,11 @@ public struct TasksCreateIdempotentTool: AgentTool {
             "reminders": .array(
                 items: .object(
                     properties: [
-                        "type": .string(description: "relative | absolute"),
+                        "type": .string(enumValues: ["relative", "absolute"], description: "relative | absolute"),
                         "offset": .integer(
                             description: "relative: seconds before/after anchor (negative = before)"
                         ),
-                        "anchor": .string(description: "relative: due | deadline"),
+                        "anchor": .string(enumValues: ["due", "deadline"], description: "relative: due | deadline"),
                         "at": .string(description: "absolute: ISO8601 timestamp"),
                     ],
                     required: ["type"]
@@ -89,7 +89,7 @@ public struct TasksCreateIdempotentTool: AgentTool {
 
         let task = TaskItem(
             title: write.fields.title,
-            body: write.fields.notes ?? "",
+            body: "",
             dueAt: write.fields.dueDate,
             deadlineAt: write.fields.deadlineAt,
             priority: write.fields.priority,
@@ -107,11 +107,22 @@ public struct TasksCreateIdempotentTool: AgentTool {
                 throw AgentError.validation("parent_id validation failed: \(error)")
             }
         }
+        let assignment = try assignmentForCreate(write: write, context: context)
+        if assignment.projectID != nil || assignment.sectionID != nil {
+            try TasksMutationToolSupport.validateProjectSectionAssignment(
+                projectID: assignment.projectID,
+                sectionID: assignment.sectionID,
+                repo: repo
+            )
+        }
         try repo.insert(task)
-        try assignIfNeeded(task, projectID: write.projectID, sectionID: write.sectionID, repo: repo)
+        try assignIfNeeded(task, projectID: assignment.projectID, sectionID: assignment.sectionID, repo: repo)
+        if write.args["notes"] != nil {
+            try TaskNotesContentStore.replaceNotes(write.fields.notes, for: task, context: context)
+        }
         await context.searchIndex.upsert(IndexedDocument(task))
 
-        let response = IdempotentResponseDTO(task: TaskDTO(from: task), wasCreated: true)
+        let response = IdempotentResponseDTO(task: try TaskNotesContentStore.dto(for: task, context: context), wasCreated: true)
         return try TasksToolJSON.encode(response)
     }
 
@@ -144,9 +155,9 @@ public struct TasksCreateIdempotentTool: AgentTool {
                 throw AgentError.validation("parent_id validation failed: \(error)")
             }
         }
+        let assignment = try assignmentIfNeeded(write: write, existing: existing, repo: repo, context: context)
         try repo.update(existing) { task in
             task.title = fields.title
-            if args["notes"] != nil { task.body = fields.notes ?? "" }
             if args["due_date"] != nil { task.dueAt = fields.dueDate }
             if args["deadline_date"] != nil { task.deadlineAt = fields.deadlineAt }
             if args["priority"] != nil { task.priorityRaw = fields.priority.rawValue }
@@ -160,16 +171,64 @@ public struct TasksCreateIdempotentTool: AgentTool {
         // the task's existing value rather than clobbering it to nil (mirrors the omit-≠-clear
         // invariant the field updates above honor). Only re-assign when at least one of the two
         // args is actually present.
-        let hasProject = args["project_id"] != nil
-        let hasSection = args["section_id"] != nil
-        if hasProject || hasSection {
-            let effectiveProject = hasProject ? write.projectID : existing.projectID
-            let effectiveSection = hasSection ? write.sectionID : existing.sectionID
-            try assign(existing, projectID: effectiveProject, sectionID: effectiveSection, repo: repo)
+        if let assignment {
+            try assign(existing, projectID: assignment.projectID, sectionID: assignment.sectionID, repo: repo)
+        }
+        if args["notes"] != nil {
+            try TaskNotesContentStore.replaceNotes(fields.notes, for: existing, context: context)
         }
         await TasksToolSearchIndexing.reflect(existing, in: context.searchIndex)
-        let response = IdempotentResponseDTO(task: TaskDTO(from: existing), wasCreated: false)
+        let response = IdempotentResponseDTO(
+            task: try TaskNotesContentStore.dto(for: existing, context: context),
+            wasCreated: false
+        )
         return try TasksToolJSON.encode(response)
+    }
+
+    @MainActor
+    private func assignmentIfNeeded(
+        write: IdempotentWriteParams,
+        existing: TaskItem,
+        repo: TaskItemRepository,
+        context: AgentContext
+    ) throws -> (projectID: UUID?, sectionID: UUID?)? {
+        let hasProject = write.args["project_id"] != nil
+        let hasSection = write.args["section_id"] != nil
+
+        if hasProject || hasSection {
+            let effectiveProject = hasProject ? write.projectID : existing.projectID
+            let effectiveSection =
+                hasSection
+                ? write.sectionID
+                : (effectiveProject == existing.projectID ? existing.sectionID : nil)
+            try TasksMutationToolSupport.validateProjectSectionAssignment(
+                projectID: effectiveProject,
+                sectionID: effectiveSection,
+                repo: repo
+            )
+            return (effectiveProject, effectiveSection)
+        }
+
+        guard write.args["parent_id"] != nil, let parentID = write.parentID else { return nil }
+        let parent = try TasksMutationToolSupport.liveTask(id: parentID, context: context)
+        try TasksMutationToolSupport.validateProjectSectionAssignment(
+            projectID: parent.projectID,
+            sectionID: parent.sectionID,
+            repo: repo
+        )
+        return (parent.projectID, parent.sectionID)
+    }
+
+    @MainActor
+    private func assignmentForCreate(
+        write: IdempotentWriteParams,
+        context: AgentContext
+    ) throws -> (projectID: UUID?, sectionID: UUID?) {
+        guard write.projectID == nil, write.sectionID == nil, let parentID = write.parentID else {
+            return (write.projectID, write.sectionID)
+        }
+        let parent = try TasksMutationToolSupport.liveTask(id: parentID, context: context)
+        return (parent.projectID, parent.sectionID)
     }
 
     @MainActor

@@ -67,16 +67,10 @@ public struct TasksListTool: AgentTool {
         let sort = try Sort(rawValue: sortValue)
             .unwrapValidation("Invalid sort")
         let tag = try trimmedOptionalString(filter["tag"], field: "filter.tag")
-        let projectID = try TasksStructuredCreateArguments.optionalUUID(
-            filter["project_id"],
-            field: "filter.project_id"
-        )
-        let sectionID = try TasksStructuredCreateArguments.optionalUUID(
-            filter["section_id"],
-            field: "filter.section_id"
-        )
-        let overdueOnly = filter["overdue"]?.boolValue ?? false
-        let deadlineWithinDays = filter["deadline_within"]?.intValue
+        let projectID = try TasksStructuredCreateArguments.optionalUUID(filter["project_id"], field: "filter.project_id")
+        let sectionID = try TasksStructuredCreateArguments.optionalUUID(filter["section_id"], field: "filter.section_id")
+        let overdueOnly = try boolValue(filter["overdue"], field: "filter.overdue", default: false)
+        let deadlineWithinDays = try positiveIntValue(filter["deadline_within"], field: "filter.deadline_within")
         let priorityAtLeast = try priorityFloor(filter["priority_at_least"])
         let limit = try TasksToolArguments.boundedInt(
             args["limit"],
@@ -114,7 +108,7 @@ public struct TasksListTool: AgentTool {
         let total = tasks.count
         let pagedTasks = Array(tasks.dropFirst(min(offset, total)).prefix(limit))
         let response = TaskListResponseDTO(
-            tasks: pagedTasks.map(TaskDTO.init(from:)),
+            tasks: try pagedTasks.map { try TaskNotesContentStore.dto(for: $0, context: context) },
             total: total,
             hasMore: offset + pagedTasks.count < total
         )
@@ -169,7 +163,9 @@ public struct TasksListTool: AgentTool {
     private func matches(_ task: TaskItem, tag: String?) -> Bool {
         guard let tag, !tag.isEmpty else { return true }
         let normalized = tag.lowercased()
-        return task.tags.contains { $0.lowercased() == normalized }
+        return task.tags.contains {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized
+        }
     }
 
     private func matches(_ task: TaskItem, projectID: UUID?) -> Bool {
@@ -203,8 +199,18 @@ public struct TasksListTool: AgentTool {
     /// Maps an optional MCP priority integer (1=high … 4=none) to a `TaskPriority`.
     /// Returns nil when the value is absent (no floor applied).
     private func priorityFloor(_ value: JSONValue?) throws -> TaskPriority? {
-        guard let raw = value?.intValue else { return nil }
-        return try TasksStructuredCreateArguments.optionalPriority(.int(raw))
+        guard let value else { return nil }
+        guard let raw = value.intValue else {
+            throw AgentError.validation("filter.priority_at_least must be an integer from 1 to 4")
+        }
+        switch raw {
+        case 1: return .high
+        case 2: return .medium
+        case 3: return .low
+        case 4: return TaskPriority.none
+        default:
+            throw AgentError.validation("filter.priority_at_least must be an integer from 1 to 4")
+        }
     }
 
     private func compare(_ lhs: TaskItem, _ rhs: TaskItem, sort: Sort) -> Bool {
@@ -269,6 +275,25 @@ public struct TasksListTool: AgentTool {
             throw AgentError.validation("\(field) cannot be empty")
         }
         return trimmed
+    }
+
+    private func boolValue(_ value: JSONValue?, field: String, default defaultValue: Bool) throws -> Bool {
+        guard let value else { return defaultValue }
+        guard let bool = value.boolValue else {
+            throw AgentError.validation("\(field) must be a boolean")
+        }
+        return bool
+    }
+
+    private func positiveIntValue(_ value: JSONValue?, field: String) throws -> Int? {
+        guard let value else { return nil }
+        guard let int = value.intValue else {
+            throw AgentError.validation("\(field) must be an integer")
+        }
+        guard int >= 1 else {
+            throw AgentError.validation("\(field) must be >= 1")
+        }
+        return int
     }
 }
 

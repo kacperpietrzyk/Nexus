@@ -17,6 +17,8 @@ public struct TaskDetailInspector: View {
     /// scrolling instead of a tall single-column stack.
     public enum Layout { case column, wide }
 
+    typealias RecurrenceChoice = TaskDetailRecurrenceChoice
+
     @Bindable public var task: TaskItem
     public let onClose: (() -> Void)?
     public let layout: Layout
@@ -25,6 +27,8 @@ public struct TaskDetailInspector: View {
     @State private var recurrenceChoice: RecurrenceChoice
     @State private var customRRule: String
     @State private var saveTask: _Concurrency.Task<Void, Never>?
+    @State private var notesDraft: String
+    @State private var notesSaveTask: _Concurrency.Task<Void, Never>?
     @State var outgoingBlockedTasks: [TaskItem] = []
     @State var incomingBlockerTasks: [TaskItem] = []
     @State var blockSearchText: String = ""
@@ -48,6 +52,7 @@ public struct TaskDetailInspector: View {
             initialValue: RecurrenceChoice.from(rrule: task.recurrenceRule)
         )
         self._customRRule = State(initialValue: task.recurrenceRule ?? "")
+        self._notesDraft = State(initialValue: task.body)
     }
 
     /// Re-derives the editor's `@State` from the current `task`. Mirrors the
@@ -69,12 +74,16 @@ public struct TaskDetailInspector: View {
             // Re-assert the achromatic control tint here (lime stays for actions).
             .tint(NexusColor.Text.primary)
             .navigationTitle(task.title.isEmpty ? "Task" : task.title)
-            .task { loadLinkState() }
+            .task {
+                loadLinkState()
+                loadNotesDraft()
+            }
             .onChange(of: task.id) { _, _ in
                 // View identity is reused across selection swaps; resync derived
                 // state else an edit writes the previous task's fields onto the new.
                 resyncDerivedState()
                 loadLinkState()
+                loadNotesDraft()
             }
             .onKeyPress(.escape) {
                 onClose?()
@@ -245,7 +254,7 @@ public struct TaskDetailInspector: View {
 
     var notesCard: some View {
         inspectorCard("Notes") {
-            TextEditor(text: $task.body)
+            TextEditor(text: $notesDraft)
                 .font(NexusType.body)
                 .foregroundStyle(NexusColor.Text.primary)
                 .scrollContentBackground(.hidden)
@@ -259,7 +268,7 @@ public struct TaskDetailInspector: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(NexusColor.Line.hairline, lineWidth: 1)
                 }
-                .onChange(of: task.body) { _, _ in saveDebounced() }
+                .onChange(of: notesDraft) { _, _ in saveNotesDebounced() }
         }
     }
 
@@ -422,35 +431,63 @@ public struct TaskDetailInspector: View {
         }
     }
 
-    enum RecurrenceChoice: String, Identifiable, CaseIterable {
-        case none, daily, weekly, monthly, custom
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .none: return "None"
-            case .daily: return "Daily"
-            case .weekly: return "Weekly"
-            case .monthly: return "Monthly"
-            case .custom: return "Custom RRULE"
-            }
+    @MainActor
+    private func loadNotesDraft() {
+        notesSaveTask?.cancel()
+        notesDraft = (try? TaskNoteContent.markdown(for: task, in: modelContext)) ?? task.body
+    }
+
+    @MainActor
+    private func saveNotesDebounced() {
+        notesSaveTask?.cancel()
+        notesSaveTask = _Concurrency.Task { @MainActor in
+            try? await _Concurrency.Task.sleep(for: .seconds(1))
+            if _Concurrency.Task.isCancelled { return }
+            saveNotes()
         }
-        var rrule: String? {
-            switch self {
-            case .none: return nil
-            case .daily: return "FREQ=DAILY"
-            case .weekly: return "FREQ=WEEKLY"
-            case .monthly: return "FREQ=MONTHLY"
-            case .custom: return nil
-            }
+    }
+
+    @MainActor
+    private func saveNotes() {
+        let noteRepository = NoteRepository(context: modelContext, tasks: repository, now: Date.init)
+
+        do {
+            try TaskNoteContent.replaceMarkdown(notesDraft, for: task, in: modelContext, repository: noteRepository)
+            try repository?.update(task) { _ in }
+        } catch {
+            // Keep the editor responsive; the next explicit save/reload will retry through the same path.
         }
-        static func from(rrule: String?) -> RecurrenceChoice {
-            guard let rrule else { return .none }
-            switch rrule {
-            case "FREQ=DAILY": return .daily
-            case "FREQ=WEEKLY": return .weekly
-            case "FREQ=MONTHLY": return .monthly
-            default: return .custom
-            }
+    }
+}
+
+enum TaskDetailRecurrenceChoice: String, Identifiable, CaseIterable {
+    case none, daily, weekly, monthly, custom
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .none: return "None"
+        case .daily: return "Daily"
+        case .weekly: return "Weekly"
+        case .monthly: return "Monthly"
+        case .custom: return "Custom RRULE"
+        }
+    }
+    var rrule: String? {
+        switch self {
+        case .none: return nil
+        case .daily: return "FREQ=DAILY"
+        case .weekly: return "FREQ=WEEKLY"
+        case .monthly: return "FREQ=MONTHLY"
+        case .custom: return nil
+        }
+    }
+    static func from(rrule: String?) -> Self {
+        guard let rrule else { return .none }
+        switch rrule {
+        case "FREQ=DAILY": return .daily
+        case "FREQ=WEEKLY": return .weekly
+        case "FREQ=MONTHLY": return .monthly
+        default: return .custom
         }
     }
 }

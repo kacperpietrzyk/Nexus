@@ -50,7 +50,7 @@ public struct TasksAssignAgentTool: AgentTool {
         }
 
         await TasksToolSearchIndexing.reflect(task, in: context.searchIndex)
-        return try TasksToolJSON.encode(TaskDTO(from: task))
+        return try TasksToolJSON.encode(TaskNotesContentStore.dto(for: task, context: context))
     }
 }
 
@@ -88,6 +88,6 @@ public struct AgentsQueueTool: AgentTool {
             )
         }
         let tasks = try context.labelRepository.agentQueue(for: agent)
-        return try TasksToolJSON.encode(tasks.map { TaskDTO(from: $0) })
+        return try TasksToolJSON.encode(tasks.map { try TaskNotesContentStore.dto(for: $0, context: context) })
     }
 }

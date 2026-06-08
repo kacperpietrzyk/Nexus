@@ -28,7 +28,7 @@ public struct TasksGetTool: AgentTool {
             throw AgentError.notFound("Task not found: \(id.uuidString)")
         }
 
-        return try TasksToolJSON.encode(TaskDTO(from: task))
+        return try TasksToolJSON.encode(TaskNotesContentStore.dto(for: task, context: context))
     }
 }
 

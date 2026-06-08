@@ -22,6 +22,19 @@ enum TasksMutationToolSupport {
         try context.modelContext.context.fetch(FetchDescriptor<TaskItem>())
     }
 
+    @MainActor
+    static func validateProjectSectionAssignment(
+        projectID: UUID?,
+        sectionID: UUID?,
+        repo: TaskItemRepository
+    ) throws {
+        do {
+            try repo.validateProjectSectionAssignment(toProject: projectID, section: sectionID)
+        } catch {
+            throw AgentError.validation("project/section assignment failed: \(error)")
+        }
+    }
+
     static func iso8601Date(_ value: JSONValue?, field: String) throws -> Date? {
         guard let value else { return nil }
         guard let text = value.stringValue else {

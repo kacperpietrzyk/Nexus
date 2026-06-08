@@ -38,6 +38,6 @@ public struct TasksReopenTool: AgentTool {
         for row in rows where row.deletedAt == nil {
             await TasksToolSearchIndexing.reflect(row, in: context.searchIndex)
         }
-        return try TasksToolJSON.encode(TaskDTO(from: task))
+        return try TasksToolJSON.encode(TaskNotesContentStore.dto(for: task, context: context))
     }
 }

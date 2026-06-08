@@ -42,7 +42,7 @@ public struct TasksSearchTool: AgentTool {
         let tasksByID = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
         let result = hits.compactMap { hit -> TaskDTO? in
             guard let task = tasksByID[hit.itemID], task.deletedAt == nil else { return nil }
-            return TaskDTO(from: task)
+            return try? TaskNotesContentStore.dto(for: task, context: context)
         }
         return try TasksToolJSON.encode(Array(result.prefix(limit)))
     }

@@ -52,6 +52,12 @@ struct TasksCreateToolTests {
         #expect(dto.deadlineDate == "2026-05-10")
         #expect(dto.priority == 1)
         #expect(dto.tags == ["work", "q2"])
+
+        let task = try #require(try fixture.repo.context.fetch(FetchDescriptor<TaskItem>()).first)
+        #expect(task.body.isEmpty)
+        let noteID = try #require(task.noteRef)
+        let note = try #require(try fixture.repo.context.fetch(FetchDescriptor<Note>()).first { $0.id == noteID })
+        #expect(note.plainText == "Use latest metrics")
     }
 
     @MainActor
@@ -112,6 +118,25 @@ struct TasksCreateToolTests {
                 context: fixture.context
             )
         }
+    }
+
+    @MainActor
+    @Test("rejects unknown project_id without inserting task")
+    func rejectsUnknownProjectIDWithoutInsertingTask() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+
+        await #expect(throws: AgentError.self) {
+            _ = try await TasksCreateTool().call(
+                args: .object([
+                    "title": .string("orphan"),
+                    "project_id": .string(UUID().uuidString),
+                ]),
+                context: fixture.context
+            )
+        }
+
+        let rows = try fixture.repo.context.fetch(FetchDescriptor<TaskItem>())
+        #expect(rows.isEmpty)
     }
 
     @MainActor
@@ -264,6 +289,28 @@ struct TasksCreateToolTests {
         await #expect(throws: AgentError.validation("tags must be an array of strings")) {
             _ = try await TasksCreateTool().call(
                 args: .object(["title": .string("Task"), "tags": .string("work")]),
+                context: fixture.context
+            )
+        }
+    }
+
+    @MainActor
+    @Test("malformed reminder entries throw validation")
+    func malformedReminderEntriesThrowValidation() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+
+        await #expect(throws: AgentError.validation("invalid reminder entry")) {
+            _ = try await TasksCreateTool().call(
+                args: .object([
+                    "title": .string("Task"),
+                    "reminders": .array([
+                        .object([
+                            "type": .string("relative"),
+                            "offset": .string("-1800"),
+                            "anchor": .string("due"),
+                        ])
+                    ]),
+                ]),
                 context: fixture.context
             )
         }

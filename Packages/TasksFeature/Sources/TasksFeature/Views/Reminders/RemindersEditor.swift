@@ -18,6 +18,22 @@ enum RemindersReducer {
     }
 }
 
+struct ReminderQuickChoice: Equatable, Identifiable {
+    let label: String
+    let rule: ReminderRule
+
+    var id: String { label }
+
+    static let relativeChoices: [ReminderQuickChoice] = [
+        ReminderQuickChoice(label: "30m due", rule: .relative(offset: -1800, anchor: .due)),
+        ReminderQuickChoice(label: "1h due", rule: .relative(offset: -3600, anchor: .due)),
+        ReminderQuickChoice(label: "1d due", rule: .relative(offset: -86400, anchor: .due)),
+        ReminderQuickChoice(label: "30m deadline", rule: .relative(offset: -1800, anchor: .deadline)),
+        ReminderQuickChoice(label: "1h deadline", rule: .relative(offset: -3600, anchor: .deadline)),
+        ReminderQuickChoice(label: "1d deadline", rule: .relative(offset: -86400, anchor: .deadline)),
+    ]
+}
+
 /// Inspector section content for configuring task reminders. Binds directly
 /// to the task's `reminders` array; the caller persists on change. Renders
 /// inside an `inspectorCard` host — it does not supply its own card chrome.
@@ -25,10 +41,8 @@ struct RemindersEditor: View {
     @Binding var reminders: [ReminderRule]
     @State private var absoluteDate = Date().addingTimeInterval(3600)
 
-    private static let relativeChoices: [(label: String, offset: TimeInterval)] = [
-        ("30 min before", -1800),
-        ("1 hour before", -3600),
-        ("1 day before", -86400),
+    private let quickChoiceColumns = [
+        GridItem(.adaptive(minimum: 96), spacing: 6)
     ]
 
     var body: some View {
@@ -43,16 +57,13 @@ struct RemindersEditor: View {
                 }
             }
 
-            HStack(spacing: 6) {
-                ForEach(Self.relativeChoices, id: \.offset) { choice in
+            LazyVGrid(columns: quickChoiceColumns, alignment: .leading, spacing: 6) {
+                ForEach(ReminderQuickChoice.relativeChoices) { choice in
                     NexusButton(
                         variant: .outline,
                         size: .sm,
                         action: {
-                            reminders = RemindersReducer.add(
-                                .relative(offset: choice.offset, anchor: .due),
-                                to: reminders
-                            )
+                            reminders = RemindersReducer.add(choice.rule, to: reminders)
                         },
                         label: { Text(choice.label) }
                     )

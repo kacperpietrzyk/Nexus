@@ -27,11 +27,11 @@ public struct TasksCreateTool: AgentTool {
             "reminders": .array(
                 items: .object(
                     properties: [
-                        "type": .string(description: "relative | absolute"),
+                        "type": .string(enumValues: ["relative", "absolute"], description: "relative | absolute"),
                         "offset": .integer(
                             description: "relative: seconds before/after anchor (negative = before)"
                         ),
-                        "anchor": .string(description: "relative: due | deadline"),
+                        "anchor": .string(enumValues: ["due", "deadline"], description: "relative: due | deadline"),
                         "at": .string(description: "absolute: ISO8601 timestamp"),
                     ],
                     required: ["type"]
@@ -55,7 +55,7 @@ public struct TasksCreateTool: AgentTool {
 
         let task = TaskItem(
             title: fields.title,
-            body: fields.notes ?? "",
+            body: "",
             dueAt: fields.dueDate,
             deadlineAt: fields.deadlineAt,
             priority: fields.priority,
@@ -73,16 +73,46 @@ public struct TasksCreateTool: AgentTool {
                 throw AgentError.validation("parent_id validation failed: \(error)")
             }
         }
+        let assignment = try assignmentForCreate(
+            projectID: projectID,
+            sectionID: sectionID,
+            parentID: parentID,
+            context: context
+        )
+        if assignment.projectID != nil || assignment.sectionID != nil {
+            try TasksMutationToolSupport.validateProjectSectionAssignment(
+                projectID: assignment.projectID,
+                sectionID: assignment.sectionID,
+                repo: repo
+            )
+        }
         try repo.insert(task)
-        if projectID != nil || sectionID != nil {
+        if assignment.projectID != nil || assignment.sectionID != nil {
             do {
-                try repo.assign(task, toProject: projectID, section: sectionID)
+                try repo.assign(task, toProject: assignment.projectID, section: assignment.sectionID)
             } catch {
                 throw AgentError.validation("project/section assignment failed: \(error)")
             }
         }
+        if args["notes"] != nil {
+            try TaskNotesContentStore.replaceNotes(fields.notes, for: task, context: context)
+        }
         await context.searchIndex.upsert(IndexedDocument(task))
-        return try TasksToolJSON.encode(TaskDTO(from: task))
+        return try TasksToolJSON.encode(TaskNotesContentStore.dto(for: task, context: context))
+    }
+
+    @MainActor
+    private func assignmentForCreate(
+        projectID: UUID?,
+        sectionID: UUID?,
+        parentID: UUID?,
+        context: AgentContext
+    ) throws -> (projectID: UUID?, sectionID: UUID?) {
+        guard projectID == nil, sectionID == nil, let parentID else {
+            return (projectID, sectionID)
+        }
+        let parent = try TasksMutationToolSupport.liveTask(id: parentID, context: context)
+        return (parent.projectID, parent.sectionID)
     }
 }
 
@@ -222,13 +252,19 @@ enum TasksStructuredCreateArguments {
         guard value.arrayValue != nil else {
             throw AgentError.validation("reminders must be an array")
         }
-        let data = try JSONEncoder().encode(value)
-        let dtos = try JSONDecoder().decode([ReminderDTO].self, from: data)
-        return try dtos.map { dto in
-            guard let rule = dto.toRule() else {
-                throw AgentError.validation("invalid reminder entry")
+        do {
+            let data = try JSONEncoder().encode(value)
+            let dtos = try JSONDecoder().decode([ReminderDTO].self, from: data)
+            return try dtos.map { dto in
+                guard let rule = dto.toRule() else {
+                    throw AgentError.validation("invalid reminder entry")
+                }
+                return rule
             }
-            return rule
+        } catch let error as AgentError {
+            throw error
+        } catch {
+            throw AgentError.validation("invalid reminder entry")
         }
     }
 

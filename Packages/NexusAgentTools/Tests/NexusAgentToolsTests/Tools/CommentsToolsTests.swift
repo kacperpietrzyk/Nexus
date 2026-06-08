@@ -71,6 +71,42 @@ struct CommentsToolsTests {
         #expect(dtos.map(\.body) == ["updated body"])
     }
 
+    @MainActor
+    @Test("edit rejects empty body and preserves existing body")
+    func editRejectsEmptyBodyAndPreservesExistingBody() async throws {
+        let task = TaskItem(title: "edit-empty task")
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+        let addResult = try await CommentsAddTool().call(
+            args: .object([
+                "item_id": .string(task.id.uuidString),
+                "item_kind": .string("task"),
+                "body": .string("original body"),
+            ]),
+            context: fixture.context
+        )
+        let added = try TasksToolJSON.decode(CommentDTO.self, from: addResult)
+
+        await #expect(throws: AgentError.validation("body cannot be empty")) {
+            _ = try await CommentsEditTool().call(
+                args: .object([
+                    "id": .string(added.id),
+                    "body": .string("   "),
+                ]),
+                context: fixture.context
+            )
+        }
+
+        let listResult = try await CommentsListTool().call(
+            args: .object([
+                "item_id": .string(task.id.uuidString),
+                "item_kind": .string("task"),
+            ]),
+            context: fixture.context
+        )
+        let dtos = try TasksToolJSON.decode([CommentDTO].self, from: listResult)
+        #expect(dtos.map(\.body) == ["original body"])
+    }
+
     // MARK: - delete hides from list
 
     @MainActor
@@ -142,6 +178,25 @@ struct CommentsToolsTests {
         #expect(dto.body == "imported comment")
     }
 
+    @MainActor
+    @Test("add rejects empty external_source_id")
+    func addRejectsEmptyExternalSourceID() async throws {
+        let task = TaskItem(title: "empty external-source task")
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+
+        await #expect(throws: AgentError.validation("external_source_id cannot be empty")) {
+            _ = try await CommentsAddTool().call(
+                args: .object([
+                    "item_id": .string(task.id.uuidString),
+                    "item_kind": .string("task"),
+                    "body": .string("imported comment"),
+                    "external_source_id": .string("   "),
+                ]),
+                context: fixture.context
+            )
+        }
+    }
+
     // MARK: - item_kind=project also works
 
     @MainActor
@@ -209,6 +264,76 @@ struct CommentsToolsTests {
                     "item_id": .string(task.id.uuidString),
                     "item_kind": .string("meeting"),
                     "body": .string("nope"),
+                ]),
+                context: fixture.context
+            )
+        }
+    }
+
+    @MainActor
+    @Test("add rejects nonexistent task item_id")
+    func addRejectsNonexistentTaskID() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let missingID = UUID()
+
+        await #expect(throws: AgentError.notFound("Task not found: \(missingID.uuidString)")) {
+            _ = try await CommentsAddTool().call(
+                args: .object([
+                    "item_id": .string(missingID.uuidString),
+                    "item_kind": .string("task"),
+                    "body": .string("orphan"),
+                ]),
+                context: fixture.context
+            )
+        }
+    }
+
+    @MainActor
+    @Test("add rejects nonexistent project item_id")
+    func addRejectsNonexistentProjectID() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let missingID = UUID()
+
+        await #expect(throws: AgentError.notFound("Project not found: \(missingID.uuidString)")) {
+            _ = try await CommentsAddTool().call(
+                args: .object([
+                    "item_id": .string(missingID.uuidString),
+                    "item_kind": .string("project"),
+                    "body": .string("orphan"),
+                ]),
+                context: fixture.context
+            )
+        }
+    }
+
+    @MainActor
+    @Test("list rejects nonexistent task item_id")
+    func listRejectsNonexistentTaskID() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let missingID = UUID()
+
+        await #expect(throws: AgentError.notFound("Task not found: \(missingID.uuidString)")) {
+            _ = try await CommentsListTool().call(
+                args: .object([
+                    "item_id": .string(missingID.uuidString),
+                    "item_kind": .string("task"),
+                ]),
+                context: fixture.context
+            )
+        }
+    }
+
+    @MainActor
+    @Test("list rejects nonexistent project item_id")
+    func listRejectsNonexistentProjectID() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let missingID = UUID()
+
+        await #expect(throws: AgentError.notFound("Project not found: \(missingID.uuidString)")) {
+            _ = try await CommentsListTool().call(
+                args: .object([
+                    "item_id": .string(missingID.uuidString),
+                    "item_kind": .string("project"),
                 ]),
                 context: fixture.context
             )
