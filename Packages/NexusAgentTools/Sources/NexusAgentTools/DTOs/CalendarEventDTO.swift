@@ -42,11 +42,11 @@ public struct CalendarEventDTO: Codable, Sendable, Equatable {
 
     public init(from event: CalendarEvent) {
         self.id = event.id
-        self.calendarID = nil
+        self.calendarID = event.calendarID
         self.title = event.title
         self.start = ScheduleDTOFormatter.string(event.start)
         self.end = ScheduleDTOFormatter.string(event.end)
-        self.isAllDay = false
+        self.isAllDay = event.isAllDay
         self.location = event.location
         self.attendees = event.attendees.compactMap { $0.email ?? $0.name }
     }

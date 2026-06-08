@@ -10,6 +10,10 @@ public struct CalendarEvent: Identifiable, Hashable, Sendable {
     public let isVideoCall: Bool
     public let urlForJoin: URL?
     public let calendarColorHex: String?
+    public let isAllDay: Bool
+    /// The owning calendar's stable identifier, when known. Lets a reader
+    /// distinguish which calendar an event lives on (agent `calendar.events.list`).
+    public let calendarID: String?
 
     public init(
         id: String,
@@ -20,7 +24,9 @@ public struct CalendarEvent: Identifiable, Hashable, Sendable {
         attendees: [Attendee] = [],
         isVideoCall: Bool = false,
         urlForJoin: URL? = nil,
-        calendarColorHex: String? = nil
+        calendarColorHex: String? = nil,
+        isAllDay: Bool = false,
+        calendarID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -31,6 +37,8 @@ public struct CalendarEvent: Identifiable, Hashable, Sendable {
         self.isVideoCall = isVideoCall
         self.urlForJoin = urlForJoin
         self.calendarColorHex = calendarColorHex
+        self.isAllDay = isAllDay
+        self.calendarID = calendarID
     }
 
     public struct Attendee: Hashable, Sendable {
