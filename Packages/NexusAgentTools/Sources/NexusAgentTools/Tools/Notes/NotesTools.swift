@@ -298,6 +298,7 @@ public struct NotesLinkTool: AgentTool {
         guard try context.noteRepository.find(id: noteID) != nil else {
             throw AgentError.notFound("Note not found: \(noteID.uuidString)")
         }
+        try AgentEndpointValidator.validateLive(targetKind, targetID, context: context)
 
         let repository = LinkRepository(context: modelContext)
         let link = try repository.findOrCreate(

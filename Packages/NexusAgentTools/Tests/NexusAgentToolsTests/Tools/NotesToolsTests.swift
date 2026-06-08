@@ -554,4 +554,31 @@ struct NotesToolsTests {
             }
         }
     }
+
+    @MainActor
+    @Test("link rejects a hallucinated target instead of minting a dangling edge (A2)")
+    func linkValidatesTarget() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let created = try await NotesCreateTool().call(
+            args: .object(["title": .string("linker")]),
+            context: fixture.context
+        )
+        let noteID = try #require(UUID(uuidString: TasksToolJSON.decode(NoteDTO.self, from: created).id))
+
+        await #expect(throws: AgentError.self) {
+            _ = try await NotesLinkTool().call(
+                args: .object([
+                    "note_id": .string(noteID.uuidString),
+                    "target_id": .string(UUID().uuidString),
+                    "target_kind": .string("project"),
+                    "kind": .string("source"),
+                ]),
+                context: fixture.context
+            )
+        }
+        // No edge should have been created.
+        let count = try fixture.context.modelContext.context.fetch(FetchDescriptor<Link>())
+            .filter { $0.fromID == noteID }.count
+        #expect(count == 0)
+    }
 }

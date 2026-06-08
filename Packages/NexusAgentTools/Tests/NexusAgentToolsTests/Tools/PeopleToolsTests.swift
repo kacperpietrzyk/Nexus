@@ -218,6 +218,25 @@ struct PeopleToolsTests {
     }
 
     @MainActor
+    @Test("link rejects a hallucinated task target instead of minting a dangling mention (A2)")
+    func linkValidatesTaskTarget() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let person = try fixture.context.personRepository.create(displayName: "Erin")
+
+        await #expect(throws: AgentError.self) {
+            _ = try await PeopleLinkTool().call(
+                args: .object([
+                    "person_id": .string(person.id.uuidString),
+                    "object_id": .string(UUID().uuidString),
+                    "object_kind": .string("task"),
+                ]),
+                context: fixture.context
+            )
+        }
+        #expect(try fixture.context.linkRepository.backlinks(to: (.person, person.id)).isEmpty)
+    }
+
+    @MainActor
     @Test("I1: linking a task to a person yields ONLY a mentions edge and never an assignee")
     func linkTaskIsMentionNeverAssignee() async throws {
         // A real task in the store, with no agent assignee.
@@ -273,7 +292,10 @@ struct PeopleToolsTests {
     func linkIsIdempotent() async throws {
         let fixture = try await InMemoryAgentContext.make()
         let person = try fixture.context.personRepository.create(displayName: "Heidi")
-        let noteID = UUID()
+        let createdNote = try await NotesCreateTool().call(
+            args: .object(["title": .string("mentioned")]), context: fixture.context
+        )
+        let noteID = try #require(UUID(uuidString: TasksToolJSON.decode(NoteDTO.self, from: createdNote).id))
         let args = JSONValue.object([
             "person_id": .string(person.id.uuidString),
             "object_id": .string(noteID.uuidString),
