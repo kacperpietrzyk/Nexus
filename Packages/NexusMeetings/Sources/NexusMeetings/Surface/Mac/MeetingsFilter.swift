@@ -28,6 +28,15 @@ public final class MeetingsListViewModel: ObservableObject {
     @Published public var items: [Meeting] = []
     @Published public var filter: MeetingsFilter = .all
     @Published public var searchQuery: String = ""
+    /// Optional speaker filter (spec §6). `nil` = no speaker constraint (today's
+    /// behavior). When set, a meeting matches only if that speaker has a segment,
+    /// and — if a query is also present — only if the query appears *within that
+    /// speaker's* segments (not the whole transcript): a hit means the named
+    /// speaker actually said it. Matches the raw diarized token or the assigned
+    /// `displayName` via ``MergeStage/segments(_:forSpeaker:participants:)``.
+    @Published public var speakerFilter: String?
+    /// Distinct labeled speaker names across all meetings, for the filter menu.
+    @Published public private(set) var speakerOptions: [String] = []
 
     private let repository: MeetingRepository
     private let clock: () -> Date
@@ -42,8 +51,12 @@ public final class MeetingsListViewModel: ObservableObject {
 
     public func reload() {
         do {
+            speakerOptions = (try? repository.distinctParticipantNames()) ?? []
             items = try repository.allChronological().filter { meeting in
-                meeting.deletedAt == nil && matchesSearch(meeting) && matchesFilter(meeting)
+                meeting.deletedAt == nil
+                    && matchesSearch(meeting)
+                    && matchesSpeaker(meeting)
+                    && matchesFilter(meeting)
             }
         } catch {
             items = []
@@ -54,9 +67,39 @@ public final class MeetingsListViewModel: ObservableObject {
         let query = searchQuery.lowercased()
         guard !query.isEmpty else { return true }
 
+        // With a speaker selected, the query must land inside that speaker's
+        // segments (handled in `matchesSpeaker`); the broad title/summary match
+        // would otherwise leak meetings where someone else said the word.
+        if speakerFilter?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return true
+        }
+
         return meeting.title.lowercased().contains(query)
             || meeting.transcriptText.lowercased().contains(query)
             || meeting.summaryText.lowercased().contains(query)
+    }
+
+    private func matchesSpeaker(_ meeting: Meeting) -> Bool {
+        guard let speaker = speakerFilter?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !speaker.isEmpty
+        else {
+            return true
+        }
+
+        let segments = (try? MeetingSpeakerSegment.decode(meeting.segmentsJSON)) ?? []
+        let participants = (try? MeetingParticipant.decode(meeting.participantsJSON ?? Data())) ?? []
+        let speakerSegments = MergeStage.segments(
+            segments,
+            forSpeaker: speaker,
+            participants: participants
+        )
+        guard !speakerSegments.isEmpty else { return false }
+
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        return speakerSegments.contains {
+            $0.text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
     }
 
     private func matchesFilter(_ meeting: Meeting) -> Bool {

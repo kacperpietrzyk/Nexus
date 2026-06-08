@@ -104,6 +104,40 @@ struct MeetingsGetTranscriptToolTests {
         #expect(returnedSegments.count == 1)
         #expect(returnedSegments.first?["speaker"]?.stringValue == "A")
     }
+
+    @Test func speakerArgumentFiltersSegmentsAndImpliesInclude() async throws {
+        let context = try MeetingsTestSupport.makeContext()
+        let repo = MeetingRepository(context: context)
+        let segments = [
+            MeetingSpeakerSegment(startMs: 0, endMs: 1_000, speaker: "Speaker_1", text: "alpha"),
+            MeetingSpeakerSegment(startMs: 1_000, endMs: 2_000, speaker: "Speaker_2", text: "beta"),
+        ]
+        let meeting = Meeting(
+            title: "Transcript",
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            detectionSource: .manual,
+            transcriptText: "Speaker_1: alpha\nSpeaker_2: beta",
+            segmentsJSON: try MeetingSpeakerSegment.encode(segments),
+            participantsJSON: try MeetingParticipant.encode([
+                MeetingParticipant(speakerID: "Speaker_2", displayName: "Bob")
+            ])
+        )
+        try repo.insert(meeting)
+
+        // speaker filter implies includeSegments (no explicit flag passed) and
+        // resolves the display name "Bob" → Speaker_2.
+        let result = try await MeetingsGetTranscriptTool(repository: repo).call(
+            args: .object([
+                "meetingID": .string(meeting.id.uuidString),
+                "speaker": .string("Bob"),
+            ]),
+            context: agentContext(modelContext: context)
+        )
+        let returnedSegments = try #require(result["segments"]?.arrayValue)
+        #expect(returnedSegments.count == 1)
+        #expect(returnedSegments.first?["speaker"]?.stringValue == "Speaker_2")
+        #expect(returnedSegments.first?["text"]?.stringValue == "beta")
+    }
 }
 
 @MainActor
@@ -156,6 +190,56 @@ struct MeetingsSearchToolTests {
         #expect(hits.count == 1)
         #expect(hits.first?["title"]?.stringValue == "Weekly")
         #expect(hits.first?["snippet"]?.stringValue?.localizedCaseInsensitiveContains("Aurora") == true)
+    }
+
+    @Test func speakerArgumentNarrowsToThatSpeaker() async throws {
+        let context = try MeetingsTestSupport.makeContext()
+        let repo = MeetingRepository(context: context)
+        let segments = [
+            MeetingSpeakerSegment(startMs: 0, endMs: 1_000, speaker: "Speaker_1", text: "the budget is locked"),
+            MeetingSpeakerSegment(startMs: 1_000, endMs: 2_000, speaker: "Speaker_2", text: "the timeline slips"),
+        ]
+        let meeting = Meeting(
+            title: "Planning",
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            detectionSource: .manual,
+            transcriptText: "Speaker_1: the budget is locked\nSpeaker_2: the timeline slips",
+            segmentsJSON: try MeetingSpeakerSegment.encode(segments)
+        )
+        try repo.insert(meeting)
+
+        let tool = MeetingsSearchTool(repository: repo)
+
+        // Speaker_1 said "budget" → hit, with a snippet drawn from their segment.
+        let match = try await tool.call(
+            args: .object(["query": .string("budget"), "speaker": .string("Speaker_1")]),
+            context: agentContext(modelContext: context)
+        )
+        let matchHits = try #require(match["hits"]?.arrayValue)
+        #expect(matchHits.count == 1)
+        #expect(matchHits.first?["snippet"]?.stringValue?.localizedCaseInsensitiveContains("budget") == true)
+
+        // Speaker_2 did NOT say "budget" → no hit.
+        let miss = try await tool.call(
+            args: .object(["query": .string("budget"), "speaker": .string("Speaker_2")]),
+            context: agentContext(modelContext: context)
+        )
+        #expect(try #require(miss["hits"]?.arrayValue).isEmpty)
+    }
+
+    @Test func emptySpeakerArgumentBehavesAsNoFilter() async throws {
+        let context = try MeetingsTestSupport.makeContext()
+        let repo = MeetingRepository(context: context)
+        // Title-only match, no segments: speaker mode would find nothing, so an
+        // empty "speaker" string must normalize to nil and hit via searchableText.
+        try repo.insert(MeetingsTestSupport.meeting(title: "Weekly", transcript: "Discuss Project Aurora launch."))
+
+        let result = try await MeetingsSearchTool(repository: repo).call(
+            args: .object(["query": .string("aurora"), "speaker": .string("   ")]),
+            context: agentContext(modelContext: context)
+        )
+        let hits = try #require(result["hits"]?.arrayValue)
+        #expect(hits.map { $0["title"]?.stringValue } == ["Weekly"])
     }
 
     @Test func handlesNonASCIITranscriptSnippetRanges() async throws {

@@ -4,6 +4,7 @@ import NexusCore
 import NexusMeetings
 import NexusSync
 import SwiftData
+import TasksFeature
 
 @MainActor
 final class HelperComposition {
@@ -41,6 +42,7 @@ final class HelperComposition {
             router: router,
             rootAudioFolder: rootFolder,
             calendarProvider: calendarProvider,
+            dateExtractor: NLParserDateExtractor(),
             workspaceProvider: NSWorkspaceProvider(),
             recorder: recorder,
             appPatternRegistry: patternStore.load(),
