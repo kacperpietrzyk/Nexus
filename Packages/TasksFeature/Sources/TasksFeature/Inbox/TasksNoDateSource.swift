@@ -19,15 +19,18 @@ public actor TasksNoDateSource: InboxSource {
         return try await MainActor.run {
             let archivedProjectIDs =
                 (try? ProjectRepository(context: repository.context).archivedProjectIDs()) ?? []
-            return try TodayQuery()
+            let tasks = try TodayQuery()
                 .noDate(excludingProjectIDs: archivedProjectIDs)
                 .apply(in: repository.context)
+            let noteTextByID = taskInboxNoteTextByID(for: tasks, in: repository.context)
+            return
+                tasks
                 .map { task in
-                    InboxItem(
+                    return InboxItem(
                         id: task.id,
                         sourceID: sourceID,
                         title: task.title,
-                        body: task.body.isEmpty ? nil : task.body,
+                        body: taskInboxBody(for: task, noteTextByID: noteTextByID),
                         due: task.dueAt,
                         tags: task.tags,
                         createdAt: task.createdAt
@@ -61,4 +64,28 @@ public actor TasksNoDateSource: InboxSource {
             try repository.snooze(task, until: date)
         }
     }
+}
+
+@MainActor
+func taskInboxNoteTextByID(for tasks: [TaskItem], in context: ModelContext) -> [UUID: String] {
+    let noteIDs = Set(tasks.compactMap(\.noteRef))
+    guard !noteIDs.isEmpty else { return [:] }
+    guard let notes = try? context.fetch(FetchDescriptor<Note>()) else { return [:] }
+    return Dictionary(
+        uniqueKeysWithValues: notes.compactMap { note in
+            guard note.deletedAt == nil, noteIDs.contains(note.id) else { return nil }
+            if !note.plainText.isEmpty {
+                return (note.id, note.plainText)
+            }
+            let text = (try? NotePlainTextFlattener.plainText(for: NoteContentCoder.decode(note.contentData))) ?? ""
+            return (note.id, text)
+        }
+    )
+}
+
+@MainActor
+func taskInboxBody(for task: TaskItem, noteTextByID: [UUID: String]) -> String? {
+    let body = (task.noteRef.flatMap { noteTextByID[$0] } ?? task.body)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    return body.isEmpty ? nil : body
 }

@@ -1,6 +1,7 @@
 import Foundation
 import NexusAI
 import NexusCore
+import SwiftData
 
 public struct TaskAssistService: Sendable {
     public enum Action: Sendable, Equatable {
@@ -56,7 +57,13 @@ public struct TaskAssistService: Sendable {
 
     @MainActor
     public func run(_ action: Action, on task: TaskItem) async throws -> AssistResult {
-        let context = TaskContext(title: task.title, body: task.body)
+        let body: String
+        if let modelContext = task.modelContext {
+            body = try TaskNoteContent.markdown(for: task, in: modelContext)
+        } else {
+            body = task.body
+        }
+        let context = TaskContext(title: task.title, body: body)
         return try await run(action, context: context)
     }
 

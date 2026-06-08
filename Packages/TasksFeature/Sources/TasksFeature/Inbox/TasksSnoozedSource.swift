@@ -27,14 +27,17 @@ public actor TasksSnoozedSource: InboxSource {
                 },
                 sortBy: [SortDescriptor(\.snoozedUntil, order: .forward)]
             )
-            return try repository.context.fetch(descriptor)
+            let tasks = try repository.context.fetch(descriptor)
                 .filter { ($0.snoozedUntil ?? .distantPast) > nowValue }
+            let noteTextByID = taskInboxNoteTextByID(for: tasks, in: repository.context)
+            return
+                tasks
                 .map { task in
-                    InboxItem(
+                    return InboxItem(
                         id: task.id,
                         sourceID: sourceID,
                         title: task.title,
-                        body: task.body.isEmpty ? nil : task.body,
+                        body: taskInboxBody(for: task, noteTextByID: noteTextByID),
                         due: task.snoozedUntil,
                         tags: task.tags,
                         createdAt: task.createdAt

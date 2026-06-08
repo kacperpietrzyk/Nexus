@@ -89,6 +89,7 @@ public struct ActionItemsTabView: View {
 
 private struct ActionItemRow: View {
     let task: TaskItem
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         HStack(alignment: .top, spacing: 11) {
@@ -105,8 +106,10 @@ private struct ActionItemRow: View {
                     )
                     .strikethrough(task.status == .done, color: NexusColor.Text.disabled)
 
-                if !task.body.isEmpty {
-                    Text(task.body)
+                let taskBody = ((try? TaskNoteContent.plainText(for: task, in: modelContext)) ?? task.body)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !taskBody.isEmpty {
+                    Text(taskBody)
                         .font(NexusType.bodySmall)
                         .foregroundStyle(NexusColor.Text.tertiary)
                         .lineLimit(2)

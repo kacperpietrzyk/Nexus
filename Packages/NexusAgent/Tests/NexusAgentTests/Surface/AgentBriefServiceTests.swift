@@ -60,6 +60,31 @@ struct AgentBriefServiceTests {
     }
 
     @Test
+    func runtimeSuccessUpsertsDailyNote() async throws {
+        let harness = try AgentBriefHarness.make(scripts: [.text("  Agent daily brief.  \n")])
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let service = AgentBriefService(
+            runtime: harness.runtime,
+            threadStore: harness.threadStore,
+            legacy: { _ in "legacy" },
+            calendar: calendar,
+            dailyNoteWriter: AgentBriefDailyNoteWriter(modelContext: harness.modelContext, calendar: calendar)
+        )
+
+        let text = await service.brief(for: Self.request)
+
+        #expect(text == "Agent daily brief.")
+        let notes = try harness.modelContext.fetch(FetchDescriptor<Note>())
+        let note = try #require(notes.first)
+        #expect(notes.count == 1)
+        #expect(note.title == "Daily Brief 2023-11-14")
+        #expect(note.role == .dailyNote)
+        #expect(note.tags == ["daily", "2023-11-14"])
+        #expect(note.plainText == "Agent daily brief.")
+    }
+
+    @Test
     func sameKeySequentialCallsUseCachedTextWithoutSecondRuntimeTurn() async throws {
         let harness = try AgentBriefHarness.make(scripts: [.text("Agent once")])
         let service = AgentBriefService(
@@ -155,6 +180,7 @@ struct AgentBriefServiceTests {
 }
 
 private struct AgentBriefHarness {
+    let modelContext: ModelContext
     let runtime: AgentRuntime
     let threadStore: AgentThreadStore
     let messageStore: AgentMessageStore
@@ -181,6 +207,7 @@ private struct AgentBriefHarness {
         )
 
         return AgentBriefHarness(
+            modelContext: modelContext,
             runtime: AgentRuntime(
                 router: router,
                 threadStore: threadStore,
@@ -210,6 +237,9 @@ private struct AgentBriefHarness {
             AgentSchedule.self,
             ItemEmbedding.self,
             Link.self,
+            Note.self,
+            Project.self,
+            Section.self,
             DebugItem.self,
             QuotaLog.self,
             TaskItem.self,

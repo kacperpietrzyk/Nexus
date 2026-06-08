@@ -134,7 +134,7 @@ public struct AgentSearchSemanticTool: AgentTool, RagRetriever {
                             itemID: task.id,
                             kind: ItemKind.task.rawValue,
                             title: task.title,
-                            snippet: task.body,
+                            snippet: (try? TaskNoteContent.plainText(for: task, in: modelContext.context)) ?? task.body,
                             score: hit.score
                         )
                     )

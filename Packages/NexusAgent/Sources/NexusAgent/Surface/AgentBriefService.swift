@@ -1,4 +1,6 @@
 import Foundation
+import NexusCore
+import SwiftData
 import SwiftUI
 
 public struct AgentBriefCounts: Sendable, Hashable {
@@ -33,6 +35,53 @@ public protocol AgentBriefServiceProtocol: Sendable {
 }
 
 @MainActor
+public protocol AgentBriefDailyNoteWriting: Sendable {
+    func upsertDailyNote(for request: AgentBriefRequest, brief: String) throws
+}
+
+@MainActor
+public final class AgentBriefDailyNoteWriter: AgentBriefDailyNoteWriting, @unchecked Sendable {
+    private let modelContext: ModelContext
+    private let calendar: Calendar
+    private let keyFormatter: DateFormatter
+
+    public init(modelContext: ModelContext, calendar: Calendar = .current) {
+        self.modelContext = modelContext
+        self.calendar = calendar
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        self.keyFormatter = formatter
+    }
+
+    public func upsertDailyNote(for request: AgentBriefRequest, brief: String) throws {
+        let text = brief.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        let dayKey = keyFormatter.string(from: calendar.startOfDay(for: request.now))
+        let title = "Daily Brief \(dayKey)"
+        let tags = ["daily", dayKey]
+        let blocks = MarkdownBlockParser.parse(text)
+        let repository = NoteRepository(context: modelContext, now: { request.now })
+
+        if let existing = try findExistingDailyNote(title: title) {
+            try repository.updateFields(existing, title: title, tags: tags, role: .dailyNote)
+            try repository.updateContent(existing, blocks: blocks)
+        } else {
+            try repository.create(title: title, blocks: blocks, role: .dailyNote, tags: tags)
+        }
+    }
+
+    private func findExistingDailyNote(title: String) throws -> Note? {
+        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.deletedAt == nil })
+        return try modelContext.fetch(descriptor)
+            .first { $0.role == .dailyNote && $0.title == title }
+    }
+}
+
+@MainActor
 public final class AgentBriefService: AgentBriefServiceProtocol, @unchecked Sendable {
     private struct CacheKey: Hashable {
         let dayBucket: Date
@@ -52,6 +101,7 @@ public final class AgentBriefService: AgentBriefServiceProtocol, @unchecked Send
     private let isEnabled: @Sendable () -> Bool
     private let calendar: Calendar
     private let ttl: TimeInterval
+    private let dailyNoteWriter: (any AgentBriefDailyNoteWriting)?
     private var cache: [CacheKey: CacheEntry] = [:]
     private var inFlight: [CacheKey: Task<String, Never>] = [:]
 
@@ -62,7 +112,8 @@ public final class AgentBriefService: AgentBriefServiceProtocol, @unchecked Send
         legacy: @escaping @Sendable (AgentBriefRequest) async -> String,
         isEnabled: @escaping @Sendable () -> Bool = { true },
         calendar: Calendar = .current,
-        ttl: TimeInterval = 30 * 60
+        ttl: TimeInterval = 30 * 60,
+        dailyNoteWriter: (any AgentBriefDailyNoteWriting)? = nil
     ) {
         self.runtime = runtime
         self.threadStore = threadStore
@@ -71,16 +122,20 @@ public final class AgentBriefService: AgentBriefServiceProtocol, @unchecked Send
         self.isEnabled = isEnabled
         self.calendar = calendar
         self.ttl = ttl
+        self.dailyNoteWriter = dailyNoteWriter
     }
 
     public func brief(for request: AgentBriefRequest) async -> String {
         guard isEnabled(), let runtime, let threadStore else {
-            return await legacy(request)
+            let text = await legacy(request)
+            upsertDailyNoteIfNeeded(for: request, brief: text)
+            return text
         }
 
         let key = cacheKey(for: request)
         let now = Date.now
         if let entry = cache[key], now.timeIntervalSince(entry.timestamp) < ttl {
+            upsertDailyNoteIfNeeded(for: request, brief: entry.value)
             return entry.value
         }
         cache[key] = nil
@@ -91,12 +146,18 @@ public final class AgentBriefService: AgentBriefServiceProtocol, @unchecked Send
 
         let task = Task { @MainActor [self] in
             let text = await resolveBrief(for: request, runtime: runtime, threadStore: threadStore)
+            upsertDailyNoteIfNeeded(for: request, brief: text)
             cache[key] = CacheEntry(value: text, timestamp: Date.now)
             inFlight[key] = nil
             return text
         }
         inFlight[key] = task
         return await task.value
+    }
+
+    private func upsertDailyNoteIfNeeded(for request: AgentBriefRequest, brief: String) {
+        guard let dailyNoteWriter else { return }
+        try? dailyNoteWriter.upsertDailyNote(for: request, brief: brief)
     }
 
     private func resolveBrief(

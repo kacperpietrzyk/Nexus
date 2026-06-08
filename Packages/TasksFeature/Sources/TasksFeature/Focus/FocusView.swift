@@ -1,10 +1,12 @@
 import NexusCore
 import NexusUI
+import SwiftData
 import SwiftUI
 
 public struct FocusView: View {
     @Environment(\.focusModeState) private var focusModeState
     @Environment(\.taskRepository) private var taskRepository
+    @Environment(\.modelContext) private var modelContext
     @State private var markDoneError: String?
     @State private var cascadePrompt: CascadeCompletionPrompt?
 
@@ -97,7 +99,8 @@ public struct FocusView: View {
 
     @ViewBuilder
     private var bodyText: some View {
-        let trimmedBody = task.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = ((try? TaskNoteContent.plainText(for: task, in: modelContext)) ?? task.body)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedBody.isEmpty {
             Text(trimmedBody)
                 .nexusType(.body)
