@@ -201,7 +201,9 @@ public final class PersonRepository {
             predicate: #Predicate { person in person.externalSourceID == externalSourceID }
         )
         if let existing = try context.fetch(descriptor).first(where: { $0.deletedAt == nil }) {
-            if !displayName.isEmpty { existing.displayName = displayName }
+            if !displayName.isEmpty, Self.shouldReplaceDisplayName(existing: existing, incoming: displayName, email: email) {
+                existing.displayName = displayName
+            }
             existing.aliases = Self.mergedAliases(existing.aliases, aliases)
             if let email, !email.isEmpty { existing.email = email }
             if let phone, !phone.isEmpty { existing.phone = phone }
@@ -357,6 +359,21 @@ public final class PersonRepository {
     }
 
     // MARK: - Helpers
+
+    /// Whether an incoming non-empty `displayName` should replace the existing one.
+    ///
+    /// When a calendar attendee has no name, `MeetingPeopleLinker` falls back to the
+    /// email as the `displayName` (passing the same string as both `displayName` and
+    /// `email`). That email-as-name is a placeholder, not a real name: it must never
+    /// overwrite an already-recorded real name (ME1). We treat `displayName == email`
+    /// as a placeholder and only let it land when the existing name is itself absent
+    /// or the same placeholder — so a real name still upgrades a placeholder, but not
+    /// the reverse.
+    static func shouldReplaceDisplayName(existing: Person, incoming: String, email: String?) -> Bool {
+        let incomingIsEmailPlaceholder = email.map { !$0.isEmpty && $0 == incoming } ?? false
+        guard incomingIsEmailPlaceholder else { return true }
+        return existing.displayName.isEmpty || existing.displayName == existing.email
+    }
 
     /// Unions two alias lists, dropping empties and case/diacritic-insensitive
     /// duplicates, preserving first-seen order.
