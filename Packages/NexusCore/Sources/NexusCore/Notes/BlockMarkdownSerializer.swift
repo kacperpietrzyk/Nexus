@@ -53,7 +53,7 @@ public enum BlockMarkdownSerializer {
     private static func markdown(for block: Block, options: Options) -> String {
         switch block.kind {
         case .paragraph(let runs):
-            return inlineMarkdown(runs)
+            return escapeBlockPrefix(inlineMarkdown(runs))
         case .heading(let level, let runs):
             let clamped = min(max(level, 1), 6)
             return String(repeating: "#", count: clamped) + " " + inlineMarkdown(runs)
@@ -108,11 +108,19 @@ public enum BlockMarkdownSerializer {
     }
 
     private static func inlineMarkdown(_ run: InlineRun) -> String {
-        var text = run.text
+        let marks = run.marks
+        // Code spans and links/wikilinks are read back BYTE-LITERALLY by the
+        // parser (their content is not re-inline-parsed), so their text must NOT
+        // be escaped — escaping would leak backslashes into the literal payload.
+        // Every other run's text IS re-parsed, so escape its inline metacharacters
+        // (mirrored by the parser's `\X` unescape).
+        let isLiteralContext =
+            marks.contains(.code)
+            || marks.contains { if case .link = $0 { return true } else { return false } }
+        var text = isLiteralContext ? run.text : escapeInline(run.text)
         // Links wrap the (already mark-decorated) text. Apply emphasis markers
         // inner→outer in a fixed order so the same run always serializes the same
         // way: code innermost, then strike, italic, bold; link outermost.
-        let marks = run.marks
         if marks.contains(.code) {
             text = "`\(text)`"
         }
@@ -142,5 +150,104 @@ public enum BlockMarkdownSerializer {
             }
         }
         return text
+    }
+
+    // MARK: - Escaping (keeps the round-trip a BLOCK fixpoint, not just a string)
+
+    /// Backslash-escape the inline metacharacters the parser treats specially, so
+    /// literal `\ * ` ~ [` in re-parsed run text survives the round-trip instead of
+    /// being read back as emphasis/code/link delimiters. Mirrored by the parser's
+    /// `\X` unescape. Backslash is escaped first (it is the escape char itself).
+    private static func escapeInline(_ text: String) -> String {
+        var out = ""
+        out.reserveCapacity(text.count)
+        for character in text {
+            switch character {
+            case "\\", "*", "`", "~", "[":
+                out.append("\\")
+                out.append(character)
+            default:
+                out.append(character)
+            }
+        }
+        return out
+    }
+
+    /// Prepend a backslash to a paragraph whose rendered line would otherwise be
+    /// classified as a different block (heading/list/quote/divider/numbered, incl.
+    /// their empty/bare forms). The parser drops the leading `\` via inline unescape
+    /// and reads the line as a paragraph. Backtick-fence and `![…` lines are already
+    /// neutralized by `escapeInline` (it escapes `` ` `` and `[`), so only the
+    /// line-start-only sigils are handled here.
+    private static func escapeBlockPrefix(_ rendered: String) -> String {
+        // Numbered lines escape the DOT (punctuation), not the leading digit: the
+        // parser's punctuation-only unescape would leave `\1` literal but reverses
+        // `1\.` -> `1.`.
+        if isNumberedPrefixed(rendered) || isBareNumbered(rendered) {
+            return escapeNumberedDot(rendered)
+        }
+        // Every other trigger starts with a punctuation char (`#`/`-`/`>`), so a
+        // single leading backslash round-trips cleanly through the unescape.
+        return needsBlockPrefixEscape(rendered) ? "\\" + rendered : rendered
+    }
+
+    private static func needsBlockPrefixEscape(_ line: String) -> Bool {
+        if line == "---" { return true }
+        // Bare/empty marker forms a paragraph could otherwise be read as (the empty
+        // bullet/quote serializations `- `/`> ` trim to these); `- [ ]` is covered
+        // by the `- ` prefix.
+        if line == "-" || line == ">" { return true }
+        if line.hasPrefix("- ") || line.hasPrefix("> ") { return true }
+        if isHeadingPrefixed(line) { return true }
+        return false
+    }
+
+    /// Insert a backslash before the dot of a numbered line (`1. x` -> `1\. x`).
+    private static func escapeNumberedDot(_ line: String) -> String {
+        guard let dotIndex = digitsBeforeDot(line) else { return line }
+        var result = line
+        result.insert("\\", at: dotIndex)
+        return result
+    }
+
+    /// `^#{1,6} ` — matches the parser's heading classifier (1–6 hashes then a space).
+    private static func isHeadingPrefixed(_ line: String) -> Bool {
+        var hashes = 0
+        for character in line {
+            if character == "#" {
+                hashes += 1
+                if hashes > 6 { return false }
+            } else {
+                return hashes >= 1 && character == " "
+            }
+        }
+        return false
+    }
+
+    /// `^[0-9]+\. ` — matches the parser's numbered classifier (digits, dot, space).
+    private static func isNumberedPrefixed(_ line: String) -> Bool {
+        digitsBeforeDot(line).map { line.distance(from: line.startIndex, to: $0) > 0 && trailingDotSpace($0, in: line) }
+            ?? false
+    }
+
+    /// `^[0-9]+\.$` — the bare/empty numbered form (`1.`), which trims off its space.
+    private static func isBareNumbered(_ line: String) -> Bool {
+        guard let dotIndex = digitsBeforeDot(line), line.distance(from: line.startIndex, to: dotIndex) > 0 else {
+            return false
+        }
+        return line.index(after: dotIndex) == line.endIndex
+    }
+
+    /// Index of the `.` immediately following a run of leading digits, or nil.
+    private static func digitsBeforeDot(_ line: String) -> String.Index? {
+        var index = line.startIndex
+        while index < line.endIndex, line[index].isNumber { index = line.index(after: index) }
+        guard index < line.endIndex, line[index] == "." else { return nil }
+        return index
+    }
+
+    private static func trailingDotSpace(_ dotIndex: String.Index, in line: String) -> Bool {
+        let afterDot = line.index(after: dotIndex)
+        return afterDot < line.endIndex && line[afterDot] == " "
     }
 }
