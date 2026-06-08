@@ -65,6 +65,19 @@ struct CustomVocabularyReplacerTests {
         #expect(replacer.apply(to: input) == once)
     }
 
+    @Test func laterShorterRuleDoesNotRematchAnEarlierRulesOutput() {
+        // ME2: "new york" -> "New York" then "york" -> "York City" must NOT cascade
+        // into "New York City" — the first rule's output is protected from being
+        // re-matched by the later, shorter rule.
+        let replacer = CustomVocabularyReplacer([
+            CustomVocabularyEntry(term: "new york", replacement: "New York"),
+            CustomVocabularyEntry(term: "york", replacement: "York City"),
+        ])
+        #expect(replacer.apply(to: "new york office") == "New York office")
+        // A standalone "york" (not produced by an earlier rule) still gets replaced.
+        #expect(replacer.apply(to: "old york town") == "old York City town")
+    }
+
     @Test func appliesToSegmentTextOnlyLeavingTimingsAndSpeaker() {
         let replacer = CustomVocabularyReplacer([
             CustomVocabularyEntry(term: "threat forge", replacement: "ThreatForge")
