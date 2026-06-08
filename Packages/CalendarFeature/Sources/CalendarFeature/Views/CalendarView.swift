@@ -231,7 +231,7 @@ public struct CalendarView: View {
             EventEditorView(
                 mode: .create,
                 calendars: availableCalendars,
-                onSave: { draft in
+                onSave: { draft, _ in
                     Task {
                         _ = await viewModel.createEvent(draft)
                         editorContext = nil
@@ -244,15 +244,15 @@ public struct CalendarView: View {
                 mode: .edit(eventID: eventID),
                 calendars: availableCalendars,
                 initial: viewModel.draft(forEventID: eventID, calendars: availableCalendars),
-                onSave: { draft in
+                onSave: { draft, span in
                     Task {
-                        await viewModel.updateEvent(id: eventID, draft: draft)
+                        await viewModel.updateEvent(id: eventID, draft: draft, span: span)
                         editorContext = nil
                     }
                 },
-                onDelete: {
+                onDelete: { span in
                     Task {
-                        await viewModel.deleteEvent(id: eventID)
+                        await viewModel.deleteEvent(id: eventID, span: span)
                         editorContext = nil
                     }
                 },

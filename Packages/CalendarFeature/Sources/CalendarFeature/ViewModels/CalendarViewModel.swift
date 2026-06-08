@@ -277,20 +277,20 @@ public final class CalendarViewModel {
         }
     }
 
-    public func updateEvent(id: String, draft: EventDraft) async {
+    public func updateEvent(id: String, draft: EventDraft, span: CalendarEventSpan = .thisEvent) async {
         guard let writer else { return }
         do {
-            try await writer.updateEvent(id: id, with: draft)
+            try await writer.updateEvent(id: id, with: draft, span: span)
             await load()
         } catch {
             lastError = String(describing: error)
         }
     }
 
-    public func deleteEvent(id: String) async {
+    public func deleteEvent(id: String, span: CalendarEventSpan = .thisEvent) async {
         guard let writer else { return }
         do {
-            try await writer.deleteEvent(id: id)
+            try await writer.deleteEvent(id: id, span: span)
             await load()
         } catch {
             lastError = String(describing: error)

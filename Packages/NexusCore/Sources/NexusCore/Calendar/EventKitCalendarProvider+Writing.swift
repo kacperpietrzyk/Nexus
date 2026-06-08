@@ -50,29 +50,38 @@ extension EventKitCalendarProvider: CalendarEventWriting, CalendarListing {
         }
     }
 
-    public func updateEvent(id: String, with draft: EventDraft) async throws {
+    public func updateEvent(id: String, with draft: EventDraft, span: CalendarEventSpan) async throws {
         try await onStore { store in
             guard let event = store.event(withIdentifier: id) else {
                 throw CalendarProviderError.underlying("Event not found: \(id)")
             }
             try Self.apply(draft, to: event, in: store)
             do {
-                try store.save(event, span: .thisEvent, commit: true)
+                try store.save(event, span: Self.ekSpan(span), commit: true)
             } catch {
                 throw CalendarProviderError.underlying(String(describing: error))
             }
         }
     }
 
-    public func deleteEvent(id: String) async throws {
+    public func deleteEvent(id: String, span: CalendarEventSpan) async throws {
         try await onStore { store in
             // No-op if the event is already gone (idempotent delete, spec §14 cascade).
             guard let event = store.event(withIdentifier: id) else { return }
             do {
-                try store.remove(event, span: .thisEvent, commit: true)
+                try store.remove(event, span: Self.ekSpan(span), commit: true)
             } catch {
                 throw CalendarProviderError.underlying(String(describing: error))
             }
+        }
+    }
+
+    /// Map the EventKit-free span onto `EKSpan`. EventKit applies it only to
+    /// recurring events; for a single event the span is inert (R2/R3).
+    static func ekSpan(_ span: CalendarEventSpan) -> EKSpan {
+        switch span {
+        case .thisEvent: .thisEvent
+        case .futureEvents: .futureEvents
         }
     }
 
