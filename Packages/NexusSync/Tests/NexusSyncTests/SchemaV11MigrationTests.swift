@@ -175,7 +175,7 @@ import Testing
     /// Seed does not re-create a label whose name already exists (case-insensitive),
     /// and does not resurrect / re-count user rows that share a name. A pre-existing
     /// user `feature` (lowercase match) blocks the system `feature` insert.
-    @Test func seedSkipsExistingNameCaseInsensitively() throws {
+    @Test func seedIsNotBlockedByUserLabelOfSameName() throws {
         let container = try ModelContainer(
             for: Schema(NexusSchemaV11.models, version: NexusSchemaV11.versionIdentifier),
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
@@ -188,16 +188,16 @@ import Testing
 
         try NexusMigrationPlan.seedSystemLabels(in: context)
 
-        let featureLabels = try context.fetch(
-            FetchDescriptor<Label>(predicate: #Predicate { $0.name.localizedStandardContains("eature") })
-        )
-        // Only the pre-existing user "Feature" — the system "feature" was skipped.
-        let featureNamed = featureLabels.filter { $0.name.lowercased() == "feature" }
-        #expect(featureNamed.count == 1)
-        #expect(featureNamed.first?.isSystem == false)
-        // The rest of the system set still seeded.
+        // P4: the user's free "Feature" must NOT suppress the canonical system
+        // "feature" (+ its stable id) — they coexist.
+        let featureNamed = try context.fetch(FetchDescriptor<Label>())
+            .filter { $0.name.lowercased() == "feature" }
+        #expect(featureNamed.count == 2)
+        #expect(featureNamed.contains { $0.id == SystemLabel.feature.id && $0.isSystem })
+        #expect(featureNamed.contains { !$0.isSystem })
+        // The full system set seeded alongside the one extra user label.
         let all = try context.fetch(FetchDescriptor<Label>())
-        #expect(all.count == SystemLabel.allCases.count)  // 1 user "Feature" + 5 other system labels
+        #expect(all.count == SystemLabel.allCases.count + 1)
     }
 
     // MARK: - Production split-container path (on-disk, crown jewel)

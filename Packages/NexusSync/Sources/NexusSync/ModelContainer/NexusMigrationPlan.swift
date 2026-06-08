@@ -168,33 +168,15 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
     /// NOT depend on `LabelRepository` (which is `@MainActor`); it touches only
     /// non-isolated `NexusCore` value/model types.
     ///
-    /// Idempotent: each `SystemLabel` is matched case-insensitively by name against
-    /// the existing non-soft-deleted `Label` rows (CloudKit forbids
-    /// `@Attribute(.unique)`), and only the missing ones are created. A re-run, or a
-    /// partially-completed prior run, never double-creates. A store already carrying
-    /// the full set yields no work and no save.
+    /// Idempotent and identity-based: delegates to the shared `SystemLabelSeeder`
+    /// (the same helper `LabelRepository.seedSystemLabels` uses) so the migration
+    /// and runtime seeds can't drift (P4). A `SystemLabel` is created with its
+    /// stable `SystemLabel.id` and skipped when that id already exists (live or
+    /// tombstoned) or a live *system* label shares its `(group, name)`. A re-run,
+    /// a partially-completed prior run, or a store carrying a user's same-named
+    /// free label never double-creates and never blocks the canonical label.
     static func seedSystemLabels(in context: ModelContext) throws {
-        let existing = try context.fetch(
-            FetchDescriptor<Label>(predicate: #Predicate { label in label.deletedAt == nil })
-        )
-        var presentNames = Set(existing.map { $0.name.lowercased() })
-        var didInsert = false
-
-        for system in SystemLabel.allCases where !presentNames.contains(system.name.lowercased()) {
-            let label = Label(
-                name: system.name,
-                glyphKey: system.glyphKey,
-                group: system.group,
-                isSystem: true
-            )
-            context.insert(label)
-            presentNames.insert(system.name.lowercased())
-            didInsert = true
-        }
-
-        if didInsert {
-            try context.save()
-        }
+        try SystemLabelSeeder.seed(in: context)
     }
 
     /// Minimal decode shape for one `Meeting.participantsJSON` entry. Deliberately
