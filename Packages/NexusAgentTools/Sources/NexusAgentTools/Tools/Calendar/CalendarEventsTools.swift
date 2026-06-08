@@ -81,7 +81,10 @@ public struct CalendarEventsCreateTool: AgentTool {
                 start: fields.start,
                 end: fields.end,
                 isAllDay: fields.isAllDay,
-                location: fields.location
+                location: fields.location,
+                attendees: fields.attendees,
+                recurrence: fields.recurrence,
+                alarmOffsets: fields.alarmOffsets
             )
             let eventID = try await writer.createEvent(draft)
             let dto = CalendarEventDTO(
@@ -92,7 +95,7 @@ public struct CalendarEventsCreateTool: AgentTool {
                 end: ScheduleDTOFormatter.string(fields.end),
                 isAllDay: fields.isAllDay,
                 location: fields.location,
-                attendees: []
+                attendees: fields.attendees
             )
             return try TasksToolJSON.encode(dto)
         }
@@ -138,7 +141,10 @@ public struct CalendarEventsUpdateTool: AgentTool {
                 start: fields.start,
                 end: fields.end,
                 isAllDay: fields.isAllDay,
-                location: fields.location
+                location: fields.location,
+                attendees: fields.attendees,
+                recurrence: fields.recurrence,
+                alarmOffsets: fields.alarmOffsets
             )
             try await writer.updateEvent(id: eventID, with: draft)
             let dto = CalendarEventDTO(
@@ -149,7 +155,7 @@ public struct CalendarEventsUpdateTool: AgentTool {
                 end: ScheduleDTOFormatter.string(fields.end),
                 isAllDay: fields.isAllDay,
                 location: fields.location,
-                attendees: []
+                attendees: fields.attendees
             )
             return try TasksToolJSON.encode(dto)
         }

@@ -14,6 +14,7 @@ final class FakeCalendarProvider: CalendarEventProviding, CalendarEventWriting, 
     private(set) var store: [String: CalendarEventSnapshot] = [:]
 
     private(set) var createdDrafts: [EventDraft] = []
+    private(set) var updatedDrafts: [EventDraft] = []
     private(set) var updatedIDs: [String] = []
     private(set) var deletedIDs: [String] = []
     private(set) var ensureNexusCount = 0
@@ -80,6 +81,7 @@ final class FakeCalendarProvider: CalendarEventProviding, CalendarEventWriting, 
 
     func updateEvent(id: String, with draft: EventDraft) async throws {
         locked {
+            updatedDrafts.append(draft)
             updatedIDs.append(id)
             store[id] = CalendarEventSnapshot(
                 eventID: id,
