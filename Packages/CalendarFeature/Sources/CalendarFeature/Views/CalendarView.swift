@@ -78,8 +78,24 @@ public struct CalendarView: View {
             if let overload = viewModel.overload, overload.isOverloaded {
                 overloadBanner(overload)
             }
+            if let notice = viewModel.planNotice {
+                planNoticeBanner(notice)
+            }
         }
         .padding(14)
+    }
+
+    private func planNoticeBanner(_ notice: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "moon.zzz.fill")
+                .foregroundStyle(NexusColor.Text.muted)
+            Text(notice)
+                .font(NexusType.caption)
+                .foregroundStyle(NexusColor.Text.secondary)
+            Spacer()
+        }
+        .padding(8)
+        .background(NexusColor.Background.panel, in: RoundedRectangle(cornerRadius: NexusRadius.r2, style: .continuous))
     }
 
     private var navButtons: some View {

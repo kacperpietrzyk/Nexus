@@ -20,6 +20,9 @@ public final class CalendarViewModel {
     public private(set) var blocks: [ScheduledBlock] = []
     public private(set) var authorization: CalendarAuthorizationStatus
     public private(set) var overload: OverloadReport?
+    /// Non-error notice from the last `planDay` — e.g. an empty plan because it's
+    /// past working hours (S8). Surfaced as a banner, distinct from `lastError`.
+    public private(set) var planNotice: String?
     public private(set) var isLoading = false
     public var lastError: String?
 
@@ -161,7 +164,11 @@ public final class CalendarViewModel {
 
     // MARK: - Plan my day (spec §10)
 
-    public func planDay(horizonDays: Int = 1) async {
+    /// Plan today (spec §10). The planner always plans the single current day; the
+    /// previously-exposed `horizonDays` knob was never passed >1 and fetched only the
+    /// day window, so a multi-day call would have overbooked future days (S2) — it is
+    /// removed rather than left as a latent footgun.
+    public func planDay() async {
         let win = window
         let fetched = (try? await reader.eventsBetween(start: win.start, end: win.end)) ?? []
         do {
@@ -169,14 +176,34 @@ public final class CalendarViewModel {
                 events: fetched,
                 prefs: preferences,
                 now: now(),
-                calendar: calendar,
-                horizonDays: horizonDays
+                calendar: calendar
             )
             overload = result.overload
+            // S8: planning after the working day has ended collapses today's window
+            // to nothing → no proposals. Surface a clear notice instead of a silent
+            // empty plan. (A daytime empty result just means nothing to schedule.)
+            planNotice =
+                result.proposals.isEmpty && isAfterWorkday(now())
+                ? "It's past today's working hours — plan tomorrow instead."
+                : nil
         } catch {
             lastError = String(describing: error)
         }
         reloadBlocks()
+    }
+
+    /// True when `instant` is at or after today's configured workday end — used to
+    /// explain an empty plan produced late at night (S8).
+    private func isAfterWorkday(_ instant: Date) -> Bool {
+        guard
+            let end = calendar.date(
+                bySettingHour: preferences.workdayEnd.hour ?? 18,
+                minute: preferences.workdayEnd.minute ?? 0,
+                second: 0,
+                of: instant
+            )
+        else { return false }
+        return instant >= end
     }
 
     // MARK: - Block accept / reject / manual (spec §7)

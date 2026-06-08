@@ -27,11 +27,13 @@ struct CalendarViewModelTests {
     private func makeViewModel(
         context: ModelContext,
         reader: MockCalendarEventProvider = MockCalendarEventProvider(),
-        writer: MockCalendarWriter? = MockCalendarWriter()
+        writer: MockCalendarWriter? = MockCalendarWriter(),
+        now: Date? = nil
     ) -> CalendarViewModel {
         let store = UserDefaultsCalendarPreferencesStore(
             defaults: UserDefaults(suiteName: "test-\(UUID().uuidString)")!
         )
+        let instant = now ?? self.now
         return CalendarViewModel(
             context: context,
             reader: reader,
@@ -39,7 +41,7 @@ struct CalendarViewModelTests {
             listing: writer,
             preferencesStore: store,
             calendar: calendar,
-            now: { self.now }
+            now: { instant }
         )
     }
 
@@ -57,6 +59,26 @@ struct CalendarViewModelTests {
         await viewModel.planDay()
 
         #expect(viewModel.blocks.contains { $0.status == .proposed && $0.taskID == task.id })
+        #expect(viewModel.planNotice == nil)  // daytime plan → no after-hours notice
+    }
+
+    @Test("planDay past working hours surfaces a notice, not a silent empty plan (S8)")
+    func planDayAfterHoursNotice() async throws {
+        let context = try makeContext()
+        let task = TaskItem(title: "late", dueAt: now.addingTimeInterval(13 * 3600 + 1800))
+        task.estimatedDurationSeconds = 1800
+        task.durationSourceRaw = DurationSource.explicit.rawValue
+        context.insert(task)
+        try context.save()
+
+        // 22:00 UTC — past the default 18:00 workday end → today's window collapses.
+        let night = now.addingTimeInterval(13 * 3600)
+        let viewModel = makeViewModel(context: context, now: night)
+        await viewModel.load()
+        await viewModel.planDay()
+
+        #expect(viewModel.blocks.isEmpty)
+        #expect(viewModel.planNotice != nil)
     }
 
     @Test("accept flips a proposed block to accepted with a mirror event id")
