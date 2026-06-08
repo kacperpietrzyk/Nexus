@@ -59,11 +59,42 @@ public final class PersonRepository {
     public let context: ModelContext
     public let now: () -> Date
     private let links: LinkRepository
+    /// Search/Spotlight observers (mirrors `LinkableRepository`). When non-empty, the
+    /// repo fires `didUpsert` after create/update/upsert (when the indexed
+    /// `searchableText` — displayName + aliases + company — changes) and
+    /// `didSoftDelete` after softDelete/merge. Default empty so existing callers and
+    /// tests are unaffected. Graph-edge ops (`linkMention`/`linkAttendee`) don't touch
+    /// `searchableText`, so they don't fan out.
+    private let observers: [any LinkableObserver]
 
-    public init(context: ModelContext, now: @escaping () -> Date = { .now }) {
+    public init(
+        context: ModelContext,
+        now: @escaping () -> Date = { .now },
+        observers: [any LinkableObserver] = []
+    ) {
         self.context = context
         self.now = now
         self.links = LinkRepository(context: context)
+        self.observers = observers
+    }
+
+    /// Fans out an upsert for `person` (snapshot built on `@MainActor`, awaited into
+    /// each observer's actor via detached `Task`). Mirrors `LinkableRepository`.
+    private func broadcastUpsert(for person: Person) {
+        guard !observers.isEmpty else { return }
+        let document = IndexedDocument(person)
+        for observer in observers {
+            _Concurrency.Task { await observer.didUpsert(document) }
+        }
+    }
+
+    /// Fans out a soft-delete for `person` to every observer.
+    private func broadcastSoftDelete(for person: Person) {
+        guard !observers.isEmpty else { return }
+        let id = person.id
+        for observer in observers {
+            _Concurrency.Task { await observer.didSoftDelete(kind: .person, id: id) }
+        }
     }
 
     // MARK: - CRUD
@@ -92,6 +123,7 @@ public final class PersonRepository {
         person.updatedAt = stamp
         context.insert(person)
         try context.save()
+        broadcastUpsert(for: person)
         return person
     }
 
@@ -112,6 +144,7 @@ public final class PersonRepository {
         if let note { person.note = note }
         person.updatedAt = now()
         try context.save()
+        broadcastUpsert(for: person)
     }
 
     public func find(id: UUID) throws -> Person? {
@@ -144,6 +177,7 @@ public final class PersonRepository {
         person.deletedAt = stamp
         person.updatedAt = stamp
         try context.save()
+        broadcastSoftDelete(for: person)
     }
 
     // MARK: - Dedup / upsert (spec §4.3)
@@ -175,6 +209,7 @@ public final class PersonRepository {
             if let note, !note.isEmpty { existing.note = note }
             existing.updatedAt = now()
             try context.save()
+            broadcastUpsert(for: existing)
             return existing
         }
         return try create(
@@ -269,6 +304,11 @@ public final class PersonRepository {
         from.updatedAt = stamp
 
         try context.save()
+
+        // The survivor's searchable text changed (merged aliases / filled fields);
+        // the merged-away duplicate is now a tombstone. Re-index one, evict the other.
+        broadcastUpsert(for: into)
+        broadcastSoftDelete(for: from)
     }
 
     // MARK: - Graph edges (spec §4.2)

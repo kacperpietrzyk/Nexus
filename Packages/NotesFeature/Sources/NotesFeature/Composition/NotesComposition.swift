@@ -18,8 +18,9 @@ public enum NotesComposition {
     @MainActor
     public static func makeRepository(
         for context: ModelContext,
-        tasks: TaskItemRepository
+        tasks: TaskItemRepository,
+        observers: [any LinkableObserver] = []
     ) -> NoteRepository {
-        NoteRepository(context: context, tasks: tasks, now: { .now })
+        NoteRepository(context: context, tasks: tasks, now: { .now }, observers: observers)
     }
 }

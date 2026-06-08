@@ -92,11 +92,18 @@ struct NexusiOSApp: App {
         // Notes content layer (spec §5). Shares the Tasks repository so the
         // checkbox→Task seam (§7) drives the same lifecycle. `Note` is already a
         // synced model in NexusSchemaV9 → the scene `.modelContainer` registers it.
-        self.noteRepository = NotesComposition.makeRepository(for: made.mainContext, tasks: self.taskRepository)
+        self.noteRepository = NotesComposition.makeRepository(
+            for: made.mainContext,
+            tasks: self.taskRepository,
+            observers: self.search.observers
+        )
         // People / Contacts (spec §6). `Person` is already a synced model in
         // NexusSchemaV12 → the scene `.modelContainer` registers it; no separate
         // container registration is needed.
-        self.personRepository = PeopleComposition.makeRepository(for: made.mainContext)
+        self.personRepository = PeopleComposition.makeRepository(
+            for: made.mainContext,
+            observers: self.search.observers
+        )
         self.meetingsComposition = Self.makeMeetingsComposition(
             context: made.mainContext,
             router: self.aiRouter,
@@ -345,7 +352,10 @@ struct NexusiOSApp: App {
     ) {
         _Concurrency.Task { @MainActor in
             do {
-                try await index.rebuild(from: context, types: TaskItem.self)
+                try await index.rebuild(
+                    from: context,
+                    types: TaskItem.self, Note.self, Label.self, Person.self
+                )
             } catch {
                 print("SearchIndex.rebuild failed on launch: \(error)")
             }
