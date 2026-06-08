@@ -8,7 +8,10 @@ import SwiftData
 /// (one `ModelContext`).
 public enum PeopleComposition {
     @MainActor
-    public static func makeRepository(for context: ModelContext) -> PersonRepository {
-        PersonRepository(context: context, now: { .now })
+    public static func makeRepository(
+        for context: ModelContext,
+        observers: [any LinkableObserver] = []
+    ) -> PersonRepository {
+        PersonRepository(context: context, now: { .now }, observers: observers)
     }
 }
