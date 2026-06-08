@@ -8,6 +8,7 @@ import NexusSearch
 import NexusSync
 import NexusUI
 import NotesFeature
+import PeopleFeature
 import SwiftData
 import SwiftUI
 import TasksFeature
@@ -41,6 +42,7 @@ struct NexusiOSApp: App {
     private let taskParser: CompositeNLParser
     private let taskRepository: TaskItemRepository
     private let noteRepository: NoteRepository
+    private let personRepository: PersonRepository
     private let notificationScheduler: NotificationScheduler
     private let agentComposition: AgentComposition
     private let meetingsComposition: MeetingsComposition
@@ -51,6 +53,10 @@ struct NexusiOSApp: App {
     // (multi-GB) must outlive the welcome sheet.
     private let welcomeMLXDownloads: WelcomeMLXDownloadCoordinator
 
+    // The composition root's init grows by ~1 wiring line per feature by design —
+    // same structural rationale as the file_length disable above. The People /
+    // Contacts repository wiring added the line that crossed the 60-line threshold.
+    // swiftlint:disable:next function_body_length
     init() {
         NexusPreferences.migrateLegacyAgentPreloadSpeechKey()
         UserDefaultsQuietHoursStore.migrateFromStandardIfNeeded()
@@ -87,6 +93,10 @@ struct NexusiOSApp: App {
         // checkbox→Task seam (§7) drives the same lifecycle. `Note` is already a
         // synced model in NexusSchemaV9 → the scene `.modelContainer` registers it.
         self.noteRepository = NotesComposition.makeRepository(for: made.mainContext, tasks: self.taskRepository)
+        // People / Contacts (spec §6). `Person` is already a synced model in
+        // NexusSchemaV12 → the scene `.modelContainer` registers it; no separate
+        // container registration is needed.
+        self.personRepository = PeopleComposition.makeRepository(for: made.mainContext)
         self.meetingsComposition = Self.makeMeetingsComposition(
             context: made.mainContext,
             router: self.aiRouter,
@@ -199,6 +209,7 @@ struct NexusiOSApp: App {
                 taskParser: taskParser,
                 taskRepository: taskRepository,
                 noteRepository: noteRepository,
+                personRepository: personRepository,
                 notificationScheduler: notificationScheduler,
                 agentComposition: agentComposition,
                 meetingsComposition: meetingsComposition,
@@ -483,6 +494,7 @@ private struct NexusiOSRootView: View {
     let taskParser: CompositeNLParser
     let taskRepository: TaskItemRepository
     let noteRepository: NoteRepository
+    let personRepository: PersonRepository
     let notificationScheduler: NotificationScheduler
     let agentComposition: AgentComposition
     let meetingsComposition: MeetingsComposition
@@ -498,6 +510,7 @@ private struct NexusiOSRootView: View {
         taskParser: CompositeNLParser,
         taskRepository: TaskItemRepository,
         noteRepository: NoteRepository,
+        personRepository: PersonRepository,
         notificationScheduler: NotificationScheduler,
         agentComposition: AgentComposition,
         meetingsComposition: MeetingsComposition,
@@ -512,6 +525,7 @@ private struct NexusiOSRootView: View {
         self.taskParser = taskParser
         self.taskRepository = taskRepository
         self.noteRepository = noteRepository
+        self.personRepository = personRepository
         self.notificationScheduler = notificationScheduler
         self.agentComposition = agentComposition
         self.meetingsComposition = meetingsComposition
@@ -580,6 +594,16 @@ private struct NexusiOSRootView: View {
             .environment(\.taskParser, taskParser)
             .environment(\.taskRepository, taskRepository)
             .environment(\.noteRepository, noteRepository)
+            .environment(\.personRepository, personRepository)
+            // People profile meeting history: PeopleFeature cannot import
+            // NexusMeetings (feature isolation), so the host resolves a meeting
+            // UUID → displayable row via the Meetings repository.
+            .environment(
+                \.personMeetingResolver,
+                PersonMeetingResolver { [meetingsComposition] id in
+                    try? meetingsComposition.meetingRepository.find(id: id)
+                }
+            )
             .environment(\.notificationScheduler, notificationScheduler)
             .environment(\.agentChatViewModel, agentComposition.chatViewModel)
             .environment(\.agentBriefService, agentComposition.briefService)

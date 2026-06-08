@@ -45,6 +45,14 @@ public struct AgentContext: Sendable {
         LinkRepository(context: modelContext.context)
     }
 
+    /// On-demand `PersonRepository` (People/Contacts module, spec §7) backed by the
+    /// same `ModelContext` as `taskRepository`. CRUD + dedup/upsert + atomic merge +
+    /// graph aggregation; the only `task ↔ person` edge it emits is `.mentions`
+    /// (invariant I1 — a `Person` is never a task assignee).
+    @MainActor public var personRepository: PersonRepository {
+        PersonRepository(context: modelContext.context, now: now)
+    }
+
     /// TasksFeature-specific helpers (NL parser + hero brief). Only populated when
     /// the consumer links `NexusAgentToolsExtras`. Tools that need these check non-nil.
     public let nlParser: AnyNLParserRef?

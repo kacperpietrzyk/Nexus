@@ -106,7 +106,7 @@ struct TasksDailySummaryToolTests {
     func registration() {
         let names = AgentToolsAll.tools().map(\.name)
 
-        #expect(names.count == 34)
+        #expect(names.count == 43)
         #expect(Set(names).count == names.count)
         #expect(names.contains("tasks.create_from_text"))
         #expect(names.contains("tasks.daily_summary"))
@@ -115,6 +115,10 @@ struct TasksDailySummaryToolTests {
         #expect(names.contains("tasks.set_workflow_state"))
         #expect(names.contains("labels.assign"))
         #expect(names.contains("blocks.add"))
+        // People / Contacts module (spec §7).
+        #expect(names.contains("people.create"))
+        #expect(names.contains("people.aggregate"))
+        #expect(names.contains("people.merge"))
     }
 
     @Test("extras-only registration does not include core task tools")

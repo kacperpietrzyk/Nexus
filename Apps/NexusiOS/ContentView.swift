@@ -7,6 +7,7 @@ import NexusCore
 import NexusMeetings
 import NexusUI
 import NotesFeature
+import PeopleFeature
 import SwiftData
 import SwiftUI
 import TasksFeature
@@ -21,7 +22,7 @@ import UIKit
 struct ContentView: View {
 
     fileprivate enum NexusTab: Hashable {
-        case today, inbox, tasks, notes, calendar, meetings, agent, settings
+        case today, inbox, tasks, notes, calendar, people, meetings, agent, settings
     }
 
     let cloudKitEnabled: Bool
@@ -228,6 +229,11 @@ struct ContentView: View {
                     .tag(NexusTab.calendar)
                     .tabItem { Label("Calendar", systemImage: "calendar") }
             }
+            if horizontalSizeClass == .regular {
+                PeopleListView()
+                    .tag(NexusTab.people)
+                    .tabItem { Label("People", systemImage: "person.crop.circle") }
+            }
             if horizontalSizeClass == .regular, let meetingsComposition {
                 iOSMeetingsHostResolver(composition: meetingsComposition)
                     .tag(NexusTab.meetings)
@@ -266,6 +272,11 @@ struct ContentView: View {
         // Calendar is regular-width only (the compact tab bar has no room for the
         // grid); fall back to Today if the user narrows while on it.
         if selectedTab == .calendar && horizontalSizeClass != .regular {
+            selectedTab = .today
+        }
+        // People is regular-width only (same crowded compact tab bar as Calendar);
+        // fall back to Today if the user narrows while on it.
+        if selectedTab == .people && horizontalSizeClass != .regular {
             selectedTab = .today
         }
     }
@@ -548,6 +559,8 @@ extension ContentView {
             NotesListView()
         case .calendar:
             calendarDetail
+        case .people:
+            PeopleListView()
         case .agent:
             AgentTab(viewModel: agentViewModel)
         case .meetings:
@@ -605,6 +618,7 @@ extension ContentView {
             RegularNavigationItem(tab: .tasks, title: "Tasks", systemImage: "checkmark.square"),
             RegularNavigationItem(tab: .notes, title: "Notes", systemImage: "note.text"),
             RegularNavigationItem(tab: .calendar, title: "Calendar", systemImage: "calendar"),
+            RegularNavigationItem(tab: .people, title: "People", systemImage: "person.crop.circle"),
             RegularNavigationItem(tab: .agent, title: "Agent", systemImage: "sparkles"),
         ]
         if meetingsComposition != nil {

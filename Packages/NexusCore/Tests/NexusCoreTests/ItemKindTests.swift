@@ -33,6 +33,7 @@ import Testing
 @Test func itemKind_allCases_haveStableOrder() {
     let expected: [ItemKind] = [
         .note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock, .label,
+        .person,
     ]
     #expect(ItemKind.allCases == expected)
 }
@@ -65,6 +66,7 @@ import Testing
 @Test func allItemKindsExhaustive() {
     let all: [ItemKind] = [
         .note, .task, .meeting, .project, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock, .label,
+        .person,
     ]
     #expect(Set(ItemKind.allCases) == Set(all))
 }

@@ -16,6 +16,10 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
     /// A structural `Label` entity (Projects tier, spec §4.4). Labels hang off
     /// tasks and projects via the `Link` graph (`LinkKind.labeled`).
     case label
+    /// A contact record (`Person`, People/Contacts module, spec §4.1). Aggregates
+    /// meetings (`LinkKind.attendee`) + mentioned tasks/notes (`LinkKind.mentions`)
+    /// via the graph. Never a task assignee (invariant I1).
+    case person
 
     public var displayName: String {
         switch self {
@@ -29,6 +33,7 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
         case .agentMemory: return "Agent Memory"
         case .scheduledBlock: return "Scheduled Block"
         case .label: return "Label"
+        case .person: return "Person"
         }
     }
 }

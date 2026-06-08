@@ -13,6 +13,7 @@ public enum TodayNavSelection: Hashable, Sendable {
     case tasks
     case notes
     case calendar
+    case people
     case agent
     case stats
     case settings
@@ -36,9 +37,9 @@ enum TodayDashboardContentRoute: Equatable {
             return .meetings
         case .tasks:
             return .tasks
-        case .agent, .notes, .calendar:
-            // Agent/Notes/Calendar are full shell destinations mounted directly in
-            // the app shell; this router is never reached on those paths.
+        case .agent, .notes, .calendar, .people:
+            // Agent/Notes/Calendar/People are full shell destinations mounted
+            // directly in the app shell; this router is never reached on those paths.
             return .today
         case .stats:
             return .productivity
@@ -450,13 +451,13 @@ public struct TodayDashboard: View {
             return "Meetings"
         case .tasks:
             return taskFilterTitle
-        case .agent:
-            return "Nexus"  // Unreached on the app path (Agent mounted in the shell).
-        case .notes:
-            // Unreached on the app path (Notes mounted directly in the shell).
-            return "Notes"
-        case .calendar:
-            return "Calendar"  // Unreached on the app path (Calendar mounted in the shell).
+        // Agent/Notes/Calendar/People are full shell destinations mounted directly
+        // in the app shell, so these titles are unreached on the app path (the
+        // oracle Agent top bar reads "Nexus"); defensive plumbing parity only.
+        case .agent: return "Nexus"
+        case .notes: return "Notes"
+        case .calendar: return "Calendar"
+        case .people: return "People"
         case .stats:
             return "Stats"
         case .settings:
