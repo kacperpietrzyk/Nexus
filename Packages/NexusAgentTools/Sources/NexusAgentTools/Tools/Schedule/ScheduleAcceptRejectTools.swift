@@ -102,6 +102,11 @@ public struct ScheduleRejectBlockTool: AgentTool {
             }
         }
         try blocks.softDelete(block)
-        return try TasksToolJSON.encode(ScheduledBlockDTO(from: block))
+        // Return an explicit deletion confirmation, not a ScheduledBlockDTO:
+        // `softDelete` stamps `deletedAt` but never changes `statusRaw`, so a DTO
+        // built here would misreport the just-rejected block as still "proposed"/
+        // "accepted". Mirrors the {"deleted": true} shape of the other delete tools
+        // (comments.delete, calendar.events.delete).
+        return .object(["deleted": .bool(true), "block_id": .string(block.id.uuidString)])
     }
 }
