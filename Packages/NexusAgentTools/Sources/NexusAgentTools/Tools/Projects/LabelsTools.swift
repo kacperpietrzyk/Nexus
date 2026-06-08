@@ -73,6 +73,7 @@ public struct LabelsAssignTool: AgentTool {
         guard let label = try context.labelRepository.find(id: labelID), label.deletedAt == nil else {
             throw AgentError.notFound("Label not found: \(labelID.uuidString)")
         }
+        try AgentEndpointValidator.validateLive(endpoint.endpointItemKind, id, context: context)
         try context.labelRepository.assign(label, to: (endpoint, id))
         let labels = try context.labelRepository.labels(for: (endpoint, id))
         return try TasksToolJSON.encode(labels.map { LabelDTO(from: $0) })
