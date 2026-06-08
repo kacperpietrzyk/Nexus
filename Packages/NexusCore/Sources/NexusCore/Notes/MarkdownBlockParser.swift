@@ -127,17 +127,28 @@ public enum MarkdownBlockParser {
         if let parsed = heading(in: trimmed) {
             return Block(kind: .heading(level: parsed.level, runs: parseInline(parsed.rest)))
         }
+        // Todo is matched (incl. its empty `- [ ]` form) BEFORE the bare-`-` bullet
+        // fallback, so an empty todo never degrades to a bullet (losing its taskRef).
         if let todo = todoBody(in: trimmed) {
             return Block(kind: .todo(taskRef: todo.taskRef ?? UUID(), runs: parseInline(todo.body)))
         }
-        if trimmed.hasPrefix("- ") {
-            return Block(kind: .bulleted(runs: parseInline(String(trimmed.dropFirst(2)))))
+        // List/quote markers, incl. their empty/bare forms (`-`, `1.`, `>`) which the
+        // serializer emits for empty items (`- `, `1. `, `> ` trim to these). A literal
+        // dash/`>`/numbered PARAGRAPH serializes backslash-escaped, so the bare form is
+        // unambiguously an empty item here.
+        if trimmed == "-" || trimmed.hasPrefix("- ") {
+            let body = trimmed == "-" ? "" : String(trimmed.dropFirst(2))
+            return Block(kind: .bulleted(runs: parseInline(body)))
         }
         if let rest = numberedBody(in: trimmed) {
             return Block(kind: .numbered(runs: parseInline(rest)))
         }
-        if trimmed.hasPrefix("> ") {
-            return Block(kind: .quote(runs: parseInline(String(trimmed.dropFirst(2)))))
+        if isBareNumbered(trimmed) {
+            return Block(kind: .numbered(runs: parseInline("")))
+        }
+        if trimmed == ">" || trimmed.hasPrefix("> ") {
+            let body = trimmed == ">" ? "" : String(trimmed.dropFirst(2))
+            return Block(kind: .quote(runs: parseInline(body)))
         }
         return Block(kind: .paragraph(runs: parseInline(trimmed)))
     }
@@ -160,6 +171,11 @@ public enum MarkdownBlockParser {
         let markers = ["- [ ] ", "- [x] ", "- [X] "]
         for marker in markers where line.hasPrefix(marker) {
             return parseTodoTaskRefMarker(String(line.dropFirst(marker.count)))
+        }
+        // Empty todo: the serializer emits `- [ ] ` for an empty label, which trims
+        // to `- [ ]` (no trailing space).
+        if line == "- [ ]" || line == "- [x]" || line == "- [X]" {
+            return (nil, "")
         }
         return nil
     }
@@ -192,6 +208,13 @@ public enum MarkdownBlockParser {
         let prefix = line[line.startIndex..<dotRange.lowerBound]
         guard !prefix.isEmpty, prefix.allSatisfy(\.isNumber) else { return nil }
         return String(line[dotRange.upperBound...])
+    }
+
+    /// `^<digits>.$` — the empty numbered form (`1.`), which the serializer emits as
+    /// `1. ` for an empty item (trims to `1.`).
+    private static func isBareNumbered(_ line: String) -> Bool {
+        guard line.hasSuffix("."), line.count >= 2 else { return false }
+        return line.dropLast().allSatisfy(\.isNumber)
     }
 
     private static func embedRef(in line: String) -> UUID? {
@@ -258,6 +281,16 @@ public enum MarkdownBlockParser {
         }
 
         while index < scalars.count {
+            // Backslash escape: `\X` emits X as literal plain text (mirrors the
+            // serializer's `escapeInline`). Checked before tokenization so an
+            // escaped delimiter never opens a span. Code/link spans consume their
+            // own (byte-literal) content via `inlineToken` before reaching here, so
+            // a backslash inside them is untouched.
+            if scalars[index] == "\\", index + 1 < scalars.count, isEscapable(scalars[index + 1]) {
+                plain.append(scalars[index + 1])
+                index += 2
+                continue
+            }
             if let token = inlineToken(scalars, at: index) {
                 flushPlain()
                 runs.append(contentsOf: token.runs)
@@ -277,36 +310,53 @@ public enum MarkdownBlockParser {
         var next: Int
     }
 
+    /// Whether a backslash before `character` is an escape (CommonMark rule: a
+    /// backslash escapes only ASCII punctuation; before any other char it is a
+    /// literal backslash). Keeps raw inbound text like `C:\Users\me` or a regex
+    /// `\d+` intact while still unescaping the serializer's `\*`/`\[`/`\.` etc.
+    private static func isEscapable(_ character: Character) -> Bool {
+        guard let ascii = character.asciiValue else { return false }
+        switch ascii {
+        case 0x21...0x2F, 0x3A...0x40, 0x5B...0x60, 0x7B...0x7E:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Try to consume one inline token (mark span or link) starting at `index`.
     /// Returns `nil` if the position is plain text. Order matters: `***` before
     /// `**`/`*`, and wikilink `[[` before plain `[`.
     private static func inlineToken(_ scalars: [Character], at index: Int) -> InlineToken? {
-        // Inline code: `…` (no nested marks inside).
-        if scalars[index] == "`", let close = findClose(scalars, from: index + 1, marker: "`") {
+        // Inline code: `…` (no nested marks inside). Content is byte-literal, so the
+        // close scan must NOT be escape-aware (e.g. `` `C:\` `` must keep its `\`).
+        if scalars[index] == "`", let close = findClose(scalars, from: index + 1, marker: "`", escapeAware: false) {
             let inner = String(scalars[(index + 1)..<close])
             return InlineToken(runs: [InlineRun(text: inner, marks: [.code])], next: close + 1)
         }
-        // Bold+italic: ***…*** (must precede `**`/`*` — the serializer emits
-        // `***x***` for any run carrying both marks).
-        if let close = closeOf("***", scalars, index) {
+        // Emphasis spans re-parse their inner content, so their close scans ARE
+        // escape-aware — an escaped delimiter (`\*`) inside must not close the span.
+        // Bold+italic: ***…*** (must precede `**`/`*`).
+        if let close = closeOf("***", scalars, index, escapeAware: true) {
             let inner = parseInline(String(scalars[(index + 3)..<close]))
             return InlineToken(runs: addMark(.bold, to: addMark(.italic, to: inner)), next: close + 3)
         }
-        if let close = closeOf("**", scalars, index) {
+        if let close = closeOf("**", scalars, index, escapeAware: true) {
             let inner = parseInline(String(scalars[(index + 2)..<close]))
             return InlineToken(runs: addMark(.bold, to: inner), next: close + 2)
         }
-        if let close = closeOf("~~", scalars, index) {
+        if let close = closeOf("~~", scalars, index, escapeAware: true) {
             let inner = parseInline(String(scalars[(index + 2)..<close]))
             return InlineToken(runs: addMark(.strike, to: inner), next: close + 2)
         }
         // Italic: *…* (single star, not part of `**`).
-        if scalars[index] == "*", let close = findClose(scalars, from: index + 1, marker: "*") {
+        if scalars[index] == "*", let close = findClose(scalars, from: index + 1, marker: "*", escapeAware: true) {
             let inner = parseInline(String(scalars[(index + 1)..<close]))
             return InlineToken(runs: addMark(.italic, to: inner), next: close + 1)
         }
-        // Wikilink: [[title]]
-        if let close = closeOf("[[", scalars, index, closeDelimiter: "]]") {
+        // Wikilink: [[title]] — title is byte-literal (not re-parsed), close scan
+        // stays literal.
+        if let close = closeOf("[[", scalars, index, closeDelimiter: "]]", escapeAware: false) {
             let title = String(scalars[(index + 2)..<close])
             return InlineToken(runs: [InlineRun(text: title, marks: [.link(ref: nil, href: nil)])], next: close + 2)
         }
@@ -324,11 +374,12 @@ public enum MarkdownBlockParser {
         _ open: String,
         _ scalars: [Character],
         _ index: Int,
-        closeDelimiter: String? = nil
+        closeDelimiter: String? = nil,
+        escapeAware: Bool
     ) -> Int? {
         guard matches(scalars, index, open) else { return nil }
         let close = closeDelimiter ?? open
-        return findCloseDelimiter(scalars, from: index + open.count, delimiter: close)
+        return findCloseDelimiter(scalars, from: index + open.count, delimiter: close, escapeAware: escapeAware)
     }
 
     private static func addMark(_ mark: Mark, to runs: [InlineRun]) -> [InlineRun] {
@@ -349,10 +400,22 @@ public enum MarkdownBlockParser {
     }
 
     /// Find the next single-character `marker` at or after `from`, not immediately
-    /// repeated (so a lone `*` doesn't match the first star of `**`).
-    private static func findClose(_ scalars: [Character], from: Int, marker: Character) -> Int? {
+    /// repeated (so a lone `*` doesn't match the first star of `**`). When
+    /// `escapeAware`, a backslash-escaped character (`\X`) is skipped so an escaped
+    /// delimiter never closes the span — used ONLY by the emphasis scans, whose
+    /// content is re-parsed. Byte-literal scans (code/link/wikilink) pass `false`.
+    private static func findClose(
+        _ scalars: [Character],
+        from: Int,
+        marker: Character,
+        escapeAware: Bool
+    ) -> Int? {
         var index = from
         while index < scalars.count {
+            if escapeAware, scalars[index] == "\\", index + 1 < scalars.count, isEscapable(scalars[index + 1]) {
+                index += 2
+                continue
+            }
             if scalars[index] == marker {
                 // For single-char markers, reject a doubled delimiter (that's a
                 // different token, e.g. `**`).
@@ -367,9 +430,18 @@ public enum MarkdownBlockParser {
         return nil
     }
 
-    private static func findCloseDelimiter(_ scalars: [Character], from: Int, delimiter: String) -> Int? {
+    private static func findCloseDelimiter(
+        _ scalars: [Character],
+        from: Int,
+        delimiter: String,
+        escapeAware: Bool
+    ) -> Int? {
         var index = from
         while index < scalars.count {
+            if escapeAware, scalars[index] == "\\", index + 1 < scalars.count, isEscapable(scalars[index + 1]) {
+                index += 2
+                continue
+            }
             if matches(scalars, index, delimiter) {
                 return index
             }
@@ -387,9 +459,13 @@ public enum MarkdownBlockParser {
     private static func parseLink(_ scalars: [Character], from: Int) -> ParsedLink? {
         // [text](href)
         guard scalars[from] == "[" else { return nil }
-        guard let textClose = findClose(scalars, from: from + 1, marker: "]") else { return nil }
+        // Link text/href are byte-literal (not re-parsed), so the close scans are
+        // NOT escape-aware.
+        guard let textClose = findClose(scalars, from: from + 1, marker: "]", escapeAware: false) else { return nil }
         guard textClose + 1 < scalars.count, scalars[textClose + 1] == "(" else { return nil }
-        guard let hrefClose = findClose(scalars, from: textClose + 2, marker: ")") else { return nil }
+        guard let hrefClose = findClose(scalars, from: textClose + 2, marker: ")", escapeAware: false) else {
+            return nil
+        }
         let text = String(scalars[(from + 1)..<textClose])
         let href = String(scalars[(textClose + 2)..<hrefClose])
         return ParsedLink(text: text, href: href, next: hrefClose + 1)
