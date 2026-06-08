@@ -108,6 +108,29 @@ struct CalendarEventsToolsTests {
         }
     }
 
+    @MainActor
+    @Test("calendar.events.create carries recurrence and alarms into the draft")
+    func createCarriesRecurrenceAndAlarms() async throws {
+        let fixture = try await InMemoryAgentContext.make(now: Self.clock)
+        let provider = FakeCalendarProvider()
+
+        _ = try await CalendarEventsCreateTool(writer: provider).call(
+            args: .object([
+                "title": .string("Planning"),
+                "start": .string(iso(0)),
+                "end": .string(iso(3600)),
+                "recurrence_rule": .string("FREQ=WEEKLY;BYDAY=MO"),
+                "alarm_offsets": .array([.int(-900), .double(-60)]),
+            ]),
+            context: fixture.context
+        )
+
+        let draft = try #require(provider.createdDrafts.first)
+        #expect(draft.recurrence?.frequency == .weekly)
+        #expect(draft.recurrence?.byWeekday == [.monday])
+        #expect(draft.alarmOffsets == [-900, -60])
+    }
+
     // MARK: - update
 
     @MainActor
@@ -143,6 +166,39 @@ struct CalendarEventsToolsTests {
             end: Self.now.addingTimeInterval(7200)
         )
         #expect(snapshots.first?.title == "Renamed")
+    }
+
+    @MainActor
+    @Test("calendar.events.update carries recurrence and alarms into the draft")
+    func updateCarriesRecurrenceAndAlarms() async throws {
+        let fixture = try await InMemoryAgentContext.make(now: Self.clock)
+        let provider = FakeCalendarProvider()
+        let created = try await CalendarEventsCreateTool(writer: provider).call(
+            args: .object([
+                "title": .string("Original"),
+                "start": .string(iso(0)),
+                "end": .string(iso(3600)),
+            ]),
+            context: fixture.context
+        )
+        let createdDTO = try TasksToolJSON.decode(CalendarEventDTO.self, from: created)
+
+        _ = try await CalendarEventsUpdateTool(writer: provider).call(
+            args: .object([
+                "event_id": .string(createdDTO.id),
+                "title": .string("Renamed"),
+                "start": .string(iso(0)),
+                "end": .string(iso(3600)),
+                "recurrence_rule": .string("FREQ=DAILY;COUNT=3"),
+                "alarm_offsets": .array([.int(-300)]),
+            ]),
+            context: fixture.context
+        )
+
+        let draft = try #require(provider.updatedDrafts.first)
+        #expect(draft.recurrence?.frequency == .daily)
+        #expect(draft.recurrence?.count == 3)
+        #expect(draft.alarmOffsets == [-300])
     }
 
     // MARK: - delete
