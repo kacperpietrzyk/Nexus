@@ -51,11 +51,11 @@ public final class MockCalendarWriter: CalendarEventWriting, CalendarListing, @u
         }
     }
 
-    public func updateEvent(id: String, with draft: EventDraft) async throws {
+    public func updateEvent(id: String, with draft: EventDraft, span: CalendarEventSpan) async throws {
         locked { events[id] = draft }
     }
 
-    public func deleteEvent(id: String) async throws {
+    public func deleteEvent(id: String, span: CalendarEventSpan) async throws {
         locked { events[id] = nil }
     }
 

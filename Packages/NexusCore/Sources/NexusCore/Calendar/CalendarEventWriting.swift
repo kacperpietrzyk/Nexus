@@ -68,6 +68,17 @@ public struct CalendarEventSnapshot: Equatable, Sendable {
     }
 }
 
+/// Which occurrences of a recurring event a write (update / delete) affects
+/// (spec §9). Maps onto EventKit's two-case `EKSpan`; non-recurring events ignore
+/// it. EventKit has NO "all events" span, so the editor offers only these two for
+/// a recurring event (R2/R3).
+public enum CalendarEventSpan: Sendable, Equatable {
+    /// Only the single occurrence the identifier resolves to.
+    case thisEvent
+    /// This occurrence and every later one in the series.
+    case futureEvents
+}
+
 /// Full event write surface (spec §8 / §9). Separate from `CalendarEventProviding`
 /// (read-only, consumed widely by Meetings / Today / Watch) so adding writes never
 /// breaks the existing read conformers. `EventKitCalendarProvider` conforms to both;
@@ -90,11 +101,16 @@ public protocol CalendarEventWriting: Sendable {
     @discardableResult
     func createEvent(_ draft: EventDraft) async throws -> String
 
-    /// Update an existing event in place to match `draft`.
-    func updateEvent(id: String, with draft: EventDraft) async throws
+    /// Update an existing event in place to match `draft`. `span` selects which
+    /// occurrences a recurring event's change applies to (ignored when the event
+    /// does not recur).
+    func updateEvent(id: String, with draft: EventDraft, span: CalendarEventSpan) async throws
 
-    /// Delete an event by identifier. A no-op if it no longer exists.
-    func deleteEvent(id: String) async throws
+    /// Delete an event by identifier. A no-op if it no longer exists. `span`
+    /// selects which occurrences of a recurring event are removed (ignored when
+    /// the event does not recur) — `.thisEvent` deletes one occurrence,
+    /// `.futureEvents` deletes this occurrence and all later ones.
+    func deleteEvent(id: String, span: CalendarEventSpan) async throws
 
     /// Read events in a single calendar overlapping `[start, end)`. The reconciler
     /// diffs only the "Nexus" calendar — never the read-everything `eventsBetween`.
@@ -106,4 +122,17 @@ public protocol CalendarEventWriting: Sendable {
     /// Nexus fetch but survives globally under the same identifier (R1). The
     /// returned snapshot's `calendarID` reflects the event's current calendar.
     func eventSnapshot(id: String) async throws -> CalendarEventSnapshot?
+}
+
+extension CalendarEventWriting {
+    /// `.thisEvent` is the right default for single mirror events (scheduler) and
+    /// agent writes — only the user-facing editor passes an explicit span for a
+    /// recurring event, so existing callers stay unchanged (R2/R3).
+    public func updateEvent(id: String, with draft: EventDraft) async throws {
+        try await updateEvent(id: id, with: draft, span: .thisEvent)
+    }
+
+    public func deleteEvent(id: String) async throws {
+        try await deleteEvent(id: id, span: .thisEvent)
+    }
 }

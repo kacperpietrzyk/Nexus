@@ -16,7 +16,9 @@ private final class FakeCalendarWriter: CalendarEventWriting, @unchecked Sendabl
     // Recorded calls.
     private(set) var createdCalendarIDs: [String] = []
     private(set) var updatedCalendarIDs: [String] = []
+    private(set) var updatedSpans: [CalendarEventSpan] = []
     private(set) var deletedEventIDs: [String] = []
+    private(set) var deletedSpans: [CalendarEventSpan] = []
     private(set) var ensureNexusCount = 0
 
     init(nexusCalendarID: String = "nexus-cal") {
@@ -48,9 +50,10 @@ private final class FakeCalendarWriter: CalendarEventWriting, @unchecked Sendabl
         }
     }
 
-    func updateEvent(id: String, with draft: EventDraft) async throws {
+    func updateEvent(id: String, with draft: EventDraft, span: CalendarEventSpan) async throws {
         locked {
             updatedCalendarIDs.append(draft.calendarID)
+            updatedSpans.append(span)
             events[id] = CalendarEventSnapshot(
                 eventID: id,
                 calendarID: draft.calendarID,
@@ -61,9 +64,10 @@ private final class FakeCalendarWriter: CalendarEventWriting, @unchecked Sendabl
         }
     }
 
-    func deleteEvent(id: String) async throws {
+    func deleteEvent(id: String, span: CalendarEventSpan) async throws {
         locked {
             deletedEventIDs.append(id)
+            deletedSpans.append(span)
             events[id] = nil
         }
     }
@@ -314,6 +318,9 @@ struct CalendarSyncReconcilerTests {
         try await reconciler.handleTaskRemoved(taskID: taskID)
 
         #expect(writer.deletedEventIDs == [eventID])
+        // Mirror events are always single occurrences → the scheduler deletes with
+        // the default `.thisEvent` span, never `.futureEvents` (R2/R3 default path).
+        #expect(writer.deletedSpans == [.thisEvent])
         #expect(try repo.find(accepted.id) == nil)
         #expect(try repo.find(proposed.id) == nil)
     }
