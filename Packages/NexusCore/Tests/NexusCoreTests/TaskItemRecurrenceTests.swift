@@ -36,6 +36,39 @@ struct TaskItemRecurrenceTests {
     }
 
     @MainActor
+    @Test("recurrence gives the next occurrence its own copy of the note (T1)")
+    func recurrenceDuplicatesNote() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let schema = Schema([TaskItem.self, Note.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        let context = ModelContext(container)
+        let repo = TaskItemRepository(
+            context: context,
+            scheduler: RRuleScheduler(calendar: .gregorianUTC),
+            now: { now }
+        )
+
+        let note = Note(title: "details", contentData: Data([1, 2, 3]), plainText: "details")
+        context.insert(note)
+        let task = TaskItem(title: "stretch", noteRef: note.id, recurrenceRule: "FREQ=DAILY")
+        try repo.insert(task)
+
+        try repo.markDone(task)
+
+        let spawn = try #require(try context.fetch(FetchDescriptor<TaskItem>()).first { $0.id != task.id })
+        // The occurrence references a note, but a fresh copy — not the shared original.
+        let spawnNoteRef = try #require(spawn.noteRef)
+        #expect(spawnNoteRef != note.id)
+        let copy = try #require(try context.fetch(FetchDescriptor<Note>()).first { $0.id == spawnNoteRef })
+        #expect(copy.contentData == note.contentData)
+        #expect(copy.plainText == "details")
+        // The completed task still owns the original, untouched.
+        #expect(task.noteRef == note.id)
+        #expect(try context.fetch(FetchDescriptor<Note>()).count == 2)
+    }
+
+    @MainActor
     @Test("daily recurrence creates next instance and preserves parent chain")
     func dailyRollsForward() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)

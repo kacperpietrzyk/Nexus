@@ -294,6 +294,7 @@ public final class TaskItemRepository {
             recurrenceRule: ruleText,
             parentID: parentID
         )
+        nextInstance.noteRef = try duplicatedNoteRef(of: task.noteRef)
         context.insert(nextInstance)
         sideEffects.scheduledTasks.append(nextInstance)
     }
@@ -430,6 +431,7 @@ public final class TaskItemRepository {
             recurrenceRule: newRule,
             parentID: parentID
         )
+        nextInstance.noteRef = try duplicatedNoteRef(of: task.noteRef)
         context.insert(nextInstance)
         return (removedID, nextInstance)
     }
@@ -469,11 +471,10 @@ public final class TaskItemRepository {
         let nextDeadlineAt = task.deadlineAt?.addingTimeInterval(intervalDelta)
 
         // Content lives in a `Note` referenced by `noteRef`, not on `body`
-        // (Notes content layer, spec §4.2) — no longer carried here.
-        // The next occurrence shares the parent's `noteRef` so the linked note
-        // stays reachable; proper per-occurrence note duplication is reconciler/
-        // repository territory (this is a pure, context-less factory).
-        // TODO(notes-reconciler): decide note duplication vs. sharing per recurrence.
+        // (Notes content layer, spec §4.2). This pure, context-less factory copies
+        // the parent's `noteRef` as a placeholder; the persisting call sites then
+        // override it with a fresh per-occurrence copy via `duplicatedNoteRef`
+        // (T1) so editing one occurrence's notes never mutates a sibling's.
         // Recurrence-reopen (spec §5.2 I3): a recurring *project* task
         // (`workflowState != nil`) spawns its next occurrence in `.todo` (not
         // `.backlog`). A recurring *GTD* task (`workflowState == nil`) must spawn
@@ -516,5 +517,35 @@ public final class TaskItemRepository {
         )
         next.reminders = carriedReminders
         return next
+    }
+}
+
+extension TaskItemRepository {
+    /// Duplicates a recurring task's backing note for its next occurrence (T1).
+    /// Each occurrence then owns its `Note` row, so a later `tasks.update(notes:)`
+    /// on one occurrence can't mutate or delete a sibling's notes. Scalar content
+    /// (title/blocks/plainText/role/tags) is copied; the note's derived graph edges
+    /// (`containsTask` for any embedded todos) are NOT reconciled onto the copy —
+    /// a recurring detail note rarely owns sub-todos, and reconciling would risk
+    /// cross-linking the original's tasks (a follow-up if it ever matters).
+    func duplicatedNoteRef(of sourceNoteRef: UUID?) throws -> UUID? {
+        guard let sourceNoteRef else { return nil }
+        var descriptor = FetchDescriptor<Note>(
+            predicate: #Predicate { $0.id == sourceNoteRef && $0.deletedAt == nil }
+        )
+        descriptor.fetchLimit = 1
+        guard let source = try context.fetch(descriptor).first else { return nil }
+        let copy = Note(
+            title: source.title,
+            contentData: source.contentData,
+            plainText: source.plainText,
+            role: source.role,
+            tags: source.tags
+        )
+        let stamp = now()
+        copy.createdAt = stamp
+        copy.updatedAt = stamp
+        context.insert(copy)
+        return copy.id
     }
 }
