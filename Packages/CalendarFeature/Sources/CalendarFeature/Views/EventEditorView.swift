@@ -31,6 +31,13 @@ public struct EventEditorView: View {
     @State private var recurrence: RecurrenceChoice
     @State private var alarmChoice: AlarmChoice
 
+    /// Original rich values carried verbatim through the lossy preset pickers.
+    /// When the matching choice is `.custom` (the preset round-trip would lose
+    /// data — a rich `RRule` or a multi/10-min alarm), `save()` re-emits these
+    /// untouched instead of the flattened preset (F2/F3).
+    private let originalRecurrence: RRule?
+    private let originalAlarmOffsets: [TimeInterval]
+
     public init(
         mode: Mode,
         calendars: [CalendarInfo],
@@ -60,8 +67,10 @@ public struct EventEditorView: View {
         _isAllDay = State(initialValue: base.isAllDay)
         _location = State(initialValue: base.location ?? "")
         _attendees = State(initialValue: base.attendees)
-        _recurrence = State(initialValue: RecurrenceChoice(rrule: base.recurrence))
-        _alarmChoice = State(initialValue: AlarmChoice(offsets: base.alarmOffsets))
+        _recurrence = State(initialValue: RecurrenceChoice.forOriginal(base.recurrence))
+        _alarmChoice = State(initialValue: AlarmChoice.forOriginal(base.alarmOffsets))
+        originalRecurrence = base.recurrence
+        originalAlarmOffsets = base.alarmOffsets
     }
 
     public var body: some View {
@@ -84,12 +93,12 @@ public struct EventEditorView: View {
             Section("Details") {
                 TextField("Location", text: $location)
                 Picker("Repeat", selection: $recurrence) {
-                    ForEach(RecurrenceChoice.allCases) { choice in
+                    ForEach(recurrenceOptions) { choice in
                         Text(choice.label).tag(choice)
                     }
                 }
                 Picker("Alert", selection: $alarmChoice) {
-                    ForEach(AlarmChoice.allCases) { choice in
+                    ForEach(alarmOptions) { choice in
                         Text(choice.label).tag(choice)
                     }
                 }
@@ -124,6 +133,16 @@ public struct EventEditorView: View {
         isAllDay ? [.date] : [.date, .hourAndMinute]
     }
 
+    /// `.custom` is offered only when the original recurrence can't be represented
+    /// by a preset; otherwise selecting it would have no original to restore.
+    private var recurrenceOptions: [RecurrenceChoice] {
+        RecurrenceChoice.presets + (RecurrenceChoice.forOriginal(originalRecurrence) == .custom ? [.custom] : [])
+    }
+
+    private var alarmOptions: [AlarmChoice] {
+        AlarmChoice.presets + (AlarmChoice.forOriginal(originalAlarmOffsets) == .custom ? [.custom] : [])
+    }
+
     private func save() {
         let draft = EventDraft(
             calendarID: calendarID,
@@ -133,10 +152,24 @@ public struct EventEditorView: View {
             isAllDay: isAllDay,
             location: location.isEmpty ? nil : location,
             attendees: attendees,
-            recurrence: recurrence.rrule,
-            alarmOffsets: alarmChoice.offsets
+            recurrence: Self.resolvedRecurrence(choice: recurrence, original: originalRecurrence),
+            alarmOffsets: Self.resolvedAlarms(choice: alarmChoice, original: originalAlarmOffsets)
         )
         onSave(draft)
+    }
+
+    /// F2/F3 merge: a `.custom` choice re-emits the original rich `RRule`
+    /// verbatim (the presets can't represent it); any preset overwrites it.
+    /// Extracted so the preserve-vs-overwrite contract is unit-testable without
+    /// SwiftUI `@State`.
+    nonisolated static func resolvedRecurrence(choice: RecurrenceChoice, original: RRule?) -> RRule? {
+        choice == .custom ? original : choice.rrule
+    }
+
+    /// F2/F3 merge: a `.custom` choice re-emits the original alarm offsets
+    /// verbatim (multiple alarms / non-preset offsets); any preset overwrites.
+    nonisolated static func resolvedAlarms(choice: AlarmChoice, original: [TimeInterval]) -> [TimeInterval] {
+        choice == .custom ? original : choice.offsets
     }
 }
 
@@ -146,6 +179,13 @@ enum RecurrenceChoice: String, CaseIterable, Identifiable, Hashable {
     case daily
     case weekly
     case monthly
+    /// Original recurrence the presets can't represent (e.g. `interval:2`,
+    /// `byWeekday`, `until`). Carried through `resolvedDraft` untouched.
+    case custom
+
+    /// Selectable presets, in display order. `.custom` is appended by the view
+    /// only when the original recurrence is genuinely unrepresentable.
+    static let presets: [RecurrenceChoice] = [.none, .daily, .weekly, .monthly]
 
     var id: String { rawValue }
 
@@ -158,18 +198,28 @@ enum RecurrenceChoice: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// The choice to seed the picker with: a preset if it round-trips the rule
+    /// losslessly, otherwise `.custom`.
+    static func forOriginal(_ rrule: RRule?) -> RecurrenceChoice {
+        let preset = RecurrenceChoice(rrule: rrule)
+        return preset.rrule == rrule ? preset : .custom
+    }
+
     var label: String {
         switch self {
         case .none: return "Never"
         case .daily: return "Every day"
         case .weekly: return "Every week"
         case .monthly: return "Every month"
+        case .custom: return "Custom (keep current)"
         }
     }
 
+    /// Non-nil only for presets. `.custom` is resolved against the original value
+    /// in `resolvedDraft`, never via this accessor.
     var rrule: RRule? {
         switch self {
-        case .none: return nil
+        case .none, .custom: return nil
         case .daily: return RRule(frequency: .daily)
         case .weekly: return RRule(frequency: .weekly)
         case .monthly: return RRule(frequency: .monthly)
@@ -184,6 +234,13 @@ enum AlarmChoice: String, CaseIterable, Identifiable, Hashable {
     case fiveMinutes
     case fifteenMinutes
     case oneHour
+    /// Original alarm set the presets can't represent (multiple alarms, or a
+    /// non-preset offset like 10 minutes). Carried through `resolvedDraft`.
+    case custom
+
+    /// Selectable presets, in display order. `.custom` is appended by the view
+    /// only when the original alarms are genuinely unrepresentable.
+    static let presets: [AlarmChoice] = [.none, .atTime, .fiveMinutes, .fifteenMinutes, .oneHour]
 
     var id: String { rawValue }
 
@@ -198,6 +255,13 @@ enum AlarmChoice: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// The choice to seed the picker with: a preset if it round-trips the alarm
+    /// set losslessly, otherwise `.custom`.
+    static func forOriginal(_ offsets: [TimeInterval]) -> AlarmChoice {
+        let preset = AlarmChoice(offsets: offsets)
+        return preset.offsets == offsets ? preset : .custom
+    }
+
     var label: String {
         switch self {
         case .none: return "None"
@@ -205,12 +269,15 @@ enum AlarmChoice: String, CaseIterable, Identifiable, Hashable {
         case .fiveMinutes: return "5 minutes before"
         case .fifteenMinutes: return "15 minutes before"
         case .oneHour: return "1 hour before"
+        case .custom: return "Custom (keep current)"
         }
     }
 
+    /// Defined only for presets. `.custom` is resolved against the original value
+    /// in `resolvedDraft`, never via this accessor.
     var offsets: [TimeInterval] {
         switch self {
-        case .none: return []
+        case .none, .custom: return []
         case .atTime: return [0]
         case .fiveMinutes: return [-300]
         case .fifteenMinutes: return [-900]
