@@ -64,7 +64,7 @@ public final class MeetingsListViewModel: ObservableObject {
     }
 
     private func matchesSearch(_ meeting: Meeting) -> Bool {
-        let query = searchQuery.lowercased()
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return true }
 
         // With a speaker selected, the query must land inside that speaker's
@@ -74,9 +74,13 @@ public final class MeetingsListViewModel: ObservableObject {
             return true
         }
 
-        return meeting.title.lowercased().contains(query)
-            || meeting.transcriptText.lowercased().contains(query)
-            || meeting.summaryText.lowercased().contains(query)
+        // Match the diacritic+case-insensitive semantics used by the repository
+        // (`MeetingRepository.search`) and the speaker-segment path below, so the
+        // list view and the agent tool surface the same hits (e.g. "lodz" ⇒ "Łódź").
+        let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return meeting.title.range(of: query, options: options) != nil
+            || meeting.transcriptText.range(of: query, options: options) != nil
+            || meeting.summaryText.range(of: query, options: options) != nil
     }
 
     private func matchesSpeaker(_ meeting: Meeting) -> Bool {
