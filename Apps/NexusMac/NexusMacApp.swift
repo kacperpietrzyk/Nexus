@@ -791,6 +791,14 @@ extension Notification.Name {
 
 /// Keeps the app alive when the main window is closed and reopens it on Dock click.
 final class NexusMacAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Nexus is a dark-only design. Pin the whole app to Dark Aqua so a
+        // light-mode Mac doesn't leak light system surfaces (segmented-control
+        // tracks, grouped/list backgrounds) through the explicitly-dark UI —
+        // the AppKit-window analogue of the iOS `.preferredColorScheme(.dark)`.
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
