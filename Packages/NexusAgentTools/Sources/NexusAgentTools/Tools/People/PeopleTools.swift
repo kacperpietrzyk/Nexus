@@ -291,8 +291,13 @@ public struct PeopleLinkTool: AgentTool {
         let link: Link
         switch sourceKind {
         case .meeting:
+            // A meeting endpoint can't be existence-checked from this layer (R8).
             link = try repo.linkAttendee(meetingID: objectID, personID: personID)
-        case .task, .note:
+        case .task:
+            try AgentEndpointValidator.validateLive(.task, objectID, context: context)
+            link = try repo.linkMention(source: sourceKind, sourceID: objectID, personID: personID)
+        case .note:
+            try AgentEndpointValidator.validateLive(.note, objectID, context: context)
             link = try repo.linkMention(source: sourceKind, sourceID: objectID, personID: personID)
         }
 

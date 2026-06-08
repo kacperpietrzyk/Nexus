@@ -472,6 +472,51 @@ struct ProjectsTierGraphToolsTests {
     }
 
     @MainActor
+    @Test("blocks.add rejects a hallucinated endpoint instead of minting a dangling edge (A2)")
+    func blocksAddValidatesEndpoints() async throws {
+        let blocker = TaskItem(title: "blocker")
+        let fixture = try await InMemoryAgentContext.make(tasks: [blocker])
+        let phantomID = UUID()
+
+        await #expect(throws: AgentError.self) {
+            _ = try await BlocksAddTool().call(
+                args: .object([
+                    "from_id": .string(blocker.id.uuidString),
+                    "from_kind": .string("task"),
+                    "to_id": .string(phantomID.uuidString),
+                    "to_kind": .string("task"),
+                ]),
+                context: fixture.context
+            )
+        }
+        // No edge should have been created from the (real) source.
+        let view = try await BlocksListTool().call(
+            args: .object(["item_id": .string(blocker.id.uuidString), "item_kind": .string("task")]),
+            context: fixture.context
+        )
+        #expect(try TasksToolJSON.decode(BlocksDTO.self, from: view).blocks.isEmpty)
+    }
+
+    @MainActor
+    @Test("labels.assign rejects a hallucinated endpoint item (A2)")
+    func labelAssignValidatesEndpoint() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let labelRepo = LabelRepository(context: fixture.repo.context)
+        let urgent = try labelRepo.create(name: "urgent", group: .free)
+
+        await #expect(throws: AgentError.self) {
+            _ = try await LabelsAssignTool().call(
+                args: .object([
+                    "item_id": .string(UUID().uuidString),
+                    "item_kind": .string("task"),
+                    "label_id": .string(urgent.id.uuidString),
+                ]),
+                context: fixture.context
+            )
+        }
+    }
+
+    @MainActor
     @Test("blocks.add is idempotent and blocks.remove detaches")
     func blocksIdempotentAndRemove() async throws {
         let blocker = TaskItem(title: "a")

@@ -65,6 +65,8 @@ public struct BlocksAddTool: AgentTool {
         if from == to {
             throw AgentError.validation("A blocks edge cannot point an item at itself")
         }
+        try AgentEndpointValidator.validateLive(from.0, from.1, context: context)
+        try AgentEndpointValidator.validateLive(to.0, to.1, context: context)
         try context.linkRepository.findOrCreate(from: from, to: to, linkKind: .blocks)
         return try BlocksToolSupport.dependencyView(for: from, context: context)
     }
