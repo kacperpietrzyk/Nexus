@@ -140,6 +140,17 @@ private struct RowBody: View {
 
     @State private var isHovering = false
 
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Compact width (iPhone, narrow split) can't hold the dense single scan-line
+    /// — title + priority + a full meta cluster + the trailing menu overflow a
+    /// ~360pt row, starving the title to nothing. There the row goes two-line:
+    /// title (+ the single loud due token) on top, the quieter meta below.
+    private var isCompact: Bool { horizontalSizeClass == .compact }
+    #else
+    private var isCompact: Bool { false }
+    #endif
+
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             disclosureControl
@@ -147,21 +158,30 @@ private struct RowBody: View {
             // Snoozed maps to `.inReview` (dashed ring); override the glyph's own
             // a11y label so VoiceOver announces the truth ("Snoozed"), not "In review".
             statusToggleButton
-            // Dense single scan-line: title dominates, with the achromatic
-            // ranked priority bars immediately after it (every level distinct).
-            // The body line is dropped in the list — density over preview text
-            // (Linear/Raycast idiom). All meta moves to the trailing cluster.
-            HStack(spacing: 6) {
-                Text(task.title)
-                    .nexusType(.body)
-                    .foregroundStyle(NexusColor.Text.primary)
-                    .lineLimit(1)
-                priorityIndicator
+            if isCompact {
+                compactCentralContent
+            } else {
+                // Dense single scan-line: title dominates, with the achromatic
+                // ranked priority bars immediately after it (every level distinct).
+                // The body line is dropped in the list — density over preview text
+                // (Linear/Raycast idiom). All meta moves to the trailing cluster.
+                HStack(spacing: 6) {
+                    Text(task.title)
+                        .nexusType(.body)
+                        .foregroundStyle(NexusColor.Text.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    priorityIndicator
+                }
+                // The title owns the flexible width: when the row can't fit title +
+                // meta on one line, the title truncates with an ellipsis rather than
+                // ceding its width to the (now fixed-size) meta chips.
+                .layoutPriority(1)
+                Spacer(minLength: 8)
+                // Right-aligned meta cluster (quiet → loud, overdue red rightmost),
+                // then the trailing slot (mac hover actions / touch menu).
+                metaCluster
             }
-            Spacer(minLength: 12)
-            // Right-aligned meta cluster (quiet → loud, overdue red rightmost),
-            // then the trailing slot (mac hover actions / touch menu).
-            metaCluster
             // Trailing slot: resting meta fades out, hover cluster fades in —
             // matches LabRowView ZStack anatomy, no layout jump.
             trailingSlot
@@ -385,6 +405,72 @@ private struct RowBody: View {
     // suppressed by an overdue due chip) · DUE. The overdue due chip is the
     // single red urgency token and sits at the trailing edge where the eye
     // lands first on a right-aligned cluster.
+    // MARK: Compact (two-line) central content
+
+    /// iPhone/compact layout: the title (with priority + the single loud due
+    /// token) takes the first line; tags and the quieter meta drop to a second
+    /// line where they have the full row width and never crush the title.
+    @ViewBuilder
+    private var compactCentralContent: some View {
+        let due = DueChipFormatter.label(for: task, now: now, calendar: Self.chipCalendar)
+        let deadline = DeadlineBadgeFormatter.presentation(
+            deadlineAt: task.deadlineAt, now: now, calendar: Self.chipCalendar)
+        let showsDeadline = deadline != nil && !suppressesDeadlineChip(due: due, deadline: deadline)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(task.title)
+                    .nexusType(.body)
+                    .foregroundStyle(NexusColor.Text.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                priorityIndicator
+                Spacer(minLength: 6)
+                dueChipView(due)
+            }
+            compactSecondaryMeta(showsDeadline: showsDeadline, deadline: deadline)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func compactSecondaryMeta(
+        showsDeadline: Bool,
+        deadline: DeadlineBadgePresentation?
+    ) -> some View {
+        let hasTags = !task.tags.isEmpty
+        let hasRecurrence = task.recurrenceRule != nil
+        let hasBlocks = (blockedCount ?? 0) > 0
+        let hasSubtasks = (subtaskProgress?.total ?? 0) > 0
+        if hasTags || hasRecurrence || hasBlocks || hasSubtasks || showsDeadline {
+            HStack(spacing: 6) {
+                ForEach(Array(task.tags.prefix(3).enumerated()), id: \.offset) { _, tag in
+                    NexusChip("#\(tag)")
+                }
+                if task.tags.count > 3 {
+                    NexusChip("+\(task.tags.count - 3)")
+                }
+                if hasRecurrence {
+                    Image(systemName: "repeat")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(NexusColor.Text.tertiary)
+                }
+                if let blockedCount, blockedCount > 0 {
+                    NexusChip("blocks \(blockedCount)", tone: .neutral)
+                }
+                if let subtaskProgress, subtaskProgress.total > 0 {
+                    NexusChip(
+                        subtaskProgress.label,
+                        systemImage: "checklist",
+                        tone: subtaskProgress.isComplete ? .positive : .neutral)
+                }
+                if let deadline, showsDeadline {
+                    NexusChip(deadline.label, systemImage: deadline.systemImage, tone: deadline.tone)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
     @ViewBuilder
     private var metaCluster: some View {
         let due = DueChipFormatter.label(for: task, now: now, calendar: Self.chipCalendar)
@@ -468,62 +554,6 @@ private struct RowBody: View {
         case .medium: return .medium
         case .high: return .high
         }
-    }
-}
-
-// MARK: - DeadlineBadgePresentation
-
-/// Semantic urgency of a deadline, independent of its display tone. Two kinds
-/// (`.missed`, `.today`) both render red (`.rose`) but are distinct facts, so
-/// dedupe logic keys on this, not on `tone` or the human-readable label.
-public enum DeadlineUrgency: Equatable, Sendable {
-    case missed  // dayDelta < 0 — the deadline has already passed
-    case today  // dayDelta == 0 — the deadline is today (more urgent than a slipped due)
-    case upcoming  // dayDelta > 0 — a future deadline
-}
-
-public struct DeadlineBadgePresentation: Equatable, Sendable {
-    public let label: String
-    public let systemImage: String
-    public let tone: NexusChipTone
-    public let kind: DeadlineUrgency
-
-    public init(
-        label: String,
-        systemImage: String = "flag.fill",
-        tone: NexusChipTone,
-        kind: DeadlineUrgency
-    ) {
-        self.label = label
-        self.systemImage = systemImage
-        self.tone = tone
-        self.kind = kind
-    }
-}
-
-// MARK: - DeadlineBadgeFormatter
-
-public enum DeadlineBadgeFormatter {
-    public static func presentation(
-        deadlineAt: Date?,
-        now: Date,
-        calendar: Calendar
-    ) -> DeadlineBadgePresentation? {
-        guard let deadlineAt else { return nil }
-
-        let startOfToday = calendar.startOfDay(for: now)
-        let startOfDeadline = calendar.startOfDay(for: deadlineAt)
-        let dayDelta = calendar.dateComponents([.day], from: startOfToday, to: startOfDeadline).day ?? 0
-
-        if dayDelta < 0 {
-            return DeadlineBadgePresentation(label: "deadline missed", tone: .rose, kind: .missed)
-        }
-        if dayDelta == 0 {
-            return DeadlineBadgePresentation(label: "deadline today", tone: .rose, kind: .today)
-        }
-
-        // MP-2 accent burn-down: always .neutral regardless of 1…3 day window
-        return DeadlineBadgePresentation(label: "deadline in \(dayDelta)d", tone: .neutral, kind: .upcoming)
     }
 }
 
