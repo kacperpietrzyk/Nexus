@@ -215,6 +215,88 @@ import Testing
         #expect(edges.first?.toID == preexisting.id)
     }
 
+    /// M2: a pre-existing `Person` stored with surrounding whitespace must still
+    /// be matched by the trimmed participant name — no duplicate on backfill.
+    @Test func backfillTrimsExistingPersonNameForDedup() throws {
+        let context = try makeBackfillContext()
+        let preexisting = Person(displayName: " Alice ")  // stored untrimmed
+        context.insert(preexisting)
+        context.insert(StubMeeting(participants: [("s1", "Alice")]))
+        try context.save()
+
+        try runBackfill(in: context)
+
+        let people = try context.fetch(FetchDescriptor<Person>())
+        #expect(people.count == 1)  // no duplicate despite the whitespace mismatch.
+        #expect(people.first?.id == preexisting.id)  // reused, not re-created.
+        #expect(try attendeeLinks(in: context).count == 1)
+    }
+
+    // MARK: - `...IfNeeded` wrapper (marker-gated invocation, M1)
+
+    /// The wrapper runs the backfill once and the per-store marker short-circuits
+    /// later launches — even if new meetings appear afterwards (idempotency is
+    /// guaranteed by the core; the marker just avoids the rescan).
+    @Test func ifNeededWrapperRunsOnceThenMarkerSkips() throws {
+        let container = try makeBackfillContainer()
+        let context = ModelContext(container)
+        context.insert(StubMeeting(participants: [("s1", "Alice"), ("s2", "Bob")]))
+        try context.save()
+        let defaults = isolatedDefaults()
+
+        try NexusModelContainer.backfillPeopleFromMeetingsIfNeeded(
+            meetingType: StubMeeting.self,
+            participantsKeyPath: \.participantsJSON,
+            idKeyPath: \.id,
+            container: container,
+            defaults: defaults
+        )
+        #expect(try context.fetch(FetchDescriptor<Person>()).count == 2)
+
+        // A meeting added after the first run is NOT backfilled — the marker gates.
+        context.insert(StubMeeting(participants: [("s3", "Carol")]))
+        try context.save()
+        try NexusModelContainer.backfillPeopleFromMeetingsIfNeeded(
+            meetingType: StubMeeting.self,
+            participantsKeyPath: \.participantsJSON,
+            idKeyPath: \.id,
+            container: container,
+            defaults: defaults
+        )
+        #expect(try context.fetch(FetchDescriptor<Person>()).count == 2)  // Carol not added.
+    }
+
+    /// A zero-meeting first launch must NOT set the marker (fresh-install upgrade
+    /// where CloudKit hasn't synced historical meetings down yet) — a later launch
+    /// once meetings have arrived still backfills them. Guards the M1 failure class.
+    @Test func ifNeededWrapperDoesNotMarkEmptyFirstRunAndBackfillsLater() throws {
+        let container = try makeBackfillContainer()
+        let context = ModelContext(container)
+        let defaults = isolatedDefaults()
+
+        // First launch: no meetings synced yet → no-op, marker left UNSET.
+        try NexusModelContainer.backfillPeopleFromMeetingsIfNeeded(
+            meetingType: StubMeeting.self,
+            participantsKeyPath: \.participantsJSON,
+            idKeyPath: \.id,
+            container: container,
+            defaults: defaults
+        )
+        #expect(try context.fetch(FetchDescriptor<Person>()).isEmpty)
+
+        // Meetings sync down; a later launch backfills them (marker wasn't gating).
+        context.insert(StubMeeting(participants: [("s1", "Alice")]))
+        try context.save()
+        try NexusModelContainer.backfillPeopleFromMeetingsIfNeeded(
+            meetingType: StubMeeting.self,
+            participantsKeyPath: \.participantsJSON,
+            idKeyPath: \.id,
+            container: container,
+            defaults: defaults
+        )
+        #expect(try context.fetch(FetchDescriptor<Person>()).count == 1)
+    }
+
     // MARK: - Production split-container path (on-disk, crown jewel)
 
     /// THE deliverable. Seeds a real on-disk store stamped at V11 holding a
@@ -284,6 +366,22 @@ import Testing
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         return ModelContext(container)
+    }
+
+    private func makeBackfillContainer() throws -> ModelContainer {
+        try ModelContainer(
+            for: Schema(
+                NexusSchemaV12.assembledModels(extraModels: [StubMeeting.self]),
+                version: NexusSchemaV12.versionIdentifier
+            ),
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+    }
+
+    /// A throwaway defaults suite so the per-store marker never leaks across tests
+    /// (in-memory containers can share a synthetic store URL).
+    private func isolatedDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "people-backfill-\(UUID().uuidString)")!
     }
 
     private func runBackfill(in context: ModelContext) throws {

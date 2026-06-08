@@ -209,21 +209,33 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
     ///   - a meeting with nil/empty `participantsJSON` contributes 0 people and 0
     ///     links; blank display names are skipped.
     /// A store with zero meetings (or zero participants) yields no work and no save.
+    /// - Returns: `true` if at least one meeting was present to scan, `false` for
+    ///   an empty meeting table. The marker-gated wrapper uses this to AVOID
+    ///   recording completion on a zero-meeting first launch (e.g. a fresh-install
+    ///   upgrade where CloudKit hasn't synced historical meetings down yet) — so a
+    ///   later launch retries once meetings have arrived.
+    @discardableResult
     static func backfillPeopleFromMeetingParticipants<M: PersistentModel>(
         meetingType _: M.Type,
         participantsKeyPath: KeyPath<M, Data?>,
         idKeyPath: KeyPath<M, UUID>,
         in context: ModelContext
-    ) throws {
+    ) throws -> Bool {
         let meetings = try context.fetch(FetchDescriptor<M>())
-        guard !meetings.isEmpty else { return }
+        guard !meetings.isEmpty else { return false }
 
-        // Index existing (non-soft-deleted) people by display name for find-or-create.
+        // Index existing (non-soft-deleted) people for find-or-create. Key by the
+        // TRIMMED display name (M2): `Person.displayName` is stored untrimmed, but
+        // participant lookup below trims, so a pre-existing person with surrounding
+        // whitespace would otherwise miss and duplicate on backfill re-run.
         var peopleByName: [String: Person] = [:]
         for person in try context.fetch(
             FetchDescriptor<Person>(predicate: #Predicate { $0.deletedAt == nil })
-        ) where peopleByName[person.displayName] == nil {
-            peopleByName[person.displayName] = person
+        ) {
+            let key = person.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if peopleByName[key] == nil {
+                peopleByName[key] = person
+            }
         }
 
         // Index existing attendee edges by their stable from/to identity. The
@@ -271,5 +283,6 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
         if didInsert {
             try context.save()
         }
+        return true
     }
 }
