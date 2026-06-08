@@ -103,6 +103,32 @@ struct PersonRepositoryTests {
     }
 
     @MainActor
+    @Test("upsert keeps a real displayName instead of clobbering it with an email placeholder (ME1)")
+    func upsertDoesNotClobberRealNameWithEmail() throws {
+        let context = try makeContext()
+        let repo = PersonRepository(context: context)
+        let key = "calendar-attendee:bob@x.com"
+        let named = try repo.upsert(externalSourceID: key, displayName: "Bob Smith", email: "bob@x.com")
+        // A later email-only attendee re-upserts with displayName == email (a placeholder).
+        let reupserted = try repo.upsert(externalSourceID: key, displayName: "bob@x.com", email: "bob@x.com")
+        #expect(reupserted.id == named.id)
+        #expect(reupserted.displayName == "Bob Smith")  // real name preserved
+    }
+
+    @MainActor
+    @Test("upsert still upgrades an email-placeholder displayName to a real name (ME1)")
+    func upsertUpgradesPlaceholderToRealName() throws {
+        let context = try makeContext()
+        let repo = PersonRepository(context: context)
+        let key = "calendar-attendee:bob@x.com"
+        // First seen email-only: displayName is the email placeholder.
+        _ = try repo.upsert(externalSourceID: key, displayName: "bob@x.com", email: "bob@x.com")
+        // A later attendee carries the real name — it must win over the placeholder.
+        let upgraded = try repo.upsert(externalSourceID: key, displayName: "Bob Smith", email: "bob@x.com")
+        #expect(upgraded.displayName == "Bob Smith")
+    }
+
+    @MainActor
     @Test("upsert with a new externalSourceID creates a distinct person")
     func upsertCreatesNew() throws {
         let context = try makeContext()
