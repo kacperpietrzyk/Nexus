@@ -50,6 +50,7 @@ public struct NexusChip: View {
             }
             Text(label)
                 .font(NexusType.caption)
+                .lineLimit(1)
             if includeRemoveIcon {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .semibold))
@@ -65,6 +66,13 @@ public struct NexusChip: View {
             chipShape
                 .strokeBorder(borderColor, lineWidth: 1)
         )
+        // A chip is an atomic badge: it must keep its intrinsic width and never
+        // be compressed by a tight parent HStack. Without this a narrow row
+        // squeezes the label until it wraps character-by-character into a
+        // vertical strip (the iOS Tasks/Today row regression). `fixedSize` pins
+        // the chip to its natural size so the flexible siblings (title) absorb
+        // the squeeze instead.
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     /// Linear tag/badge — flat 4 px corner (`NexusRadius.badge`), not a pill.

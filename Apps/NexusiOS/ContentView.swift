@@ -41,7 +41,27 @@ struct ContentView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var selectedTab: NexusTab = .today
+    @State private var selectedTab: NexusTab = ContentView.initialTab()
+
+    /// DEBUG-only: lets the screenshot/QA loop deep-open a specific tab via the
+    /// `NEXUS_INITIAL_TAB` launch env var (no tap automation in the harness).
+    /// Always `.today` in Release.
+    private static func initialTab() -> NexusTab {
+        #if DEBUG
+        switch ProcessInfo.processInfo.environment["NEXUS_INITIAL_TAB"] {
+        case "tasks": return .tasks
+        case "notes": return .notes
+        case "inbox": return .inbox
+        case "agent": return .agent
+        case "calendar": return .calendar
+        case "people": return .people
+        case "settings": return .settings
+        default: return .today
+        }
+        #else
+        return .today
+        #endif
+    }
     // Calendar/Motion-AI surface (spec §9). Lazily
     // built once so scope/anchor state survives tab switches.
     @State private var calendarViewModel: CalendarViewModel?
