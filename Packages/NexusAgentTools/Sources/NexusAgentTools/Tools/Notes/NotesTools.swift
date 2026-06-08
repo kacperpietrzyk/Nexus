@@ -30,15 +30,43 @@ public struct NotesCreateTool: AgentTool {
 
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
-        let title = try NotesToolSupport.optionalString(args["title"], field: "title") ?? ""
-        let role = try NotesToolSupport.role(args["role"]) ?? .free
-        let tags = try NotesToolSupport.tags(args["tags"]) ?? []
-        let blocks = try NotesToolSupport.blocks(fromBodyIn: args) ?? []
+        let parsedBody = try NotesToolSupport.parsedBody(fromBodyIn: args)
+        let title =
+            try NotesToolSupport.optionalString(args["title"], field: "title")
+            ?? parsedBody?.frontmatter?.title
+            ?? ""
+        let role =
+            try NotesToolSupport.role(args["role"])
+            ?? parsedBody?.frontmatter?.role
+            ?? .free
+        let tags =
+            try NotesToolSupport.tags(args["tags"])
+            ?? parsedBody?.frontmatter?.tags
+            ?? []
+        let blocks = parsedBody?.blocks ?? []
 
         let repo = context.noteRepository
         let note = try repo.create(title: title, blocks: blocks, role: role, tags: tags)
+        try restoreFrontmatterLinks(parsedBody?.frontmatter?.links ?? [], from: note, context: context)
         await context.searchIndex.upsert(IndexedDocument(note))
         return try TasksToolJSON.encode(try NoteDTO(from: note, format: .markdown))
+    }
+
+    @MainActor
+    private func restoreFrontmatterLinks(
+        _ links: [MarkdownDocument.LinkRef],
+        from note: Note,
+        context: AgentContext
+    ) throws {
+        guard links.isEmpty == false else { return }
+        let repository = LinkRepository(context: context.modelContext.context)
+        for link in links where NotesLinkTool.reconcilerOwnedKinds.contains(link.linkKind) == false {
+            try repository.findOrCreate(
+                from: (.note, note.id),
+                to: (link.toKind, link.toID),
+                linkKind: link.linkKind
+            )
+        }
     }
 }
 

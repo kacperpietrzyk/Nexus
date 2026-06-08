@@ -5,6 +5,111 @@ import Testing
 
 @testable import NexusAgentTools
 
+@Suite("NotesTools frontmatter import")
+struct NotesToolsFrontmatterImportTests {
+    @MainActor
+    @Test("create strips exported markdown frontmatter before parsing blocks")
+    func createStripsExportedFrontmatter() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let document = """
+            ---
+            id: 11111111-1111-1111-1111-111111111111
+            kind: note
+            title: "Imported note"
+            links: []
+            ---
+
+            # Imported note
+
+            Real body.
+            """
+        let result = try await NotesCreateTool().call(
+            args: .object([
+                "title": .string("Imported note"),
+                "body": .string(document),
+            ]),
+            context: fixture.context
+        )
+        let dto = try TasksToolJSON.decode(NoteDTO.self, from: result)
+
+        #expect(dto.body.contains("Real body."))
+        #expect(dto.body.contains("11111111-1111-1111-1111-111111111111") == false)
+        #expect(dto.body.contains("links: []") == false)
+
+        let id = try #require(UUID(uuidString: dto.id))
+        let note = try #require(try fixture.context.noteRepository.find(id: id))
+        #expect(note.plainText.contains("Real body."))
+        #expect(note.plainText.contains("11111111-1111-1111-1111-111111111111") == false)
+        #expect(note.plainText.contains("links: []") == false)
+    }
+
+    @MainActor
+    @Test("create applies exported frontmatter metadata when fields are omitted")
+    func createAppliesExportedFrontmatterMetadata() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let document = """
+            ---
+            title: "Imported metadata"
+            role: dailyNote
+            tags:
+              - obsidian
+              - project
+            links:
+              - toKind: task
+                toID: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+                linkKind: containsTask
+            ---
+
+            Real body.
+            """
+        let result = try await NotesCreateTool().call(
+            args: .object(["body": .string(document)]),
+            context: fixture.context
+        )
+        let dto = try TasksToolJSON.decode(NoteDTO.self, from: result)
+
+        #expect(dto.title == "Imported metadata")
+        #expect(dto.role == "dailyNote")
+        #expect(dto.tags == ["obsidian", "project"])
+        #expect(dto.body.contains("Real body."))
+        #expect(dto.body.contains("toKind: task") == false)
+    }
+
+    @MainActor
+    @Test("create restores explicit frontmatter links and skips reconciler-owned links")
+    func createRestoresExplicitFrontmatterLinks() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let projectID = UUID()
+        let taskID = UUID()
+        let document = """
+            ---
+            title: "Imported links"
+            links:
+              - toKind: project
+                toID: \(projectID.uuidString)
+                linkKind: source
+              - toKind: task
+                toID: \(taskID.uuidString)
+                linkKind: containsTask
+            ---
+
+            Real body.
+            """
+        let result = try await NotesCreateTool().call(
+            args: .object(["body": .string(document)]),
+            context: fixture.context
+        )
+        let dto = try TasksToolJSON.decode(NoteDTO.self, from: result)
+        let noteID = try #require(UUID(uuidString: dto.id))
+
+        let links = try fixture.context.linkRepository.outgoing(from: (.note, noteID))
+        #expect(links.count == 1)
+        #expect(links.first?.toKind == .project)
+        #expect(links.first?.toID == projectID)
+        #expect(links.first?.linkKind == .source)
+    }
+}
+
 @Suite("NotesTools")
 struct NotesToolsTests {
     // MARK: - note.create
@@ -126,22 +231,14 @@ struct NotesToolsTests {
         #expect(linksAfterReload == 2)
     }
 
-    // MARK: - KNOWN LIMITATION: checkbox identity is lost on markdown round-trip update
+    // MARK: - Checkbox identity round-trip
 
-    /// Documents a real spec-§12 gap: `note.update` re-parses the markdown body, and
-    /// the serializer does NOT round-trip a todo's `taskRef` (BlockMarkdownSerializer
-    /// emits a bare `- [ ]`, MarkdownBlockParser mints a fresh placeholder UUID). So a
-    /// get-markdown → update-with-same-markdown cycle orphans the original `TaskItem`
-    /// and materializes a NEW one — the UI's in-place `editTodoText` path avoids this,
-    /// but the MCP path cannot reconstruct identity from plain markdown.
-    ///
-    /// This test pins the ACTUAL (defective) behavior so a future foundation fix
-    /// (a stable taskRef marker the parser can recover) flips it deliberately. It is
-    /// flagged as a handoff blocker for the checkbox↔task invariant over MCP; it does
-    /// not affect note create/get/list/search/link.
+    /// MCP markdown reads include a stable task-ref marker that `note.update`
+    /// parses back into the same todo block. A get-markdown → update-with-same-
+    /// markdown cycle must not orphan the original task or mint a duplicate.
     @MainActor
-    @Test("KNOWN LIMITATION: markdown round-trip update re-mints the checkbox task")
-    func updateMarkdownRoundTripLosesTaskIdentity() async throws {
+    @Test("markdown round-trip update preserves checkbox task identity")
+    func updateMarkdownRoundTripPreservesTaskIdentity() async throws {
         let fixture = try await InMemoryAgentContext.make()
         let modelContext = fixture.context.modelContext.context
 
@@ -162,6 +259,7 @@ struct NotesToolsTests {
             context: fixture.context
         )
         let markdown = try TasksToolJSON.decode(NoteDTO.self, from: gotten).body
+        #expect(markdown.contains("nexus-task:\(originalTaskID.uuidString)"))
         _ = try await NotesUpdateTool().call(
             args: .object(["id": .string(id.uuidString), "body": .string(markdown)]),
             context: fixture.context
@@ -169,15 +267,12 @@ struct NotesToolsTests {
 
         let afterTasks = try modelContext.fetch(FetchDescriptor<TaskItem>())
             .filter { $0.deletedAt == nil }
-        // DEFECT: a fresh task is minted; the original is orphaned (deletedAt stays nil
-        // because §8 only soft-detaches the block, it does not delete the task). The
-        // live-task count therefore grows to 2 and the new live link points at a new id.
         let liveContainsTargets = try modelContext.fetch(FetchDescriptor<Link>())
             .filter { $0.fromID == id && $0.linkKind == .containsTask }
             .map(\.toID)
-        #expect(afterTasks.count == 2)
+        #expect(afterTasks.count == 1)
         #expect(liveContainsTargets.count == 1)
-        #expect(liveContainsTargets.first != originalTaskID)
+        #expect(liveContainsTargets.first == originalTaskID)
     }
 
     // MARK: - note.update
