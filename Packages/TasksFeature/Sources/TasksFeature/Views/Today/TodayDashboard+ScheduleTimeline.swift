@@ -241,8 +241,18 @@ extension TodayDashboard {
 
     func rejectBlock(_ block: ScheduledBlock) {
         let repository = ScheduledBlockRepository(context: modelContext)
+        // Tear down the mirror event for an accepted block first, so rejecting it
+        // never orphans an event in the "Nexus" calendar — mirrors
+        // `ScheduleRejectBlockTool` and the accept path above. Best-effort.
+        let eventID = block.externalEventID
+        let writer = calendarWriter
         try? repository.softDelete(block)
-        _Concurrency.Task { @MainActor in await reloadScheduleData() }
+        _Concurrency.Task { @MainActor in
+            if let eventID, let writer {
+                try? await writer.deleteEvent(id: eventID)
+            }
+            await reloadScheduleData()
+        }
     }
 
     /// Morning "Plan my day" (spec §10): run the shared NexusCore `DayPlanner`
