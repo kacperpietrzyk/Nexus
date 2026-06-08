@@ -46,6 +46,7 @@ Config/Signing.local.xcconfig
 .claude/
 .codex/
 .agents/
+.workflows/
 skills-lock.json
 DESIGN.md
 RESEARCH_linear_notion_vs_nexus.md
