@@ -59,6 +59,19 @@ public final class MockCalendarWriter: CalendarEventWriting, CalendarListing, @u
         locked { events[id] = nil }
     }
 
+    public func eventSnapshot(id: String) async throws -> CalendarEventSnapshot? {
+        locked {
+            guard let draft = events[id] else { return nil }
+            return CalendarEventSnapshot(
+                eventID: id,
+                calendarID: draft.calendarID,
+                title: draft.title,
+                start: draft.start,
+                end: draft.end
+            )
+        }
+    }
+
     public func events(inCalendar calendarID: String, start: Date, end: Date) async throws -> [CalendarEventSnapshot] {
         locked {
             events.compactMap { id, draft -> CalendarEventSnapshot? in
