@@ -172,7 +172,9 @@ struct TaskItemGTDRegressionTests {
         let spawn = try #require(all.first { $0.id != task.id })
         #expect(spawn.projectID == projectID)
         #expect(spawn.sectionID == sectionID)
-        #expect(spawn.parentTaskID == parentID)
+        // A recurring subtask's next occurrence spawns top-level, not back under the
+        // parent (T2) — so the parent isn't permanently blocked by a fresh subtask.
+        #expect(spawn.parentTaskID == nil)
         #expect(spawn.deadlineAt == deadline.addingTimeInterval(86_400))
     }
 
