@@ -1,5 +1,6 @@
 import Foundation
 import NexusCore
+import SwiftData
 
 /// Wire format for `TaskItem` exposed via MCP. snake_case keys per MCP convention.
 public struct TaskDTO: Codable, Sendable, Equatable {
@@ -92,12 +93,30 @@ public struct TaskDTO: Codable, Sendable, Equatable {
 
     @MainActor
     internal init(from task: TaskItem, deadlineCalendar: Calendar) {
+        self.init(
+            from: task,
+            deadlineCalendar: deadlineCalendar,
+            notes: task.body.isEmpty ? nil : task.body
+        )
+    }
+
+    @MainActor
+    public init(from task: TaskItem, modelContext: ModelContext) throws {
+        self.init(
+            from: task,
+            deadlineCalendar: Self.currentDeadlineCalendar,
+            notes: try Self.notes(for: task, modelContext: modelContext)
+        )
+    }
+
+    @MainActor
+    internal init(from task: TaskItem, deadlineCalendar: Calendar, notes: String?) {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         self.init(
             id: task.id.uuidString,
             title: task.title,
-            notes: task.body.isEmpty ? nil : task.body,
+            notes: notes,
             dueDate: task.dueAt.map { formatter.string(from: $0) },
             deadlineDate: task.deadlineAt.map { Self.deadlineDateString(for: $0, calendar: deadlineCalendar) },
             priority: Self.priorityToInt(task.priority),
@@ -115,6 +134,12 @@ public struct TaskDTO: Codable, Sendable, Equatable {
             createdAt: formatter.string(from: task.createdAt),
             updatedAt: formatter.string(from: task.updatedAt)
         )
+    }
+
+    @MainActor
+    private static func notes(for task: TaskItem, modelContext: ModelContext) throws -> String? {
+        let markdown = try TaskNoteContent.markdown(for: task, in: modelContext)
+        return markdown.isEmpty ? nil : markdown
     }
 
     internal static func deadlineDateString(for date: Date, calendar: Calendar) -> String {

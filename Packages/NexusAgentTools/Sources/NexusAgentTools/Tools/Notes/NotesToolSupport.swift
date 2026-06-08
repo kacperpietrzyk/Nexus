@@ -10,6 +10,18 @@ import NexusCore
 /// the model already defines (§4.3) and renders sanitized (§14). This keeps untrusted
 /// agent HTML quarantined in one block instead of being mis-parsed as markdown.
 enum NotesToolSupport {
+    struct ParsedBody {
+        let blocks: [Block]
+        let frontmatter: FrontmatterMetadata?
+    }
+
+    struct FrontmatterMetadata {
+        let title: String?
+        let role: NoteRole?
+        let tags: [String]?
+        let links: [MarkdownDocument.LinkRef]
+    }
+
     /// The supported write formats for a note body. Distinct from `NoteContentFormat`
     /// (which also has `plain`, a read-only projection that cannot round-trip back to
     /// blocks).
@@ -22,6 +34,12 @@ enum NotesToolSupport {
     /// `body` is omitted (so callers can distinguish "leave content untouched" from
     /// "set empty content").
     static func blocks(fromBodyIn args: JSONValue) throws -> [Block]? {
+        try parsedBody(fromBodyIn: args)?.blocks
+    }
+
+    /// Parse the optional `(body, body_format)` pair into blocks plus import
+    /// metadata, when the markdown body is a full anti-lock-in document.
+    static func parsedBody(fromBodyIn args: JSONValue) throws -> ParsedBody? {
         guard let bodyValue = args["body"] else { return nil }
         guard let body = bodyValue.stringValue else {
             throw AgentError.validation("body must be a string")
@@ -29,11 +47,75 @@ enum NotesToolSupport {
         let format = try bodyFormat(args["body_format"])
         switch format {
         case .markdown:
-            return MarkdownBlockParser.parse(body)
+            let markdown = markdownDocument(body)
+            return ParsedBody(
+                blocks: MarkdownBlockParser.parse(markdown.body),
+                frontmatter: markdown.frontmatter
+            )
         case .html:
             // No HTML→Blocks parser: wrap verbatim in an html(raw:) block (§4.3/§14).
-            return [Block(kind: .html(raw: body))]
+            return ParsedBody(blocks: [Block(kind: .html(raw: body))], frontmatter: nil)
         }
+    }
+
+    /// Accept either a raw note body or a full anti-lock-in export document. The
+    /// core parser is intentionally body-only; MCP is the import/write boundary.
+    private static func markdownDocument(_ markdown: String) -> (body: String, frontmatter: FrontmatterMetadata?) {
+        guard markdown.hasPrefix("---\n"),
+            let parsed = try? MarkdownFrontmatterCoder.decode(markdown)
+        else {
+            return (markdown, nil)
+        }
+        return (parsed.body, metadata(from: parsed.fields))
+    }
+
+    private static func metadata(from fields: [(String, FrontmatterValue)]) -> FrontmatterMetadata {
+        let title = stringField("title", in: fields)
+        let role = stringField("role", in: fields).flatMap(NoteRole.init(rawValue:))
+        let tags = listField("tags", in: fields)
+        let links = linkRefsField("links", in: fields)
+        return FrontmatterMetadata(title: title, role: role, tags: tags, links: links)
+    }
+
+    private static func stringField(_ name: String, in fields: [(String, FrontmatterValue)]) -> String? {
+        guard case .string(let value)? = fields.first(where: { $0.0 == name })?.1 else {
+            return nil
+        }
+        return value
+    }
+
+    private static func listField(_ name: String, in fields: [(String, FrontmatterValue)]) -> [String]? {
+        guard case .list(let values)? = fields.first(where: { $0.0 == name })?.1 else {
+            return nil
+        }
+        return values.compactMap { value in
+            guard case .string(let text) = value else { return nil }
+            return text
+        }
+    }
+
+    private static func linkRefsField(_ name: String, in fields: [(String, FrontmatterValue)]) -> [MarkdownDocument.LinkRef] {
+        guard case .list(let values)? = fields.first(where: { $0.0 == name })?.1 else {
+            return []
+        }
+        return values.compactMap { value in
+            guard case .dict(let pairs) = value else { return nil }
+            return linkRef(from: pairs)
+        }
+    }
+
+    private static func linkRef(from pairs: [(String, FrontmatterValue)]) -> MarkdownDocument.LinkRef? {
+        guard
+            let toKindText = stringField("toKind", in: pairs),
+            let toKind = ItemKind(rawValue: toKindText),
+            let toIDText = stringField("toID", in: pairs),
+            let toID = UUID(uuidString: toIDText),
+            let linkKindText = stringField("linkKind", in: pairs),
+            let linkKind = LinkKind(rawValue: linkKindText)
+        else {
+            return nil
+        }
+        return MarkdownDocument.LinkRef(toKind: toKind, toID: toID, linkKind: linkKind)
     }
 
     /// Default body format is markdown (the round-trip path). `body_format` is

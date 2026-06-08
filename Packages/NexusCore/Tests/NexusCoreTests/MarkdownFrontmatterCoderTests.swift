@@ -83,6 +83,45 @@ import Testing
     #expect(fields["deletedAt"] == FrontmatterValue.none)
 }
 
+@Test func frontmatterCoder_decode_roundTripsLists() throws {
+    let source = """
+        ---
+        tags:
+          - obsidian
+          - project
+        links:
+          - toKind: task
+            toID: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+            linkKind: containsTask
+          - toKind: note
+            toID: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+            linkKind: mentions
+        ---
+
+        body
+        """
+    let parsed = try MarkdownFrontmatterCoder.decode(source)
+
+    #expect(parsed.body == "body")
+    let fields = Dictionary(uniqueKeysWithValues: parsed.fields.map { ($0.0, $0.1) })
+    #expect(fields["tags"] == .list([.string("obsidian"), .string("project")]))
+    #expect(
+        fields["links"]
+            == .list([
+                .dict([
+                    ("toKind", .string("task")),
+                    ("toID", .string("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")),
+                    ("linkKind", .string("containsTask")),
+                ]),
+                .dict([
+                    ("toKind", .string("note")),
+                    ("toID", .string("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")),
+                    ("linkKind", .string("mentions")),
+                ]),
+            ])
+    )
+}
+
 @Test func frontmatterCoder_decode_throwsOnMissingClose() {
     let source = """
         ---

@@ -80,7 +80,10 @@ public enum NoteContentFormatRenderer {
         case .plain:
             return note.plainText
         case .markdown:
-            return BlockMarkdownSerializer.markdown(for: try NoteContentCoder.decode(note.contentData))
+            return BlockMarkdownSerializer.markdown(
+                for: try NoteContentCoder.decode(note.contentData),
+                options: .mcpRoundTrip
+            )
         case .html:
             return BlockHTMLSerializer.html(for: try NoteContentCoder.decode(note.contentData))
         }

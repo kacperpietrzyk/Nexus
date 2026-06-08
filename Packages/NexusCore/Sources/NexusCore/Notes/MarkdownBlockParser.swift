@@ -127,8 +127,8 @@ public enum MarkdownBlockParser {
         if let parsed = heading(in: trimmed) {
             return Block(kind: .heading(level: parsed.level, runs: parseInline(parsed.rest)))
         }
-        if let rest = todoBody(in: trimmed) {
-            return Block(kind: .todo(taskRef: UUID(), runs: parseInline(rest)))
+        if let todo = todoBody(in: trimmed) {
+            return Block(kind: .todo(taskRef: todo.taskRef ?? UUID(), runs: parseInline(todo.body)))
         }
         if trimmed.hasPrefix("- ") {
             return Block(kind: .bulleted(runs: parseInline(String(trimmed.dropFirst(2)))))
@@ -155,13 +155,35 @@ public enum MarkdownBlockParser {
         return (level, rest)
     }
 
-    private static func todoBody(in line: String) -> String? {
+    private static func todoBody(in line: String) -> (taskRef: UUID?, body: String)? {
         guard line.hasPrefix("- [") else { return nil }
         let markers = ["- [ ] ", "- [x] ", "- [X] "]
         for marker in markers where line.hasPrefix(marker) {
-            return String(line.dropFirst(marker.count))
+            return parseTodoTaskRefMarker(String(line.dropFirst(marker.count)))
         }
         return nil
+    }
+
+    private static func parseTodoTaskRefMarker(_ body: String) -> (taskRef: UUID?, body: String) {
+        let markerPrefix = "<!-- nexus-task:"
+        let markerSuffix = "-->"
+        let trimmed = body.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasSuffix(markerSuffix),
+            let markerRange = trimmed.range(of: markerPrefix, options: .backwards)
+        else {
+            return (nil, body)
+        }
+
+        let idStart = markerRange.upperBound
+        let idEnd = trimmed.index(trimmed.endIndex, offsetBy: -markerSuffix.count)
+        let idText = trimmed[idStart..<idEnd].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let taskRef = UUID(uuidString: String(idText)) else {
+            return (nil, body)
+        }
+
+        let text = trimmed[..<markerRange.lowerBound]
+            .trimmingCharacters(in: .whitespaces)
+        return (taskRef, String(text))
     }
 
     private static func numberedBody(in line: String) -> String? {

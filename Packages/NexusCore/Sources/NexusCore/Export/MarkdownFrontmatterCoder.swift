@@ -149,29 +149,24 @@ public enum MarkdownFrontmatterCoder {
                 i += 1
                 break
             }
-            // Phase 0f decode handles only flat scalars + null + empty-list. Lists-of-dicts not
-            // round-tripped (Phase 1 if needed for re-import).
-            let parts = line.split(separator: ":", maxSplits: 1).map(String.init)
+            let parts = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+                .map(String.init)
             guard parts.count == 2 else {
                 throw MarkdownFrontmatterError.malformedKeyValue(line: line)
             }
             let key = parts[0].trimmingCharacters(in: .whitespaces)
             let raw = parts[1].trimmingCharacters(in: .whitespaces)
             let value: FrontmatterValue
-            if raw == "null" {
-                value = .none
-            } else if raw == "[]" {
-                value = .list([])
-            } else if raw.hasPrefix("\"") && raw.hasSuffix("\"") && raw.count >= 2 {
-                let inner = String(raw.dropFirst().dropLast())
-                    .replacingOccurrences(of: "\\\"", with: "\"")
-                    .replacingOccurrences(of: "\\n", with: "\n")
-                    .replacingOccurrences(of: "\\\\", with: "\\")
-                value = .string(inner)
+            if raw.isEmpty {
+                let parsed = try decodeBlockValue(lines: lines, startIndex: i + 1)
+                value = parsed.value
+                i = parsed.nextIndex
+                fields.append((key, value))
+                continue
             } else if let d = dateFormatter.date(from: raw) {
                 value = .date(d)
             } else {
-                value = .string(raw)
+                value = decodeInlineValue(raw)
             }
             fields.append((key, value))
             i += 1
@@ -183,5 +178,70 @@ public enum MarkdownFrontmatterCoder {
         let body = lines[i...].joined(separator: "\n")
         let trimmedBody = body.hasSuffix("\n") ? String(body.dropLast()) : body
         return ParsedFrontmatter(fields: fields, body: trimmedBody)
+    }
+
+    private static func decodeInlineValue(_ raw: String) -> FrontmatterValue {
+        if raw == "null" {
+            return .none
+        }
+        if raw == "[]" {
+            return .list([])
+        }
+        if raw.hasPrefix("\""), raw.hasSuffix("\""), raw.count >= 2 {
+            let inner = String(raw.dropFirst().dropLast())
+                .replacingOccurrences(of: "\\\"", with: "\"")
+                .replacingOccurrences(of: "\\n", with: "\n")
+                .replacingOccurrences(of: "\\\\", with: "\\")
+            return .string(inner)
+        }
+        if let d = dateFormatter.date(from: raw) {
+            return .date(d)
+        }
+        return .string(raw)
+    }
+
+    private static func decodeBlockValue(
+        lines: [String],
+        startIndex: Int
+    ) throws -> (value: FrontmatterValue, nextIndex: Int) {
+        var i = startIndex
+        var items: [FrontmatterValue] = []
+        while i < lines.count {
+            let line = lines[i]
+            if line == "---" || line.isEmpty || line.hasPrefix("  ") == false {
+                break
+            }
+            guard line.hasPrefix("  - ") else {
+                throw MarkdownFrontmatterError.malformedKeyValue(line: line)
+            }
+
+            let itemText = String(line.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+            if let firstPair = decodeDictPair(itemText) {
+                var pairs = [firstPair]
+                i += 1
+                while i < lines.count, lines[i].hasPrefix("    ") {
+                    let childText = String(lines[i].dropFirst(4)).trimmingCharacters(in: .whitespaces)
+                    guard let pair = decodeDictPair(childText) else {
+                        throw MarkdownFrontmatterError.malformedKeyValue(line: lines[i])
+                    }
+                    pairs.append(pair)
+                    i += 1
+                }
+                items.append(.dict(pairs))
+            } else {
+                items.append(decodeInlineValue(itemText))
+                i += 1
+            }
+        }
+        return (.list(items), i)
+    }
+
+    private static func decodeDictPair(_ text: String) -> (String, FrontmatterValue)? {
+        let parts = text.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+            .map(String.init)
+        guard parts.count == 2 else { return nil }
+        let key = parts[0].trimmingCharacters(in: .whitespaces)
+        let raw = parts[1].trimmingCharacters(in: .whitespaces)
+        return (key, decodeInlineValue(raw))
     }
 }

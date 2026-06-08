@@ -48,7 +48,7 @@ public struct TasksCreateFromTextTool: AgentTool {
         try context.taskRepository.repository.insert(task)
         await context.searchIndex.upsert(IndexedDocument(task))
 
-        let data = try JSONEncoder().encode(TaskDTO(from: task))
+        let data = try JSONEncoder().encode(TaskDTO(from: task, modelContext: context.modelContext.context))
         return try JSONDecoder().decode(JSONValue.self, from: data)
     }
 
