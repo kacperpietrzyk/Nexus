@@ -63,7 +63,7 @@ public final class AgentBriefDailyNoteWriter: AgentBriefDailyNoteWriting, @unche
         let dayKey = keyFormatter.string(from: calendar.startOfDay(for: request.now))
         let title = "Daily Brief \(dayKey)"
         let tags = ["daily", dayKey]
-        let blocks = MarkdownBlockParser.parse(text)
+        let blocks = MarkdownBlockParser.parse(Self.strippingDigestMarkers(from: text))
         let repository = NoteRepository(context: modelContext, now: { request.now })
 
         if let existing = try findExistingDailyNote(title: title) {
@@ -79,6 +79,21 @@ public final class AgentBriefDailyNoteWriter: AgentBriefDailyNoteWriting, @unche
         } else {
             try repository.create(title: title, blocks: blocks, role: .dailyNote, tags: tags)
         }
+    }
+
+    /// The Today hero brief carries `[[accent]]…[[/accent]]` / `[[mono]]…[[/mono]]`
+    /// emphasis markers that `DigestRenderer` turns into styled runs on that
+    /// surface. A persisted daily note has no such renderer, so the markers must
+    /// be stripped before storing — otherwise the Notes list and editor show the
+    /// literal `[[accent]]…` wire tokens. Kept as an explicit token list (rather
+    /// than importing `DigestRenderer`) to keep NexusAgent decoupled from
+    /// TasksFeature; the token set mirrors `DigestRenderer`'s emphasis/mono spans.
+    static func strippingDigestMarkers(from text: String) -> String {
+        var result = text
+        for marker in ["[[accent]]", "[[/accent]]", "[[mono]]", "[[/mono]]"] {
+            result = result.replacingOccurrences(of: marker, with: "")
+        }
+        return result
     }
 
     private func findExistingDailyNote(title: String) throws -> Note? {

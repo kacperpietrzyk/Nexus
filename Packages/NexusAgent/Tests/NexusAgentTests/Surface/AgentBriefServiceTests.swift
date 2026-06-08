@@ -85,6 +85,15 @@ struct AgentBriefServiceTests {
     }
 
     @Test
+    func dailyNoteStripsDigestEmphasisMarkers() {
+        // The Today hero brief carries [[accent]]…[[/accent]] / [[mono]]…[[/mono]]
+        // markers; a persisted note must store clean prose, not the wire tokens.
+        let brief = "You have [[accent]]1 task[[/accent]] in [[mono]]bench.swift[[/mono]] today."
+        let cleaned = AgentBriefDailyNoteWriter.strippingDigestMarkers(from: brief)
+        #expect(cleaned == "You have 1 task in bench.swift today.")
+    }
+
+    @Test
     func dailyNoteUpsertIsIdentityStableAndSpawnsNoTasks() async throws {
         // A brief with a checkbox, "read" twice (the second is a cache-hit).
         let harness = try AgentBriefHarness.make(scripts: [.text("Plan:\n- [ ] Ship it\n")])
