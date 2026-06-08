@@ -245,6 +245,7 @@ extension TodayDashboard {
             if let embeddedError {
                 embeddedErrorRow(embeddedError)
             }
+            deadlineRiskBanner()  // spec §19.1 D1; see +EmbeddedAlerts
 
             if !embeddedTodayTasks.isEmpty {
                 embeddedSection(eyebrow: "TODAY", count: embeddedTodayTasks.count) {
@@ -282,21 +283,6 @@ extension TodayDashboard {
         // (was 26 — content hung 8pt right of the breadcrumb).
         .padding(.horizontal, 18)
         .padding(.vertical, 24)
-    }
-
-    /// ScrollView translation of `TaskListView.errorRow`: same `.caption` +
-    /// `NexusColor.Text.primary` ink (achromatic — legibility via contrast,
-    /// not hue), but with explicit padding instead of the `List`-only
-    /// `listRowInsets`/`listRowBackground`/`listRowSeparator` modifiers, which
-    /// no-op outside a `List`.
-    @ViewBuilder
-    func embeddedErrorRow(_ message: String) -> some View {
-        Text(message)
-            .font(.caption)
-            .foregroundStyle(NexusColor.Text.primary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
     }
 
     // MARK: - NowCard "TERAZ" (Today-specific anchor, gated on pinnedAsFocus)

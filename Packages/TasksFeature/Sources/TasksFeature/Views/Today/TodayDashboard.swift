@@ -168,6 +168,9 @@ public struct TodayDashboard: View {
     @State var todaysEvents: [CalendarEvent] = []
     // Calendar/Motion-AI blocks for today (spec §7), read via NexusCore.
     @State var scheduleBlocks: [ScheduledBlock] = []
+    // Forward-looking deadline-risk signal (spec §19.1 D1); see +EmbeddedAlerts.
+    @State var deadlineRiskSummary = DeadlineRiskSummary(atRiskTaskIDs: [], tightTaskIDs: [], mostUrgent: nil)
+    @State var deadlineRiskTopTask: TaskItem?
     @State private var digestText: String = ""
     @State private var digestTimestamp: Date = .now
     @State private var heroService: HeroBriefService?
@@ -503,34 +506,6 @@ public struct TodayDashboard: View {
         }?.name
     }
 
-    private func placeholderScroll(eyebrow: String, title: String, body: String) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(eyebrow.uppercased())
-                        .nexusType(.eyebrow)
-                        .foregroundStyle(NexusColor.Text.muted)
-
-                    Text(title)
-                        .font(NexusType.display)
-                        .foregroundStyle(NexusColor.Text.primary)
-
-                    Text(body)
-                        .nexusType(.body)
-                        .foregroundStyle(NexusColor.Text.tertiary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(24)
-                .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(NexusColor.Line.regular, lineWidth: 1))
-            }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 24)
-        }
-        .scrollContentBackground(.hidden)
-        .background(Color.clear)
-    }
-
     @MainActor
     func reloadScheduleData() async {
         reloadGeneration += 1
@@ -541,6 +516,7 @@ public struct TodayDashboard: View {
             enabled: calendarEventsEnabled,
             provider: calendarProvider
         )
+        await refreshDeadlineRisk(now: now)  // spec §19.1 D1; see +EmbeddedAlerts
         do {
             let input = try Self.digestInput(now: now, modelContext: modelContext)
             let sections = try Self.embeddedTodaySections(now: now, modelContext: modelContext)
