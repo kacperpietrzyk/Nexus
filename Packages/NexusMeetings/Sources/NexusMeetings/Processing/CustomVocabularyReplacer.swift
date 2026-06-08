@@ -42,20 +42,25 @@ public struct CustomVocabularyReplacer: Sendable {
     public var isEmpty: Bool { entries.isEmpty }
 
     /// Applies the vocabulary to a single string. Empty list returns the input
-    /// unchanged (identity). Replacements are applied sequentially, longest term
-    /// first; each pass scans the *current* text so a longer match consumes the
-    /// region before a shorter sub-term can.
+    /// unchanged (identity). A single left-to-right pass applies *all* entries:
+    /// at each position the longest matching term wins (entries are pre-sorted
+    /// longest-first) and the scan resumes past the matched source region, so an
+    /// earlier rule's output is never re-matched by a later, shorter rule (ME2).
     public func apply(to text: String) -> String {
         guard entries.isEmpty == false, text.isEmpty == false else { return text }
-        var result = text
-        for entry in entries {
-            result = Self.replace(
-                foldedTerm: entry.foldedTerm,
-                with: entry.replacement,
-                in: result
-            )
+        let original = Array(text)
+        let folded = Array(Self.fold(text))
+        // Folding is per-character (diacritic + case) so it preserves index
+        // alignment with the original array. If a fold ever changed the length
+        // (rare — ß/ligatures), fall back to the sequential per-entry scan.
+        guard folded.count == original.count else {
+            var result = text
+            for entry in entries {
+                result = Self.naiveReplace(foldedTerm: entry.foldedTerm, with: entry.replacement, in: result)
+            }
+            return result
         }
-        return result
+        return Self.replaceAll(entries: entries, original: original, folded: folded)
     }
 
     /// Applies the vocabulary to each segment's text, returning corrected
@@ -76,37 +81,34 @@ public struct CustomVocabularyReplacer: Sendable {
 
     // MARK: - Matching
 
-    /// Word-boundary, case/diacritic-insensitive replacement of a single folded
-    /// term. Matches on a folded copy of the text (so casing/diacritics don't
-    /// affect detection) while splicing the canonical `replacement` into the
-    /// *original* text at the matched range (so untouched text keeps its casing).
-    private static func replace(foldedTerm: String, with replacement: String, in text: String) -> String {
-        let original = Array(text)
-        let folded = Array(fold(text))
-        // Folding is per-character (diacritic + case) so it preserves index
-        // alignment with the original array; guard defensively regardless.
-        guard folded.count == original.count else {
-            return naiveReplace(foldedTerm: foldedTerm, with: replacement, in: text)
-        }
-
-        let needle = Array(foldedTerm)
-        guard needle.isEmpty == false, needle.count <= folded.count else { return text }
-
+    /// Single left-to-right pass applying *all* entries, with word-boundary,
+    /// case/diacritic-insensitive matching. Matches on the folded copy (so
+    /// casing/diacritics don't affect detection) while splicing the canonical
+    /// `replacement` into the *original* text (so untouched text keeps its
+    /// casing). At each position the entries are tried longest-first; the first
+    /// whole-word match wins and the scan advances past the matched *source*,
+    /// never re-scanning emitted replacements.
+    private static func replaceAll(entries: [CompiledEntry], original: [Character], folded: [Character]) -> String {
+        let needles = entries.map { Array($0.foldedTerm) }
         var output: [Character] = []
         output.reserveCapacity(original.count)
         var index = 0
-        while index < folded.count {
-            let isWholeWordMatch =
-                matches(needle: needle, in: folded, at: index)
-                && isBoundary(folded, before: index)
-                && isBoundary(folded, after: index + needle.count - 1)
-            if isWholeWordMatch {
-                output.append(contentsOf: replacement)
-                index += needle.count
-            } else {
-                output.append(original[index])
-                index += 1
+        outer: while index < folded.count {
+            for (entryIndex, needle) in needles.enumerated() {
+                guard needle.isEmpty == false else { continue }
+                let lastIndex = index + needle.count - 1
+                guard lastIndex < folded.count else { continue }
+                if matches(needle: needle, in: folded, at: index),
+                    isBoundary(folded, before: index),
+                    isBoundary(folded, after: lastIndex)
+                {
+                    output.append(contentsOf: entries[entryIndex].replacement)
+                    index += needle.count
+                    continue outer
+                }
             }
+            output.append(original[index])
+            index += 1
         }
         return String(output)
     }
