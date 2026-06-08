@@ -18,6 +18,9 @@ final class FakeCalendarProvider: CalendarEventProviding, CalendarEventWriting, 
     private(set) var updatedIDs: [String] = []
     private(set) var deletedIDs: [String] = []
     private(set) var ensureNexusCount = 0
+    /// When set, `deleteEvent` throws this instead of mutating the store — used to
+    /// exercise the orphan-event failure path.
+    var deleteEventError: CalendarProviderError?
 
     init(
         status: CalendarAuthorizationStatus = .fullAccess,
@@ -94,6 +97,9 @@ final class FakeCalendarProvider: CalendarEventProviding, CalendarEventWriting, 
     }
 
     func deleteEvent(id: String) async throws {
+        if let deleteEventError = locked({ deleteEventError }) {
+            throw deleteEventError
+        }
         locked {
             deletedIDs.append(id)
             store[id] = nil
