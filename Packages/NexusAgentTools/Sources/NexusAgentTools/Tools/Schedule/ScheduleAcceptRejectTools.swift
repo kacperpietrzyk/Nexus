@@ -89,16 +89,23 @@ public struct ScheduleRejectBlockTool: AgentTool {
         }
 
         // Delete the mirror event first (accepted blocks only) so rejecting an
-        // accepted block never leaves an orphan event in the "Nexus" calendar.
+        // accepted block never leaves an orphan event in the "Nexus" calendar. If
+        // the delete fails we surface it and do NOT soft-delete: silently dropping
+        // the block while its mirror event survives would orphan the event and
+        // misreport success (A3). The user grants access in Settings and retries —
+        // mirroring `accept`'s handling — leaving block + event consistent.
         if let eventID = block.externalEventID {
             do {
                 try await writer.deleteEvent(id: eventID)
             } catch let error as CalendarProviderError {
-                if case .underlying(let message) = error {
+                switch error {
+                case .accessDenied:
+                    throw AgentError.validation(
+                        "Calendar write access denied; grant access in Settings to reject an accepted block."
+                    )
+                case .underlying(let message):
                     throw AgentError.internalError("Calendar delete failed: \(message)")
                 }
-                // accessDenied: the event cannot be reached, but the user still
-                // wants the block gone — proceed with the soft-delete below.
             }
         }
         try blocks.softDelete(block)
