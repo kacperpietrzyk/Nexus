@@ -40,6 +40,15 @@ public final class ProjectRepository {
         try context.save()
     }
 
+    /// Sets the project's lifecycle state (Projects tier, spec §4.1). `ProjectStatus`
+    /// has no reconciliation overlay (unlike `WorkflowState ⇒ status` on tasks), so
+    /// this is a plain setter; `archivedAt` is orthogonal and left untouched.
+    public func setStatus(_ status: ProjectStatus, on project: Project) throws {
+        project.statusRaw = status.rawValue
+        project.updatedAt = now()
+        try context.save()
+    }
+
     public func archive(_ project: Project) throws {
         let stamp = now()
         var visited = Set<UUID>()

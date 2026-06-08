@@ -10,22 +10,27 @@ import SwiftUI
 /// `@Query` can't represent.
 public struct TaskListView: View {
 
-    @Environment(\.modelContext) private var modelContext
+    // `internal` (not private) so the refinement extension in
+    // TaskListRefinement.swift can post-filter the resolved arrays without
+    // bloating this file's type body past the lint budget.
+    @Environment(\.modelContext) var modelContext
     @Environment(\.taskRepository) private var repository
 
     public let filter: TaskFilter
     public let now: Date
     public let onSelect: ((TaskItem) -> Void)?
 
-    @State private var overdue: [TaskItem] = []
-    @State private var today: [TaskItem] = []
-    @State private var noDate: [TaskItem] = []
-    @State private var flatList: [TaskItem] = []
+    @State var overdue: [TaskItem] = []
+    @State var today: [TaskItem] = []
+    @State var noDate: [TaskItem] = []
+    @State var flatList: [TaskItem] = []
     @State private var expandedTaskIDs: Set<UUID> = []
     @State private var subtaskProgressByTaskID: [UUID: SubtaskProgress] = [:]
     @State private var parentPickerTarget: TaskItem?
     @State private var cascadePrompt: CascadeCompletionPrompt?
     @State private var error: String?
+    @State var refinement = TaskListRefinement()
+    @State var refinementLabels: [TaskLabel] = []
 
     public init(
         filter: TaskFilter,
@@ -47,8 +52,13 @@ public struct TaskListView: View {
             }
         }
         .background(NexusColor.Background.base)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            TaskListFilterBar(refinement: $refinement, availableLabels: refinementLabels)
+        }
         .task(id: filter) { reload() }
+        .task { loadRefinementLabels() }
         .onChange(of: now) { _, _ in reload() }
+        .onChange(of: refinement) { _, _ in reload() }
         .reloadOnStoreChange { reload() }
         .sheet(item: $parentPickerTarget) { item in
             ParentTaskPickerSheet(task: item) {
@@ -313,6 +323,7 @@ public struct TaskListView: View {
                     modelContext: modelContext
                 )
             }
+            applyRefinement()
             subtaskProgressByTaskID = try SubtaskTreeDataSource.progress(
                 for: visibleRootTasks,
                 modelContext: modelContext
@@ -570,23 +581,5 @@ extension TaskListView {
         } catch is DecodingError {
             throw SavedFilterTaskListError.corrupt
         }
-    }
-}
-
-private enum SavedFilterTaskListError: LocalizedError, CustomStringConvertible {
-    case missing
-    case corrupt
-
-    var errorDescription: String? {
-        switch self {
-        case .missing:
-            return "This Smart List no longer exists."
-        case .corrupt:
-            return "This Smart List cannot be decoded. Delete it and save the filter again."
-        }
-    }
-
-    var description: String {
-        errorDescription ?? "Smart List error."
     }
 }

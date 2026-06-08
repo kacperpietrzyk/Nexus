@@ -67,6 +67,13 @@ extension TaskDetailInspector {
                     Text("Blocks")
                         .nexusType(.caption)
                         .foregroundStyle(NexusColor.Text.muted)
+                    if !outgoingBlockedTasks.isEmpty {
+                        // Blocked count (spec §9): how many tasks this one blocks.
+                        Text("\(outgoingBlockedTasks.count)")
+                            .nexusType(.caption)
+                            .foregroundStyle(NexusColor.Text.tertiary)
+                            .accessibilityLabel("Blocks \(outgoingBlockedTasks.count) tasks")
+                    }
                     Spacer()
                     Button {
                         blockPickerPresented = true

@@ -27,6 +27,24 @@ public struct AgentContext: Sendable {
         )
     }
 
+    /// On-demand `ProjectRepository` (Projects tier, spec §10) backed by the same
+    /// `ModelContext` as `taskRepository`.
+    @MainActor public var projectRepository: ProjectRepository {
+        ProjectRepository(context: modelContext.context, now: now)
+    }
+
+    /// On-demand `LabelRepository` (Projects tier, spec §7 / §10) — owns the
+    /// single-select policy, the system-label seed, and the agent-queue query.
+    @MainActor public var labelRepository: LabelRepository {
+        LabelRepository(context: modelContext.context, now: now)
+    }
+
+    /// On-demand `LinkRepository` (Projects tier, spec §9 / §10) for `blocks`
+    /// dependency edges.
+    @MainActor public var linkRepository: LinkRepository {
+        LinkRepository(context: modelContext.context)
+    }
+
     /// TasksFeature-specific helpers (NL parser + hero brief). Only populated when
     /// the consumer links `NexusAgentToolsExtras`. Tools that need these check non-nil.
     public let nlParser: AnyNLParserRef?

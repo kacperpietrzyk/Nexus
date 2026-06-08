@@ -106,11 +106,15 @@ struct TasksDailySummaryToolTests {
     func registration() {
         let names = AgentToolsAll.tools().map(\.name)
 
-        #expect(names.count == 22)
+        #expect(names.count == 34)
         #expect(Set(names).count == names.count)
         #expect(names.contains("tasks.create_from_text"))
         #expect(names.contains("tasks.daily_summary"))
         #expect(names.contains("note.create"))
+        // Projects tier (spec §10) tools are part of the full registration.
+        #expect(names.contains("tasks.set_workflow_state"))
+        #expect(names.contains("labels.assign"))
+        #expect(names.contains("blocks.add"))
     }
 
     @Test("extras-only registration does not include core task tools")

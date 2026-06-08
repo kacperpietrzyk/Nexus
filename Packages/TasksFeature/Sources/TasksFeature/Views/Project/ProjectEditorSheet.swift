@@ -12,6 +12,7 @@ public struct ProjectEditorSheet: View {
 
     @State private var name: String
     @State private var colorToken: String
+    @State private var status: ProjectStatus
     @State private var error: String?
 
     public init(project: Project? = nil, onSave: (() -> Void)? = nil) {
@@ -19,6 +20,7 @@ public struct ProjectEditorSheet: View {
         self.onSave = onSave
         self._name = State(initialValue: project?.name ?? "")
         self._colorToken = State(initialValue: project?.color ?? ProjectColorToken.defaultName)
+        self._status = State(initialValue: project?.status ?? .backlog)
     }
 
     public var body: some View {
@@ -53,6 +55,12 @@ public struct ProjectEditorSheet: View {
                         colorButton(token)
                     }
                 }
+            }
+
+            statusSection
+
+            if let project {
+                ProjectLabelsSection(projectID: project.id)
             }
 
             if let error {
@@ -98,6 +106,36 @@ public struct ProjectEditorSheet: View {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Project lifecycle picker (Projects tier, spec §4.1). Persisted via
+    /// `ProjectRepository.setStatus`; archive stays a separate, orthogonal action.
+    private var statusSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Status")
+                .nexusType(.eyebrow)
+                .foregroundStyle(NexusColor.Text.muted)
+
+            Picker("Status", selection: $status) {
+                ForEach(ProjectStatus.allCases, id: \.self) { value in
+                    Text(statusLabel(value)).tag(value)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .tint(NexusColor.Text.primary)
+        }
+    }
+
+    private func statusLabel(_ status: ProjectStatus) -> String {
+        switch status {
+        case .backlog: return "Backlog"
+        case .planned: return "Planned"
+        case .active: return "Active"
+        case .inReview: return "In Review"
+        case .completed: return "Completed"
+        case .cancelled: return "Cancelled"
+        }
+    }
+
     private func colorButton(_ token: ProjectColorToken) -> some View {
         let shapeLabel = projectShapeLabel(named: token.name)
         return Button {
@@ -138,8 +176,14 @@ public struct ProjectEditorSheet: View {
                 if project.color != colorToken {
                     try repository.recolor(project, to: colorToken)
                 }
+                if project.status != status {
+                    try repository.setStatus(status, on: project)
+                }
             } else {
-                try repository.create(name: cleanedName, color: colorToken)
+                let created = try repository.create(name: cleanedName, color: colorToken)
+                if status != .backlog {
+                    try repository.setStatus(status, on: created)
+                }
             }
             onSave?()
             dismiss()
