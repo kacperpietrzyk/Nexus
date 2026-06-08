@@ -63,13 +63,19 @@ public struct ProjectPromoter {
         note.createdAt = stamp
         note.updatedAt = stamp
         context.insert(note)
+        // Wire `canonicalNoteRef` BEFORE reconcile: the reconciler mints a
+        // `TaskItem` for every unbound checkbox in the body and routes it via
+        // `NoteReconciler.projectContext`, which queries `canonicalNoteRef ==
+        // note.id`. Setting the ref first lets those todos resolve to THIS project
+        // (its phases); reconciling first would find no owning project and dump
+        // every promoted-body todo into Inbox.
+        project.canonicalNoteRef = note.id
         // Build the note's blob↔graph mirror + search/plainText cache before the
         // single terminal save (mirrors NoteRepository.create's reconcile step),
         // so the project page is queryable immediately rather than only after the
         // next reconcileOnLoad. The reconciler does not save — atomicity (I6) is
         // preserved by this method's lone `context.save()`.
         _ = try NoteReconciler(context: context).reconcile(note)
-        project.canonicalNoteRef = note.id
 
         // 3. Re-parent direct children → project phases.
         for child in try directChildren(of: task) {
