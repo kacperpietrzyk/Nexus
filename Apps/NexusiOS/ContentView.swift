@@ -14,7 +14,7 @@ import TasksFeature
 import UIKit
 
 // The iOS root shell mounts one tab/destination per feature
-// (Today/Inbox/Tasks/Notes/Agent/Meetings/Settings) in both the compact tab bar
+// (Today/Inbox/Tasks/Notes/Calendar/People/Agent/Meetings/Settings) in both the compact tab bar
 // and the regular-width split; it grows by a tab + a `regularDetail` case + a
 // nav item per feature by design — the same structural per-feature growth that
 // disables `file_length` on `NexusiOSApp`. The Notes mount crossed 600 lines.
@@ -42,7 +42,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var selectedTab: NexusTab = .today
-    // Calendar/Motion-AI surface (spec §9), regular-width only on iOS. Lazily
+    // Calendar/Motion-AI surface (spec §9). Lazily
     // built once so scope/anchor state survives tab switches.
     @State private var calendarViewModel: CalendarViewModel?
     // Internal (not private) so the `ContentView+CaptureAndPeek` extension file
@@ -224,17 +224,13 @@ struct ContentView: View {
             AgentTab(viewModel: agentViewModel)
                 .tag(NexusTab.agent)
                 .tabItem { Label("Agent", systemImage: "sparkles") }
-            if horizontalSizeClass == .regular {
-                calendarDetail
-                    .tag(NexusTab.calendar)
-                    .tabItem { Label("Calendar", systemImage: "calendar") }
-            }
-            if horizontalSizeClass == .regular {
-                PeopleListView()
-                    .tag(NexusTab.people)
-                    .tabItem { Label("People", systemImage: "person.crop.circle") }
-            }
-            if horizontalSizeClass == .regular, let meetingsComposition {
+            calendarDetail
+                .tag(NexusTab.calendar)
+                .tabItem { Label("Calendar", systemImage: "calendar") }
+            PeopleListView()
+                .tag(NexusTab.people)
+                .tabItem { Label("People", systemImage: "person.crop.circle") }
+            if let meetingsComposition {
                 iOSMeetingsHostResolver(composition: meetingsComposition)
                     .tag(NexusTab.meetings)
                     .tabItem { Label("Meetings", systemImage: "person.wave.2") }
@@ -266,18 +262,8 @@ struct ContentView: View {
 
     @MainActor
     private func resolveUnavailableTab() {
-        if selectedTab == .meetings && horizontalSizeClass != .regular {
+        if selectedTab == .meetings && meetingsComposition == nil {
             selectedTab = .settings
-        }
-        // Calendar is regular-width only (the compact tab bar has no room for the
-        // grid); fall back to Today if the user narrows while on it.
-        if selectedTab == .calendar && horizontalSizeClass != .regular {
-            selectedTab = .today
-        }
-        // People is regular-width only (same crowded compact tab bar as Calendar);
-        // fall back to Today if the user narrows while on it.
-        if selectedTab == .people && horizontalSizeClass != .regular {
-            selectedTab = .today
         }
     }
 

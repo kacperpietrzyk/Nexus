@@ -180,14 +180,17 @@ public struct ActionItemsReviewView: View {
 
 private struct ActionItemsReviewRow: View {
     let task: TaskItem
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(task.title)
                 .font(.body.weight(.medium))
 
-            if !task.body.isEmpty {
-                Text(task.body)
+            let taskBody = ((try? TaskNoteContent.plainText(for: task, in: modelContext)) ?? task.body)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !taskBody.isEmpty {
+                Text(taskBody)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
