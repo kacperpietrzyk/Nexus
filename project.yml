@@ -38,6 +38,8 @@ packages:
     path: Packages/NotesFeature
   CalendarFeature:
     path: Packages/CalendarFeature
+  PeopleFeature:
+    path: Packages/PeopleFeature
   InboxShell:
     path: Packages/InboxShell
   CommandPaletteShell:
@@ -166,6 +168,7 @@ targets:
       - package: TasksFeature
       - package: NotesFeature
       - package: CalendarFeature
+      - package: PeopleFeature
       - package: InboxShell
       - package: CommandPaletteShell
       - package: NexusAgentTools
@@ -212,6 +215,7 @@ targets:
       - package: TasksFeature
       - package: NotesFeature
       - package: CalendarFeature
+      - package: PeopleFeature
       - package: InboxShell
       - package: CommandPaletteShell
       - package: NexusAgentTools

@@ -73,6 +73,7 @@ public struct ItemRow: View {
         case .agentMemory: return "brain.head.profile"
         case .scheduledBlock: return "calendar.badge.clock"
         case .label: return "tag"
+        case .person: return "person.crop.circle"
         }
     }
 

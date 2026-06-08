@@ -10,6 +10,7 @@ import NexusSearch
 import NexusSync
 import NexusUI
 import NotesFeature
+import PeopleFeature
 import SwiftData
 import SwiftUI
 import TasksFeature
@@ -43,6 +44,7 @@ struct NexusMacApp: App {
     private let taskParser: CompositeNLParser
     private let taskRepository: TaskItemRepository
     private let noteRepository: NoteRepository
+    private let personRepository: PersonRepository
     private let notificationScheduler: NotificationScheduler
     // Strong ref — UNUserNotificationCenter does NOT retain its delegate.
     private let actionHandler: NotificationActionHandler
@@ -101,6 +103,10 @@ struct NexusMacApp: App {
             for: made.mainContext,
             tasks: self.taskRepository
         )
+        // People / Contacts (spec §6). `Person` is already a synced model in
+        // NexusSchemaV12, so the main window + Settings `.modelContainer(container)`
+        // already register it — no separate container registration is needed.
+        self.personRepository = PeopleComposition.makeRepository(for: made.mainContext)
         self.meetingsComposition = Self.makeMeetingsComposition(
             context: made.mainContext,
             router: self.aiRouter,
@@ -218,6 +224,16 @@ struct NexusMacApp: App {
                 .environment(\.taskParser, taskParser)
                 .environment(\.taskRepository, taskRepository)
                 .environment(\.noteRepository, noteRepository)
+                .environment(\.personRepository, personRepository)
+                // People profile meeting history: PeopleFeature cannot import
+                // NexusMeetings (feature isolation), so the host resolves a meeting
+                // UUID → displayable row via the Meetings repository.
+                .environment(
+                    \.personMeetingResolver,
+                    PersonMeetingResolver { [meetingsComposition] id in
+                        try? meetingsComposition.meetingRepository.find(id: id)
+                    }
+                )
                 .environment(\.notificationScheduler, notificationScheduler)
                 .environment(\.agentActivityLog, agentActivityLog)
                 .environment(\.agentChatViewModel, agentComposition.chatViewModel)

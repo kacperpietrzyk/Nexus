@@ -25,6 +25,15 @@ import SwiftData
 ///   migration stage (same reasoning as the body -> Note move below): it runs as
 ///   plain, idempotent, marker-gated post-open code in
 ///   `NexusModelContainer.seedSystemLabelsIfNeeded`.
+/// - V11 -> V12 lightweight (additive schema: `Person` contact-record entity;
+///   People / Contacts module, spec §4.1/§8). Pure additive — no data move. The new
+///   `ItemKind.person` / `LinkKind.attendee` raw enum cases are stored as existing
+///   `String` columns on the `Link` table and need no schema change. The optional
+///   `participantsJSON` -> `Person` BACKFILL is NOT a migration stage (same reasoning
+///   as the body -> Note move below): it runs as plain, idempotent code over an
+///   already-open container in `backfillPeopleFromMeetingParticipants` and is deferred
+///   to first-launch bootstrap because it needs the concrete `Meeting` type (a
+///   composition-time extra NexusSync cannot import).
 ///
 /// WHY the body -> Note move is NOT a `.custom` migration stage (a deliberate
 /// deviation from the spec's "custom stage" wording, forced by this codebase's
@@ -58,6 +67,7 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             NexusSchemaV9.self,
             NexusSchemaV10.self,
             NexusSchemaV11.self,
+            NexusSchemaV12.self,
         ]
     }
 
@@ -102,6 +112,10 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             MigrationStage.lightweight(
                 fromVersion: NexusSchemaV10.self,
                 toVersion: NexusSchemaV11.self
+            ),
+            MigrationStage.lightweight(
+                fromVersion: NexusSchemaV11.self,
+                toVersion: NexusSchemaV12.self
             ),
         ]
     }
@@ -176,6 +190,100 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             context.insert(label)
             presentNames.insert(system.name.lowercased())
             didInsert = true
+        }
+
+        if didInsert {
+            try context.save()
+        }
+    }
+
+    /// Minimal decode shape for one `Meeting.participantsJSON` entry. Deliberately
+    /// NOT `MeetingParticipant` (that lives in NexusMeetings, which NexusSync cannot
+    /// import). Decoding only the `displayName` is forward-compatible: extra keys in
+    /// the persisted JSON (e.g. `speakerID`) are ignored.
+    private struct BackfillParticipant: Decodable {
+        let displayName: String
+    }
+
+    /// V11 -> V12 People backfill (spec §8). For each existing meeting's
+    /// `participantsJSON`, ensures a `Person` exists for every unique participant
+    /// `displayName` and a `Link(.attendee)` from that meeting to the person.
+    ///
+    /// Generic over the concrete `Meeting` model `M` (passed by `participantsKeyPath`
+    /// + `idKeyPath`) because NexusSync cannot import `Meeting` (composition-time
+    /// extra / package cycle) — so the INVOCATION is deferred to first-launch
+    /// bootstrap where `Meeting.self` is nameable, NOT wired into
+    /// `NexusModelContainer.make`. Invoked as plain code (NOT a `didMigrate` closure —
+    /// see the type doc / `migrateTaskBodiesToNotes`) on an already-open V12 container:
+    /// `Person` and `Link` are insertable and the `participantsJSON` column is readable.
+    ///
+    /// Idempotency (spec §8 / §10):
+    ///   - `Person` is deduplicated GLOBALLY by an EXACT, non-soft-deleted
+    ///     `displayName` match (find-or-create) — NOT the fuzzy soft-match, so two
+    ///     runs yield the same set. `externalSourceID` stays nil (the key here is the
+    ///     name, not an external id).
+    ///   - the `.attendee` edge is created only if an identical edge does not already
+    ///     exist (matched on from/to/linkKind), so a re-run never double-links.
+    ///   - a meeting with nil/empty `participantsJSON` contributes 0 people and 0
+    ///     links; blank display names are skipped.
+    /// A store with zero meetings (or zero participants) yields no work and no save.
+    static func backfillPeopleFromMeetingParticipants<M: PersistentModel>(
+        meetingType _: M.Type,
+        participantsKeyPath: KeyPath<M, Data?>,
+        idKeyPath: KeyPath<M, UUID>,
+        in context: ModelContext
+    ) throws {
+        let meetings = try context.fetch(FetchDescriptor<M>())
+        guard !meetings.isEmpty else { return }
+
+        // Index existing (non-soft-deleted) people by display name for find-or-create.
+        var peopleByName: [String: Person] = [:]
+        for person in try context.fetch(
+            FetchDescriptor<Person>(predicate: #Predicate { $0.deletedAt == nil })
+        ) where peopleByName[person.displayName] == nil {
+            peopleByName[person.displayName] = person
+        }
+
+        // Index existing attendee edges by their stable from/to identity. The
+        // `linkKind` enum case cannot be compared inside a `#Predicate` key path, so
+        // filter in Swift after the fetch.
+        var existingAttendeeEdges = Set<String>()
+        for link in try context.fetch(FetchDescriptor<Link>()) where link.linkKind == .attendee {
+            existingAttendeeEdges.insert("\(link.fromID.uuidString):\(link.toID.uuidString)")
+        }
+
+        var didInsert = false
+
+        for meeting in meetings {
+            guard let data = meeting[keyPath: participantsKeyPath], !data.isEmpty,
+                let participants = try? JSONDecoder().decode([BackfillParticipant].self, from: data)
+            else { continue }
+
+            let meetingID = meeting[keyPath: idKeyPath]
+            var seenInMeeting = Set<String>()
+
+            for participant in participants {
+                let name = participant.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty, seenInMeeting.insert(name).inserted else { continue }
+
+                let person: Person
+                if let existing = peopleByName[name] {
+                    person = existing
+                } else {
+                    let created = Person(displayName: name)
+                    context.insert(created)
+                    peopleByName[name] = created
+                    person = created
+                    didInsert = true
+                }
+
+                let edgeKey = "\(meetingID.uuidString):\(person.id.uuidString)"
+                guard existingAttendeeEdges.insert(edgeKey).inserted else { continue }
+                context.insert(
+                    Link(from: (.meeting, meetingID), to: (.person, person.id), linkKind: .attendee)
+                )
+                didInsert = true
+            }
         }
 
         if didInsert {

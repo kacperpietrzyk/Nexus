@@ -12,8 +12,9 @@ public protocol NexusEnvironmentProviding: Sendable {
 extension NexusEnvironment: NexusEnvironmentProviding {}
 
 /// Single source of truth for the SwiftData container the apps install via `.modelContainer(...)`.
-/// Currently bound to `NexusSchemaV11` (V10 + `Label` + additive `Project.statusRaw` /
-/// `TaskItem.workflowStateRaw` / `TaskItem.assignedAgent`).
+/// Currently bound to `NexusSchemaV12` (V11 + the `Person` contact-record entity;
+/// V11 itself adds `Label` + additive `Project.statusRaw` / `TaskItem.workflowStateRaw` /
+/// `TaskItem.assignedAgent`).
 /// CloudKit mirroring is gated by `NexusEnvironment.cloudKitEnabled` — when off, local-only.
 public enum NexusModelContainer {
     public static let appGroupIdentifier = "group.com.kacperpietrzyk.Nexus"
@@ -69,7 +70,7 @@ public enum NexusModelContainer {
     ///     runtime; without activation, `containerURL(forSecurityApplicationGroupIdentifier:)`
     ///     returns nil and we fall back to the default Application Support path.
     ///   - extraModels: composition-time models from packages that cannot be imported by
-    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV11`.
+    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV12`.
     ///   - localOnlyExtraModels: composition-time models that must be present in the
     ///     container but excluded from CloudKit-backed configurations.
     public static func make(
@@ -128,10 +129,10 @@ public enum NexusModelContainer {
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
     ) -> ModelPartitions {
-        let allModels = NexusSchemaV11.assembledModels(extraModels: extraModels + localOnlyExtraModels)
+        let allModels = NexusSchemaV12.assembledModels(extraModels: extraModels + localOnlyExtraModels)
         let localOnlyBaselineIDs = Set(localOnlyBaseline.map(ObjectIdentifier.init))
         let baselineSyncedIdentifiers = Set(
-            NexusSchemaV11.models
+            NexusSchemaV12.models
                 .filter { !localOnlyBaselineIDs.contains(ObjectIdentifier($0)) }
                 .map(ObjectIdentifier.init)
         )
@@ -148,7 +149,7 @@ public enum NexusModelContainer {
             containerModels: allModels,
             syncedModels: syncedModels,
             localOnlyModels: localOnlyModels,
-            hasEffectiveExtraModels: allModels.count > NexusSchemaV11.models.count
+            hasEffectiveExtraModels: allModels.count > NexusSchemaV12.models.count
         )
     }
 
@@ -163,8 +164,8 @@ public enum NexusModelContainer {
             extraModels: extraModels,
             localOnlyExtraModels: localOnlyExtraModels
         )
-        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV11.versionIdentifier)
-        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV11.versionIdentifier)
+        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV12.versionIdentifier)
+        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV12.versionIdentifier)
         let configurations: [ModelConfiguration]
 
         if isStoredInMemoryOnly {
@@ -203,7 +204,7 @@ public enum NexusModelContainer {
         }
 
         return ModelConfigurationPlan(
-            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV11.versionIdentifier),
+            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV12.versionIdentifier),
             configurations: configurations,
             partitions: partitions
         )
