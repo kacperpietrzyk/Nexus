@@ -20,14 +20,24 @@ public final class MeetingsComposition {
 
     private let taskRepository: TaskItemRepository
     public let linkRepository: LinkRepository
+    private let calendarProvider: any CalendarEventProviding
 
     public var taskItemRepository: TaskItemRepository { taskRepository }
+
+    /// Wires named speakers to `Person` records (`.attendee` edges), graph-only.
+    /// Built here because the People schema rides the base container, so the
+    /// `PersonRepository` is always available. Inject into the transcript
+    /// labeling surface so a rename surfaces a `Person` (idempotent, never an
+    /// assignee — invariant I1). Calendar enrichment reuses the same provider
+    /// already wired for detection.
+    public let peopleLinker: MeetingPeopleLinker
 
     public init(
         context: ModelContext,
         router: any MeetingProcessingRouting,
         rootAudioFolder: URL,
         calendarProvider: any CalendarEventProviding,
+        dateExtractor: (any DateExtracting)? = nil,
         taskRepository: TaskItemRepository? = nil,
         workspaceProvider: any WindowTitleWorkspaceProviding = EmptyWindowTitleWorkspaceProvider(),
         recorder: MeetingRecorder? = nil,
@@ -42,8 +52,10 @@ public final class MeetingsComposition {
             withIntermediateDirectories: true
         )
 
+        self.calendarProvider = calendarProvider
         meetingRepository = MeetingRepository(context: context)
         audioStorageRepository = MeetingAudioStorageRepository(context: context)
+        peopleLinker = Self.makePeopleLinker(context: context, calendarProvider: calendarProvider)
         self.taskRepository =
             taskRepository
             ?? TaskItemRepository(
@@ -78,7 +90,8 @@ public final class MeetingsComposition {
                 taskRepository: self.taskRepository,
                 meetingRepository: meetingRepository,
                 linkRepository: linkRepository,
-                sourceID: MeetingActionItemsInboxSource.identifier
+                sourceID: MeetingActionItemsInboxSource.identifier,
+                dateExtractor: dateExtractor
             ),
             providerProfile: {
                 "\(primaryProvider.identifier)+sortformer"
@@ -100,6 +113,35 @@ public final class MeetingsComposition {
         )
     }
 
+    /// Calendar-attendee display names for a meeting, used to *seed* the speaker
+    /// labeling UI (spec §5 / I3): suggestions only, never auto-assigned. Returns
+    /// `[]` when the meeting has no linked calendar event or the lookup fails
+    /// (best-effort, like the detection correlator). Matches the event by id over
+    /// a padded window since `CalendarEventProviding` has no fetch-by-id.
+    public func calendarAttendeeNames(for meeting: Meeting) async -> [String] {
+        guard let eventID = meeting.calendarEventID else { return [] }
+        let pad: TimeInterval = 15 * 60
+        let end = meeting.endedAt ?? meeting.startedAt.addingTimeInterval(TimeInterval(meeting.durationSec))
+        let lower = meeting.startedAt.addingTimeInterval(-pad)
+        let upper = max(end, meeting.startedAt).addingTimeInterval(pad)
+        do {
+            let events = try await calendarProvider.eventsBetween(start: lower, end: upper)
+            let attendees = events.first { $0.id == eventID }?.attendees ?? []
+            var seen = Set<String>()
+            var names: [String] = []
+            for attendee in attendees {
+                guard let name = attendee.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+                    name.isEmpty == false,
+                    seen.insert(name.lowercased()).inserted
+                else { continue }
+                names.append(name)
+            }
+            return names
+        } catch {
+            return []
+        }
+    }
+
     public func agentTools() -> [any AgentTool] {
         MeetingsAgentTools.tools(
             meetingRepository: meetingRepository,
@@ -113,6 +155,16 @@ public final class MeetingsComposition {
         Task {
             await registry.register(source)
         }
+    }
+
+    private static func makePeopleLinker(
+        context: ModelContext,
+        calendarProvider: any CalendarEventProviding
+    ) -> MeetingPeopleLinker {
+        MeetingPeopleLinker(
+            people: PersonRepository(context: context),
+            calendarProvider: calendarProvider
+        )
     }
 
     private static func makeDetector(

@@ -346,6 +346,7 @@ targets:
       - package: NexusCore
       - package: NexusAI
       - package: NexusSync
+      - package: TasksFeature
 
   # NexusMCPSidecar is a macOS command-line tool target embedded into NexusMac
   # at build time via the host app's postBuildScript. Its 7 unit tests live in

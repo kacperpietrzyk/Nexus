@@ -113,6 +113,96 @@ import Testing
 }
 
 @MainActor
+@Test func pipelineThreadsScreenContextSidecarIntoSummaryAndActionPrompts() async throws {
+    let context = try MeetingsTestSupport.makeContext()
+    let meetingRepo = MeetingRepository(context: context)
+    let meeting = MeetingsTestSupport.meeting(title: "Sync", status: .queued)
+    try meetingRepo.insert(meeting)
+    let router = CapturingMeetingProcessingRouter()
+    let pipeline = MeetingProcessingPipeline(
+        repo: meetingRepo,
+        vad: VADTrimStage(sileroLoader: { TestNoopVADSession() }),
+        transcription: TranscriptionStage(
+            primary: TextTranscriptionProvider(identifier: "parakeet-tdt-v3"),
+            fallback: TextTranscriptionProvider(identifier: "whisperkit-large")
+        ),
+        diarization: DiarizationStage(sessionLoader: { TestNoopSortformerSession() }),
+        merge: MergeStage(),
+        summary: SummaryStage(router: router),
+        actionItems: ActionItemsStage(
+            router: router,
+            taskRepository: TaskItemRepository(
+                context: context,
+                scheduler: RRuleScheduler(),
+                now: Date.init
+            ),
+            meetingRepository: meetingRepo,
+            linkRepository: LinkRepository(context: context),
+            sourceID: "meetings.action-items"
+        ),
+        providerProfile: { "parakeet-tdt-v3+sortformer" },
+        summaryProviderPreference: { .auto }
+    )
+
+    let audioFolder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pipeline-screen-context-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: audioFolder) }
+    // Simulate recording-time screen OCR having written its text-only sidecar.
+    try ScreenContextStore().append(text: "Roadmap slide: Q3 launch", folder: audioFolder)
+
+    try await pipeline.process(meeting: meeting, audioFolder: audioFolder)
+
+    let requests = await router.requests
+    // Both the summary prompt and the action-items prompt must carry the OCR text.
+    #expect(requests.count >= 2)
+    #expect(requests.allSatisfy { $0.prompt.contains("Roadmap slide: Q3 launch") })
+    #expect(requests.allSatisfy { $0.prompt.contains("On-screen context") })
+}
+
+@MainActor
+@Test func pipelineLeavesPromptsUnchangedWhenNoScreenContextSidecar() async throws {
+    let context = try MeetingsTestSupport.makeContext()
+    let meetingRepo = MeetingRepository(context: context)
+    let meeting = MeetingsTestSupport.meeting(title: "Sync", status: .queued)
+    try meetingRepo.insert(meeting)
+    let router = CapturingMeetingProcessingRouter()
+    let pipeline = MeetingProcessingPipeline(
+        repo: meetingRepo,
+        vad: VADTrimStage(sileroLoader: { TestNoopVADSession() }),
+        transcription: TranscriptionStage(
+            primary: TextTranscriptionProvider(identifier: "parakeet-tdt-v3"),
+            fallback: TextTranscriptionProvider(identifier: "whisperkit-large")
+        ),
+        diarization: DiarizationStage(sessionLoader: { TestNoopSortformerSession() }),
+        merge: MergeStage(),
+        summary: SummaryStage(router: router),
+        actionItems: ActionItemsStage(
+            router: router,
+            taskRepository: TaskItemRepository(
+                context: context,
+                scheduler: RRuleScheduler(),
+                now: Date.init
+            ),
+            meetingRepository: meetingRepo,
+            linkRepository: LinkRepository(context: context),
+            sourceID: "meetings.action-items"
+        ),
+        providerProfile: { "parakeet-tdt-v3+sortformer" },
+        summaryProviderPreference: { .auto }
+    )
+
+    let audioFolder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pipeline-no-screen-context-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: audioFolder) }
+
+    try await pipeline.process(meeting: meeting, audioFolder: audioFolder)
+
+    let requests = await router.requests
+    #expect(requests.isEmpty == false)
+    #expect(requests.allSatisfy { $0.prompt.contains("On-screen context") == false })
+}
+
+@MainActor
 @Test func pipelinePersistsFailureStatusAndRethrowsStageError() async throws {
     let context = try MeetingsTestSupport.makeContext()
     let meetingRepo = MeetingRepository(context: context)

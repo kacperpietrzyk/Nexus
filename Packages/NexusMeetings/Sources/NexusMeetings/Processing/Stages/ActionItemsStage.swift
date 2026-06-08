@@ -26,21 +26,40 @@ public struct ExtractedActionItem: Codable, Sendable, Equatable {
 public struct ActionItemsStageOutput {
     public let autoCreated: [TaskItem]
     public let lowConfidence: [ExtractedActionItem]
+    /// High-confidence items whose `assigneeHint` names someone other than the
+    /// user. Single-user correctness boundary (§4.1/I1): another person's
+    /// action item is NOT your task, so it is never materialized. Held here as
+    /// a "not-mine" channel; a future People wire-up may link these to a
+    /// `Person` via `LinkKind.mentions` (never as an assignee).
+    public let notMine: [ExtractedActionItem]
 
-    public init(autoCreated: [TaskItem], lowConfidence: [ExtractedActionItem]) {
+    public init(
+        autoCreated: [TaskItem],
+        lowConfidence: [ExtractedActionItem],
+        notMine: [ExtractedActionItem] = []
+    ) {
         self.autoCreated = autoCreated
         self.lowConfidence = lowConfidence
+        self.notMine = notMine
     }
 }
 
 @MainActor
 public final class ActionItemsStage {
+    /// First-person aliases that mark an action item as the user's own. Used as
+    /// the default for `userAliases` so an `assigneeHint` like "Me"/"I" still
+    /// materializes a task in a single-user app. Names not in this set are
+    /// treated as someone else and routed to the not-mine channel.
+    public static let defaultUserAliases: Set<String> = ["me", "i", "myself", "my", "mine"]
+
     private let router: any MeetingProcessingRouting
     private let taskRepository: TaskItemRepository
     private let meetingRepository: MeetingRepository
     private let linkRepository: LinkRepository
     private let sourceID: String
     private let threshold: Double
+    private let dateExtractor: (any DateExtracting)?
+    private let userAliases: Set<String>
 
     public init(
         router: any MeetingProcessingRouting,
@@ -48,7 +67,9 @@ public final class ActionItemsStage {
         meetingRepository: MeetingRepository,
         linkRepository: LinkRepository,
         sourceID: String,
-        threshold: Double = 0.5
+        threshold: Double = 0.5,
+        dateExtractor: (any DateExtracting)? = nil,
+        userAliases: Set<String> = ActionItemsStage.defaultUserAliases
     ) {
         self.router = router
         self.taskRepository = taskRepository
@@ -56,14 +77,21 @@ public final class ActionItemsStage {
         self.linkRepository = linkRepository
         self.sourceID = sourceID
         self.threshold = threshold
+        self.dateExtractor = dateExtractor
+        self.userAliases = Set(userAliases.map { $0.lowercased() })
     }
 
     public func run(
         meeting: Meeting,
         transcript: String,
-        summary: String
+        summary: String,
+        screenContext: String? = nil
     ) async throws -> ActionItemsStageOutput {
-        let prompt = MeetingPromptBuilder.actionItemsPrompt(transcript: transcript, summary: summary)
+        let prompt = MeetingPromptBuilder.actionItemsPrompt(
+            transcript: transcript,
+            summary: summary,
+            screenContext: screenContext
+        )
         let request = AIRequest(
             prompt: prompt,
             capability: .generate,
@@ -74,41 +102,45 @@ public final class ActionItemsStage {
         let response = try await router.route(request)
 
         guard let extracted = Self.decodeExtractedItems(from: response.text) else {
-            return ActionItemsStageOutput(autoCreated: [], lowConfidence: [])
+            return ActionItemsStageOutput(autoCreated: [], lowConfidence: [], notMine: [])
         }
 
         var autoCreated: [TaskItem] = []
         var lowConfidence: [ExtractedActionItem] = []
+        var notMine: [ExtractedActionItem] = []
         var createdIDs: [UUID] = []
+        let locale = Self.locale(for: meeting)
 
         for item in extracted {
             let trimmedText = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if item.confidence >= threshold, trimmedText.isEmpty == false {
-                let externalSourceID = Self.externalSourceID(
-                    sourceID: sourceID,
-                    meetingID: meeting.id,
-                    actionText: trimmedText
-                )
-                let task: TaskItem
-                if let existing = try existingTask(externalSourceID: externalSourceID) {
-                    task = existing
-                } else {
-                    let created = TaskItem(title: trimmedText, status: .open)
-                    created.externalSourceID = externalSourceID
-                    try taskRepository.insert(created)
-                    task = created
-                }
-                try linkRepository.findOrCreate(
-                    from: (.meeting, meeting.id),
-                    to: (.task, task.id),
-                    linkKind: .actionItem
-                )
-                autoCreated.append(task)
-                if createdIDs.contains(task.id) == false {
-                    createdIDs.append(task.id)
-                }
-            } else {
+            guard item.confidence >= threshold, trimmedText.isEmpty == false else {
                 lowConfidence.append(item)
+                continue
+            }
+
+            // Single-user boundary (§4.1/I1): only materialize items assigned to
+            // the user (or with no explicit assignee). Someone else's item is
+            // routed to the not-mine channel — never a task, and `assigneeHint`
+            // is never stored on a `TaskItem` (I2).
+            guard isMine(assigneeHint: item.assigneeHint) else {
+                notMine.append(item)
+                continue
+            }
+
+            let task = try await materializeTask(
+                meeting: meeting,
+                item: item,
+                trimmedText: trimmedText,
+                locale: locale
+            )
+            try linkRepository.findOrCreate(
+                from: (.meeting, meeting.id),
+                to: (.task, task.id),
+                linkKind: .actionItem
+            )
+            autoCreated.append(task)
+            if createdIDs.contains(task.id) == false {
+                createdIDs.append(task.id)
             }
         }
 
@@ -119,7 +151,57 @@ public final class ActionItemsStage {
             try meetingRepository.upsert(saved)
         }
 
-        return ActionItemsStageOutput(autoCreated: autoCreated, lowConfidence: lowConfidence)
+        return ActionItemsStageOutput(
+            autoCreated: autoCreated,
+            lowConfidence: lowConfidence,
+            notMine: notMine
+        )
+    }
+
+    /// Returns the existing deduped task for this action item, or creates a new
+    /// one. For newly-created tasks only, resolves a free-text `dueHint` into a
+    /// concrete `dueAt` (unresolved hint -> task without `dueAt`, not an error).
+    /// A dedup hit is returned untouched so an existing `dueAt` is never clobbered.
+    private func materializeTask(
+        meeting: Meeting,
+        item: ExtractedActionItem,
+        trimmedText: String,
+        locale: Locale
+    ) async throws -> TaskItem {
+        let externalSourceID = Self.externalSourceID(
+            sourceID: sourceID,
+            meetingID: meeting.id,
+            actionText: trimmedText
+        )
+        if let existing = try existingTask(externalSourceID: externalSourceID) {
+            return existing
+        }
+        let created = TaskItem(title: trimmedText, status: .open)
+        created.externalSourceID = externalSourceID
+        if let hint = item.dueHint, let extractor = dateExtractor {
+            created.dueAt = await extractor.date(from: hint, now: meeting.startedAt, locale: locale)
+        }
+        try taskRepository.insert(created)
+        return created
+    }
+
+    /// Whether an action item with the given `assigneeHint` belongs to the user.
+    /// `nil`/blank hint -> mine; a hint matching a known user alias -> mine;
+    /// any other named assignee -> not mine.
+    private func isMine(assigneeHint: String?) -> Bool {
+        guard let hint = assigneeHint?.trimmingCharacters(in: .whitespacesAndNewlines),
+            hint.isEmpty == false
+        else {
+            return true
+        }
+        return userAliases.contains(hint.lowercased())
+    }
+
+    private static func locale(for meeting: Meeting) -> Locale {
+        if let code = meeting.languageCode, code.isEmpty == false, code != "und" {
+            return Locale(identifier: code)
+        }
+        return Locale.current
     }
 
     private func existingTask(externalSourceID: String) throws -> TaskItem? {

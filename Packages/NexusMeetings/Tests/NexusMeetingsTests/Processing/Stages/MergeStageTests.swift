@@ -40,6 +40,37 @@ import Testing
     #expect(text.contains("Hello"))
 }
 
+@Test func mergeRenderLinearSubstitutesMappedSpeakerNames() {
+    let stage = MergeStage()
+    let segments: [MeetingSpeakerSegment] = [
+        .init(startMs: 0, endMs: 1_000, speaker: "Me", text: "Hi"),
+        .init(startMs: 1_000, endMs: 2_000, speaker: "Speaker_1", text: "Hello"),
+        .init(startMs: 2_000, endMs: 3_000, speaker: "Speaker_2", text: "Hey"),
+    ]
+    let participants = [
+        MeetingParticipant(speakerID: "Speaker_1", displayName: "Anna"),
+        // Placeholder left at its speakerID -> not substituted.
+        MeetingParticipant(speakerID: "Speaker_2", displayName: "Speaker_2"),
+    ]
+
+    let text = stage.renderLinear(segments, participants: participants)
+
+    #expect(text.contains("[00:00:01] Anna"))
+    // Unmapped "Me" and placeholder "Speaker_2" keep their raw tokens.
+    #expect(text.contains("[00:00:00] Me"))
+    #expect(text.contains("[00:00:02] Speaker_2"))
+    #expect(text.contains("Speaker_1") == false)
+}
+
+@Test func mergeRenderLinearWithoutParticipantsMatchesLegacyRender() {
+    let stage = MergeStage()
+    let segments: [MeetingSpeakerSegment] = [
+        .init(startMs: 0, endMs: 1_000, speaker: "Me", text: "Hi"),
+        .init(startMs: 1_000, endMs: 2_000, speaker: "Speaker_1", text: "Hello"),
+    ]
+    #expect(stage.renderLinear(segments, participants: []) == stage.renderLinear(segments))
+}
+
 @Test func mergeFallsBackToLargestDiarizationOverlap() {
     let me = TranscriptionResult(text: "", segments: [], detectedLanguage: "en")
     let others = TranscriptionResult(

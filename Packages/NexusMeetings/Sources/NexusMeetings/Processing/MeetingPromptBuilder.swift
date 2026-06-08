@@ -5,7 +5,8 @@ public enum MeetingPromptBuilder {
         transcript: String,
         title: String,
         durationSec: Int,
-        customTemplate: String?
+        customTemplate: String?,
+        screenContext: String? = nil
     ) -> String {
         if let customTemplate, customTemplate.isEmpty == false {
             return
@@ -13,6 +14,7 @@ public enum MeetingPromptBuilder {
                 .replacingOccurrences(of: "{{title}}", with: title)
                 .replacingOccurrences(of: "{{durationMinutes}}", with: "\(durationSec / 60)")
                 .replacingOccurrences(of: "{{transcript}}", with: transcript)
+                .replacingOccurrences(of: "{{screenContext}}", with: screenContext ?? "")
         }
 
         return """
@@ -33,13 +35,16 @@ public enum MeetingPromptBuilder {
             - bullet per concrete decision
 
             Do NOT include an "Action items" section -- those are extracted separately.
-
-            Transcript:
+            \(screenContextBlock(screenContext))Transcript:
             \(transcript)
             """
     }
 
-    public static func actionItemsPrompt(transcript: String, summary: String) -> String {
+    public static func actionItemsPrompt(
+        transcript: String,
+        summary: String,
+        screenContext: String? = nil
+    ) -> String {
         """
         Extract action items from this meeting transcript and summary. Return ONLY a JSON array
         of objects with this schema:
@@ -52,12 +57,25 @@ public enum MeetingPromptBuilder {
           }
         ]
         Skip statements that are not concrete action items (e.g. "we'll discuss later").
-
+        \(screenContextBlock(screenContext))
         Summary:
         \(summary)
 
         Transcript:
         \(transcript)
         """
+    }
+
+    /// Renders an optional on-screen-context block for prompt enrichment. Returns
+    /// an empty string when there is no screen context, so a prompt built without
+    /// screen OCR is byte-identical to the pre-feature output.
+    private static func screenContextBlock(_ screenContext: String?) -> String {
+        guard let screenContext, screenContext.isEmpty == false else { return "" }
+        return """
+
+            On-screen context captured during the meeting (OCR of shared windows; may be noisy):
+            \(screenContext)
+
+            """
     }
 }

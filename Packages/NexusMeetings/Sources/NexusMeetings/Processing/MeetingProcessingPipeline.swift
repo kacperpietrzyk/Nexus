@@ -14,7 +14,9 @@ public final class MeetingProcessingPipeline {
     private let providerProfile: @MainActor () -> String
     private let customSummaryTemplateProvider: @MainActor () -> String?
     private let summaryProviderPreference: @MainActor () -> MeetingsSummaryProviderPreference
+    private let customVocabularyProvider: @MainActor () -> [CustomVocabularyEntry]
     private let metadataStore: RecordingMetadataStore
+    private let screenContextStore: ScreenContextStore
     private let now: @MainActor () -> Date
 
     public init(
@@ -32,7 +34,11 @@ public final class MeetingProcessingPipeline {
         summaryProviderPreference: @escaping @MainActor () -> MeetingsSummaryProviderPreference = {
             MeetingsProviderSettingsStore.shared.summaryProvider()
         },
+        customVocabularyProvider: @escaping @MainActor () -> [CustomVocabularyEntry] = {
+            UserDefaultsCustomVocabularyStore.shared.load()
+        },
         metadataStore: RecordingMetadataStore = RecordingMetadataStore(),
+        screenContextStore: ScreenContextStore = ScreenContextStore(),
         now: @escaping @MainActor () -> Date = Date.init
     ) {
         self.repo = repo
@@ -45,7 +51,9 @@ public final class MeetingProcessingPipeline {
         self.providerProfile = providerProfile
         self.customSummaryTemplateProvider = customSummaryTemplateProvider
         self.summaryProviderPreference = summaryProviderPreference
+        self.customVocabularyProvider = customVocabularyProvider
         self.metadataStore = metadataStore
+        self.screenContextStore = screenContextStore
         self.now = now
     }
 
@@ -75,14 +83,17 @@ public final class MeetingProcessingPipeline {
 
             currentStage = MeetingProcessingStatus.processingMerge.rawValue
             try setStatus(meeting, .processingMerge)
-            let segments = merge.merge(
-                me: transcriptionOutput.me,
-                others: transcriptionOutput.others,
-                othersDiarization: diarizationOutput
+            try mergeAndPersistTranscript(
+                meeting: meeting,
+                transcription: transcriptionOutput,
+                diarization: diarizationOutput,
+                audioFolder: audioFolder
             )
-            meeting.segmentsJSON = try MeetingSpeakerSegment.encode(segments)
-            meeting.transcriptText = merge.renderLinear(segments)
-            try metadataStore.markTranscriptComplete(meeting: meeting, folder: audioFolder, completedAt: now())
+
+            // Screen-OCR context (spec §7): recording-time OCR text bridged via a
+            // text-only sidecar in the audio folder (no schema field). `nil` when
+            // the opt-in feature was off, so the prompts are byte-unchanged.
+            let screenContext = screenContextStore.combinedText(folder: audioFolder)
 
             currentStage = MeetingProcessingStatus.processingSummary.rawValue
             try setStatus(meeting, .processingSummary)
@@ -91,7 +102,8 @@ public final class MeetingProcessingPipeline {
                 title: meeting.title,
                 durationSec: meeting.durationSec,
                 customTemplate: customSummaryTemplateProvider(),
-                providerPreference: summaryProviderPreference()
+                providerPreference: summaryProviderPreference(),
+                screenContext: screenContext
             )
 
             currentStage = MeetingProcessingStatus.processingActions.rawValue
@@ -99,7 +111,8 @@ public final class MeetingProcessingPipeline {
             _ = try await actionItems.run(
                 meeting: meeting,
                 transcript: meeting.transcriptText,
-                summary: meeting.summaryText
+                summary: meeting.summaryText,
+                screenContext: screenContext
             )
 
             let stamp = now()
@@ -116,6 +129,28 @@ public final class MeetingProcessingPipeline {
             try? setFailureStatus(meeting, stage: currentStage)
             throw error
         }
+    }
+
+    /// Merges the transcription + diarization into speaker segments, applies the
+    /// deterministic custom-vocabulary correction to the segments, then renders
+    /// the transcript from the corrected segments — so `segmentsJSON`,
+    /// `transcriptText`, and the downstream summary/action-items all share the
+    /// canonical spelling (spec §8). Empty vocabulary is an identity pass.
+    private func mergeAndPersistTranscript(
+        meeting: Meeting,
+        transcription: TranscriptionStageOutput,
+        diarization: [DiarizationSegment],
+        audioFolder: URL
+    ) throws {
+        let mergedSegments = merge.merge(
+            me: transcription.me,
+            others: transcription.others,
+            othersDiarization: diarization
+        )
+        let segments = CustomVocabularyReplacer(customVocabularyProvider()).apply(to: mergedSegments)
+        meeting.segmentsJSON = try MeetingSpeakerSegment.encode(segments)
+        meeting.transcriptText = merge.renderLinear(segments)
+        try metadataStore.markTranscriptComplete(meeting: meeting, folder: audioFolder, completedAt: now())
     }
 
     private func setStatus(_ meeting: Meeting, _ status: MeetingProcessingStatus) throws {

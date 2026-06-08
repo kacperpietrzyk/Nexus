@@ -19,7 +19,8 @@ public final class SummaryStage: Sendable {
         title: String,
         durationSec: Int,
         customTemplate: String?,
-        providerPreference: MeetingsSummaryProviderPreference = .auto
+        providerPreference: MeetingsSummaryProviderPreference = .auto,
+        screenContext: String? = nil
     ) async throws -> String {
         guard let aiProviderPreference = providerPreference.providerPreference else {
             return ""
@@ -29,7 +30,8 @@ public final class SummaryStage: Sendable {
             transcript: transcript,
             title: title,
             durationSec: durationSec,
-            customTemplate: customTemplate
+            customTemplate: customTemplate,
+            screenContext: screenContext
         )
         let request = AIRequest(
             prompt: prompt,

@@ -10,13 +10,26 @@ public final class TranscriptViewModel: ObservableObject {
     @Published public private(set) var participants: [MeetingParticipant] = []
     /// Distinct names used in prior meetings, offered as rename suggestions.
     @Published public private(set) var priorParticipantNames: [String] = []
+    /// Names seeded from this meeting's calendar attendees (spec §5 / I3): a
+    /// *suggestion* surface for labeling, never auto-assigned to a speaker.
+    @Published public private(set) var attendeeSuggestions: [String] = []
 
     private let meetingID: UUID
     private let repository: MeetingRepository
+    private let peopleLinker: MeetingPeopleLinker?
+    private let attendeeSeedProvider: (@MainActor (Meeting) async -> [String])?
+    private let merge = MergeStage()
 
-    public init(meetingID: UUID, repository: MeetingRepository) {
+    public init(
+        meetingID: UUID,
+        repository: MeetingRepository,
+        peopleLinker: MeetingPeopleLinker? = nil,
+        attendeeSeedProvider: (@MainActor (Meeting) async -> [String])? = nil
+    ) {
         self.meetingID = meetingID
         self.repository = repository
+        self.peopleLinker = peopleLinker
+        self.attendeeSeedProvider = attendeeSeedProvider
     }
 
     public var speakerNames: Set<String> {
@@ -36,6 +49,19 @@ public final class TranscriptViewModel: ObservableObject {
         participants = (try? MeetingParticipant.decode(meeting.participantsJSON ?? Data())) ?? []
     }
 
+    /// Loads calendar-attendee name suggestions for the current meeting. These
+    /// are merged into the rename sheet as *candidates only* — picking one is the
+    /// user's manual choice (I3); nothing here writes `participantsJSON`.
+    public func loadAttendeeSuggestions() async {
+        guard let provider = attendeeSeedProvider,
+            let meeting = try? repository.find(id: meetingID)
+        else {
+            attendeeSuggestions = []
+            return
+        }
+        attendeeSuggestions = await provider(meeting)
+    }
+
     public func displayName(for speaker: String) -> String {
         participants.first { $0.speakerID == speaker }?.displayName ?? speaker
     }
@@ -51,9 +77,28 @@ public final class TranscriptViewModel: ObservableObject {
         nextParticipants.sort { $0.speakerID.localizedStandardCompare($1.speakerID) == .orderedAscending }
 
         meeting.participantsJSON = try MeetingParticipant.encode(nextParticipants)
+        // Re-render the persisted transcript from the corrected segments so the
+        // stored `transcriptText` (used by search/summary) substitutes the named
+        // speakers, matching the view (spec §5: transcript projection substitutes).
+        let storedSegments = (try? MeetingSpeakerSegment.decode(meeting.segmentsJSON)) ?? []
+        meeting.transcriptText = merge.renderLinear(storedSegments, participants: nextParticipants)
         meeting.updatedAt = Date()
         try repository.upsert(meeting)
         participants = nextParticipants
+
+        // Wire the (otherwise inert) People linker: a named speaker becomes a
+        // `Person` + `.attendee` edge. Idempotent and graph-only — never an
+        // assignee (I1). Runs at the labeling-save path because `participantsJSON`
+        // is empty at pipeline time (names exist only after this manual step).
+        // The hop re-fetches the meeting on the MainActor (the `Meeting` model is
+        // not `Sendable`, so only the `UUID` crosses the task boundary).
+        if let peopleLinker {
+            let meetingID = meetingID
+            Task { @MainActor [peopleLinker, repository] in
+                guard let saved = try? repository.find(id: meetingID) else { return }
+                _ = try? await peopleLinker.link(meeting: saved)
+            }
+        }
     }
 }
 
@@ -67,11 +112,18 @@ public struct TranscriptView: View {
     public init(
         meetingID: UUID,
         repository: MeetingRepository,
-        isReadOnly: Bool = false
+        isReadOnly: Bool = false,
+        peopleLinker: MeetingPeopleLinker? = nil,
+        attendeeSeedProvider: (@MainActor (Meeting) async -> [String])? = nil
     ) {
         self.isReadOnly = isReadOnly
         _viewModel = StateObject(
-            wrappedValue: TranscriptViewModel(meetingID: meetingID, repository: repository)
+            wrappedValue: TranscriptViewModel(
+                meetingID: meetingID,
+                repository: repository,
+                peopleLinker: peopleLinker,
+                attendeeSeedProvider: attendeeSeedProvider
+            )
         )
     }
 
@@ -97,6 +149,9 @@ public struct TranscriptView: View {
         .onAppear {
             viewModel.load()
         }
+        .task {
+            await viewModel.loadAttendeeSuggestions()
+        }
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
             viewModel.load()
         }
@@ -116,6 +171,7 @@ public struct TranscriptView: View {
                 speaker: renaming ?? "",
                 draft: $renameDraft,
                 errorMessage: renameError,
+                attendeeSuggestions: viewModel.attendeeSuggestions,
                 suggestions: viewModel.priorParticipantNames,
                 onCancel: {
                     renaming = nil
@@ -200,6 +256,7 @@ private struct RenameSpeakerSheet: View {
     let speaker: String
     @Binding var draft: String
     let errorMessage: String?
+    let attendeeSuggestions: [String]
     let suggestions: [String]
     let onCancel: () -> Void
     let onSave: () -> Void
@@ -208,17 +265,16 @@ private struct RenameSpeakerSheet: View {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Names from prior meetings that match what the user is typing. An empty
-    /// draft shows the full roster; otherwise it's a case/diacritic-insensitive
-    /// substring match. The exact current value is dropped (nothing to pick when
-    /// the field already equals it). Capped so the sheet can't grow unbounded.
-    private var filteredSuggestions: [String] {
+    /// Filters a candidate list against the current draft (case/diacritic-
+    /// insensitive substring match; empty draft shows the full list; the exact
+    /// current value is dropped; capped so the sheet can't grow unbounded).
+    private func filtered(_ candidates: [String]) -> [String] {
         let needle = trimmedDraft
         let matches: [String]
         if needle.isEmpty {
-            matches = suggestions
+            matches = candidates
         } else {
-            matches = suggestions.filter { candidate in
+            matches = candidates.filter { candidate in
                 candidate.caseInsensitiveCompare(needle) != .orderedSame
                     && candidate.range(
                         of: needle,
@@ -227,6 +283,15 @@ private struct RenameSpeakerSheet: View {
             }
         }
         return Array(matches.prefix(6))
+    }
+
+    private var filteredSuggestions: [String] { filtered(suggestions) }
+
+    /// Calendar attendees of *this* meeting (spec §5 seed / I3), with any name
+    /// already offered in the prior-meetings list removed so it isn't shown twice.
+    private var filteredAttendeeSuggestions: [String] {
+        let priorSet = Set(filteredSuggestions.map { $0.lowercased() })
+        return filtered(attendeeSuggestions).filter { priorSet.contains($0.lowercased()) == false }
     }
 
     var body: some View {
@@ -241,38 +306,20 @@ private struct RenameSpeakerSheet: View {
             TextField("Display name", text: $draft)
                 .textFieldStyle(.roundedBorder)
 
-            if !filteredSuggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("From previous meetings")
-                        .font(.caption2)
-                        .foregroundStyle(NexusColor.Text.muted)
+            if !filteredAttendeeSuggestions.isEmpty {
+                suggestionSection(
+                    title: "From this meeting's invite",
+                    names: filteredAttendeeSuggestions,
+                    glyph: "calendar"
+                )
+            }
 
-                    ForEach(filteredSuggestions, id: \.self) { suggestion in
-                        Button {
-                            draft = suggestion
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "person.crop.circle")
-                                    .font(.caption)
-                                    .foregroundStyle(NexusColor.Text.tertiary)
-                                Text(suggestion)
-                                    .font(.caption)
-                                    .foregroundStyle(NexusColor.Text.primary)
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .background(
-                                NexusColor.Background.control,
-                                in: RoundedRectangle(cornerRadius: 6)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Use this name")
-                    }
-                }
+            if !filteredSuggestions.isEmpty {
+                suggestionSection(
+                    title: "From previous meetings",
+                    names: filteredSuggestions,
+                    glyph: "person.crop.circle"
+                )
             }
 
             if let errorMessage {
@@ -291,5 +338,40 @@ private struct RenameSpeakerSheet: View {
         }
         .padding(20)
         .frame(width: 360)
+    }
+
+    @ViewBuilder
+    private func suggestionSection(title: String, names: [String], glyph: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(NexusColor.Text.muted)
+
+            ForEach(names, id: \.self) { suggestion in
+                Button {
+                    draft = suggestion
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: glyph)
+                            .font(.caption)
+                            .foregroundStyle(NexusColor.Text.tertiary)
+                        Text(suggestion)
+                            .font(.caption)
+                            .foregroundStyle(NexusColor.Text.primary)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .background(
+                        NexusColor.Background.control,
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Use this name")
+            }
+        }
     }
 }
