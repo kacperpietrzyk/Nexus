@@ -142,9 +142,15 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             guard !body.isEmpty, task.noteRef == nil else { continue }
 
             let blocks = MarkdownBlockParser.parse(task.body)
+            // Never persist a junk empty note as "converted": if encoding the
+            // parsed blocks fails, SKIP this task instead of writing
+            // `contentData = Data()` and setting `noteRef`. The legacy `body`
+            // column is retained in V9, so the text is not lost and a future
+            // re-migration can recover it — far safer than a silent empty note.
+            guard let contentData = try? NoteContentCoder.encode(blocks) else { continue }
             let note = Note(
                 title: task.title,
-                contentData: (try? NoteContentCoder.encode(blocks)) ?? Data(),
+                contentData: contentData,
                 plainText: NotePlainTextFlattener.plainText(for: blocks),
                 role: .free
             )
