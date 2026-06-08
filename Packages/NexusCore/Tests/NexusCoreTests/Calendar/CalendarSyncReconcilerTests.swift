@@ -76,6 +76,12 @@ private final class FakeCalendarWriter: CalendarEventWriting, @unchecked Sendabl
         }
     }
 
+    /// Global by-identifier lookup, ignoring calendar + window (mirrors EventKit's
+    /// `event(withIdentifier:)`). Returns nil only when the event is truly gone.
+    func eventSnapshot(id: String) async throws -> CalendarEventSnapshot? {
+        locked { events[id] }
+    }
+
     // Test helpers to mutate the "store" out-of-band (simulating Apple Calendar edits).
     func mutateEvent(id: String, start: Date, end: Date) {
         locked {
@@ -92,6 +98,21 @@ private final class FakeCalendarWriter: CalendarEventWriting, @unchecked Sendabl
 
     func removeEventFromStore(id: String) {
         locked { events[id] = nil }
+    }
+
+    /// Simulate the user dragging the mirror event onto another calendar: it leaves
+    /// the window-scoped Nexus fetch but survives globally under the same id (R1).
+    func moveEventToCalendar(id: String, calendarID: String) {
+        locked {
+            guard let existing = events[id] else { return }
+            events[id] = CalendarEventSnapshot(
+                eventID: id,
+                calendarID: calendarID,
+                title: existing.title,
+                start: existing.start,
+                end: existing.end
+            )
+        }
     }
 
     private func locked<Value>(_ body: () -> Value) -> Value {
@@ -234,6 +255,28 @@ struct CalendarSyncReconcilerTests {
 
         #expect(try repo.find(block.id) == nil)
         #expect(try repo.blocks(for: taskID).isEmpty)
+    }
+
+    @Test("event moved to another calendar is NOT treated as deleted (R1)")
+    func movedToAnotherCalendarBlockSurvives() async throws {
+        let context = try makeContext()
+        let writer = FakeCalendarWriter()
+        let repo = ScheduledBlockRepository(context: context)
+        let reconciler = CalendarSyncReconciler(context: context, writer: writer, blocks: repo)
+
+        let taskID = UUID()
+        let block = try repo.create(taskID: taskID, start: t0, end: t0.addingTimeInterval(1800))
+        let eventID = try await reconciler.accept(block)
+
+        // User drags the accepted mirror event onto the Work calendar: it leaves the
+        // window-scoped Nexus fetch but survives globally under the same identifier.
+        writer.moveEventToCalendar(id: eventID, calendarID: "work")
+        try await reconciler.reconcile(window: t0, to: t0.addingTimeInterval(86_400))
+
+        // The block is NOT soft-deleted (the task does not return to the pool).
+        #expect(try repo.find(block.id) != nil)
+        #expect(try repo.blocks(for: taskID).count == 1)
+        #expect(block.status == .accepted)
     }
 
     @Test("a block outside the refetch window is NOT treated as deleted")

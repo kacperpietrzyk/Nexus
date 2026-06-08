@@ -76,6 +76,23 @@ extension EventKitCalendarProvider: CalendarEventWriting, CalendarListing {
         }
     }
 
+    public func eventSnapshot(id: String) async throws -> CalendarEventSnapshot? {
+        try await onStore { store in
+            // `event(withIdentifier:)` searches across ALL calendars, so a mirror
+            // event moved out of the Nexus calendar still resolves here (R1).
+            guard let event = store.event(withIdentifier: id),
+                let identifier = event.eventIdentifier
+            else { return nil }
+            return CalendarEventSnapshot(
+                eventID: identifier,
+                calendarID: event.calendar?.calendarIdentifier ?? "",
+                title: event.title ?? "",
+                start: event.startDate,
+                end: event.endDate
+            )
+        }
+    }
+
     public func events(inCalendar calendarID: String, start: Date, end: Date) async throws -> [CalendarEventSnapshot] {
         try await onStore { store in
             guard let calendar = store.calendar(withIdentifier: calendarID) else { return [] }
