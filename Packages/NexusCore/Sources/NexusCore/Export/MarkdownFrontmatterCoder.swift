@@ -113,8 +113,13 @@ public enum MarkdownFrontmatterCoder {
 
     private static func encodeScalarString(_ s: String) -> String {
         // Quote if string contains characters that confuse YAML or starts with whitespace / is empty.
+        // `null` and `[]` must also be quoted: unquoted they decode back as
+        // `.none` / `.list([])`, silently losing the literal-string identity of a
+        // value like a Note titled exactly "null".
         let needsQuotes =
             s.isEmpty
+            || s == "null"
+            || s == "[]"
             || s.contains(":")
             || s.contains("#")
             || s.contains("\"")
@@ -127,6 +132,33 @@ public enum MarkdownFrontmatterCoder {
             .replacingOccurrences(of: "\"", with: "\\\"")
             .replacingOccurrences(of: "\n", with: "\\n")
         return "\"\(escaped)\""
+    }
+
+    /// Inverts `encodeScalarString`'s escaping in a single left-to-right pass.
+    /// A naive sequence of `replacingOccurrences` cannot reverse it correctly:
+    /// the encoder doubles backslashes FIRST, so un-escaping `\n` before `\\`
+    /// turns the second backslash of an escaped literal `\\` into a newline
+    /// (e.g. `C:\notes\new` round-tripped through the old decoder corrupted).
+    private static func unescapeQuoted(_ inner: String) -> String {
+        var result = ""
+        result.reserveCapacity(inner.count)
+        var chars = Substring(inner)
+        while let first = chars.first {
+            if first == "\\", chars.count >= 2 {
+                let next = chars[chars.index(after: chars.startIndex)]
+                switch next {
+                case "\\": result.append("\\")
+                case "\"": result.append("\"")
+                case "n": result.append("\n")
+                default: result.append(next)  // unknown escape: drop the backslash, keep the char
+                }
+                chars = chars.dropFirst(2)
+            } else {
+                result.append(first)
+                chars = chars.dropFirst()
+            }
+        }
+        return result
     }
 
     public static func decode(_ source: String) throws -> ParsedFrontmatter {
@@ -188,11 +220,7 @@ public enum MarkdownFrontmatterCoder {
             return .list([])
         }
         if raw.hasPrefix("\""), raw.hasSuffix("\""), raw.count >= 2 {
-            let inner = String(raw.dropFirst().dropLast())
-                .replacingOccurrences(of: "\\\"", with: "\"")
-                .replacingOccurrences(of: "\\n", with: "\n")
-                .replacingOccurrences(of: "\\\\", with: "\\")
-            return .string(inner)
+            return .string(unescapeQuoted(String(raw.dropFirst().dropLast())))
         }
         if let d = dateFormatter.date(from: raw) {
             return .date(d)
