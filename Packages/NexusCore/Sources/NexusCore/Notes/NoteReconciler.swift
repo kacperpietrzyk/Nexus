@@ -115,6 +115,13 @@ public struct NoteReconciler {
     /// path leaves the block shape unchanged — the `TaskItem` and link are created
     /// with `id == taskRef` so the blob does not need rewriting).
     private func reconcileTodo(taskRef: UUID, runs: [InlineRun], note: Note) throws -> BlockKind? {
+        // A daily note's checkboxes never materialize tasks (SW1) — a brief is
+        // re-rendered on every read, so minting here would spawn duplicate Inbox
+        // tasks. Leave the block an inert checkbox; `requiredEdges` likewise skips
+        // its containsTask edge.
+        if note.role == .dailyNote {
+            return nil
+        }
         if try fetchTask(id: taskRef) != nil {
             // Live task — nothing to rewrite. Link is (re)created in reconcileLinks.
             return nil
@@ -227,6 +234,8 @@ public struct NoteReconciler {
         for block in blocks {
             switch block.kind {
             case .todo(let taskRef, _):
+                // Daily-note checkboxes are inert (SW1) — no task, so no edge.
+                guard note.role != .dailyNote else { break }
                 // Only mirror a todo whose task is (now) live. A deleted-task todo
                 // was already converted to inert text in `rewriteBlocks`, so a
                 // lingering `.todo` here means a live task.

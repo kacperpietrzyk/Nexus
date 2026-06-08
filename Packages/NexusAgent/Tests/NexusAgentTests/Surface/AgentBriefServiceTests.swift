@@ -85,6 +85,35 @@ struct AgentBriefServiceTests {
     }
 
     @Test
+    func dailyNoteUpsertIsIdentityStableAndSpawnsNoTasks() async throws {
+        // A brief with a checkbox, "read" twice (the second is a cache-hit).
+        let harness = try AgentBriefHarness.make(scripts: [.text("Plan:\n- [ ] Ship it\n")])
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let service = AgentBriefService(
+            runtime: harness.runtime,
+            threadStore: harness.threadStore,
+            legacy: { _ in "legacy" },
+            calendar: calendar,
+            dailyNoteWriter: AgentBriefDailyNoteWriter(modelContext: harness.modelContext, calendar: calendar)
+        )
+
+        _ = await service.brief(for: Self.request)
+        let contentAfterFirst = try #require(
+            try harness.modelContext.fetch(FetchDescriptor<Note>()).first
+        ).contentData
+
+        _ = await service.brief(for: Self.request)  // cache-hit — must not churn the note
+
+        let notes = try harness.modelContext.fetch(FetchDescriptor<Note>())
+        #expect(notes.count == 1)
+        // Identity-stable: the unchanged brief did not rewrite the note (no fresh refs).
+        #expect(notes.first?.contentData == contentAfterFirst)
+        // The checkbox never spawned a task — no duplicate Inbox tasks on re-read (SW1).
+        #expect(try harness.modelContext.fetch(FetchDescriptor<TaskItem>()).isEmpty)
+    }
+
+    @Test
     func sameKeySequentialCallsUseCachedTextWithoutSecondRuntimeTurn() async throws {
         let harness = try AgentBriefHarness.make(scripts: [.text("Agent once")])
         let service = AgentBriefService(
