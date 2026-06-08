@@ -97,6 +97,27 @@ import Testing
         ])
 }
 
+@Test func mergeBreaksContainmentTiesDeterministicallyByEarliestStart() {
+    // Two diarization turns both fully contain the segment. The speaker must be
+    // chosen deterministically (earliest-starting container), never by array order.
+    let me = TranscriptionResult(text: "", segments: [], detectedLanguage: "en")
+    let others = TranscriptionResult(
+        text: "Ambiguous",
+        segments: [.init(startMs: 1_000, endMs: 2_000, text: "Ambiguous")],
+        detectedLanguage: "en"
+    )
+    // Better (earlier-starting) container listed SECOND, so array-order would mispick.
+    let diarization = [
+        DiarizationSegment(startMs: 500, endMs: 2_500, speakerID: "Speaker_B"),
+        DiarizationSegment(startMs: 0, endMs: 3_000, speakerID: "Speaker_A"),
+    ]
+    let stage = MergeStage()
+
+    let segs = stage.merge(me: me, others: others, othersDiarization: diarization)
+
+    #expect(segs.first?.speaker == "Speaker_A")
+}
+
 @Test func mergeDefaultsOthersToSpeakerOneWithoutDiarization() {
     let me = TranscriptionResult(text: "", segments: [], detectedLanguage: "en")
     let others = TranscriptionResult(
