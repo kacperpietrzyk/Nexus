@@ -192,7 +192,7 @@ public struct PeopleListTool: AgentTool {
 
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
-        let limit = args["limit"]?.intValue ?? 200
+        let limit = AgentToolArgs.limit(args, default: 200, max: 1000)
         let people = try context.personRepository.allActive().prefix(limit)
         return try TasksToolJSON.encode(people.map { PersonDTO(from: $0) })
     }
@@ -220,7 +220,7 @@ public struct PeopleSearchTool: AgentTool {
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let query = try PeopleToolSupport.requiredString(args["query"], field: "query")
-        let limit = args["limit"]?.intValue ?? 50
+        let limit = AgentToolArgs.limit(args, default: 50, max: 1000)
         let people = try PeopleToolSupport.fetch(context: context, searchableContains: query, limit: limit)
         return try TasksToolJSON.encode(people.map { PersonDTO(from: $0) })
     }

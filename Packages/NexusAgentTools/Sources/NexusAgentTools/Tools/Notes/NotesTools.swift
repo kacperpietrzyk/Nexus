@@ -172,7 +172,7 @@ public struct NotesListTool: AgentTool {
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let role = try NotesToolSupport.role(args["role"])
         let requiredTags = try NotesToolSupport.tags(args["tags"]) ?? []
-        let limit = args["limit"]?.intValue ?? 50
+        let limit = AgentToolArgs.limit(args, default: 50, max: 500)
 
         let notes = try NotesQuery.fetch(
             context: context.modelContext.context,
@@ -218,7 +218,7 @@ public struct NotesSearchTool: AgentTool {
         }
         let role = try NotesToolSupport.role(args["role"])
         let requiredTags = try NotesToolSupport.tags(args["tags"]) ?? []
-        let limit = args["limit"]?.intValue ?? 50
+        let limit = AgentToolArgs.limit(args, default: 50, max: 500)
 
         let notes = try NotesQuery.fetch(
             context: context.modelContext.context,
