@@ -28,7 +28,7 @@ struct EmbeddedTimelineBlocksTests {
     @Test("nil/zero endAt yields a synthetic >=15-minute span, never degenerate")
     func syntheticSpanForMissingOrZeroEnd() throws {
         let calendar = utcCalendar
-        let start = try #require(date(hour: 10, minute: 0, calendar: calendar))
+        let start = date(hour: 10, minute: 0, calendar: calendar)
 
         // endAt nil AND dueAt nil → end falls back to start (zero length).
         let noEnd = TaskItem(title: "No end", startAt: start)
@@ -53,8 +53,8 @@ struct EmbeddedTimelineBlocksTests {
     @Test("Inverted endAt < startAt is clamped to a non-inverted rect")
     func invertedEndClamped() throws {
         let calendar = utcCalendar
-        let start = try #require(date(hour: 15, minute: 0, calendar: calendar))
-        let earlierEnd = try #require(date(hour: 13, minute: 0, calendar: calendar))
+        let start = date(hour: 15, minute: 0, calendar: calendar)
+        let earlierEnd = date(hour: 13, minute: 0, calendar: calendar)
         let task = TaskItem(title: "Inverted", startAt: start, endAt: earlierEnd)
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
@@ -76,13 +76,13 @@ struct EmbeddedTimelineBlocksTests {
         // 07:00–08:00 fully before 9; 21:00–22:00 fully after 20.
         let early = TaskItem(
             title: "Early",
-            startAt: try #require(date(hour: 7, minute: 0, calendar: calendar)),
-            endAt: try #require(date(hour: 8, minute: 0, calendar: calendar))
+            startAt: date(hour: 7, minute: 0, calendar: calendar),
+            endAt: date(hour: 8, minute: 0, calendar: calendar)
         )
         let late = TaskItem(
             title: "Late",
-            startAt: try #require(date(hour: 21, minute: 0, calendar: calendar)),
-            endAt: try #require(date(hour: 22, minute: 0, calendar: calendar))
+            startAt: date(hour: 21, minute: 0, calendar: calendar),
+            endAt: date(hour: 22, minute: 0, calendar: calendar)
         )
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
@@ -100,13 +100,13 @@ struct EmbeddedTimelineBlocksTests {
         // 08:00–10:00 → clamp start up to 9.0; 19:00–21:00 → clamp end to 20.0.
         let spansStart = TaskItem(
             title: "Spans start",
-            startAt: try #require(date(hour: 8, minute: 0, calendar: calendar)),
-            endAt: try #require(date(hour: 10, minute: 0, calendar: calendar))
+            startAt: date(hour: 8, minute: 0, calendar: calendar),
+            endAt: date(hour: 10, minute: 0, calendar: calendar)
         )
         let spansEnd = TaskItem(
             title: "Spans end",
-            startAt: try #require(date(hour: 19, minute: 0, calendar: calendar)),
-            endAt: try #require(date(hour: 21, minute: 0, calendar: calendar))
+            startAt: date(hour: 19, minute: 0, calendar: calendar),
+            endAt: date(hour: 21, minute: 0, calendar: calendar)
         )
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
@@ -139,13 +139,13 @@ struct EmbeddedTimelineBlocksTests {
         let calendar = utcCalendar
         let live = TaskItem(
             title: "Live",
-            startAt: try #require(date(hour: 11, minute: 0, calendar: calendar))
+            startAt: date(hour: 11, minute: 0, calendar: calendar)
         )
         let deleted = TaskItem(
             title: "Deleted",
-            startAt: try #require(date(hour: 12, minute: 0, calendar: calendar))
+            startAt: date(hour: 12, minute: 0, calendar: calendar)
         )
-        deleted.deletedAt = try #require(date(hour: 9, minute: 0, calendar: calendar))
+        deleted.deletedAt = date(hour: 9, minute: 0, calendar: calendar)
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
             tasks: [live, deleted],
@@ -161,7 +161,7 @@ struct EmbeddedTimelineBlocksTests {
         let calendar = utcCalendar
         let unscheduled = TaskItem(
             title: "Unscheduled",
-            dueAt: try #require(date(hour: 14, minute: 0, calendar: calendar))
+            dueAt: date(hour: 14, minute: 0, calendar: calendar)
         )
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
@@ -178,19 +178,19 @@ struct EmbeddedTimelineBlocksTests {
         let calendar = utcCalendar
         let t16 = TaskItem(
             title: "Task 16",
-            startAt: try #require(date(hour: 16, minute: 0, calendar: calendar)),
-            endAt: try #require(date(hour: 16, minute: 30, calendar: calendar))
+            startAt: date(hour: 16, minute: 0, calendar: calendar),
+            endAt: date(hour: 16, minute: 30, calendar: calendar)
         )
         let t10 = TaskItem(
             title: "Task 10",
-            startAt: try #require(date(hour: 10, minute: 0, calendar: calendar)),
-            endAt: try #require(date(hour: 11, minute: 0, calendar: calendar))
+            startAt: date(hour: 10, minute: 0, calendar: calendar),
+            endAt: date(hour: 11, minute: 0, calendar: calendar)
         )
         let event13 = CalendarEvent(
             id: "ev-13",
             title: "Event 13",
-            start: try #require(date(hour: 13, minute: 0, calendar: calendar)),
-            end: try #require(date(hour: 14, minute: 0, calendar: calendar))
+            start: date(hour: 13, minute: 0, calendar: calendar),
+            end: date(hour: 14, minute: 0, calendar: calendar)
         )
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
@@ -212,8 +212,8 @@ struct EmbeddedTimelineBlocksTests {
         let allDay = CalendarEvent(
             id: "all-day",
             title: "All day",
-            start: try #require(date(hour: 0, minute: 0, calendar: calendar)),
-            end: try #require(date(hour: 0, minute: 0, calendar: calendar))
+            start: date(hour: 0, minute: 0, calendar: calendar),
+            end: date(hour: 0, minute: 0, calendar: calendar)
         )
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
@@ -308,7 +308,7 @@ struct EmbeddedTimelineBlocksTests {
     @Test("Empty blocks with now in window yields a single now element")
     func a11yLabelsNowOnlyNoBlocks() throws {
         let calendar = utcCalendar
-        let now = try #require(date(hour: 11, minute: 30, calendar: calendar))
+        let now = date(hour: 11, minute: 30, calendar: calendar)
 
         let labels = TodayDashboard.embeddedTimelineAccessibilityLabels(
             blocks: [],
@@ -323,7 +323,7 @@ struct EmbeddedTimelineBlocksTests {
     func a11yLabelsNowOutsideWindowNoBlocks() throws {
         let calendar = utcCalendar
         // 07:00 is before the 9-20 window.
-        let now = try #require(date(hour: 7, minute: 0, calendar: calendar))
+        let now = date(hour: 7, minute: 0, calendar: calendar)
 
         let labels = TodayDashboard.embeddedTimelineAccessibilityLabels(
             blocks: [],
@@ -338,7 +338,7 @@ struct EmbeddedTimelineBlocksTests {
     func a11yBlockLabelFormat() throws {
         let calendar = utcCalendar
         // Block 10:00–11:00; now outside window so only block label appears.
-        let now = try #require(date(hour: 22, minute: 0, calendar: calendar))
+        let now = date(hour: 22, minute: 0, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "t1", a: 10.0, b: 11.0, title: "Team standup",
@@ -358,7 +358,7 @@ struct EmbeddedTimelineBlocksTests {
     func a11yNowInterleaved() throws {
         let calendar = utcCalendar
         // Two blocks around now (10:00–11:00, 13:00–14:00); now = 11:30.
-        let now = try #require(date(hour: 11, minute: 30, calendar: calendar))
+        let now = date(hour: 11, minute: 30, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b1", a: 10.0, b: 11.0, title: "Morning sync",
@@ -386,7 +386,7 @@ struct EmbeddedTimelineBlocksTests {
     func a11yNowBeforeAllBlocks() throws {
         let calendar = utcCalendar
         // now = 09:00, block starts at 10:00 → now first.
-        let now = try #require(date(hour: 9, minute: 0, calendar: calendar))
+        let now = date(hour: 9, minute: 0, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b1", a: 10.0, b: 11.0, title: "Call",
@@ -406,7 +406,7 @@ struct EmbeddedTimelineBlocksTests {
     func a11yNowAfterAllBlocks() throws {
         let calendar = utcCalendar
         // now = 18:00, block ends at 11:00 → now appended at end.
-        let now = try #require(date(hour: 18, minute: 0, calendar: calendar))
+        let now = date(hour: 18, minute: 0, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b1", a: 10.0, b: 11.0, title: "Retrospective",
@@ -425,7 +425,7 @@ struct EmbeddedTimelineBlocksTests {
     @Test("Now exactly at window boundary (20:00) is included")
     func a11yNowAtWindowBoundary() throws {
         let calendar = utcCalendar
-        let now = try #require(date(hour: 20, minute: 0, calendar: calendar))
+        let now = date(hour: 20, minute: 0, calendar: calendar)
 
         let labels = TodayDashboard.embeddedTimelineAccessibilityLabels(
             blocks: [],
@@ -441,7 +441,7 @@ struct EmbeddedTimelineBlocksTests {
         let calendar = utcCalendar
         // Block runs 19:00–21:00 but window clamps b to 20.0.
         // endTime should be "21:00" (original), not "20:00" (clamped b).
-        let now = try #require(date(hour: 7, minute: 0, calendar: calendar))
+        let now = date(hour: 7, minute: 0, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b1", a: 19.0, b: 20.0, title: "Late event",
@@ -470,19 +470,24 @@ struct EmbeddedTimelineBlocksTests {
         minute: Int,
         calendar: Calendar,
         day: Int = 12
-    ) -> Date? {
-        calendar.date(
-            from: DateComponents(
-                calendar: calendar,
-                timeZone: calendar.timeZone,
-                year: 2026,
-                month: 5,
-                day: day,
-                hour: hour,
-                minute: minute,
-                second: 0,
-                nanosecond: 0
+    ) -> Date {
+        guard
+            let date = calendar.date(
+                from: DateComponents(
+                    calendar: calendar,
+                    timeZone: calendar.timeZone,
+                    year: 2026,
+                    month: 5,
+                    day: day,
+                    hour: hour,
+                    minute: minute,
+                    second: 0,
+                    nanosecond: 0
+                )
             )
-        )
+        else {
+            preconditionFailure("Invalid embedded timeline fixture date")
+        }
+        return date
     }
 }

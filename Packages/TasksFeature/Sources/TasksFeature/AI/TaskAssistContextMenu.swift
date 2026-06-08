@@ -163,8 +163,15 @@ struct TaskAssistActionHandler {
             case .title:
                 $0.title = text
             case .body:
-                $0.body = text
+                break
             }
+        }
+        if field == .body {
+            let noteRepository = NoteRepository(context: modelContext, tasks: repository, now: Date.init)
+            try TaskNoteContent.replaceMarkdown(text, for: task, in: modelContext, repository: noteRepository)
+        } else if field == .title, let note = try TaskNoteContent.note(for: task, in: modelContext) {
+            try NoteRepository(context: modelContext, tasks: repository, now: Date.init)
+                .updateFields(note, title: task.title)
         }
     }
 

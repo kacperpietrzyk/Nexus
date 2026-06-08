@@ -106,7 +106,10 @@ struct TaskAssistContextMenuTests {
 
         let stored = try fetchTask(task.id, in: harness.container)
         #expect(stored.title == "title")
-        #expect(stored.body == "Clear body copy")
+        #expect(stored.body.isEmpty)
+        let noteID = try #require(stored.noteRef)
+        let note = try #require(try fetchNote(noteID, in: harness.container))
+        #expect(note.plainText == "Clear body copy")
     }
 
     @MainActor
@@ -304,8 +307,9 @@ struct TaskAssistContextMenuTests {
 private func makeHarness(
     stamp: Date = Date(timeIntervalSinceReferenceDate: 913_000)
 ) throws -> TaskAssistHarness {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try ModelContainer(for: TaskItem.self, configurations: config)
+    let schema = Schema([TaskItem.self, Note.self, Link.self, Project.self, Section.self])
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+    let container = try ModelContainer(for: schema, configurations: [config])
     let context = container.mainContext
     let repository = TaskItemRepository(context: context, scheduler: RRuleScheduler(), now: { stamp })
     return TaskAssistHarness(container: container, context: context, repository: repository, stamp: stamp)
@@ -326,6 +330,18 @@ private func fetchTask(_ id: UUID, in container: ModelContainer) throws -> TaskI
 private func fetchTasks(in container: ModelContainer) throws -> [TaskItem] {
     let context = ModelContext(container)
     return try context.fetch(FetchDescriptor<TaskItem>())
+}
+
+@MainActor
+private func fetchNote(_ id: UUID, in container: ModelContainer) throws -> Note? {
+    let context = ModelContext(container)
+    var descriptor = FetchDescriptor<Note>(
+        predicate: #Predicate { note in
+            note.id == id
+        }
+    )
+    descriptor.fetchLimit = 1
+    return try context.fetch(descriptor).first
 }
 
 private func makeRouter(responseText: String) -> AIRouter {

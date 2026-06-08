@@ -108,6 +108,7 @@ struct TodayDashboardTests {
     // MARK: - A10: embeddedTodayIsEmpty pure-static predicate
 
     @Test("Empty-state gate: all buckets empty, no pin, no error → true")
+    @MainActor
     func embeddedIsEmptyWhenAllBucketsEmptyNoError() {
         #expect(
             TodayDashboard.embeddedTodayIsEmpty(
@@ -121,6 +122,7 @@ struct TodayDashboardTests {
     }
 
     @Test("Empty-state gate: load failure (error set) with zeroed buckets → false (no false achievement)")
+    @MainActor
     func embeddedIsNotEmptyWhenLoadFailed() {
         // This is the regression the pure seam was extracted to lock:
         // a data-load failure zeros all buckets AND sets embeddedError.
@@ -138,6 +140,7 @@ struct TodayDashboardTests {
     }
 
     @Test("Empty-state gate: today bucket non-empty → false")
+    @MainActor
     func embeddedIsNotEmptyWhenTodayBucketHasTasks() {
         let task = TaskItem(title: "Today task")
         #expect(
@@ -152,6 +155,7 @@ struct TodayDashboardTests {
     }
 
     @Test("Empty-state gate: awaiting bucket non-empty → false")
+    @MainActor
     func embeddedIsNotEmptyWhenAwaitingBucketHasEntries() {
         let task = TaskItem(title: "Awaiting task")
         let entry = AwaitingEntry(task: task, blockedCount: 1)
@@ -167,6 +171,7 @@ struct TodayDashboardTests {
     }
 
     @Test("Empty-state gate: later bucket non-empty → false")
+    @MainActor
     func embeddedIsNotEmptyWhenLaterBucketHasTasks() {
         let task = TaskItem(title: "Later task")
         #expect(
@@ -181,6 +186,7 @@ struct TodayDashboardTests {
     }
 
     @Test("Empty-state gate: pinned NowCard task (featuredNowTask non-nil) with empty buckets → false")
+    @MainActor
     func embeddedIsNotEmptyWhenPinnedTaskPresent() {
         let pinned = TaskItem(title: "Pinned focus")
         #expect(

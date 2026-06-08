@@ -14,14 +14,14 @@ import Testing
             embeddingClient: client,
             index: try SqliteVecIndex.inMemory(dimension: 4),
             context: context,
-            debounce: .milliseconds(200)
+            debounce: .seconds(2)
         )
         let id = UUID()
 
         for value in ["buy milk 1", "buy milk 2", "buy milk 3", "buy milk 4", "buy milk 5"] {
             await dispatcher.enqueue(itemID: id, kind: "task", text: value)
         }
-        try await Task.sleep(for: .milliseconds(360))
+        try await dispatcher.waitUntilIdle()
 
         let embeddings = try fetchEmbeddings(context, itemID: id)
         #expect(embeddings.count == 1)

@@ -154,7 +154,8 @@ public struct AgentComposition {
             // enforced separately by the provider, so defaulting this feature flag ON is safe.)
             isEnabled: {
                 UserDefaults.standard.object(forKey: NexusPreferences.Keys.agentEnabled) as? Bool ?? true
-            }
+            },
+            dailyNoteWriter: AgentBriefDailyNoteWriter(modelContext: context)
         )
         let scheduleRunner = AgentScheduleRunner(
             runtime: runtime,

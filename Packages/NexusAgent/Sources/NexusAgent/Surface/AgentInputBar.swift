@@ -72,6 +72,24 @@ private struct AgentImageDropDelegate: DropDelegate {
     }
 }
 
+private struct AgentInputBarImageButtonLabel: View {
+    let isDisabled: Bool
+    let foreground: Color
+    let border: Color
+
+    var body: some View {
+        Image(systemName: "photo")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(isDisabled ? NexusColor.Text.tertiary : foreground)
+            .frame(width: 30, height: 30)
+            .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+            .overlay(
+                RoundedRectangle(cornerRadius: NexusRadius.r2)
+                    .strokeBorder(border, lineWidth: 1)
+            )
+    }
+}
+
 public struct AgentInputBar: View {
     public typealias OnSend = (String) -> Void
     public typealias OnSendWithAttachments = (String, [String], String?) async -> AgentInputSendResult
@@ -486,36 +504,37 @@ extension AgentInputBar {
 
     @ViewBuilder
     private var imageButton: some View {
+        let isDisabled = imageButtonDisabled
+        let foreground = imageButtonForeground
+        let border = imageButtonBorder
         #if os(iOS) && canImport(PhotosUI)
         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-            imageButtonLabel
+            AgentInputBarImageButtonLabel(
+                isDisabled: isDisabled,
+                foreground: foreground,
+                border: border
+            )
         }
         .buttonStyle(.plain)
-        .disabled(imageButtonDisabled)
-        .opacity(imageButtonDisabled ? 0.46 : 1)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.46 : 1)
         .accessibilityLabel("Attach image")
         #else
         Button(
             action: { isFileImporterPresented = true },
-            label: { imageButtonLabel }
+            label: {
+                AgentInputBarImageButtonLabel(
+                    isDisabled: isDisabled,
+                    foreground: foreground,
+                    border: border
+                )
+            }
         )
         .buttonStyle(.plain)
-        .disabled(imageButtonDisabled)
-        .opacity(imageButtonDisabled ? 0.46 : 1)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.46 : 1)
         .accessibilityLabel("Attach image")
         #endif
-    }
-
-    private var imageButtonLabel: some View {
-        Image(systemName: "photo")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(imageButtonDisabled ? NexusColor.Text.tertiary : imageButtonForeground)
-            .frame(width: 30, height: 30)
-            .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
-            .overlay(
-                RoundedRectangle(cornerRadius: NexusRadius.r2)
-                    .strokeBorder(imageButtonBorder, lineWidth: 1)
-            )
     }
 
     private var imageButtonForeground: Color {
