@@ -6,6 +6,7 @@ import NexusCore
 import NexusMeetings
 import NexusUI
 import NotesFeature
+import PeopleFeature
 import SwiftData
 import SwiftUI
 import TasksFeature
@@ -204,6 +205,7 @@ struct ContentView: View {
             .init(id: .tasks, systemImage: "checkmark.square", label: "Tasks"),
             .init(id: .notes, systemImage: "note.text", label: "Notes"),
             .init(id: .calendar, systemImage: "calendar", label: "Calendar"),
+            .init(id: .people, systemImage: "person.crop.circle", label: "People"),
             .init(id: .agent, systemImage: "sparkles", label: "Agent"),
             .init(id: .stats, systemImage: "chart.bar", label: "Stats"),
         ]
@@ -299,6 +301,20 @@ struct ContentView: View {
                 topControl: { EmptyView() },
                 content: { calendarContent }
             )
+        } else if selection == .people {
+            // People / Contacts surface (spec §6): the searchable people list +
+            // profile ("everything about X") + field editor + merge UI, mounted
+            // directly in the shell content slot. `PeopleListView` owns its own
+            // NavigationStack.
+            NexusShell(
+                crumbs: ["Personal", shellTitle],
+                onOpenCommandPalette: { commandPalettePresented = true },
+                onOpenCapture: { mode in
+                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
+                },
+                topControl: { EmptyView() },
+                content: { PeopleListView() }
+            )
         } else {
             NexusShell(
                 crumbs: ["Personal", shellTitle],
@@ -393,6 +409,7 @@ struct ContentView: View {
         case .tasks: return "Tasks"
         case .notes: return "Notes"
         case .calendar: return "Calendar"
+        case .people: return "People"
         // The oracle Agent top bar reads "Nexus"; crumbs are unused in
         // control mode anyway (no `NexusTopBar`), so this is defensive
         // plumbing parity only.
