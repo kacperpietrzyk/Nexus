@@ -65,4 +65,30 @@ struct DailyRolloverJobTests {
         #expect((rolledOverdue.dueAt ?? .distantPast) > now)
         #expect(unchangedFuture.dueAt == nextWeek)
     }
+
+    @MainActor
+    @Test("rollover leaves a task still due later today untouched (only genuinely overdue rolls, S1)")
+    func leavesDueLaterTodayUntouched() async throws {
+        let schema = Schema([TaskItem.self, ScheduledBlock.self, Link.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        let context = ModelContext(container)
+        let cal = calendar
+
+        // now = 2026-06-05 10:00 UTC; a task due today at 17:00 is still ahead.
+        let now = Date(timeIntervalSince1970: 1_780_653_600)
+        let dueToday = cal.date(bySettingHour: 17, minute: 0, second: 0, of: now)!
+        let task = TaskItem(title: "later today", dueAt: dueToday)
+        context.insert(task)
+        try context.save()
+        let id = task.id
+
+        try await DailyRolloverJob.rollover(in: container, now: now, calendar: cal)
+
+        let verify = ModelContext(container)
+        let after = try #require(
+            try verify.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })).first
+        )
+        #expect(after.dueAt == dueToday)
+    }
 }
