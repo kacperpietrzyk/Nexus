@@ -67,6 +67,13 @@ public final class AgentBriefDailyNoteWriter: AgentBriefDailyNoteWriting, @unche
         let repository = NoteRepository(context: modelContext, now: { request.now })
 
         if let existing = try findExistingDailyNote(title: title) {
+            // Identity-stable (SW1): `brief()` re-runs this on every Today read,
+            // including cache-hits. Skip the rewrite when the brief content is
+            // unchanged — `plainText` is taskRef-independent, so an identical brief
+            // compares equal even though a re-parse mints fresh checkbox refs.
+            // Avoids churning the note + firing reloadAllTimelines on every read.
+            let newPlainText = NotePlainTextFlattener.plainText(for: blocks)
+            guard existing.plainText != newPlainText || existing.tags != tags else { return }
             try repository.updateFields(existing, title: title, tags: tags, role: .dailyNote)
             try repository.updateContent(existing, blocks: blocks)
         } else {
