@@ -34,11 +34,21 @@ public struct ScheduledJob: Sendable {
 /// second caller exists.
 public actor Scheduler {
     private let clock: any JobClock
+    /// Base delay before a failed job is retried (S5). The effective retry delay is
+    /// `retryBackoff * 2^(failures-1)`, capped at the job's own interval — so a
+    /// failure is retried sooner than a full interval, repeated failures back off,
+    /// and a perpetually-failing job never runs more often than its interval
+    /// (anti-starvation preserved).
+    private let retryBackoff: TimeInterval
     private var jobs: [JobID: ScheduledJob] = [:]
     private var lastRun: [JobID: Date] = [:]
+    /// Consecutive failures since the last success, per job. Drives retry backoff;
+    /// reset to 0 on a successful run.
+    private var failureCount: [JobID: Int] = [:]
 
-    public init(clock: any JobClock = SystemJobClock()) {
+    public init(clock: any JobClock = SystemJobClock(), retryBackoff: TimeInterval = 300) {
         self.clock = clock
+        self.retryBackoff = retryBackoff
     }
 
     public func register(_ job: ScheduledJob) {
@@ -49,18 +59,14 @@ public actor Scheduler {
         jobs.keys.sorted { $0.rawValue < $1.rawValue }
     }
 
-    /// Iterates all registered jobs and runs the ones whose interval has elapsed since their last
-    /// run. Throws are caught per-job so one failure doesn't starve the others. `lastRun` advances
-    /// even on throw — we don't want a perpetually-failing job to monopolise scheduler ticks.
+    /// Iterates all registered jobs and runs the ones whose (effective) interval has elapsed since
+    /// their last attempt. Throws are caught per-job so one failure doesn't starve the others. The
+    /// `lastRun` anchor advances on every attempt; a failed job is re-eligible after a capped
+    /// backoff (see `retryBackoff`) rather than waiting a full interval (S5).
     public func runDue() async {
         let now = clock.now()
         for job in jobs.values where shouldRun(job, at: now) {
-            lastRun[job.id] = now
-            do {
-                try await job.run(now)
-            } catch {
-                // Intentional swallow — log via OS log when logger lands in Phase 1.
-            }
+            await execute(job, at: now)
         }
     }
 
@@ -68,17 +74,34 @@ public actor Scheduler {
     /// the system already decided the task is due.
     public func runNow(_ id: JobID) async {
         guard let job = jobs[id] else { return }
-        let now = clock.now()
-        lastRun[id] = now
+        await execute(job, at: clock.now())
+    }
+
+    /// Run a job, advancing its `lastRun` anchor and recording success/failure so the
+    /// next `shouldRun` applies the retry backoff (S5).
+    private func execute(_ job: ScheduledJob, at now: Date) async {
+        lastRun[job.id] = now
         do {
             try await job.run(now)
+            failureCount[job.id] = 0
         } catch {
-            // swallow — same rationale as runDue
+            // Swallow (one failure mustn't starve the others) but record it so the
+            // job is retried after a backoff. Log via OS log when logger lands.
+            failureCount[job.id, default: 0] += 1
         }
     }
 
     private func shouldRun(_ job: ScheduledJob, at now: Date) -> Bool {
         guard let last = lastRun[job.id] else { return true }
-        return now.timeIntervalSince(last) >= job.interval
+        return now.timeIntervalSince(last) >= effectiveInterval(for: job)
+    }
+
+    /// Normal interval when the last run succeeded; otherwise an exponential backoff
+    /// from `retryBackoff`, capped at the interval so retries never outpace it.
+    private func effectiveInterval(for job: ScheduledJob) -> TimeInterval {
+        let failures = failureCount[job.id] ?? 0
+        guard failures > 0 else { return job.interval }
+        let backoff = retryBackoff * pow(2, Double(failures - 1))
+        return min(backoff, job.interval)
     }
 }
