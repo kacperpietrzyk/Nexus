@@ -37,6 +37,29 @@ struct CalendarEventsToolsTests {
     }
 
     @MainActor
+    @Test("calendar.events.list echoes all-day and calendar id from the source event (A4)")
+    func listCarriesAllDayAndCalendarID() async throws {
+        let fixture = try await InMemoryAgentContext.make(now: Self.clock)
+        let event = CalendarEvent(
+            id: "e1",
+            title: "Holiday",
+            start: Self.now,
+            end: Self.now.addingTimeInterval(86_400),
+            isAllDay: true,
+            calendarID: "work-cal"
+        )
+        let provider = FakeCalendarProvider(stubEvents: [event])
+
+        let result = try await CalendarEventsListTool(provider: provider).call(
+            args: .object(["start": .string(iso(-3600)), "end": .string(iso(90_000))]),
+            context: fixture.context
+        )
+        let dto = try #require(try TasksToolJSON.decode([CalendarEventDTO].self, from: result).first)
+        #expect(dto.isAllDay == true)
+        #expect(dto.calendarID == "work-cal")
+    }
+
+    @MainActor
     @Test("calendar.events.list throws when access not granted")
     func listRequiresAccess() async throws {
         let fixture = try await InMemoryAgentContext.make(now: Self.clock)

@@ -108,7 +108,9 @@ public final class EventKitCalendarProvider: CalendarEventProviding, @unchecked 
             attendees: attendees(from: event),
             isVideoCall: videoURL != nil,
             urlForJoin: videoURL,
-            calendarColorHex: event.calendar?.cgColor.flatMap(hexString(from:))
+            calendarColorHex: event.calendar?.cgColor.flatMap(hexString(from:)),
+            isAllDay: event.isAllDay,
+            calendarID: event.calendar?.calendarIdentifier
         )
     }
 
