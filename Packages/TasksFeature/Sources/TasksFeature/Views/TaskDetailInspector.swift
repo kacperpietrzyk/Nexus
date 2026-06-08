@@ -515,8 +515,8 @@ extension TaskDetailInspector {
     var deadlineCard: some View {
         inspectorCard("Deadline") {
             Toggle("Deadline", isOn: deadlineEnabledBinding)
-
             if task.deadlineAt != nil {
+                deadlineRiskRow()  // spec §19.1 D1; see +DeadlineRisk
                 dateRow("Date") {
                     NexusDateField(
                         date: deadlineAtBinding,
