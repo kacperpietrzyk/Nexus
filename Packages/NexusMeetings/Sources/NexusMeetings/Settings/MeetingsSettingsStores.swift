@@ -10,6 +10,7 @@ public enum MeetingsSettingsKeys {
     public static let summaryProvider = "nexus.meetings.summary.provider"
     public static let customVocabulary = "nexus.meetings.customVocabulary.v1"
     public static let screenOCREnabled = "nexus.meetings.screenOCR.enabled"
+    public static let readinessSnapshot = "nexus.meetings.readiness.snapshot.v1"
 }
 
 public enum MeetingsTranscriptionProviderPreference: String, CaseIterable, Sendable {
