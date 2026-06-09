@@ -1,3 +1,8 @@
+// Mac-only surface: the readiness panel and its commands rely on
+// `DistributedNotificationCenter` (unavailable on iOS) and the view model is only
+// consumed by `MeetingsReadinessSection`, which is itself `#if os(macOS)`.
+#if os(macOS)
+
 import Foundation
 
 @MainActor
@@ -52,3 +57,5 @@ public final class MeetingsReadinessViewModel {
         }
     }
 }
+
+#endif
