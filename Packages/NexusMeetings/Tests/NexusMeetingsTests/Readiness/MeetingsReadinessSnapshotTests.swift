@@ -9,16 +9,14 @@ struct MeetingsReadinessSnapshotTests {
         let snapshot = MeetingsReadinessSnapshot(
             permissions: .init(microphone: .granted, accessibility: .denied, audioCapture: .unknown),
             models: [
-                ModelReadiness(id: .parakeet, downloaded: true, sizeBytes: 1_234, state: .ready),
+                ModelReadiness(id: .parakeet, sizeBytes: 1_234, state: .ready),
                 ModelReadiness(
                     id: .sortformer,
-                    downloaded: false,
                     sizeBytes: nil,
                     state: .downloading(fraction: 0.5)
                 ),
                 ModelReadiness(
                     id: .whisperKit,
-                    downloaded: false,
                     sizeBytes: nil,
                     state: .failed(reason: "network")
                 ),

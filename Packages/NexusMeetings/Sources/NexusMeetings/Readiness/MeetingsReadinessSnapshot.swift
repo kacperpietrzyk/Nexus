@@ -1,5 +1,7 @@
 import Foundation
 
+/// `.notDetermined` means the OS has not been asked yet; `.unknown` means the status
+/// could not be determined (no public API / indeterminate result).
 public enum PermissionState: String, Codable, Sendable, Equatable {
     case granted
     case denied
@@ -23,13 +25,14 @@ public enum ModelDownloadState: Codable, Sendable, Equatable {
 
 public struct ModelReadiness: Codable, Sendable, Equatable {
     public let id: MeetingsModelID
-    public let downloaded: Bool
     public let sizeBytes: Int64?
     public let state: ModelDownloadState
 
-    public init(id: MeetingsModelID, downloaded: Bool, sizeBytes: Int64?, state: ModelDownloadState) {
+    /// Derived from `state` to avoid an unenforceable invariant.
+    public var downloaded: Bool { state == .ready }
+
+    public init(id: MeetingsModelID, sizeBytes: Int64?, state: ModelDownloadState) {
         self.id = id
-        self.downloaded = downloaded
         self.sizeBytes = sizeBytes
         self.state = state
     }
