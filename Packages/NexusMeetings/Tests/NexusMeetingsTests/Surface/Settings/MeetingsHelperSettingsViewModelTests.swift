@@ -35,13 +35,18 @@ import Testing
 }
 
 @MainActor
-@Test func enablingHelperRegistersViaRegistrar() {
+@Test func enablingHelperRegistersViaRegistrarAndRequestsMicInProcess() {
     let registrar = RecordingRegistrar()
     let preferences = RecordingAutoRecordStore()
+    let micFlag = MicRequestFlag()
     let vm = MeetingsHelperSettingsViewModel(
         statusProvider: { .enabled },
         registrar: registrar,
-        preferenceStore: preferences
+        preferenceStore: preferences,
+        requestMicrophoneAccess: { completion in
+            micFlag.markCalled()
+            completion(true)
+        }
     )
 
     vm.toggle(enabled: true)
@@ -49,6 +54,15 @@ import Testing
     #expect(registrar.registerCallCount == 1)
     #expect(registrar.unregisterCallCount == 0)
     #expect(preferences.savedValues == [true])
+    // Microphone is requested IN-PROCESS, not via the sandboxed helper.
+    #expect(micFlag.wasCalled)
+}
+
+private final class MicRequestFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var called = false
+    var wasCalled: Bool { lock.withLock { called } }
+    func markCalled() { lock.withLock { called = true } }
 }
 
 @MainActor

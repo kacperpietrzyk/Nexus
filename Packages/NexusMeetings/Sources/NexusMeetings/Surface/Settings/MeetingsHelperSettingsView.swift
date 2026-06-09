@@ -1,4 +1,5 @@
 #if os(macOS) && canImport(ServiceManagement)
+import AVFoundation
 import Combine
 import NexusUI
 @preconcurrency import ServiceManagement
@@ -37,17 +38,22 @@ public final class MeetingsHelperSettingsViewModel: ObservableObject {
     private let statusProvider: () -> SMAppService.Status
     private let registrar: any HelperRegistrar
     private let preferenceStore: any HelperAutoRecordStoring
+    private let requestMicrophoneAccess: @Sendable (@escaping @Sendable (Bool) -> Void) -> Void
 
     public init(
         statusProvider: @escaping () -> SMAppService.Status = {
             MeetingsHelperService.service.status
         },
         registrar: any HelperRegistrar = ServiceManagementHelperRegistrar(),
-        preferenceStore: any HelperAutoRecordStoring = UserDefaultsHelperAutoRecordStore.shared
+        preferenceStore: any HelperAutoRecordStoring = UserDefaultsHelperAutoRecordStore.shared,
+        requestMicrophoneAccess: @escaping @Sendable (@escaping @Sendable (Bool) -> Void) -> Void = { completion in
+            AVCaptureDevice.requestAccess(for: .audio) { granted in completion(granted) }
+        }
     ) {
         self.statusProvider = statusProvider
         self.registrar = registrar
         self.preferenceStore = preferenceStore
+        self.requestMicrophoneAccess = requestMicrophoneAccess
 
         let status = statusProvider()
         isEnabled = status == .enabled
@@ -69,12 +75,13 @@ public final class MeetingsHelperSettingsViewModel: ObservableObject {
             }
             preferenceStore.save(enabled: enabled)
             if enabled {
-                // Kick the (now-launching) helper to prompt for mic + open
-                // Accessibility Settings. The helper may still be starting up
-                // when this arrives — the readiness panel's [Request] button
-                // re-posts if needed.
+                // Request microphone IN-PROCESS (main app has `audio-input`); the
+                // cross-app post to the sandboxed helper was unreliable.
+                requestMicrophoneAccess { _ in }
+                // Nudge the (now-launching) helper to refresh its Accessibility /
+                // system-audio view as a best-effort fallback.
                 DistributedNotificationCenter.default().postNotificationName(
-                    MeetingsReadinessNotification.requestPermissions,
+                    MeetingsReadinessNotification.refreshReadiness,
                     object: nil, userInfo: nil, deliverImmediately: true
                 )
             }

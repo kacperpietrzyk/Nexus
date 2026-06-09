@@ -1,4 +1,3 @@
-import FluidAudio
 import Foundation
 import NexusAI
 import NexusCore
@@ -68,24 +67,8 @@ final class HelperComposition {
     }
 
     private static func makeReadinessCoordinator() -> HelperReadinessCoordinator {
-        let modelProbe = DirectoryModelProbe(resolvers: [
-            DirectoryModelProbe.Resolver(id: .parakeet) {
-                AsrModels.defaultCacheDirectory(for: .v3)
-            },
-            DirectoryModelProbe.Resolver(id: .sortformer) {
-                MLModelConfigurationUtils.defaultModelsDirectory(for: .sortformer)
-            },
-            DirectoryModelProbe.Resolver(id: .whisperKit) {
-                WhisperKitMeetingProvider.defaultLocalModelFolder()
-            },
-        ])
-        let computer = MeetingsReadinessComputer(
-            permissions: LivePermissionProbe(),
-            models: modelProbe,
-            environment: LiveEnvironmentProbe()
-        )
-        return HelperReadinessCoordinator(
-            computer: computer,
+        HelperReadinessCoordinator(
+            computer: MeetingsReadinessFactory.makeComputer(),
             store: UserDefaultsMeetingsReadinessStore.shared,
             prefetcher: LiveMeetingsModelPrefetcher()
         )
