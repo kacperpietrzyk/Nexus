@@ -49,6 +49,11 @@ public final class MeetingsComposition {
     /// already wired for detection.
     public let peopleLinker: MeetingPeopleLinker
 
+    /// The shared `PersonRepository` (NexusCore), exposed so the transcript rename
+    /// sheet can list existing contacts to assign a speaker to (#3). Graph-only — the
+    /// Meetings surface never imports a People UI module.
+    public let personRepository: PersonRepository
+
     public init(
         context: ModelContext,
         router: any MeetingProcessingRouting,
@@ -72,6 +77,7 @@ public final class MeetingsComposition {
         self.calendarProvider = calendarProvider
         meetingRepository = MeetingRepository(context: context)
         audioStorageRepository = MeetingAudioStorageRepository(context: context)
+        personRepository = PersonRepository(context: context)
         peopleLinker = Self.makePeopleLinker(context: context, calendarProvider: calendarProvider)
         self.taskRepository =
             taskRepository
@@ -156,6 +162,75 @@ public final class MeetingsComposition {
             return names
         } catch {
             return []
+        }
+    }
+
+    /// Richer calendar-attendee suggestions for the speaker rename sheet (#4b):
+    /// name + email + response/role, ranked for usefulness. Like
+    /// `calendarAttendeeNames`, best-effort and suggestion-only (I3) — picking one is
+    /// the user's manual choice and nothing here writes `participantsJSON`. Returns
+    /// `[]` when the meeting has no linked calendar event or the lookup fails.
+    public func calendarAttendeeCandidates(for meeting: Meeting) async -> [MeetingAttendeeCandidate] {
+        guard let eventID = meeting.calendarEventID else { return [] }
+        let pad: TimeInterval = 15 * 60
+        let end = meeting.endedAt ?? meeting.startedAt.addingTimeInterval(TimeInterval(meeting.durationSec))
+        let lower = meeting.startedAt.addingTimeInterval(-pad)
+        let upper = max(end, meeting.startedAt).addingTimeInterval(pad)
+        do {
+            let events = try await calendarProvider.eventsBetween(start: lower, end: upper)
+            let attendees = events.first { $0.id == eventID }?.attendees ?? []
+            return Self.rankAttendeeCandidates(attendees)
+        } catch {
+            return []
+        }
+    }
+
+    /// Pure ranking used by `calendarAttendeeCandidates` (testable in isolation):
+    /// drops the current user ("Me") and unnamed attendees, de-duplicates by email
+    /// (else name), then orders accepted/required participants ahead of tentative and
+    /// declined ones (a declined invitee is the least likely speaker).
+    nonisolated static func rankAttendeeCandidates(
+        _ attendees: [CalendarEvent.Attendee]
+    ) -> [MeetingAttendeeCandidate] {
+        var seen = Set<String>()
+        var candidates: [MeetingAttendeeCandidate] = []
+        for attendee in attendees {
+            guard attendee.isCurrentUser == false else { continue }
+            let name = attendee.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let email = attendee.email?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let nonEmptyName = (name?.isEmpty == false) ? name : nil
+            let nonEmptyEmail = (email?.isEmpty == false) ? email : nil
+            // A candidate must be human-readable: prefer a real name, else fall back to
+            // the email so an email-only attendee is still pickable.
+            guard let label = nonEmptyName ?? nonEmptyEmail else { continue }
+            let dedupeKey = (nonEmptyEmail ?? label).lowercased()
+            guard seen.insert(dedupeKey).inserted else { continue }
+            candidates.append(
+                MeetingAttendeeCandidate(
+                    name: label,
+                    email: nonEmptyEmail,
+                    responseStatus: attendee.responseStatus,
+                    role: attendee.role
+                )
+            )
+        }
+        // Stable sort: lower rank first; equal-rank attendees keep invite order.
+        return candidates.enumerated()
+            .sorted { lhs, rhs in
+                let lr = Self.rank(lhs.element)
+                let rr = Self.rank(rhs.element)
+                return lr == rr ? lhs.offset < rhs.offset : lr < rr
+            }
+            .map(\.element)
+    }
+
+    /// Lower is shown first. Declined invitees sink to the bottom (unlikely speakers);
+    /// tentative sits just above; everything else (accepted / pending / unknown) leads.
+    nonisolated private static func rank(_ candidate: MeetingAttendeeCandidate) -> Int {
+        switch candidate.responseStatus {
+        case .declined: return 2
+        case .tentative: return 1
+        case .accepted, .pending, .none: return 0
         }
     }
 

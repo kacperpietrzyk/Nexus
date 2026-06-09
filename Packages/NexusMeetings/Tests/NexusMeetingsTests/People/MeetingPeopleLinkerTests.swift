@@ -159,6 +159,76 @@ struct MeetingPeopleLinkerTests {
         #expect(edges.contains { $0.linkKind == .mentions } == false)
     }
 
+    @Test func participantWithPersonIDLinksThatPersonDirectly() async throws {
+        let context = try makeContext()
+        let repo = PersonRepository(context: context)
+        // A pre-existing contact the user assigned the speaker to.
+        let chosen = try repo.create(displayName: "Alice Anderson", email: "alice@example.com")
+
+        let meeting = try meeting(participants: [
+            MeetingParticipant(speakerID: "Speaker 1", displayName: "Alice Anderson", personID: chosen.id)
+        ])
+        context.insert(meeting)
+        try context.save()
+
+        let linker = MeetingPeopleLinker(people: repo)
+        let linked = try await linker.link(meeting: meeting)
+
+        // No new Person minted — the chosen one is linked via .attendee.
+        #expect(try activePeople(repo).count == 1)
+        #expect(linked.map(\.id) == [chosen.id])
+        let aggregate = try repo.aggregate(chosen)
+        #expect(aggregate.meetings == [meeting.id])
+    }
+
+    @Test func personIDChoiceOverridesNumberedPlaceholderSkip() async throws {
+        let context = try makeContext()
+        let repo = PersonRepository(context: context)
+        let chosen = try repo.create(displayName: "Bob")
+        // displayName is still a numbered placeholder, but the explicit personID must
+        // win — the placeholder filter never drops a user-chosen person.
+        let meeting = try meeting(participants: [
+            MeetingParticipant(speakerID: "Speaker 1", displayName: "Speaker 1", personID: chosen.id)
+        ])
+        context.insert(meeting)
+        try context.save()
+
+        let linker = MeetingPeopleLinker(people: repo)
+        let linked = try await linker.link(meeting: meeting)
+        #expect(linked.map(\.id) == [chosen.id])
+    }
+
+    @Test func numberedPlaceholderNamesAreNotMinted() async throws {
+        let context = try makeContext()
+        let repo = PersonRepository(context: context)
+        let meeting = try meeting(participants: [
+            // All numbered placeholders the user typed/renamed-to but that are not real
+            // names — none should mint a Person (root-cause fix for list pollution).
+            MeetingParticipant(speakerID: "S1", displayName: "Participant 1"),
+            MeetingParticipant(speakerID: "S2", displayName: "participant_2"),
+            MeetingParticipant(speakerID: "S3", displayName: "Speaker 3"),
+            MeetingParticipant(speakerID: "S4", displayName: "Carol"),
+        ])
+        context.insert(meeting)
+        try context.save()
+
+        let linker = MeetingPeopleLinker(people: repo)
+        let linked = try await linker.link(meeting: meeting)
+
+        #expect(linked.map(\.displayName) == ["Carol"])
+        #expect(try activePeople(repo).map(\.displayName) == ["Carol"])
+    }
+
+    @Test func placeholderMatcherRecognizesPatterns() {
+        #expect(MeetingPeopleLinker.isNumberedPlaceholder("Participant 1"))
+        #expect(MeetingPeopleLinker.isNumberedPlaceholder("participant_2"))
+        #expect(MeetingPeopleLinker.isNumberedPlaceholder("Speaker3"))
+        #expect(MeetingPeopleLinker.isNumberedPlaceholder("SPEAKER 12"))
+        #expect(MeetingPeopleLinker.isNumberedPlaceholder("Anna") == false)
+        #expect(MeetingPeopleLinker.isNumberedPlaceholder("Participant Smith") == false)
+        #expect(MeetingPeopleLinker.isNumberedPlaceholder("") == false)
+    }
+
     // MARK: - Calendar pass (enrichment)
 
     @Test func calendarAttendeeEnrichesMatchingSpeakerWithoutDuplicating() async throws {
