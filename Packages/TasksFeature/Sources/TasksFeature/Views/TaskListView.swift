@@ -457,7 +457,12 @@ public struct TaskListView: View {
 extension TaskListView {
     @MainActor
     static func rootTasks(from tasks: [TaskItem]) -> [TaskItem] {
-        SubtaskTreeDataSource.rootTasks(from: tasks)
+        // `.dedupedByID()` defends the list against the historical synced-store
+        // duplication (one logical task materialized as two same-`id` rows under
+        // different entity versions). This is the funnel for nearly every Tasks
+        // filter, so deduping here keeps the visible list honest without any
+        // destructive write. No-op on a clean store.
+        SubtaskTreeDataSource.rootTasks(from: tasks).dedupedByID()
     }
 
     @MainActor
@@ -474,7 +479,7 @@ extension TaskListView {
                     SortDescriptor(\TaskItem.createdAt, order: .reverse),
                 ]
             )
-            return try modelContext.fetch(descriptor)
+            return try modelContext.fetch(descriptor).dedupedByID()
         }
 
         let doneStatus = TaskStatus.done.rawValue
@@ -488,7 +493,7 @@ extension TaskListView {
                 SortDescriptor(\TaskItem.createdAt, order: .reverse),
             ]
         )
-        return try modelContext.fetch(descriptor)
+        return try modelContext.fetch(descriptor).dedupedByID()
     }
 
     @MainActor
@@ -549,7 +554,7 @@ extension TaskListView {
                 guard let projectID = task.projectID else { return true }
                 return !archivedProjectIDs.contains(projectID)
             }
-        return (rootTasks(from: noDate) + snoozed).sorted { lhs, rhs in
+        return (rootTasks(from: noDate) + snoozed).dedupedByID().sorted { lhs, rhs in
             switch (lhs.snoozedUntil, rhs.snoozedUntil) {
             case (let lhsDate?, let rhsDate?):
                 return lhsDate < rhsDate
