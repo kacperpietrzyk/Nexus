@@ -249,6 +249,123 @@ struct CalendarEventsToolsTests {
         #expect(provider.deletedIDs == [id])
     }
 
+    // MARK: - calendar target: none / default (#7)
+
+    private func isolatedStore(_ prefs: CalendarPreferences = .default) -> UserDefaultsCalendarPreferencesStore {
+        let store = UserDefaultsCalendarPreferencesStore(
+            defaults: UserDefaults(suiteName: "test-\(UUID().uuidString)")!
+        )
+        store.save(prefs)
+        return store
+    }
+
+    @MainActor
+    @Test("calendar.events.create with calendar_id \"none\" skips the system-calendar write (#7)")
+    func createNoneSkipsWrite() async throws {
+        let fixture = try await InMemoryAgentContext.make(now: Self.clock)
+        let provider = FakeCalendarProvider()
+
+        let result = try await CalendarEventsCreateTool(
+            writer: provider, preferencesStore: isolatedStore()
+        ).call(
+            args: .object([
+                "title": .string("Private note event"),
+                "start": .string(iso(0)),
+                "end": .string(iso(3600)),
+                "calendar_id": .string("none"),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(result["skipped"]?.boolValue == true)
+        // No EKEvent persisted (the dedup probe never ran, the draft carried nil).
+        #expect(provider.store.isEmpty)
+        #expect(provider.ensureNexusCount == 0)
+        // The draft was still recorded with a nil calendar.
+        #expect(provider.createdDrafts.first?.calendarID == nil)
+    }
+
+    @MainActor
+    @Test("calendar.events.create omitted calendar honors the configured write target (#7)")
+    func createOmittedHonorsDefault() async throws {
+        let fixture = try await InMemoryAgentContext.make(now: Self.clock)
+        let provider = FakeCalendarProvider()
+        let store = isolatedStore(CalendarPreferences(writeCalendarID: "my-default-cal"))
+
+        let result = try await CalendarEventsCreateTool(
+            writer: provider, preferencesStore: store
+        ).call(
+            args: .object([
+                "title": .string("Focus block"),
+                "start": .string(iso(0)),
+                "end": .string(iso(3600)),
+            ]),
+            context: fixture.context
+        )
+
+        let dto = try TasksToolJSON.decode(CalendarEventDTO.self, from: result)
+        #expect(dto.calendarID == "my-default-cal")
+        // The default was used directly — the "Nexus" calendar was never forced.
+        #expect(provider.ensureNexusCount == 0)
+    }
+
+    @MainActor
+    @Test("calendar.events.create omitted with no configured target falls back to Nexus (#7)")
+    func createOmittedFallsBackToNexus() async throws {
+        let fixture = try await InMemoryAgentContext.make(now: Self.clock)
+        let provider = FakeCalendarProvider()
+
+        let result = try await CalendarEventsCreateTool(
+            writer: provider, preferencesStore: isolatedStore()
+        ).call(
+            args: .object([
+                "title": .string("Focus block"),
+                "start": .string(iso(0)),
+                "end": .string(iso(3600)),
+            ]),
+            context: fixture.context
+        )
+
+        let dto = try TasksToolJSON.decode(CalendarEventDTO.self, from: result)
+        #expect(dto.calendarID == "nexus-cal")
+        #expect(provider.ensureNexusCount == 1)
+    }
+
+    @MainActor
+    @Test("calendar.events.update with omitted calendar leaves the event's calendar unchanged (#7)")
+    func updateOmittedKeepsCalendar() async throws {
+        let fixture = try await InMemoryAgentContext.make(now: Self.clock)
+        let provider = FakeCalendarProvider()
+        let created = try await CalendarEventsCreateTool(
+            writer: provider, preferencesStore: isolatedStore()
+        ).call(
+            args: .object([
+                "title": .string("Original"),
+                "start": .string(iso(0)),
+                "end": .string(iso(3600)),
+                "calendar_id": .string("team-cal"),
+            ]),
+            context: fixture.context
+        )
+        let createdDTO = try TasksToolJSON.decode(CalendarEventDTO.self, from: created)
+
+        _ = try await CalendarEventsUpdateTool(writer: provider).call(
+            args: .object([
+                "event_id": .string(createdDTO.id),
+                "title": .string("Renamed"),
+                "start": .string(iso(0)),
+                "end": .string(iso(3600)),
+            ]),
+            context: fixture.context
+        )
+
+        // The update draft carried nil (no reassignment); the stored event keeps
+        // its original calendar.
+        #expect(provider.updatedDrafts.first?.calendarID == nil)
+        let snapshot = try await provider.eventSnapshot(id: createdDTO.id)
+        #expect(snapshot?.calendarID == "team-cal")
+    }
+
     // MARK: - builder
 
     @MainActor

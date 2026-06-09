@@ -55,6 +55,56 @@ struct EventKitCalendarProviderHelperTests {
         #expect(ekRule.daysOfTheMonth == [NSNumber(value: 15)])
         #expect(ekRule.recurrenceEnd?.endDate == until)
     }
+
+    // MARK: - Teams meeting-ID extraction (#4a)
+
+    @Test("Teams meeting id parsed from the join URL digits, ignoring query params")
+    func teamsMeetingIDFromJoinURL() throws {
+        let url = try #require(URL(string: "https://teams.microsoft.com/meet/312967000844149?p=abcDEF123"))
+        let id = EventKitCalendarProvider.teamsMeetingID(notes: nil, joinURL: url, eventURL: nil)
+        #expect(id == "312967000844149")
+    }
+
+    @Test("Teams meeting id parsed from a Polish label, stripping grouping spaces")
+    func teamsMeetingIDFromPolishLabel() throws {
+        let notes = """
+            Dołącz do spotkania w aplikacji Microsoft Teams
+            Identyfikator spotkania: 312 967 000 844 149
+            Kod dostępu: aB1cD2
+            Zadzwoń: +48 22 123 45 67
+            """
+        let id = EventKitCalendarProvider.teamsMeetingID(notes: notes, joinURL: nil, eventURL: nil)
+        #expect(id == "312967000844149")
+    }
+
+    @Test("Teams meeting id parsed from an English label")
+    func teamsMeetingIDFromEnglishLabel() throws {
+        let notes = "Meeting ID: 123 456 789 012\nPasscode: zZ9"
+        let id = EventKitCalendarProvider.teamsMeetingID(notes: notes, joinURL: nil, eventURL: nil)
+        #expect(id == "123456789012")
+    }
+
+    @Test("Teams meeting id parsed from a join URL embedded in the notes body")
+    func teamsMeetingIDFromEmbeddedURL() throws {
+        let notes = "Click https://teams.microsoft.com/meet/987654321?context=x to join."
+        let id = EventKitCalendarProvider.teamsMeetingID(notes: notes, joinURL: nil, eventURL: nil)
+        #expect(id == "987654321")
+    }
+
+    @Test("No Teams identifier present yields nil and a bare phone number is not misread")
+    func teamsMeetingIDAbsent() throws {
+        let notes = "Call me at +48 600 700 800 to discuss."
+        let id = EventKitCalendarProvider.teamsMeetingID(notes: notes, joinURL: nil, eventURL: nil)
+        #expect(id == nil)
+    }
+
+    @Test("The join URL wins over a label when both are present")
+    func teamsMeetingIDPrefersURL() throws {
+        let url = try #require(URL(string: "https://teams.microsoft.com/meet/111222333?p=x"))
+        let notes = "Identyfikator spotkania: 999 888 777"
+        let id = EventKitCalendarProvider.teamsMeetingID(notes: notes, joinURL: url, eventURL: nil)
+        #expect(id == "111222333")
+    }
 }
 
 @Suite(

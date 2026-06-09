@@ -98,6 +98,7 @@ public final class EventKitCalendarProvider: CalendarEventProviding, @unchecked 
 
     private static func calendarEvent(from event: EKEvent) -> CalendarEvent {
         let videoURL = detectVideoURL(in: event)
+        let notes = event.notes.nilIfBlank
 
         return CalendarEvent(
             id: event.eventIdentifier ?? UUID().uuidString,
@@ -110,17 +111,109 @@ public final class EventKitCalendarProvider: CalendarEventProviding, @unchecked 
             urlForJoin: videoURL,
             calendarColorHex: event.calendar?.cgColor.flatMap(hexString(from:)),
             isAllDay: event.isAllDay,
-            calendarID: event.calendar?.calendarIdentifier
+            calendarID: event.calendar?.calendarIdentifier,
+            organizer: event.organizer.map(attendee(from:)),
+            notes: notes,
+            meetingID: teamsMeetingID(notes: notes, joinURL: videoURL, eventURL: event.url)
         )
     }
 
     private static func attendees(from event: EKEvent) -> [CalendarEvent.Attendee] {
-        (event.attendees ?? []).map { attendee in
-            CalendarEvent.Attendee(
-                name: attendee.name.nilIfBlank,
-                email: attendee.url.emailAddress
-            )
+        (event.attendees ?? []).map(attendee(from:))
+    }
+
+    private static func attendee(from participant: EKParticipant) -> CalendarEvent.Attendee {
+        CalendarEvent.Attendee(
+            name: participant.name.nilIfBlank,
+            email: participant.url.emailAddress,
+            responseStatus: responseStatus(from: participant.participantStatus),
+            role: role(from: participant.participantRole),
+            isCurrentUser: participant.isCurrentUser
+        )
+    }
+
+    private static func responseStatus(from status: EKParticipantStatus) -> CalendarEvent.ResponseStatus? {
+        switch status {
+        case .accepted: return .accepted
+        case .declined: return .declined
+        case .tentative: return .tentative
+        case .pending: return .pending
+        // `.unknown`, `.delegated`, `.completed`, `.inProcess` have no clean Nexus
+        // mapping — surface them as "no recorded response" rather than guessing.
+        default: return nil
         }
+    }
+
+    private static func role(from role: EKParticipantRole) -> CalendarEvent.Role? {
+        switch role {
+        case .required: return .required
+        case .optional: return .optional
+        case .chair: return .chair
+        // `.unknown` / `.nonParticipant` carry no useful UI distinction.
+        default: return nil
+        }
+    }
+
+    /// Extract a Microsoft Teams meeting identifier (digits only) from the invite.
+    /// Anchors on the two reliable forms — the `teams.microsoft.com/meet/<digits>`
+    /// join URL and the localized "meeting id" label (e.g. Polish
+    /// "Identyfikator spotkania: 312 967 000 844 149") — rather than grabbing the
+    /// longest digit run, so phone numbers in the body are not misread (#4a).
+    static func teamsMeetingID(notes: String?, joinURL: URL?, eventURL: URL?) -> String? {
+        let urlCandidates = [joinURL, eventURL].compactMap(\.self).map(\.absoluteString)
+        if let urlMeetID = urlCandidates.compactMap(meetID(fromTeamsURL:)).first {
+            return urlMeetID
+        }
+
+        guard let notes else { return nil }
+        // Any teams.microsoft.com/meet/<digits> URL embedded in the notes body.
+        if let embedded = urls(in: notes).compactMap({ meetID(fromTeamsURL: $0.absoluteString) }).first {
+            return embedded
+        }
+        // Localized label forms: "<label>: <grouped digits>". Match a label, then
+        // read the digit groups that follow and strip the spaces. Covers EN
+        // "Meeting ID:" and PL "Identyfikator spotkania:".
+        return labelledMeetingID(in: notes)
+    }
+
+    private static func meetID(fromTeamsURL urlString: String) -> String? {
+        let lower = urlString.lowercased()
+        guard let range = lower.range(of: "teams.microsoft.com/meet/") else { return nil }
+        let tail = urlString[range.upperBound...]
+        let digits = tail.prefix { $0.isNumber }
+        return digits.isEmpty ? nil : String(digits)
+    }
+
+    private static func labelledMeetingID(in text: String) -> String? {
+        let labels = ["identyfikator spotkania", "meeting id", "meeting-id"]
+        let separators: Set<Character> = [":", " ", "\u{00A0}"]
+        let lower = text.lowercased()
+        for label in labels {
+            guard let labelRange = lower.range(of: label) else { continue }
+            // Skip the label and any ":"/whitespace separator.
+            var cursor = labelRange.upperBound
+            while cursor < lower.endIndex, separators.contains(lower[cursor]) {
+                cursor = lower.index(after: cursor)
+            }
+            // Collect digits, tolerating the spaces that group them, then strip
+            // those spaces. Stops at the first non-digit, non-grouping character.
+            var digits = ""
+            var index = cursor
+            while index < lower.endIndex {
+                let character = lower[index]
+                if character.isNumber {
+                    digits.append(character)
+                } else if (character == " " || character == "\u{00A0}") && !digits.isEmpty {
+                    index = lower.index(after: index)
+                    continue
+                } else {
+                    break
+                }
+                index = lower.index(after: index)
+            }
+            if !digits.isEmpty { return digits }
+        }
+        return nil
     }
 
     private static func detectVideoURL(in event: EKEvent) -> URL? {

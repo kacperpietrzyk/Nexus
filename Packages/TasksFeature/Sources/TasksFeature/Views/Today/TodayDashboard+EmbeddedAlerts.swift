@@ -48,11 +48,13 @@ extension TodayDashboard {
         // Obstacles across the whole horizon (not just today) so the free-time
         // math sees future events; `[]` when the feed is off or access absent.
         var events: [CalendarEvent] = []
+        let prefs = UserDefaultsCalendarPreferencesStore().load()
         if calendarEventsEnabled {
             let end = now.addingTimeInterval(TimeInterval(days * 24 * 60 * 60))
-            events = (try? await calendarProvider.eventsBetween(start: now, end: end)) ?? []
+            let fetched = (try? await calendarProvider.eventsBetween(start: now, end: end)) ?? []
+            // #6: deadline-risk free-time math must ignore disabled calendars too.
+            events = prefs.visibleEvents(fetched)
         }
-        let prefs = UserDefaultsCalendarPreferencesStore().load()
         let risks = DeadlineRiskProjector.project(
             context: modelContext,
             events: events,

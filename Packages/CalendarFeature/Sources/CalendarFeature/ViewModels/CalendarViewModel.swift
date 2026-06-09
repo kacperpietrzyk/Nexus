@@ -127,7 +127,10 @@ public final class CalendarViewModel {
         authorization = reader.authorizationStatus()
         let win = window
         do {
-            events = try await reader.eventsBetween(start: win.start, end: win.end)
+            let fetched = try await reader.eventsBetween(start: win.start, end: win.end)
+            // #6: hide events from calendars the user disabled in Settings. Empty
+            // read-set ⇒ all granted (preferences semantic).
+            events = preferences.visibleEvents(fetched)
         } catch {
             events = []
             lastError = String(describing: error)
@@ -170,7 +173,11 @@ public final class CalendarViewModel {
     /// removed rather than left as a latent footgun.
     public func planDay() async {
         let win = window
-        let fetched = (try? await reader.eventsBetween(start: win.start, end: win.end)) ?? []
+        // #6: the planner must treat a disabled calendar's events as non-obstacles,
+        // matching what the views display. Empty read-set ⇒ all granted.
+        let fetched = preferences.visibleEvents(
+            (try? await reader.eventsBetween(start: win.start, end: win.end)) ?? []
+        )
         do {
             let result = try planner.planDay(
                 events: fetched,
@@ -341,8 +348,22 @@ public final class CalendarViewModel {
             start: event.start,
             end: event.end,
             location: event.location,
-            attendees: event.attendees.compactMap(\.email)
+            // #4a: show every attendee as "Name (email)" / name / email rather than
+            // dropping name-only attendees (those without a mailto). Display-only —
+            // EventKit ignores attendees on write.
+            attendees: event.attendees.compactMap(Self.attendeeDisplay)
         )
+    }
+
+    /// Format an attendee for the read-only editor list: "Name (email)" when both
+    /// are present, otherwise whichever the invite carried; nil only when neither.
+    static func attendeeDisplay(_ attendee: CalendarEvent.Attendee) -> String? {
+        switch (attendee.name, attendee.email) {
+        case (let name?, let email?): return "\(name) (\(email))"
+        case (let name?, nil): return name
+        case (nil, let email?): return email
+        case (nil, nil): return nil
+        }
     }
 
     /// Open task ids + titles for the manual-block picker (candidates to schedule).

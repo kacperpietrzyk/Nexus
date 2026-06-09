@@ -35,7 +35,10 @@ extension EventKitCalendarProvider: CalendarEventWriting, CalendarListing {
 
     @discardableResult
     public func createEvent(_ draft: EventDraft) async throws -> String {
-        try await onStore { store in
+        // #7: a nil calendar means "do not write to the system Calendar" — skip the
+        // EKEvent save entirely and report the skip via the sentinel id.
+        guard draft.calendarID != nil else { return Self.skippedEventID }
+        return try await onStore { store in
             let event = EKEvent(eventStore: store)
             try Self.apply(draft, to: event, in: store)
             do {
@@ -179,10 +182,16 @@ extension EventKitCalendarProvider: CalendarEventWriting, CalendarListing {
     }
 
     static func apply(_ draft: EventDraft, to event: EKEvent, in store: EKEventStore) throws {
-        guard let calendar = store.calendar(withIdentifier: draft.calendarID) else {
-            throw CalendarProviderError.underlying("Calendar not found: \(draft.calendarID)")
+        // #7: a nil calendarID on update leaves the event's current calendar
+        // untouched (you can't un-calendar an existing event without deleting it).
+        // `createEvent` short-circuits the nil case before reaching here, so a nil
+        // here only ever comes from an in-place update.
+        if let calendarID = draft.calendarID {
+            guard let calendar = store.calendar(withIdentifier: calendarID) else {
+                throw CalendarProviderError.underlying("Calendar not found: \(calendarID)")
+            }
+            event.calendar = calendar
         }
-        event.calendar = calendar
         event.title = draft.title
         event.startDate = draft.start
         event.endDate = draft.end

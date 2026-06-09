@@ -22,7 +22,8 @@ public struct EventEditorView: View {
     let onCancel: () -> Void
 
     @State private var title: String
-    @State private var calendarID: String
+    /// `nil` ⇒ the "None" tag: no system-calendar event is written (#7).
+    @State private var calendarID: String?
     @State private var start: Date
     @State private var end: Date
     @State private var isAllDay: Bool
@@ -52,6 +53,7 @@ public struct EventEditorView: View {
         mode: Mode,
         calendars: [CalendarInfo],
         initial: EventDraft? = nil,
+        preferredCalendarID: String? = nil,
         onSave: @escaping (EventDraft, CalendarEventSpan) -> Void,
         onDelete: ((CalendarEventSpan) -> Void)? = nil,
         onCancel: @escaping () -> Void
@@ -61,11 +63,18 @@ public struct EventEditorView: View {
         self.onSave = onSave
         self.onDelete = onDelete
         self.onCancel = onCancel
+        // #7 create default: seed from the user's configured write target (falling
+        // back to the first writable calendar) instead of always grabbing the first
+        // writable one. An edit passes its own `initial`, so this only steers create.
         let writable = calendars.first(where: \.isWritable)
+        let seededCalendarID =
+            preferredCalendarID.flatMap { id in calendars.first { $0.id == id }?.id }
+            ?? writable?.id
+            ?? calendars.first?.id
         let base =
             initial
             ?? EventDraft(
-                calendarID: writable?.id ?? calendars.first?.id ?? "",
+                calendarID: seededCalendarID,
                 title: "",
                 start: Date(),
                 end: Date().addingTimeInterval(3600)
@@ -88,8 +97,11 @@ public struct EventEditorView: View {
             Section("Event") {
                 TextField("Title", text: $title)
                 Picker("Calendar", selection: $calendarID) {
+                    // #7: "None" writes no system-calendar event; mirrors the
+                    // Settings "Write target" picker.
+                    Text("None").tag(String?.none)
                     ForEach(calendars.filter(\.isWritable)) { calendar in
-                        Text(calendar.title).tag(calendar.id)
+                        Text(calendar.title).tag(Optional(calendar.id))
                     }
                 }
             }
@@ -129,7 +141,7 @@ public struct EventEditorView: View {
 
             Section {
                 Button("Save", action: save)
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || calendarID.isEmpty)
+                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
                 if case .edit = mode, onDelete != nil {
                     Button("Delete event", role: .destructive, action: requestDelete)
                 }

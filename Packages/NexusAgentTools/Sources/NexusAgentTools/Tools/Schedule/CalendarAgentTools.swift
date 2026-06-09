@@ -31,7 +31,7 @@ public enum CalendarAgentTools {
                 provider: provider, estimator: estimator, preferencesStore: preferencesStore
             ),
             CalendarEventsListTool(provider: provider),
-            CalendarEventsCreateTool(writer: provider),
+            CalendarEventsCreateTool(writer: provider, preferencesStore: preferencesStore),
             CalendarEventsUpdateTool(writer: provider),
             CalendarEventsDeleteTool(writer: provider),
         ]

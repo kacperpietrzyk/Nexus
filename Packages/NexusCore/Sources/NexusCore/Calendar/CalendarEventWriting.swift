@@ -10,7 +10,10 @@ import Foundation
 /// event editor, not something the reconciler exercises (spec §8).
 public struct EventDraft: Equatable, Sendable {
     /// Identifier of the target writable calendar (e.g. the "Nexus" calendar).
-    public var calendarID: String
+    /// `nil` means "no system-calendar event": on create the write is skipped
+    /// entirely (no EKEvent saved), and on update the event's current calendar is
+    /// left unchanged (#7).
+    public var calendarID: String?
     public var title: String
     public var start: Date
     public var end: Date
@@ -27,7 +30,7 @@ public struct EventDraft: Equatable, Sendable {
     public var alarmOffsets: [TimeInterval]
 
     public init(
-        calendarID: String,
+        calendarID: String?,
         title: String,
         start: Date,
         end: Date,
@@ -89,6 +92,11 @@ public enum CalendarEventSpan: Sendable, Equatable {
 /// type. EventKit lives entirely inside the `EventKitCalendarProvider`
 /// implementation.
 public protocol CalendarEventWriting: Sendable {
+    /// Sentinel identifier returned by `createEvent` when the draft's `calendarID`
+    /// is `nil` and no system-calendar event was written (#7). Callers must treat
+    /// it as "skipped", not a real event id.
+    static var skippedEventID: String { get }
+
     /// Request full calendar access (write requires full access, not write-only).
     @discardableResult
     func requestFullAccess() async throws -> CalendarAuthorizationStatus
@@ -125,6 +133,10 @@ public protocol CalendarEventWriting: Sendable {
 }
 
 extension CalendarEventWriting {
+    /// Shared sentinel value (see protocol requirement) so conformers needn't each
+    /// redeclare it.
+    public static var skippedEventID: String { "nexus.calendar.skipped" }
+
     /// `.thisEvent` is the right default for single mirror events (scheduler) and
     /// agent writes — only the user-facing editor passes an explicit span for a
     /// recurring event, so existing callers stay unchanged (R2/R3).

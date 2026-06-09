@@ -106,7 +106,12 @@ extension TodayDashboard {
         provider: any CalendarEventProviding
     ) async -> [CalendarEvent] {
         guard enabled else { return [] }
-        return (try? await provider.eventsToday(now: now)) ?? []
+        let fetched = (try? await provider.eventsToday(now: now)) ?? []
+        // #6: honor the "Read calendars" visibility toggle on the Today rail's feed,
+        // matching the calendar views. Empty read-set ⇒ all granted. This shared
+        // helper also feeds the Today "Plan my day" path, so the planner sees the
+        // same obstacle set the rail displays.
+        return UserDefaultsCalendarPreferencesStore().load().visibleEvents(fetched)
     }
 
     /// Task universe for the evening-shutdown summary (spec §10): non-deleted

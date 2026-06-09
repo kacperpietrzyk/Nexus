@@ -247,6 +247,8 @@ public struct CalendarView: View {
             EventEditorView(
                 mode: .create,
                 calendars: availableCalendars,
+                // #7: seed the new event's calendar from the configured write target.
+                preferredCalendarID: viewModel.preferences.writeCalendarID,
                 onSave: { draft, _ in
                     Task {
                         _ = await viewModel.createEvent(draft)
