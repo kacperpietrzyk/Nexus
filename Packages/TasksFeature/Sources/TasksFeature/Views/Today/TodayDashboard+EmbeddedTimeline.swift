@@ -2,22 +2,20 @@ import NexusCore
 import NexusUI
 import SwiftUI
 
-// MARK: - Embedded-Today Canvas day-timeline right rail (MP-2 slice 4)
+// MARK: - Embedded-Today day-timeline right rail
 //
-// Rebuilds the embedded (Nexus shell) Today RIGHT RAIL to the accepted Lab
-// `DayTimeline` oracle: 9–20 grid, schedule blocks, free-time labels, and a
-// live now-line driven by `TimelineView(.animation(paused: reduce))`.
+// The embedded (Nexus shell) Today RIGHT RAIL: a SCROLLABLE full-day (0–24)
+// timeline — hour grid, schedule blocks, free-time labels, an all-day strip,
+// and a live now-line via `TimelineView(.animation(paused: reduce))`. The
+// rail auto-scrolls to the current hour on appear.
 //
-// COMPOSITION DECISION (explicit, reported to the user): the Lab Today
-// right rail per the oracle is `DayTimeline` ONLY. The capture-pills +
-// morning-digest content that previously occupied the embedded right rail
-// (`rightRail` getter + `+RightRail.swift`) is therefore UNMOUNTED on the
-// embedded path here to match the Lab organism. That code is RETAINED and
-// UNCHANGED — the standalone (`standaloneRegularBody`) and iOS-compact
-// paths still mount `rightRail` exactly as before, so this is reversible
-// by flipping the one branch in `embeddedRegularBody` back to `rightRail`.
-// Capture access is NOT lost: slice-1's bottom command bar + the
-// `NexusTopBar` "New"/"Ask" actions still reach capture.
+// HISTORY: the original surface mirrored the Lab `DayTimeline` oracle's
+// fixed, non-scrolling 9:00–20:00 window, which silently DROPPED every event
+// outside those hours (early-morning, evening, all-day). That window was an
+// approved product change away from oracle parity — the rail now covers the
+// whole day (0–24) and never drops an item. The right rail remains
+// `DayTimeline`-only on the embedded path; the standalone / iOS-compact
+// paths still mount the capture-pills + digest `rightRail` unchanged.
 //
 // UI-only: renders existing `scheduleTasks` + `todaysEvents`; no new query,
 // predicate, repo, facet, or behaviour. Achromatic: every tone is a
@@ -34,18 +32,15 @@ extension TodayDashboard {
     /// derived from the dashboard's already-loaded `scheduleTasks` +
     /// `todaysEvents` — no new data source.
     var embeddedTimelineRail: some View {
-        // The rail FILLS the full height of the content area: the day grid
-        // (9–20) spans top→bottom so blocks/now-line sit at their true
-        // wall-clock position and the rail never reads as a short strip
-        // floating in a 2/3-empty column. `EmbeddedDayTimeline` flexes to fill
-        // (its Canvas/empty-state use `maxHeight: .infinity`); no trailing
-        // `Spacer` is needed and none should be re-added — it would re-collapse
-        // the grid back to `canvasH` at the top.
-        EmbeddedDayTimeline(
-            blocks: Self.embeddedTimelineBlocks(
-                tasks: scheduleTasks,
-                events: todaysEvents
-            )
+        // The rail FILLS the content area's full height, which becomes the
+        // scroll viewport for `EmbeddedDayTimeline`'s fixed 0–24 hour axis.
+        let built = Self.embeddedTimelineBlocks(
+            tasks: scheduleTasks,
+            events: todaysEvents
+        )
+        return EmbeddedDayTimeline(
+            blocks: built.blocks,
+            allDay: built.allDay
         )
         .padding(18)
         .frame(width: 320)
@@ -61,16 +56,11 @@ extension TodayDashboard {
         .nexusShadow(NexusShadow.s1)
     }
 
-    /// A single timeline block in fractional-hour coordinates, clamped to the
-    /// visible 9–20 window. Pure value type — presentation geometry, not a
-    /// model. `a`/`b` are start/end as `hour + minute/60`; `time` is the
-    /// "HH:mm" start label.
-    ///
-    /// NOT `Identifiable` — the Canvas iterates the block list with a bare
-    /// `for block in blocks` (no `ForEach`, no `\.id` key path anywhere), so
-    /// the conformance was dead. The `id` STORED FIELD is retained: it is a
-    /// `"task:<uuid>"` / `"event:<id>"` key prefix used by the builder for
-    /// origin disambiguation, not for SwiftUI identity.
+    /// A single timeline block in fractional-hour coordinates on the full-day
+    /// (0–24) axis. Pure presentation geometry. `a`/`b` are start/end as
+    /// `hour + minute/60`; `time` is the "HH:mm" start label. The `id`
+    /// (`"task:<uuid>"` / `"event:<id>"`) is an origin-disambiguation key, not
+    /// SwiftUI identity (the Canvas iterates with a bare `for`, no `ForEach`).
     struct EmbeddedTimelineBlock {
         let id: String
         let a: Double
@@ -78,72 +68,57 @@ extension TodayDashboard {
         let title: String
         /// "HH:mm" start label — same formatter as the Canvas start indicator.
         let time: String
-        /// "HH:mm" end label — from the original (un-clamped) end `Date`.
-        /// Used by the accessibility representation so VoiceOver reads the
-        /// real end time rather than the window-clamped fractional `b`.
+        /// "HH:mm" end label — from the end `Date`.
         let endTime: String
     }
 
-    /// Build the Canvas blocks from EXISTING schedule data the dashboard
-    /// already loaded — `scheduleTasks` (`TodayQuery.today`, set in
-    /// `reloadScheduleData()` `TodayDashboard.swift:435`) and `todaysEvents`
-    /// (the calendar provider, same reload). No new query/predicate/repo.
+    /// An all-day event for the strip pinned above the hour axis (all-day
+    /// events have no meaningful hour-grid position, so they live here rather
+    /// than at 00:00). `id` mirrors the builder's `"event:<id>"` convention.
+    struct EmbeddedAllDayItem {
+        let id: String
+        let title: String
+    }
+
+    /// Build the timed blocks + all-day items from EXISTING schedule data the
+    /// dashboard already loaded — `scheduleTasks` + `todaysEvents` (set in
+    /// `reloadScheduleData()`). No new query/predicate/repo.
     ///
     /// A task contributes a block only if it has a real `startAt` (the same
-    /// "scheduled" rule `ScheduleGrouping` uses — `startAt == nil` ⇒
-    /// unscheduled, not on the timeline). Its end is `endAt ?? dueAt ??
-    /// start` (identical fallback to `ScheduleItem.end` /
-    /// `ScheduleGrouping`). Events use their `start`/`end` directly.
+    /// "scheduled" rule `ScheduleGrouping` uses). Its end is
+    /// `endAt ?? dueAt ?? start`. Tasks are never all-day. Timed events use
+    /// their `start`/`end` directly; an event with `isAllDay == true` is
+    /// routed to the all-day strip instead of being placed on the hour axis.
     ///
-    /// Blocks whose `[start, end]` does not overlap the visible 9–20 window
-    /// are dropped; partial overlaps are clamped to the window edges so the
-    /// Canvas never draws outside its rect or inverts a rectangle.
-    ///
-    /// ALL-DAY / CROSS-MIDNIGHT LIMITATION (intentional — this is a
-    /// wall-clock day view, not a duration timeline). `fractionalHour`
-    /// reads ONLY `.hour` + `.minute` of the wall-clock date; it carries no
-    /// day component. Consequences, all by design:
-    ///   • An all-day event (`start` at 00:00) maps to `rawA == 0.0`, which
-    ///     is `< windowStart` and below the synthetic-span floor, so it is
-    ///     dropped by the 9–20 window guard. All-day items are not points
-    ///     on a 9–20 hour rail and are correctly absent.
-    ///   • A cross-midnight item (e.g. 23:30 → 01:00) reads `rawA == 23.5`,
-    ///     `rawB` collapses toward the same wall-clock hour rather than
-    ///     wrapping past midnight, so it too falls outside 9–20 and is
-    ///     dropped. The rail shows a single day's working hours; an item
-    ///     spanning the day boundary has no well-formed slab here.
-    /// This is deliberately DST-correct: using wall-clock `.hour`/`.minute`
-    /// (not an absolute interval) means a clock change does not skew block
-    /// positions — 14:00 is always 14:00 on the rail regardless of any UTC
-    /// offset shift during the day.
+    /// NO WINDOW GUARD: every timed item renders at its TRUE wall-clock
+    /// position on the full-day (0–24) axis — a 07:00 or 22:00 item is no
+    /// longer dropped. A zero/negative-length item still gets a small
+    /// synthetic span (`+0.25h`) so the rect is never degenerate or inverted.
+    /// `fractionalHour` reads only wall-clock `.hour`/`.minute` (DST-correct:
+    /// 14:00 is always 14:00 regardless of any UTC offset shift); a
+    /// cross-midnight item collapses to a short slab at its start hour rather
+    /// than wrapping past midnight.
     static func embeddedTimelineBlocks(
         tasks: [TaskItem],
         events: [CalendarEvent],
         calendar: Calendar = .current
-    ) -> [EmbeddedTimelineBlock] {
-        let windowStart = 9.0
-        let windowEnd = 20.0
-
+    ) -> (blocks: [EmbeddedTimelineBlock], allDay: [EmbeddedAllDayItem]) {
         func fractionalHour(_ date: Date) -> Double {
             let comps = calendar.dateComponents([.hour, .minute], from: date)
             return Double(comps.hour ?? 0) + Double(comps.minute ?? 0) / 60.0
         }
 
-        func clampedBlock(
+        func makeBlock(
             id: String,
             start: Date,
             end: Date,
             title: String
-        ) -> EmbeddedTimelineBlock? {
-            let rawA = fractionalHour(start)
+        ) -> EmbeddedTimelineBlock {
+            let a = fractionalHour(start)
             // A zero/negative-length item still gets a minimum visible slab
-            // (the Canvas already enforces `max(20, …)` height); use a small
-            // synthetic span so clamping math stays well-formed.
-            let rawB = max(fractionalHour(end), rawA + 0.25)
-            guard rawB > windowStart, rawA < windowEnd else { return nil }
-            let a = max(rawA, windowStart)
-            let b = min(rawB, windowEnd)
-            guard b > a else { return nil }
+            // (the Canvas also enforces `max(20, …)` height); use a small
+            // synthetic span so the rect is never degenerate or inverted.
+            let b = max(fractionalHour(end), a + 0.25)
             return EmbeddedTimelineBlock(
                 id: id,
                 a: a,
@@ -155,32 +130,39 @@ extension TodayDashboard {
         }
 
         var blocks: [EmbeddedTimelineBlock] = []
+        var allDay: [EmbeddedAllDayItem] = []
 
         for task in tasks where task.deletedAt == nil {
             guard let start = task.startAt else { continue }
             let end = task.endAt ?? task.dueAt ?? start
-            if let block = clampedBlock(
-                id: "task:\(task.id.uuidString)",
-                start: start,
-                end: end,
-                title: task.title
-            ) {
-                blocks.append(block)
-            }
+            blocks.append(
+                makeBlock(
+                    id: "task:\(task.id.uuidString)",
+                    start: start,
+                    end: end,
+                    title: task.title
+                )
+            )
         }
 
         for event in events {
-            if let block = clampedBlock(
-                id: "event:\(event.id)",
-                start: event.start,
-                end: event.end,
-                title: event.title
-            ) {
-                blocks.append(block)
+            if event.isAllDay {
+                allDay.append(
+                    EmbeddedAllDayItem(id: "event:\(event.id)", title: event.title)
+                )
+            } else {
+                blocks.append(
+                    makeBlock(
+                        id: "event:\(event.id)",
+                        start: event.start,
+                        end: event.end,
+                        title: event.title
+                    )
+                )
             }
         }
 
-        return blocks.sorted { $0.a < $1.a }
+        return (blocks.sorted { $0.a < $1.a }, allDay)
     }
 
     static let embeddedTimelineTimeFormatter: DateFormatter = {
@@ -189,25 +171,17 @@ extension TodayDashboard {
         return formatter
     }()
 
-    /// Polish free-time label for the gap between `nowFrac` and the next
-    /// block strictly after it (the earliest block with `a > gapStart`), or
-    /// `nil` to omit the label. Both gap bounds are clamped to the visible
-    /// `[windowStart, windowEnd]` window so a far-off block does not report
-    /// a misleadingly large gap, and a `nowFrac` past the window end yields
-    /// no label. The threshold is `>= 30` minutes: a gap shorter than that
-    /// is suppressed (not worth surfacing as "free time"); `>= 30` with
-    /// `< 60` minutes renders `"wolne · Nm"`, `>= 60` renders
-    /// `"wolne · Hh Mm"`.
-    ///
-    /// Lifted out of `EmbeddedDayTimeline` to `internal static` (NOT
-    /// `public` — §5 MP-1 API freeze) purely so the anchor's free-time gap
-    /// math is unit-coverable before MP-2.2 locks the pattern. Pure
-    /// function — no view state, no `self`.
+    /// Free-time label for the gap between `nowFrac` and the next block
+    /// strictly after it, or `nil` to omit. Bounds are clamped to
+    /// `[windowStart, windowEnd]`. Threshold is `>= 30` minutes: shorter gaps
+    /// are suppressed; `>= 30` & `< 60` renders `"free · Nm"`, `>= 60` renders
+    /// `"free · Hh Mm"`. The window defaults to the full day (`0…24`). Pure
+    /// function — no view state; unit-coverable.
     static func embeddedFreeTimeLabel(
         nowFrac: Double,
         blocks: [EmbeddedTimelineBlock],
-        windowStart: Double = 9.0,
-        windowEnd: Double = 20.0
+        windowStart: Double = 0.0,
+        windowEnd: Double = 24.0
     ) -> (text: String, midFrac: Double)? {
         let gapStart = max(nowFrac, windowStart)
         guard gapStart < windowEnd else { return nil }
@@ -231,28 +205,18 @@ extension TodayDashboard {
         return (text, (gapStart + gapEnd) / 2)
     }
 
-    /// Build the ordered list of VoiceOver label strings for the embedded
-    /// day-timeline Canvas — one string per schedule block, plus a now-line
-    /// element when `now` falls within the visible `[windowStart, windowEnd]`
-    /// window. Elements are interleaved chronologically (natural swipe-through
-    /// order), with the now element inserted at its wall-clock position.
-    ///
-    /// Format:
-    ///   • Schedule block  → `"<title>, <start>–<end>"` (`endTime` is the
-    ///     real un-clamped end time from the original `Date`, not the
-    ///     window-clamped fractional `b`).
-    ///   • Now-line        → `"Now, <HH:mm>"`.
-    ///
-    /// Pure function — no view state, no side effects, deterministic on
-    /// `calendar`. The same seam pattern as `embeddedFreeTimeLabel`.
-    ///
-    /// Called from both the view's `.accessibilityRepresentation` and the
-    /// test suite — single source, no parallel logic.
+    /// Ordered VoiceOver label strings for the day-timeline Canvas — one per
+    /// schedule block (`"<title>, <start>–<end>"`), plus a now-line element
+    /// (`"Now, <HH:mm>"`) interleaved at its wall-clock position when `now`
+    /// falls within `[windowStart, windowEnd]`. The window defaults to the
+    /// full day (`0…24`), so the now element is emitted for any time. Pure +
+    /// deterministic on `calendar`; called from both the view's
+    /// `.accessibilityRepresentation` and the test suite (single source).
     static func embeddedTimelineAccessibilityLabels(
         blocks: [EmbeddedTimelineBlock],
         now: Date,
-        windowStart: Double = 9.0,
-        windowEnd: Double = 20.0,
+        windowStart: Double = 0.0,
+        windowEnd: Double = 24.0,
         calendar: Calendar = .current
     ) -> [String] {
         let comps = calendar.dateComponents([.hour, .minute], from: now)
@@ -286,32 +250,38 @@ extension TodayDashboard {
     }
 }
 
-// MARK: - DayTimeline Canvas (Today-specific; oracle parity)
+// MARK: - DayTimeline Canvas (Today-specific; full-day scrollable rail)
 
-/// The `Nexus*`/token equivalent of the Lab `DayTimeline` oracle
-/// (`TodayHUDPreview.swift` `DayTimeline`). Presentation-pure: takes the
-/// pre-derived block list and renders the 9–20 Canvas. The now-line +
-/// current-time + free-time are recomputed from `tl.date` inside the
-/// `TimelineView` closure so they stay live without any persisted state.
-/// `private` — mirrors the oracle's `private struct DayTimeline`; zero
-/// `public`, never API.
+/// The day-timeline rail: a SCROLLABLE full-day (0–24) Canvas inside a
+/// `ScrollView`, with an all-day strip pinned above and a live now-line.
+/// Presentation-pure — takes the pre-derived `blocks` + `allDay` lists; the
+/// now-line + free-time recompute from `tl.date` inside the `TimelineView`
+/// closure so they stay live without persisted state. Replaces the original
+/// fixed-height 9–20 Canvas; the scroll/auto-scroll pattern mirrors
+/// `CalendarFeature.DayGridView` without importing it (feature modules stay
+/// independent — see `CLAUDE.md`). `private` — never API.
 private struct EmbeddedDayTimeline: View {
     let blocks: [TodayDashboard.EmbeddedTimelineBlock]
+    let allDay: [TodayDashboard.EmbeddedAllDayItem]
 
-    private let startH = 9.0
-    private let endH = 20.0
-    private let canvasH: CGFloat = 300
+    private let startH = 0.0
+    private let endH = 24.0
+    private let hourHeight: CGFloat = 48
     private let gutter: CGFloat = 26
 
-    // Reduce-Motion gated AT SOURCE: the `paused:` argument below freezes
-    // the `TimelineView` schedule entirely. `reduce` is also read inside
-    // the Canvas to pin the pulse to its resting value, so the now-line is
-    // a steady (non-animating) line under Reduce Motion — never a call-site
-    // `if reduceMotion { … }` around the construct.
+    /// Total height of the 0–24 hour axis — the Canvas is laid out at exactly
+    /// this height, taller than the viewport, so the day scrolls.
+    private var axisHeight: CGFloat { CGFloat(endH - startH) * hourHeight }
+
+    // Reduce-Motion gated AT SOURCE: the `paused:` argument freezes the
+    // `TimelineView` schedule; `reduce` is also read in `drawNowLine` to pin
+    // the pulse to its resting value (steady, non-animating now-line).
     @Environment(\.accessibilityReduceMotion) private var reduce
 
-    private func y(_ t: Double, _ height: CGFloat) -> CGFloat {
-        CGFloat((t - startH) / (endH - startH)) * height
+    /// Fractional hour `t` → absolute pixel offset on the 0–24 axis (the
+    /// affine form keeps the axis bounds a single source).
+    private func y(_ t: Double) -> CGFloat {
+        CGFloat(t - startH) * hourHeight
     }
 
     /// "HH:mm" for `date` — the live current-time indicator label. Reuses
@@ -321,17 +291,13 @@ private struct EmbeddedDayTimeline: View {
     }
 
     /// `date` as fractional hours (`hour + minute/60`) — the now-line
-    /// position. Derived live from `tl.date`; the oracle hardcodes `11.7`,
-    /// the real surface computes it.
+    /// position. Derived live from `tl.date`.
     private func fractionalHour(_ date: Date) -> Double {
         let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
         return Double(comps.hour ?? 0) + Double(comps.minute ?? 0) / 60.0
     }
 
-    /// Thin call-through to the unit-covered `TodayDashboard`-level free-time
-    /// gap math. The label logic itself lives on `TodayDashboard` so it is
-    /// testable as a pure function; this view just supplies its own window
-    /// bounds + block list.
+    /// Thin call-through to the unit-covered free-time gap math.
     private func freeTimeLabel(nowFrac: Double) -> (text: String, midFrac: Double)? {
         TodayDashboard.embeddedFreeTimeLabel(
             nowFrac: nowFrac,
@@ -343,188 +309,250 @@ private struct EmbeddedDayTimeline: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 7) {
-                Text("DAY")
-                    .font(Self.headerFont)
-                    .foregroundStyle(NexusColor.Text.tertiary)
-                Text("9:00–20:00")
-                    .font(Self.headerTimeFont)
-                    .monospacedDigit()
-                    .foregroundStyle(NexusColor.Text.tertiary)
-            }
-            // Now-line pulse construct — lifted verbatim in pattern from the
-            // oracle: `TimelineView(.animation(paused: reduce))` + phase from
-            // `tl.date` via `sin()`. NOT `@State` + `withAnimation` (a Canvas
-            // samples its closure once per redraw; the TimelineView is what
-            // drives redraws). `NexusMotion.breathePeriod` (== the oracle's
-            // `LabMotion.breathePeriod`, 2.4s) is the public token; using it
-            // (not a `Lab*` reference) keeps the Lab as oracle-only.
+            header
+            allDayStrip
             if blocks.isEmpty {
                 railEmptyState
             } else {
-                TimelineView(.animation(paused: reduce)) { tl in
-                    Canvas { ctx, size in
-                        let height = size.height
-                        let pulse =
-                            reduce
-                            ? 1.0
-                            : 0.4 + 0.6
-                                * (0.5 + 0.5
-                                    * sin(
-                                        tl.date.timeIntervalSinceReferenceDate
-                                            / NexusMotion.breathePeriod * 2 * .pi))
+                scrollingAxis
+            }
+        }
+    }
 
-                        // Hourly grid lines + hour labels (9 → 19 step 2).
-                        for hr in stride(from: 9, through: 19, by: 2) {
-                            let yy = y(Double(hr), height)
-                            var line = Path()
-                            line.move(to: CGPoint(x: gutter, y: yy))
-                            line.addLine(to: CGPoint(x: size.width, y: yy))
-                            ctx.stroke(
-                                line,
-                                with: .color(NexusColor.Line.hairline.opacity(0.6)),
-                                lineWidth: 1
-                            )
-                            ctx.draw(
-                                Text(String(format: "%02d", hr))
-                                    .font(Self.gridFont)
-                                    .foregroundStyle(NexusColor.Text.disabled),
-                                at: CGPoint(x: 2, y: yy),
-                                anchor: .leading
-                            )
-                        }
+    private var header: some View {
+        HStack(spacing: 7) {
+            Text("DAY")
+                .font(Self.headerFont)
+                .foregroundStyle(NexusColor.Text.tertiary)
+            Text(headerDate)
+                .font(Self.headerTimeFont)
+                .foregroundStyle(NexusColor.Text.tertiary)
+        }
+    }
 
-                        let nowFrac = fractionalHour(tl.date)
-
-                        // Free-time label — gap from now to the next block.
-                        if let free = freeTimeLabel(nowFrac: nowFrac) {
-                            ctx.draw(
-                                Text(free.text)
-                                    .font(Self.freeFont)
-                                    .foregroundStyle(NexusColor.Text.disabled),
-                                at: CGPoint(x: gutter + 10, y: y(free.midFrac, height)),
-                                anchor: .leading
-                            )
-                        }
-
-                        // Schedule block rectangles (name + time).
-                        for block in blocks {
-                            let top = y(block.a, height)
-                            let bh = max(20, y(block.b, height) - top)
-                            let rect = CGRect(
-                                x: gutter + 4,
-                                y: top,
-                                width: size.width - gutter - 4,
-                                height: bh
-                            )
-                            ctx.fill(
-                                Path(roundedRect: rect, cornerRadius: 7),
-                                with: .color(NexusColor.Background.controlHover)
-                            )
-                            let tick = CGRect(
-                                x: rect.minX,
-                                y: rect.minY + 3,
-                                width: 2,
-                                height: rect.height - 6
-                            )
-                            ctx.fill(
-                                Path(roundedRect: tick, cornerRadius: 1),
-                                with: .color(NexusColor.Text.tertiary)
-                            )
-                            ctx.draw(
-                                Text(block.title)
-                                    .font(Self.blockTitleFont)
-                                    .foregroundStyle(NexusColor.Text.secondary),
-                                at: CGPoint(
-                                    x: rect.minX + 10,
-                                    y: bh > 30 ? rect.minY + 11 : rect.midY
-                                ),
-                                anchor: .leading
-                            )
-                            if bh > 30 {
-                                ctx.draw(
-                                    Text(block.time)
-                                        .font(Self.blockTimeFont)
-                                        .foregroundStyle(NexusColor.Text.muted),
-                                    at: CGPoint(x: rect.minX + 10, y: rect.minY + 25),
-                                    anchor: .leading
-                                )
-                            }
-                        }
-
-                        // Now-line + pulsing dot + live "HH:mm" indicator.
-                        let ny = y(nowFrac, height)
-                        if nowFrac >= startH, nowFrac <= endH {
-                            var nline = Path()
-                            nline.move(to: CGPoint(x: gutter, y: ny))
-                            nline.addLine(to: CGPoint(x: size.width, y: ny))
-                            ctx.stroke(
-                                nline,
-                                with: .color(NexusColor.Text.primary.opacity(0.3 + 0.25 * pulse)),
-                                lineWidth: 1
-                            )
-                            ctx.fill(
-                                Path(
-                                    ellipseIn: CGRect(
-                                        x: gutter - 2.5,
-                                        y: ny - 2.5,
-                                        width: 5,
-                                        height: 5
-                                    )
-                                ),
-                                with: .color(NexusColor.Text.primary.opacity(pulse))
-                            )
-                            ctx.draw(
-                                Text(nowLabel(tl.date))
-                                    .font(Self.nowFont)
-                                    .foregroundStyle(NexusColor.Text.secondary),
-                                at: CGPoint(x: 2, y: ny - 11),
-                                anchor: .leading
-                            )
-                        }
+    /// Pinned all-day row above the scrollable hour axis (mirrors
+    /// `DayGridView.allDayBanner`); never scrolls away with the hour grid.
+    @ViewBuilder
+    private var allDayStrip: some View {
+        if !allDay.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(allDay, id: \.id) { item in
+                    HStack(spacing: 8) {
+                        Text("all-day")
+                            .font(Self.gridFont)
+                            .foregroundStyle(NexusColor.Text.disabled)
+                        Text(item.title)
+                            .font(Self.blockTitleFont)
+                            .foregroundStyle(NexusColor.Text.secondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
                     }
-                    // Fill the rail's full height (was a fixed `canvasH`): the
-                    // `y(_:_:)` mapping is already height-relative, so the 9–20
-                    // grid, blocks and now-line stretch to the column instead of
-                    // bunching into a 300pt strip with dead space below.
-                    .frame(minHeight: canvasH, maxHeight: .infinity)
-                    // A `Canvas` is fully opaque to VoiceOver — replace its
-                    // accessibility subtree with one real element per block
-                    // (chronologically interleaved with the now-line element).
-                    // The pure helper `TodayDashboard.embeddedTimelineAccessibilityLabels`
-                    // is the single source of the label strings; it is also
-                    // called by `EmbeddedTimelineBlocksTests` to prevent drift.
-                    .accessibilityRepresentation {
-                        let labels = TodayDashboard.embeddedTimelineAccessibilityLabels(
-                            blocks: blocks,
-                            now: tl.date
-                        )
-                        VStack(spacing: 0) {
-                            ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
-                                Color.clear
-                                    .frame(width: 1, height: 1)
-                                    .accessibilityElement()
-                                    .accessibilityLabel(label)
-                            }
-                        }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("All day, \(item.title)")
+                }
+            }
+            .padding(.leading, gutter)
+            Rectangle()
+                .fill(NexusColor.Line.hairline.opacity(0.6))
+                .frame(height: 1)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// The scrollable 0–24 hour axis: the Canvas draws the whole day at a
+    /// fixed `axisHeight` (taller than the viewport) inside a `ScrollView`;
+    /// per-hour anchor views let `ScrollViewReader` jump to the current hour on
+    /// appear (a `Canvas` is opaque, so `scrollTo` needs real `.id`'d views).
+    private var scrollingAxis: some View {
+        // `TimelineView` wraps only the Canvas (not the static `hourAnchors`),
+        // so the anchors/scroll structure aren't re-evaluated every tick.
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                ZStack(alignment: .topLeading) {
+                    hourAnchors
+                    TimelineView(.animation(paused: reduce)) { tl in
+                        timelineCanvas(now: tl.date)
                     }
+                }
+                .frame(height: axisHeight)
+            }
+            .onAppear {
+                // Land on the current hour, mid-viewport. The async hop defers
+                // until the ScrollView has laid out content — a synchronous
+                // `scrollTo` in `onAppear` often no-ops and opens at 00:00.
+                let hour = Calendar.current.component(.hour, from: Date())
+                DispatchQueue.main.async {
+                    proxy.scrollTo(Self.anchorID(for: hour), anchor: .center)
                 }
             }
         }
     }
 
-    /// Audit B3 (a): an empty day (no scheduled tasks/events) used to
-    /// render just the faint hour grid + now-line, reading as a broken,
-    /// unfinished strip. A quiet achromatic placeholder under the
-    /// "DAY 9–20" header makes "nothing scheduled" legible instead, in
-    /// the same muted idiom the rest of the rail uses (the grid labels and
-    /// "wolne · …" free-time text are `Text.disabled`). Kept at `canvasH`
-    /// so the glass card does not change height between empty and populated.
+    /// Invisible per-hour layout anchors the `ScrollViewReader` targets — they
+    /// tile the full axis so each carries its true layout position (`scrollTo`
+    /// needs layout position, not a render transform; an `.offset` won't work).
+    private var hourAnchors: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<24, id: \.self) { hour in
+                Color.clear
+                    .frame(height: hourHeight)
+                    .id(Self.anchorID(for: hour))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// Hourly grid lines + hour labels across the full 0–24 day, stepped
+    /// every 2 hours to keep the rail uncluttered.
+    private func drawGrid(in ctx: inout GraphicsContext, size: CGSize) {
+        for hr in stride(from: 0, through: 24, by: 2) {
+            let yy = y(Double(hr))
+            var line = Path()
+            line.move(to: CGPoint(x: gutter, y: yy))
+            line.addLine(to: CGPoint(x: size.width, y: yy))
+            ctx.stroke(
+                line,
+                with: .color(NexusColor.Line.hairline.opacity(0.6)),
+                lineWidth: 1
+            )
+            ctx.draw(
+                Text(String(format: "%02d", hr))
+                    .font(Self.gridFont)
+                    .foregroundStyle(NexusColor.Text.disabled),
+                at: CGPoint(x: 2, y: yy),
+                anchor: .leading
+            )
+        }
+    }
+
+    /// Schedule block rectangles (name + time).
+    private func drawBlocks(in ctx: inout GraphicsContext, size: CGSize) {
+        for block in blocks {
+            let top = y(block.a)
+            let bh = max(20, y(block.b) - top)
+            let rect = CGRect(
+                x: gutter + 4,
+                y: top,
+                width: size.width - gutter - 4,
+                height: bh
+            )
+            ctx.fill(
+                Path(roundedRect: rect, cornerRadius: 7),
+                with: .color(NexusColor.Background.controlHover)
+            )
+            let tick = CGRect(
+                x: rect.minX, y: rect.minY + 3, width: 2, height: rect.height - 6
+            )
+            ctx.fill(
+                Path(roundedRect: tick, cornerRadius: 1),
+                with: .color(NexusColor.Text.tertiary)
+            )
+            ctx.draw(
+                Text(block.title)
+                    .font(Self.blockTitleFont)
+                    .foregroundStyle(NexusColor.Text.secondary),
+                at: CGPoint(x: rect.minX + 10, y: bh > 30 ? rect.minY + 11 : rect.midY),
+                anchor: .leading
+            )
+            if bh > 30 {
+                ctx.draw(
+                    Text(block.time)
+                        .font(Self.blockTimeFont)
+                        .foregroundStyle(NexusColor.Text.muted),
+                    at: CGPoint(x: rect.minX + 10, y: rect.minY + 25),
+                    anchor: .leading
+                )
+            }
+        }
+    }
+
+    /// Now-line + pulsing dot + live "HH:mm" indicator (the pulse is pinned to
+    /// its resting value under Reduce Motion).
+    private func drawNowLine(
+        in ctx: inout GraphicsContext, size: CGSize, now: Date, nowFrac: Double
+    ) {
+        let pulse =
+            reduce
+            ? 1.0
+            : 0.4 + 0.6
+                * (0.5 + 0.5
+                    * sin(
+                        now.timeIntervalSinceReferenceDate
+                            / NexusMotion.breathePeriod * 2 * .pi))
+        let ny = y(nowFrac)
+        var nline = Path()
+        nline.move(to: CGPoint(x: gutter, y: ny))
+        nline.addLine(to: CGPoint(x: size.width, y: ny))
+        ctx.stroke(
+            nline,
+            with: .color(NexusColor.Text.primary.opacity(0.3 + 0.25 * pulse)),
+            lineWidth: 1
+        )
+        ctx.fill(
+            Path(ellipseIn: CGRect(x: gutter - 2.5, y: ny - 2.5, width: 5, height: 5)),
+            with: .color(NexusColor.Text.primary.opacity(pulse))
+        )
+        ctx.draw(
+            Text(nowLabel(now))
+                .font(Self.nowFont)
+                .foregroundStyle(NexusColor.Text.secondary),
+            at: CGPoint(x: 2, y: ny - 11),
+            anchor: .leading
+        )
+    }
+
+    private func timelineCanvas(now: Date) -> some View {
+        Canvas { ctx, size in
+            drawGrid(in: &ctx, size: size)
+            let nowFrac = fractionalHour(now)
+            if let free = freeTimeLabel(nowFrac: nowFrac) {
+                ctx.draw(
+                    Text(free.text)
+                        .font(Self.freeFont)
+                        .foregroundStyle(NexusColor.Text.disabled),
+                    at: CGPoint(x: gutter + 10, y: y(free.midFrac)),
+                    anchor: .leading
+                )
+            }
+            drawBlocks(in: &ctx, size: size)
+            drawNowLine(in: &ctx, size: size, now: now, nowFrac: nowFrac)
+        }
+        // A `Canvas` is opaque to VoiceOver — replace its subtree with one
+        // element per block (interleaved with the now-line). The pure helper
+        // `embeddedTimelineAccessibilityLabels` is the single label source,
+        // also exercised by `EmbeddedTimelineBlocksTests` to prevent drift.
+        .accessibilityRepresentation {
+            let labels = TodayDashboard.embeddedTimelineAccessibilityLabels(
+                blocks: blocks,
+                now: now
+            )
+            VStack(spacing: 0) {
+                ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .accessibilityElement()
+                        .accessibilityLabel(label)
+                }
+            }
+        }
+    }
+
+    private static func anchorID(for hour: Int) -> String { "hour-\(hour)" }
+
+    /// Today's "<weekday> <day>" subtitle (computed per body eval so it stays
+    /// current across midnight) — replaces the old "9:00–20:00" window copy.
+    private var headerDate: String {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("EEE d")
+        return formatter.string(from: Date())
+    }
+
+    /// An empty day (no timed blocks) renders a quiet placeholder instead of a
+    /// bare grid. All-day items, if any, still show in the strip above.
     private var railEmptyState: some View {
         ZStack {
-            // Faint hour grid spread across the FULL rail height — the same 9–20
-            // rhythm a populated rail shows, so the empty rail reads as "a clear
-            // day", not an unfinished strip.
+            // Faint hour-grid rhythm so the empty rail reads as "a clear day",
+            // not an unfinished strip.
             VStack(spacing: 0) {
                 ForEach(0..<6, id: \.self) { _ in
                     Rectangle()
@@ -537,8 +565,6 @@ private struct EmbeddedDayTimeline: View {
             .frame(maxHeight: .infinity)
             .accessibilityHidden(true)
 
-            // Placeholder copy CENTERED in the full height (was pinned ~84pt
-            // from the top, which floated awkwardly once the rail fills).
             VStack(spacing: 9) {
                 Image(systemName: "calendar")
                     .font(.system(size: 19, weight: .regular))
@@ -546,7 +572,7 @@ private struct EmbeddedDayTimeline: View {
                 Text("No blocks scheduled")
                     .font(Self.emptyTitleFont)
                     .foregroundStyle(NexusColor.Text.tertiary)
-                Text("Your day is clear from 9:00 to 20:00")
+                Text("Your day is clear")
                     .font(Self.emptyBodyFont)
                     .foregroundStyle(NexusColor.Text.muted)
             }
@@ -554,19 +580,14 @@ private struct EmbeddedDayTimeline: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity)
-        .frame(minHeight: canvasH, maxHeight: .infinity)
+        .frame(maxHeight: .infinity)
     }
 
-    // Canvas-only sub-token fonts. NexusType's token sizes (eyebrow 10 /
-    // mono 12 / meta 12 …) don't cover the oracle's 9–11pt Canvas
-    // typography, and NexusType's internal `fontName(for:)`/`monoFontName`
-    // are not visible from TasksFeature. The Geist / GeistMono families ARE
-    // registered process-wide at app launch by
-    // `NexusFontRegistration.registerAll()`, so `Font.custom(...)` with the
-    // registered family names is the supported way to hit the oracle's
-    // exact Canvas type — this is not bypassing the token system, it is the
-    // same mechanism `NexusType` itself uses internally, matched 1:1 to the
-    // oracle's `DayTimeline` Canvas.
+    // Canvas-only sub-token fonts. NexusType's token sizes don't cover the
+    // 9–11pt Canvas typography, and its internal font-name helpers aren't
+    // visible from TasksFeature; the families are registered process-wide at
+    // launch by `NexusFontRegistration.registerAll()`, so `Font.custom(...)`
+    // with the registered names is the supported way to hit the exact type.
     private static let headerFont = Font.custom("IBMPlexMono-SemiBold", size: 11)
     private static let headerTimeFont = Font.custom("IBMPlexMono-Medium", size: 12)
     private static let gridFont = Font.custom("IBMPlexMono-Medium", size: 10)
