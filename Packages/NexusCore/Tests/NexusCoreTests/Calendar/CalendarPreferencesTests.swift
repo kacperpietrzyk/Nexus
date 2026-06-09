@@ -50,3 +50,35 @@ private func makeIsolatedDefaults() -> UserDefaults {
     store.save(CalendarPreferences(minBlockMinutes: 45))
     #expect(store.load().minBlockMinutes == 45)
 }
+
+// MARK: - visibleEvents calendar filter (#6)
+
+private func makeEvent(id: String, calendarID: String?) -> CalendarEvent {
+    let start = Date(timeIntervalSince1970: 1_000)
+    return CalendarEvent(
+        id: id,
+        title: id,
+        start: start,
+        end: start.addingTimeInterval(3_600),
+        calendarID: calendarID
+    )
+}
+
+@Test func calendarPreferences_visibleEvents_emptyReadSetKeepsEverything() {
+    let prefs = CalendarPreferences(readCalendarIDs: [])
+    let events = [makeEvent(id: "a", calendarID: "work"), makeEvent(id: "b", calendarID: "home")]
+    #expect(prefs.visibleEvents(events).map(\.id) == ["a", "b"])
+}
+
+@Test func calendarPreferences_visibleEvents_filtersToReadSet() {
+    let prefs = CalendarPreferences(readCalendarIDs: ["work"])
+    let events = [makeEvent(id: "a", calendarID: "work"), makeEvent(id: "b", calendarID: "home")]
+    #expect(prefs.visibleEvents(events).map(\.id) == ["a"])
+}
+
+@Test func calendarPreferences_visibleEvents_keepsUnknownCalendarWhenFilterActive() {
+    let prefs = CalendarPreferences(readCalendarIDs: ["work"])
+    let events = [makeEvent(id: "a", calendarID: "home"), makeEvent(id: "b", calendarID: nil)]
+    // The disabled "home" event is hidden; the nil-calendar event is kept (cannot classify).
+    #expect(prefs.visibleEvents(events).map(\.id) == ["b"])
+}

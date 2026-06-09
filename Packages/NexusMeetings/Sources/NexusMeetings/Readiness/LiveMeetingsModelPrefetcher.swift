@@ -1,11 +1,13 @@
 import FluidAudio
 import Foundation
 import NexusAI
-import NexusMeetings
 
 /// Downloads the three meeting models on demand, mirroring the exact load/download
 /// entry points the processing pipeline uses so a prefetch warms the same on-disk
 /// cache the providers later read.
+///
+/// Lives in the shared module (not the helper) so the **main app** can drive
+/// downloads in-process — it has `network.client` and needs no sandboxed helper.
 ///
 /// - parakeet / sortformer: FluidAudio's `downloadAndLoad` / `loadFromHuggingFace`
 ///   stream real fractional progress via `DownloadUtils.ProgressHandler`.
@@ -13,8 +15,10 @@ import NexusMeetings
 ///   path Settings uses). That coordinator exposes only an observable `phase`, no
 ///   fractional callback, so progress is reported best-effort (1.0 on success) and
 ///   failure is surfaced by inspecting the terminal phase.
-struct LiveMeetingsModelPrefetcher: MeetingsModelPrefetching {
-    func prefetch(_ id: MeetingsModelID, progress: @Sendable @escaping (Double) -> Void) async throws {
+public struct LiveMeetingsModelPrefetcher: MeetingsModelPrefetching {
+    public init() {}
+
+    public func prefetch(_ id: MeetingsModelID, progress: @Sendable @escaping (Double) -> Void) async throws {
         switch id {
         case .parakeet:
             _ = try await AsrModels.downloadAndLoad(
@@ -55,6 +59,6 @@ struct LiveMeetingsModelPrefetcher: MeetingsModelPrefetching {
     }
 }
 
-enum MeetingsModelPrefetchError: Error {
+public enum MeetingsModelPrefetchError: Error {
     case whisperKitDownloadFailed(String)
 }

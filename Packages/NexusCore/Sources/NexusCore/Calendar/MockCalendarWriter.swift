@@ -43,7 +43,9 @@ public final class MockCalendarWriter: CalendarEventWriting, CalendarListing, @u
 
     @discardableResult
     public func createEvent(_ draft: EventDraft) async throws -> String {
-        locked {
+        // #7: mirror the provider's skip contract — a nil calendar writes nothing.
+        guard draft.calendarID != nil else { return Self.skippedEventID }
+        return locked {
             nextID += 1
             let id = "event-\(nextID)"
             events[id] = draft
@@ -64,7 +66,7 @@ public final class MockCalendarWriter: CalendarEventWriting, CalendarListing, @u
             guard let draft = events[id] else { return nil }
             return CalendarEventSnapshot(
                 eventID: id,
-                calendarID: draft.calendarID,
+                calendarID: draft.calendarID ?? "",
                 title: draft.title,
                 start: draft.start,
                 end: draft.end

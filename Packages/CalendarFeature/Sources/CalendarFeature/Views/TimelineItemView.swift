@@ -25,7 +25,7 @@ struct TimelineItemView: View {
                         .lineLimit(positioned.height > 34 ? 2 : 1)
                     if positioned.height > 40 {
                         Text(timeRange)
-                            .font(NexusType.caption)
+                            .font(NexusType.metaMono)
                             .foregroundStyle(NexusColor.Text.tertiary)
                     }
                 }
@@ -76,10 +76,17 @@ struct TimelineItemView: View {
         }
     }
 
+    /// The event's desaturated calendar color, or nil when it has no/invalid hex.
+    /// Lime (accepted) and the neutral tint (proposed) bypass this.
+    private var calendarTint: Color? {
+        guard item.kind == .event else { return nil }
+        return item.colorHex.flatMap { Color(calendarHexDesaturated: $0) }
+    }
+
     private var accentColor: Color {
         switch item.kind {
         case .event:
-            return item.colorHex.flatMap { Color(calendarHex: $0) } ?? NexusColor.Text.tertiary
+            return calendarTint ?? NexusColor.Text.tertiary
         case .proposedBlock:
             return NexusColor.Text.tertiary
         case .acceptedBlock:
@@ -87,16 +94,27 @@ struct TimelineItemView: View {
         }
     }
 
+    /// Events no longer fight the dark palette with a full-saturation 3px bar:
+    /// the whole card surface is tinted with the desaturated calendar color at
+    /// low opacity over `Background.raised`, keeping events distinguishable by
+    /// calendar while lime stays the only fully-saturated accent. Blocks keep
+    /// their neutral surfaces.
+    @ViewBuilder
     private var background: some View {
-        Group {
-            switch item.kind {
-            case .event:
+        let shape = RoundedRectangle(cornerRadius: NexusRadius.r2, style: .continuous)
+        switch item.kind {
+        case .event:
+            ZStack {
                 NexusColor.Background.raised
-            case .proposedBlock:
-                NexusColor.Background.panel.opacity(0.7)
-            case .acceptedBlock:
-                NexusColor.Background.control
+                if let tint = calendarTint {
+                    tint.opacity(0.16)
+                }
             }
+            .clipShape(shape)
+        case .proposedBlock:
+            NexusColor.Background.panel.opacity(0.7)
+        case .acceptedBlock:
+            NexusColor.Background.control
         }
     }
 
@@ -112,7 +130,9 @@ struct TimelineItemView: View {
         case .acceptedBlock:
             shape.strokeBorder(NexusColor.Accent.lime.opacity(0.5), lineWidth: 1)
         case .event:
-            shape.strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
+            // A faint tint-tinged rim keeps the card edge legible without the
+            // hard saturated border the raw color produced.
+            shape.strokeBorder((calendarTint ?? NexusColor.Line.hairline).opacity(0.4), lineWidth: 1)
         }
     }
 

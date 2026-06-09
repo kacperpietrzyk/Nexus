@@ -203,6 +203,7 @@ struct ContentView: View {
             .init(id: .inbox, systemImage: "tray", label: "Inbox", count: inboxUnreadCount),
             .init(id: .meetings, systemImage: "person.wave.2", label: "Meetings"),
             .init(id: .tasks, systemImage: "checkmark.square", label: "Tasks"),
+            .init(id: .projects, systemImage: "square.stack.3d.up", label: "Projects"),
             .init(id: .notes, systemImage: "note.text", label: "Notes"),
             .init(id: .calendar, systemImage: "calendar", label: "Calendar"),
             .init(id: .people, systemImage: "person.crop.circle", label: "People"),
@@ -274,6 +275,24 @@ struct ContentView: View {
                 topControl: { AgentTopControl(viewModel: agentViewModel) },
                 bottomBar: { AgentBottomInput(viewModel: agentViewModel) },
                 content: { AgentThreadRail(viewModel: agentViewModel) }
+            )
+        } else if selection == .projects {
+            // Projects tier (#10): a full shell destination mounting the
+            // Linear-style project list → project page (header + lifecycle
+            // status + Kanban board). `ProjectsRootView` owns its own
+            // list/detail routing, so it slots straight into the shell content
+            // area. Opening a card routes through `openTask` (inspector ⊥ Agent
+            // invariant preserved). Before this destination the only project UI
+            // lived in the standalone-chrome sidebar the embedded Mac never
+            // mounts — projects were effectively unreachable.
+            NexusShell(
+                crumbs: ["Personal", shellTitle],
+                onOpenCommandPalette: { commandPalettePresented = true },
+                onOpenCapture: { mode in
+                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
+                },
+                topControl: { EmptyView() },
+                content: { ProjectsRootView(onOpenTask: { openTask($0) }) }
             )
         } else if selection == .notes {
             // Notes content layer (spec §5): a full shell destination mounting
@@ -407,6 +426,7 @@ struct ContentView: View {
         case .inbox: return "Inbox"
         case .meetings: return "Meetings"
         case .tasks: return "Tasks"
+        case .projects: return "Projects"
         case .notes: return "Notes"
         case .calendar: return "Calendar"
         case .people: return "People"

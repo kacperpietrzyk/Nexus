@@ -154,4 +154,79 @@ struct CalendarViewModelTests {
         viewModel.scope = .month
         #expect(viewModel.visibleDays.count == 42)
     }
+
+    // MARK: - Calendar visibility filter (#6)
+
+    private func stubEvent(id: String, calendarID: String?, at instant: Date) -> CalendarEvent {
+        CalendarEvent(
+            id: id,
+            title: id,
+            start: instant.addingTimeInterval(3_600),
+            end: instant.addingTimeInterval(7_200),
+            calendarID: calendarID
+        )
+    }
+
+    @Test("load hides events from calendars outside the read-set (#6)")
+    func loadFiltersDisabledCalendars() async throws {
+        let context = try makeContext()
+        let reader = MockCalendarEventProvider(events: [
+            stubEvent(id: "work", calendarID: "work-cal", at: now),
+            stubEvent(id: "home", calendarID: "home-cal", at: now),
+        ])
+        let store = UserDefaultsCalendarPreferencesStore(
+            defaults: UserDefaults(suiteName: "test-\(UUID().uuidString)")!
+        )
+        store.save(CalendarPreferences(readCalendarIDs: ["work-cal"]))
+        let viewModel = CalendarViewModel(
+            context: context,
+            reader: reader,
+            preferencesStore: store,
+            calendar: calendar,
+            now: { self.now }
+        )
+
+        await viewModel.load()
+
+        #expect(viewModel.events.map(\.id) == ["work"])
+    }
+
+    @Test("load with an empty read-set shows every calendar (#6)")
+    func loadEmptyReadSetShowsAll() async throws {
+        let context = try makeContext()
+        let reader = MockCalendarEventProvider(events: [
+            stubEvent(id: "work", calendarID: "work-cal", at: now),
+            stubEvent(id: "home", calendarID: "home-cal", at: now),
+        ])
+        let store = UserDefaultsCalendarPreferencesStore(
+            defaults: UserDefaults(suiteName: "test-\(UUID().uuidString)")!
+        )
+        store.save(CalendarPreferences(readCalendarIDs: []))
+        let viewModel = CalendarViewModel(
+            context: context,
+            reader: reader,
+            preferencesStore: store,
+            calendar: calendar,
+            now: { self.now }
+        )
+
+        await viewModel.load()
+
+        #expect(Set(viewModel.events.map(\.id)) == ["work", "home"])
+    }
+
+    // MARK: - Attendee display (#4a)
+
+    @Test("attendeeDisplay formats name+email and keeps name-only attendees (#4a)")
+    func attendeeDisplayFormats() {
+        let both = CalendarEvent.Attendee(name: "Ada Lovelace", email: "ada@example.com")
+        let nameOnly = CalendarEvent.Attendee(name: "Grace Hopper", email: nil)
+        let emailOnly = CalendarEvent.Attendee(name: nil, email: "alan@example.com")
+        let empty = CalendarEvent.Attendee(name: nil, email: nil)
+
+        #expect(CalendarViewModel.attendeeDisplay(both) == "Ada Lovelace (ada@example.com)")
+        #expect(CalendarViewModel.attendeeDisplay(nameOnly) == "Grace Hopper")
+        #expect(CalendarViewModel.attendeeDisplay(emailOnly) == "alan@example.com")
+        #expect(CalendarViewModel.attendeeDisplay(empty) == nil)
+    }
 }

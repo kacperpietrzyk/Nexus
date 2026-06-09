@@ -3,10 +3,10 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
-/// The Notes surface: a list of all live notes (the free-note knowledge base —
-/// spec §1, free notes are first-class), with a "New Note" affordance and
-/// navigation into the block editor. Mac + iOS; the Watch projection is a separate
-/// bespoke view in the Watch app target (read-only plain text).
+/// The Notes surface: a grouped list of all live notes (the free-note knowledge
+/// base — spec §1, free notes are first-class), with a "New Note" affordance, a
+/// grouping picker (role / tag), and navigation into the block editor. Mac + iOS;
+/// the Watch projection is a separate bespoke view in the Watch app target.
 ///
 /// Mounts inside the existing app navigation, so it inherits the scene's
 /// `.modelContainer` — no separate container registration is needed.
@@ -21,10 +21,25 @@ public struct NotesListView: View {
     )
     private var notes: [Note]
 
+    // The whole Link table, folded once into a per-note backlink count map (A5).
+    // One query beats N per-row `FetchDescriptor<Link>` fetches on the main actor
+    // during scroll (the documented hot-path rule). `toKind` is an enum stored
+    // field that doesn't filter reliably in `#Predicate`, so we fold in memory.
+    @Query private var links: [GraphLink]
+
     @State private var path: [UUID] = []
     @State private var newNoteError: String?
+    @State private var groupMode: NoteListGrouping.Mode = .role
 
     public init() {}
+
+    private var backlinkCounts: [UUID: Int] {
+        NoteListGrouping.backlinkCounts(from: links)
+    }
+
+    private var groups: [NoteListGrouping.Group] {
+        NoteListGrouping.groups(for: notes, mode: groupMode)
+    }
 
     public var body: some View {
         NavigationStack(path: $path) {
@@ -50,6 +65,15 @@ public struct NotesListView: View {
                     }
                     .disabled(noteRepository == nil)
                 }
+                ToolbarItem(placement: .automatic) {
+                    Picker("Group by", selection: $groupMode) {
+                        Label("Type", systemImage: "square.stack.3d.up")
+                            .tag(NoteListGrouping.Mode.role)
+                        Label("Tag", systemImage: "number")
+                            .tag(NoteListGrouping.Mode.tag)
+                    }
+                    .pickerStyle(.menu)
+                }
             }
             .navigationDestination(for: UUID.self) { id in
                 NoteDetailLoader(noteID: id, onOpenNote: { path.append($0) })
@@ -70,14 +94,36 @@ public struct NotesListView: View {
 
     private var list: some View {
         List {
-            ForEach(notes) { note in
-                NavigationLink(value: note.id) {
-                    NoteListRow(note: note)
+            ForEach(groups) { group in
+                Section {
+                    ForEach(group.notes) { note in
+                        NavigationLink(value: note.id) {
+                            NoteListRow(note: note, backlinkCount: backlinkCounts[note.id] ?? 0)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                deleteNote(note)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
+                } header: {
+                    sectionHeader(group)
                 }
             }
-            .onDelete(perform: deleteNotes)
         }
         .listStyle(.plain)
+    }
+
+    private func sectionHeader(_ group: NoteListGrouping.Group) -> some View {
+        HStack(spacing: 7) {
+            Text(group.title)
+                .nexusType(.eyebrow)
+                .foregroundStyle(NexusColor.Text.tertiary)
+            NexusCount(value: group.notes.count, font: NexusType.metaMono)
+            Spacer(minLength: 0)
+        }
     }
 
     private func createNote() {
@@ -90,21 +136,24 @@ public struct NotesListView: View {
         }
     }
 
-    private func deleteNotes(at offsets: IndexSet) {
-        guard let noteRepository else { return }
-        for index in offsets {
-            try? noteRepository.delete(notes[index])
-        }
+    private func deleteNote(_ note: Note) {
+        try? noteRepository?.delete(note)
     }
 }
 
-/// A single row in the notes list: title (or a placeholder) + a one-line preview
-/// drawn from the denormalized `plainText` cache (never the block blob — spec §4.1).
+/// A single row in the notes list: a role glyph + title, a one-line preview drawn
+/// from the denormalized `plainText` cache (never the block blob — spec §4.1), and
+/// a metadata strip of tag chips + an optional backlink count.
 struct NoteListRow: View {
     let note: Note
+    let backlinkCount: Int
+
+    private var tags: [String] {
+        NoteListGrouping.normalizedTags(note.tags)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 roleGlyph
                 Text(displayTitle)
@@ -112,6 +161,10 @@ struct NoteListRow: View {
                     .fontWeight(.medium)
                     .foregroundStyle(NexusColor.Text.primary)
                     .lineLimit(1)
+                Spacer(minLength: 0)
+                if backlinkCount > 0 {
+                    backlinkBadge
+                }
             }
             if !preview.isEmpty {
                 Text(preview)
@@ -119,8 +172,33 @@ struct NoteListRow: View {
                     .foregroundStyle(NexusColor.Text.muted)
                     .lineLimit(1)
             }
+            if !tags.isEmpty {
+                tagStrip
+            }
         }
         .padding(.vertical, 2)
+    }
+
+    private var backlinkBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.turn.up.left")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(NexusColor.Text.tertiary)
+            NexusCount(value: backlinkCount, font: NexusType.metaMono)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(backlinkCount) backlinks"))
+    }
+
+    private var tagStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(tags, id: \.self) { tag in
+                    NexusChip(tag, systemImage: "number")
+                }
+            }
+        }
+        .scrollDisabled(tags.count <= 3)
     }
 
     private var displayTitle: String {

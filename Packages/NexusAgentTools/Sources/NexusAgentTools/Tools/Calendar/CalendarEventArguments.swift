@@ -8,10 +8,20 @@ struct CalendarEventDraftFields {
     let end: Date
     let isAllDay: Bool
     let location: String?
-    let calendarID: String?
+    let calendarTarget: CalendarTarget
     let attendees: [String]
     let recurrence: RRule?
     let alarmOffsets: [TimeInterval]
+}
+
+/// How the `calendar_id` argument resolves to a write target (#7).
+enum CalendarTarget: Equatable {
+    /// `calendar_id` was omitted — fall back to the user's configured write target.
+    case omitted
+    /// `calendar_id` was the literal `"none"` — skip the system-calendar write.
+    case none
+    /// An explicit calendar identifier to write to.
+    case explicit(String)
 }
 
 /// Argument parsing for the `calendar.events.*` tools, reusing the schedule
@@ -27,9 +37,7 @@ enum CalendarEventArguments {
         }
         let isAllDay = args["is_all_day"]?.boolValue ?? false
         let location = try TasksStructuredCreateArguments.optionalString(args["location"], field: "location")
-        let calendarID = try TasksStructuredCreateArguments.optionalString(
-            args["calendar_id"], field: "calendar_id"
-        )
+        let calendarTarget = try calendarTarget(args["calendar_id"])
         let attendees = try optionalStringArray(args["attendees"], field: "attendees")
         let recurrence = try optionalRecurrenceRule(args["recurrence_rule"])
         let alarmOffsets = try optionalAlarmOffsets(args["alarm_offsets"])
@@ -39,11 +47,21 @@ enum CalendarEventArguments {
             end: end,
             isAllDay: isAllDay,
             location: location,
-            calendarID: calendarID,
+            calendarTarget: calendarTarget,
             attendees: attendees,
             recurrence: recurrence,
             alarmOffsets: alarmOffsets
         )
+    }
+
+    /// Resolve the `calendar_id` argument into a `CalendarTarget` (#7): omitted ⇒
+    /// honor the configured default; the literal `"none"` (any case) ⇒ skip the
+    /// system-calendar write; anything else ⇒ that explicit calendar id.
+    static func calendarTarget(_ value: JSONValue?) throws -> CalendarTarget {
+        guard let raw = try TasksStructuredCreateArguments.optionalString(value, field: "calendar_id") else {
+            return .omitted
+        }
+        return raw.lowercased() == "none" ? .none : .explicit(raw)
     }
 
     static func requiredDate(_ value: JSONValue?, field: String) throws -> Date {
@@ -123,7 +141,9 @@ enum CalendarEventSchema {
                 description: "Optional alarm offsets in seconds relative to event start."
             ),
             "calendar_id": .string(
-                description: "Target writable calendar id. Omit to use the \"Nexus\" calendar."
+                description: "Target writable calendar id. Omit to use the configured default "
+                    + "write calendar (falling back to the \"Nexus\" calendar). Pass \"none\" to "
+                    + "skip writing a system-calendar event entirely."
             ),
         ]
     }

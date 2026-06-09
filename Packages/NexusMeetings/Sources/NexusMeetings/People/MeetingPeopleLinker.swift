@@ -79,8 +79,27 @@ public struct MeetingPeopleLinker {
 
         for participant in participants {
             let name = participant.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Skip empties and auto-generated placeholders the user never renamed.
-            guard !name.isEmpty, name != participant.speakerID else { continue }
+
+            // Primary: the user explicitly assigned this speaker to a `Person` in the
+            // rename sheet (#3). Link THAT person directly — no name soft-match, no
+            // placeholder skip (a chosen person must never be dropped).
+            if let personID = participant.personID, let person = try people.find(id: personID) {
+                let key = "id:\(personID.uuidString)"
+                guard seenNames.insert(key).inserted else { continue }
+                try people.linkAttendee(meetingID: meeting.id, personID: person.id)
+                linked.append(person)
+                continue
+            }
+
+            // Skip empties, auto-generated placeholders the user never renamed
+            // (`displayName == speakerID`), and numbered "Participant N" / "Speaker N"
+            // labels — those are not real names and minting `Person` rows for them is
+            // the source of the People-list pollution this fix removes (#4b).
+            guard
+                !name.isEmpty,
+                name != participant.speakerID,
+                !Self.isNumberedPlaceholder(name)
+            else { continue }
             // Dedupe within a single meeting case/diacritic-insensitively.
             let key = Self.fold(name)
             guard seenNames.insert(key).inserted else { continue }
@@ -169,6 +188,19 @@ public struct MeetingPeopleLinker {
         } catch {
             return []
         }
+    }
+
+    /// Matches auto-generated placeholder labels like "Participant 1", "Speaker_2",
+    /// "speaker 3" (case-insensitive, optional space/underscore before the digits).
+    /// These are never real names, so the linker must not mint `Person` rows for them
+    /// — that minting was the root cause of the People-list "Participant N" pollution.
+    static func isNumberedPlaceholder(_ name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed.range(
+            of: "^(participant|speaker)[ _]?\\d+$",
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
     }
 
     /// Case/diacritic-insensitive fold for intra-meeting name de-duplication

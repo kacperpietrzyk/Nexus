@@ -101,25 +101,21 @@ public struct CalendarView: View {
     private var navButtons: some View {
         HStack(spacing: 6) {
             iconButton("chevron.left", label: "Previous") { viewModel.step(-1) }
-            Button("Today") { viewModel.goToToday() }
-                .buttonStyle(.plain)
-                .font(NexusType.bodySmall)
-                .foregroundStyle(NexusColor.Text.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(NexusColor.Background.control, in: Capsule())
+            NexusButton(variant: .outline, size: .sm) {
+                viewModel.goToToday()
+            } label: {
+                Text("Today")
+            }
+            .accessibilityLabel("Go to today")
             iconButton("chevron.right", label: "Next") { viewModel.step(1) }
         }
     }
 
     private var scopePicker: some View {
-        Picker("Scope", selection: $viewModel.scope) {
-            ForEach(CalendarScope.allCases) { scope in
-                Text(scope.label).tag(scope)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+        NexusSegmentedControl(
+            items: CalendarScope.allCases.map { NexusSegmentedItem(id: $0, label: $0.label) },
+            selection: $viewModel.scope
+        )
         .frame(maxWidth: 240)
     }
 
@@ -247,6 +243,8 @@ public struct CalendarView: View {
             EventEditorView(
                 mode: .create,
                 calendars: availableCalendars,
+                // #7: seed the new event's calendar from the configured write target.
+                preferredCalendarID: viewModel.preferences.writeCalendarID,
                 onSave: { draft, _ in
                     Task {
                         _ = await viewModel.createEvent(draft)

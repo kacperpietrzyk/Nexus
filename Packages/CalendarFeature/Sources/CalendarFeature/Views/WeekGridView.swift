@@ -48,9 +48,7 @@ struct WeekGridView: View {
             Rectangle().fill(NexusColor.Line.hairline).frame(height: 1)
 
             if items.isEmpty {
-                Text("—")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
+                emptyColumn
             } else {
                 ForEach(items) { item in
                     compactChip(item)
@@ -61,6 +59,19 @@ struct WeekGridView: View {
         .frame(minWidth: 96)
     }
 
+    /// Subtle empty-day treatment: a faint centered dot rather than a bare "—",
+    /// reading as an intentional state, not a layout gap. (NexusEmptyState is a
+    /// full-bleed centered block — too heavy for a ~96pt column.)
+    private var emptyColumn: some View {
+        Circle()
+            .fill(NexusColor.Text.disabled)
+            .frame(width: 4, height: 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+            .padding(.leading, 2)
+            .accessibilityLabel("No events")
+    }
+
     private func compactChip(_ item: TimelineItem) -> some View {
         Button {
             onTapItem(item)
@@ -69,7 +80,7 @@ struct WeekGridView: View {
                 Circle().fill(chipColor(item)).frame(width: 5, height: 5)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(TimelineItemView.timeFormatter.string(from: item.start))
-                        .font(NexusType.caption)
+                        .font(NexusType.metaMono)
                         .foregroundStyle(NexusColor.Text.tertiary)
                     Text(item.title)
                         .font(NexusType.caption)
@@ -87,7 +98,7 @@ struct WeekGridView: View {
 
     private func chipColor(_ item: TimelineItem) -> Color {
         switch item.kind {
-        case .event: return item.colorHex.flatMap { Color(calendarHex: $0) } ?? NexusColor.Text.tertiary
+        case .event: return item.colorHex.flatMap { Color(calendarHexDesaturated: $0) } ?? NexusColor.Text.tertiary
         case .proposedBlock: return NexusColor.Text.muted
         case .acceptedBlock: return NexusColor.Accent.lime
         }

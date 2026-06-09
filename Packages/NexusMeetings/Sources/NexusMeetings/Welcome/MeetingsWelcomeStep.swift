@@ -1,4 +1,5 @@
 #if os(macOS) && canImport(ServiceManagement)
+import AVFoundation
 import Foundation
 import NexusUI
 @preconcurrency import ServiceManagement
@@ -12,6 +13,7 @@ public final class MeetingsWelcomeStepViewModel: ObservableObject {
     private let registrar: any HelperRegistrar
     private let statusProvider: () -> SMAppService.Status
     private let preferenceStore: any HelperAutoRecordStoring
+    private let requestMicrophoneAccess: @Sendable (@escaping @Sendable (Bool) -> Void) -> Void
 
     public init(
         enableHelper: Bool = true,
@@ -20,12 +22,16 @@ public final class MeetingsWelcomeStepViewModel: ObservableObject {
             MeetingsHelperService.service.status
         },
         preferenceStore: any HelperAutoRecordStoring =
-            UserDefaultsHelperAutoRecordStore.shared
+            UserDefaultsHelperAutoRecordStore.shared,
+        requestMicrophoneAccess: @escaping @Sendable (@escaping @Sendable (Bool) -> Void) -> Void = { completion in
+            AVCaptureDevice.requestAccess(for: .audio) { granted in completion(granted) }
+        }
     ) {
         self.enableHelper = enableHelper
         self.registrar = registrar
         self.statusProvider = statusProvider
         self.preferenceStore = preferenceStore
+        self.requestMicrophoneAccess = requestMicrophoneAccess
     }
 
     public func refreshStatus() {
@@ -49,11 +55,18 @@ public final class MeetingsWelcomeStepViewModel: ObservableObject {
         }
 
         preferenceStore.save(enabled: true)
-        // Kick the (now-launching) helper to prompt for mic + open Accessibility
-        // Settings. The helper may still be starting up when this arrives — the
-        // Settings readiness panel's [Request] button re-posts if needed.
+        // Request microphone IN-PROCESS — the main app has the `audio-input`
+        // entitlement and needs no helper for this. (The previous cross-app
+        // `DistributedNotificationCenter` post to the sandboxed helper was
+        // unreliable and did nothing on a plain launch.)
+        requestMicrophoneAccess { _ in }
+        // Nudge the (now-launching) helper to refresh its Accessibility/system-
+        // audio view as a fallback; the in-process readiness panel is what
+        // actually shows status.
+        // TODO: prefer the helper's XPC interface once it vends a permission entry
+        // point (connecting via XPC also launches the agent on demand).
         DistributedNotificationCenter.default().postNotificationName(
-            MeetingsReadinessNotification.requestPermissions,
+            MeetingsReadinessNotification.refreshReadiness,
             object: nil, userInfo: nil, deliverImmediately: true
         )
         onContinue(true)

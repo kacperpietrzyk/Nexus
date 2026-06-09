@@ -46,24 +46,54 @@ public struct CalendarEventsCreateTool: AgentTool {
     public let description =
         "Creates a calendar event. Idempotent: an existing event in the target calendar "
         + "with the same title, start, and end is reused rather than duplicated. Defaults "
-        + "to the dedicated \"Nexus\" calendar when no calendar_id is given. Requires "
-        + "calendar write access."
+        + "to the configured write calendar (falling back to the dedicated \"Nexus\" "
+        + "calendar) when no calendar_id is given; pass calendar_id \"none\" to skip writing "
+        + "a system-calendar event. Requires calendar write access."
     public let inputSchema: JSONSchema = .object(
         properties: CalendarEventSchema.draftProperties(titleRequired: true),
         required: ["title", "start", "end"]
     )
 
     private let writer: any CalendarEventWriting
+    private let preferencesStore: UserDefaultsCalendarPreferencesStore
 
-    public init(writer: any CalendarEventWriting) {
+    public init(
+        writer: any CalendarEventWriting,
+        preferencesStore: UserDefaultsCalendarPreferencesStore = UserDefaultsCalendarPreferencesStore()
+    ) {
         self.writer = writer
+        self.preferencesStore = preferencesStore
     }
 
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let fields = try CalendarEventArguments.parseDraft(args)
         return try await CalendarToolErrors.mapping {
-            let calendarID = try await resolvedCalendarID(fields.calendarID)
+            // #7: "none" skips the system-calendar write entirely — no dedup probe,
+            // no EKEvent, and a clear skipped result instead of a phantom event id.
+            guard
+                let calendarID = try await CalendarTargetResolver.resolve(
+                    fields.calendarTarget, writer: writer, preferencesStore: preferencesStore
+                )
+            else {
+                _ = try await writer.createEvent(
+                    EventDraft(
+                        calendarID: nil,
+                        title: fields.title,
+                        start: fields.start,
+                        end: fields.end,
+                        isAllDay: fields.isAllDay,
+                        location: fields.location,
+                        attendees: fields.attendees,
+                        recurrence: fields.recurrence,
+                        alarmOffsets: fields.alarmOffsets
+                    )
+                )
+                return .object([
+                    "skipped": .bool(true),
+                    "reason": .string("calendar_id was \"none\"; no system-calendar event written."),
+                ])
+            }
 
             // Dedup: an identical event already in the target calendar window is reused.
             let existing = try await writer.events(
@@ -100,12 +130,6 @@ public struct CalendarEventsCreateTool: AgentTool {
             return try TasksToolJSON.encode(dto)
         }
     }
-
-    @MainActor
-    private func resolvedCalendarID(_ explicit: String?) async throws -> String {
-        if let explicit { return explicit }
-        return try await writer.ensureNexusCalendar()
-    }
 }
 
 /// `calendar.events.update` (spec §9 / §12): update an existing event in place.
@@ -134,7 +158,16 @@ public struct CalendarEventsUpdateTool: AgentTool {
         let eventID = try TasksToolArguments.requiredString(args["event_id"], field: "event_id")
         let fields = try CalendarEventArguments.parseDraft(args)
         return try await CalendarToolErrors.mapping {
-            let calendarID = try await resolvedCalendarID(fields.calendarID)
+            // #7: an explicit calendar_id moves the event; omitted or "none" leaves
+            // its current calendar in place (you can't un-calendar an existing event
+            // without deleting it), so the draft carries nil and `apply` skips the
+            // calendar reassignment.
+            let calendarID: String?
+            if case .explicit(let id) = fields.calendarTarget {
+                calendarID = id
+            } else {
+                calendarID = nil
+            }
             let draft = EventDraft(
                 calendarID: calendarID,
                 title: fields.title,
@@ -147,9 +180,18 @@ public struct CalendarEventsUpdateTool: AgentTool {
                 alarmOffsets: fields.alarmOffsets
             )
             try await writer.updateEvent(id: eventID, with: draft)
+            // Report the event's resulting calendar (the explicit target, or its
+            // existing one read back) rather than a misleading nil.
+            let resultingCalendarID: String?
+            if let calendarID {
+                resultingCalendarID = calendarID
+            } else {
+                let snapshot = try await writer.eventSnapshot(id: eventID)
+                resultingCalendarID = snapshot?.calendarID
+            }
             let dto = CalendarEventDTO(
                 id: eventID,
-                calendarID: calendarID,
+                calendarID: resultingCalendarID,
                 title: fields.title,
                 start: ScheduleDTOFormatter.string(fields.start),
                 end: ScheduleDTOFormatter.string(fields.end),
@@ -160,11 +202,30 @@ public struct CalendarEventsUpdateTool: AgentTool {
             return try TasksToolJSON.encode(dto)
         }
     }
+}
 
-    @MainActor
-    private func resolvedCalendarID(_ explicit: String?) async throws -> String {
-        if let explicit { return explicit }
-        return try await writer.ensureNexusCalendar()
+/// Resolves a parsed `CalendarTarget` into the concrete write calendar id for the
+/// create path (#7): `.explicit` ⇒ that id; `.omitted` ⇒ the configured write
+/// target, falling back to the on-demand "Nexus" calendar; `.none` ⇒ `nil`, the
+/// signal to skip the system-calendar write.
+@MainActor
+enum CalendarTargetResolver {
+    static func resolve(
+        _ target: CalendarTarget,
+        writer: any CalendarEventWriting,
+        preferencesStore: UserDefaultsCalendarPreferencesStore
+    ) async throws -> String? {
+        switch target {
+        case .none:
+            return nil
+        case .explicit(let id):
+            return id
+        case .omitted:
+            if let configured = preferencesStore.load().writeCalendarID {
+                return configured
+            }
+            return try await writer.ensureNexusCalendar()
+        }
     }
 }
 

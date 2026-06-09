@@ -105,7 +105,8 @@ public struct MeetingDetailView: View {
                 meetingID: meetingID,
                 repository: composition.meetingRepository,
                 peopleLinker: composition.peopleLinker,
-                attendeeSeedProvider: { await composition.calendarAttendeeNames(for: $0) }
+                personRepository: composition.personRepository,
+                attendeeSeedProvider: { await composition.calendarAttendeeCandidates(for: $0) }
             )
             .id(meetingID)
         case .summary:

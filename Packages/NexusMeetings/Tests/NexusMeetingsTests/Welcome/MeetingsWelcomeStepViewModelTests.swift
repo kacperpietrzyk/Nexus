@@ -46,13 +46,18 @@ import Testing
 }
 
 @MainActor
-@Test func welcomeStepContinueEnabledRegistersPersistsAndContinues() {
+@Test func welcomeStepContinueEnabledRegistersPersistsAndRequestsMicInProcess() {
     let registrar = RecordingRegistrar()
     let preferences = RecordingAutoRecordStore()
+    let micFlag = MicRequestFlag()
     let viewModel = MeetingsWelcomeStepViewModel(
         registrar: registrar,
         statusProvider: { .notRegistered },
-        preferenceStore: preferences
+        preferenceStore: preferences,
+        requestMicrophoneAccess: { completion in
+            micFlag.markCalled()
+            completion(true)
+        }
     )
     var continuedChoice: Bool?
 
@@ -63,6 +68,15 @@ import Testing
     #expect(registrar.registerCallCount == 1)
     #expect(preferences.savedValues == [true])
     #expect(continuedChoice == true)
+    // Microphone is requested IN-PROCESS by the main app (no sandboxed helper).
+    #expect(micFlag.wasCalled)
+}
+
+private final class MicRequestFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var called = false
+    var wasCalled: Bool { lock.withLock { called } }
+    func markCalled() { lock.withLock { called = true } }
 }
 
 @MainActor

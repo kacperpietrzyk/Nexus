@@ -38,10 +38,10 @@ private final class FakeCalendarWriter: CalendarEventWriting, @unchecked Sendabl
         locked {
             nextEventSeq += 1
             let id = "evt-\(nextEventSeq)"
-            createdCalendarIDs.append(draft.calendarID)
+            createdCalendarIDs.append(draft.calendarID ?? "")
             events[id] = CalendarEventSnapshot(
                 eventID: id,
-                calendarID: draft.calendarID,
+                calendarID: draft.calendarID ?? "",
                 title: draft.title,
                 start: draft.start,
                 end: draft.end
@@ -52,11 +52,11 @@ private final class FakeCalendarWriter: CalendarEventWriting, @unchecked Sendabl
 
     func updateEvent(id: String, with draft: EventDraft, span: CalendarEventSpan) async throws {
         locked {
-            updatedCalendarIDs.append(draft.calendarID)
+            updatedCalendarIDs.append(draft.calendarID ?? "")
             updatedSpans.append(span)
             events[id] = CalendarEventSnapshot(
                 eventID: id,
-                calendarID: draft.calendarID,
+                calendarID: draft.calendarID ?? "",
                 title: draft.title,
                 start: draft.start,
                 end: draft.end

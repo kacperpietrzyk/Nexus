@@ -36,4 +36,27 @@ public enum PersonAggregateResolver {
             .filter { $0.deletedAt == nil }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
+
+    /// Attended-meeting counts for EVERY person, keyed by `personID`, in a single
+    /// pass over the `Link` table — the list-row chip ("4 meetings") source. Doing
+    /// one batched fetch (not N per-row `aggregate()` queries) keeps a long People
+    /// list cheap. Counts `.attendee` edges that point at a person
+    /// (`toKind == .person`, `fromKind == .meeting`), mirroring
+    /// `PersonRepository.aggregate`. People with no meetings are simply absent from
+    /// the map (treat missing as 0).
+    public static func meetingCounts(in context: ModelContext) throws -> [UUID: Int] {
+        // SwiftData #Predicate cannot capture enum values; pre-filter is impossible
+        // without a captured raw value, so fetch all links and discriminate kind in
+        // memory (same pattern as LinkRepository.backlinks; the Link table is small
+        // in single-user use).
+        let links = try context.fetch(FetchDescriptor<Link>())
+        var counts: [UUID: Int] = [:]
+        for link in links {
+            guard link.linkKind == .attendee, link.toKind == .person, link.fromKind == .meeting else {
+                continue
+            }
+            counts[link.toID, default: 0] += 1
+        }
+        return counts
+    }
 }

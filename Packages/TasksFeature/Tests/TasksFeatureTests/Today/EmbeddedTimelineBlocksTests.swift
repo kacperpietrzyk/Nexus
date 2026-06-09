@@ -4,12 +4,14 @@ import Testing
 
 @testable import TasksFeature
 
-/// Coverage for the MP-2 embedded-Today DayTimeline anchor transform
-/// (`TodayDashboard.embeddedTimelineBlocks` + `embeddedFreeTimeLabel`),
-/// folded in from the slice-4 review so the pure geometry is locked before
-/// MP-2.2 freezes the pattern. Mirrors the `ScheduleGroupingTests` idiom:
-/// fixed UTC gregorian calendar, deterministic component-built dates,
-/// Swift Testing `@Test`/`#expect`.
+/// Coverage for the embedded-Today DayTimeline geometry
+/// (`TodayDashboard.embeddedTimelineBlocks` + `embeddedFreeTimeLabel` +
+/// `embeddedTimelineAccessibilityLabels`). The rail is a SCROLLABLE full-day
+/// (0–24) timeline: no item is ever dropped for falling outside a visible
+/// sub-window, and all-day events are routed to a separate strip rather than
+/// placed on the hour axis. Mirrors the `ScheduleGroupingTests` idiom: fixed
+/// UTC gregorian calendar, deterministic component-built dates, Swift Testing
+/// `@Test`/`#expect`.
 ///
 /// `@MainActor` on the suite: `embeddedTimelineBlocks` /
 /// `embeddedFreeTimeLabel` are statics on `TodayDashboard`, a SwiftUI
@@ -19,16 +21,16 @@ import Testing
 /// `TodayDashboardTests` uses for its `TodayDashboard.scheduleTasks(...)`
 /// test (per-test `@MainActor`), hoisted to the suite here since every
 /// case touches a `TodayDashboard` static.
-@Suite("EmbeddedTimelineBlocks MP-2")
+@Suite("EmbeddedTimelineBlocks")
 @MainActor
 struct EmbeddedTimelineBlocksTests {
 
-    // MARK: - clampedBlock geometry (via embeddedTimelineBlocks)
+    // MARK: - Block geometry (via embeddedTimelineBlocks)
 
     @Test("nil/zero endAt yields a synthetic >=15-minute span, never degenerate")
     func syntheticSpanForMissingOrZeroEnd() throws {
-        let calendar = utcCalendar
-        let start = date(hour: 10, minute: 0, calendar: calendar)
+        let calendar = TimelineFixture.utcCalendar
+        let start = TimelineFixture.date(hour: 10, minute: 0, calendar: calendar)
 
         // endAt nil AND dueAt nil → end falls back to start (zero length).
         let noEnd = TaskItem(title: "No end", startAt: start)
@@ -39,7 +41,7 @@ struct EmbeddedTimelineBlocksTests {
             tasks: [noEnd, zeroEnd],
             events: [],
             calendar: calendar
-        )
+        ).blocks
 
         #expect(blocks.count == 2)
         for block in blocks {
@@ -50,154 +52,158 @@ struct EmbeddedTimelineBlocksTests {
         }
     }
 
-    @Test("Inverted endAt < startAt is clamped to a non-inverted rect")
-    func invertedEndClamped() throws {
-        let calendar = utcCalendar
-        let start = date(hour: 15, minute: 0, calendar: calendar)
-        let earlierEnd = date(hour: 13, minute: 0, calendar: calendar)
+    @Test("Inverted endAt < startAt yields a non-inverted synthetic rect")
+    func invertedEndSynthetic() throws {
+        let calendar = TimelineFixture.utcCalendar
+        let start = TimelineFixture.date(hour: 15, minute: 0, calendar: calendar)
+        let earlierEnd = TimelineFixture.date(hour: 13, minute: 0, calendar: calendar)
         let task = TaskItem(title: "Inverted", startAt: start, endAt: earlierEnd)
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
             tasks: [task],
             events: [],
             calendar: calendar
-        )
+        ).blocks
 
         let block = try #require(blocks.first)
         #expect(block.a == 15.0)
-        // rawB = max(13.0, 15.0 + 0.25) = 15.25 → never < a.
+        // b = max(13.0, 15.0 + 0.25) = 15.25 → never < a.
         #expect(block.b > block.a)
         #expect(block.b == 15.25)
     }
 
-    @Test("Block fully outside the 9-20 window is dropped, not degenerate")
-    func outsideWindowDropped() throws {
-        let calendar = utcCalendar
-        // 07:00–08:00 fully before 9; 21:00–22:00 fully after 20.
+    @Test("Early-morning and late-evening blocks render at true time (never dropped)")
+    func outOfBusinessHoursBlocksPresent() throws {
+        let calendar = TimelineFixture.utcCalendar
+        // 07:00–08:00 (before old 9 floor); 21:00–22:00 (after old 20 ceiling).
         let early = TaskItem(
             title: "Early",
-            startAt: date(hour: 7, minute: 0, calendar: calendar),
-            endAt: date(hour: 8, minute: 0, calendar: calendar)
+            startAt: TimelineFixture.date(hour: 7, minute: 0, calendar: calendar),
+            endAt: TimelineFixture.date(hour: 8, minute: 0, calendar: calendar)
         )
         let late = TaskItem(
             title: "Late",
-            startAt: date(hour: 21, minute: 0, calendar: calendar),
-            endAt: date(hour: 22, minute: 0, calendar: calendar)
+            startAt: TimelineFixture.date(hour: 21, minute: 0, calendar: calendar),
+            endAt: TimelineFixture.date(hour: 22, minute: 0, calendar: calendar)
         )
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
             tasks: [early, late],
             events: [],
             calendar: calendar
-        )
+        ).blocks
 
-        #expect(blocks.isEmpty)
+        #expect(blocks.map(\.title) == ["Early", "Late"])
+        #expect(blocks.map(\.a) == [7.0, 21.0])
+        #expect(blocks.map(\.b) == [8.0, 22.0])
     }
 
-    @Test("Partial overlap is clamped to the window edges")
-    func partialOverlapClamped() throws {
-        let calendar = utcCalendar
-        // 08:00–10:00 → clamp start up to 9.0; 19:00–21:00 → clamp end to 20.0.
+    @Test("Block spans are no longer clamped — true start/end are preserved")
+    func spansPreservedUnclamped() throws {
+        let calendar = TimelineFixture.utcCalendar
+        // 08:00–10:00 and 19:00–21:00 used to clamp to the 9–20 window; now the
+        // full-day axis keeps their true bounds.
         let spansStart = TaskItem(
             title: "Spans start",
-            startAt: date(hour: 8, minute: 0, calendar: calendar),
-            endAt: date(hour: 10, minute: 0, calendar: calendar)
+            startAt: TimelineFixture.date(hour: 8, minute: 0, calendar: calendar),
+            endAt: TimelineFixture.date(hour: 10, minute: 0, calendar: calendar)
         )
         let spansEnd = TaskItem(
             title: "Spans end",
-            startAt: date(hour: 19, minute: 0, calendar: calendar),
-            endAt: date(hour: 21, minute: 0, calendar: calendar)
+            startAt: TimelineFixture.date(hour: 19, minute: 0, calendar: calendar),
+            endAt: TimelineFixture.date(hour: 21, minute: 0, calendar: calendar)
         )
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
             tasks: [spansStart, spansEnd],
             events: [],
             calendar: calendar
-        )
+        ).blocks
 
         #expect(blocks.count == 2)
         let first = try #require(blocks.first)
         let last = try #require(blocks.last)
-        #expect(first.a == 9.0)  // clamped up from 8.0
+        #expect(first.a == 8.0)  // unclamped
         #expect(first.b == 10.0)
         #expect(last.a == 19.0)
-        #expect(last.b == 20.0)  // clamped down from 21.0
+        #expect(last.b == 21.0)  // unclamped
     }
 
     @Test("Empty input yields an empty result with no crash or NaN")
     func emptyInput() {
-        let blocks = TodayDashboard.embeddedTimelineBlocks(
+        let result = TodayDashboard.embeddedTimelineBlocks(
             tasks: [],
             events: [],
-            calendar: utcCalendar
+            calendar: TimelineFixture.utcCalendar
         )
-        #expect(blocks.isEmpty)
+        #expect(result.blocks.isEmpty)
+        #expect(result.allDay.isEmpty)
     }
 
     @Test("Soft-deleted tasks are excluded from the timeline")
     func deletedTaskExcluded() throws {
-        let calendar = utcCalendar
+        let calendar = TimelineFixture.utcCalendar
         let live = TaskItem(
             title: "Live",
-            startAt: date(hour: 11, minute: 0, calendar: calendar)
+            startAt: TimelineFixture.date(hour: 11, minute: 0, calendar: calendar)
         )
         let deleted = TaskItem(
             title: "Deleted",
-            startAt: date(hour: 12, minute: 0, calendar: calendar)
+            startAt: TimelineFixture.date(hour: 12, minute: 0, calendar: calendar)
         )
-        deleted.deletedAt = date(hour: 9, minute: 0, calendar: calendar)
+        deleted.deletedAt = TimelineFixture.date(hour: 9, minute: 0, calendar: calendar)
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
             tasks: [live, deleted],
             events: [],
             calendar: calendar
-        )
+        ).blocks
 
         #expect(blocks.map(\.title) == ["Live"])
     }
 
     @Test("Tasks without startAt never contribute a block")
     func unscheduledTaskDropped() throws {
-        let calendar = utcCalendar
+        let calendar = TimelineFixture.utcCalendar
         let unscheduled = TaskItem(
             title: "Unscheduled",
-            dueAt: date(hour: 14, minute: 0, calendar: calendar)
+            dueAt: TimelineFixture.date(hour: 14, minute: 0, calendar: calendar)
         )
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
             tasks: [unscheduled],
             events: [],
             calendar: calendar
-        )
+        ).blocks
 
         #expect(blocks.isEmpty)
     }
 
     @Test("Multiple tasks and events are merged and sorted ascending by start")
     func multipleBlocksSorted() throws {
-        let calendar = utcCalendar
+        let calendar = TimelineFixture.utcCalendar
         let t16 = TaskItem(
             title: "Task 16",
-            startAt: date(hour: 16, minute: 0, calendar: calendar),
-            endAt: date(hour: 16, minute: 30, calendar: calendar)
+            startAt: TimelineFixture.date(hour: 16, minute: 0, calendar: calendar),
+            endAt: TimelineFixture.date(hour: 16, minute: 30, calendar: calendar)
         )
         let t10 = TaskItem(
             title: "Task 10",
-            startAt: date(hour: 10, minute: 0, calendar: calendar),
-            endAt: date(hour: 11, minute: 0, calendar: calendar)
+            startAt: TimelineFixture.date(hour: 10, minute: 0, calendar: calendar),
+            endAt: TimelineFixture.date(hour: 11, minute: 0, calendar: calendar)
         )
         let event13 = CalendarEvent(
             id: "ev-13",
             title: "Event 13",
-            start: date(hour: 13, minute: 0, calendar: calendar),
-            end: date(hour: 14, minute: 0, calendar: calendar)
+            start: TimelineFixture.date(hour: 13, minute: 0, calendar: calendar),
+            end: TimelineFixture.date(hour: 14, minute: 0, calendar: calendar)
         )
 
         let blocks = TodayDashboard.embeddedTimelineBlocks(
             tasks: [t16, t10],
             events: [event13],
             calendar: calendar
-        )
+        ).blocks
 
         #expect(blocks.map(\.title) == ["Task 10", "Event 13", "Task 16"])
         #expect(blocks.map(\.a) == [10.0, 13.0, 16.0])
@@ -205,24 +211,53 @@ struct EmbeddedTimelineBlocksTests {
         #expect(blocks.dropFirst().first?.id == "event:ev-13")
     }
 
-    @Test("All-day event at 00:00 collapses outside 9-20 and is dropped")
-    func allDayEventDropped() throws {
-        let calendar = utcCalendar
-        // Wall-clock 00:00 → fractionalHour 0.0, below the 9-20 window.
+    @Test("All-day event is routed to the all-day strip, not the hour axis")
+    func allDayEventRoutedToStrip() throws {
+        let calendar = TimelineFixture.utcCalendar
         let allDay = CalendarEvent(
             id: "all-day",
             title: "All day",
-            start: date(hour: 0, minute: 0, calendar: calendar),
-            end: date(hour: 0, minute: 0, calendar: calendar)
+            start: TimelineFixture.date(hour: 0, minute: 0, calendar: calendar),
+            end: TimelineFixture.date(hour: 23, minute: 59, calendar: calendar),
+            isAllDay: true
         )
 
-        let blocks = TodayDashboard.embeddedTimelineBlocks(
+        let result = TodayDashboard.embeddedTimelineBlocks(
             tasks: [],
             events: [allDay],
             calendar: calendar
         )
 
-        #expect(blocks.isEmpty)
+        // Not a timed block …
+        #expect(result.blocks.isEmpty)
+        // … it lives in the all-day strip instead.
+        #expect(result.allDay.map(\.title) == ["All day"])
+        #expect(result.allDay.first?.id == "event:all-day")
+    }
+
+    @Test("A timed event starting at 00:00 still renders on the axis (not dropped)")
+    func midnightTimedEventRendered() throws {
+        let calendar = TimelineFixture.utcCalendar
+        // A real timed event at 00:00–01:00 (isAllDay == false) must appear at
+        // its true position — the old 9–20 window would have dropped it.
+        let midnight = CalendarEvent(
+            id: "midnight",
+            title: "Midnight call",
+            start: TimelineFixture.date(hour: 0, minute: 0, calendar: calendar),
+            end: TimelineFixture.date(hour: 1, minute: 0, calendar: calendar)
+        )
+
+        let result = TodayDashboard.embeddedTimelineBlocks(
+            tasks: [],
+            events: [midnight],
+            calendar: calendar
+        )
+
+        #expect(result.allDay.isEmpty)
+        let block = try #require(result.blocks.first)
+        #expect(block.a == 0.0)
+        #expect(block.b == 1.0)
+        #expect(block.title == "Midnight call")
     }
 
     // MARK: - Free-time gap math (embeddedFreeTimeLabel)
@@ -277,38 +312,46 @@ struct EmbeddedTimelineBlocksTests {
         #expect(label == nil)
     }
 
-    @Test("now past the window end yields no free-time label")
+    @Test("now at the end of the day yields no free-time label")
     func freeTimeNowPastWindow() {
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b", a: 19.0, b: 19.5, title: "Block", time: "19:00",
                 endTime: "19:30")
         ]
-        // gapStart = max(21.0, 9.0) = 21.0, not < windowEnd 20.0 → nil.
-        let label = TodayDashboard.embeddedFreeTimeLabel(nowFrac: 21.0, blocks: blocks)
+        // gapStart = max(24.0, 0.0) = 24.0, not < windowEnd 24.0 → nil.
+        let label = TodayDashboard.embeddedFreeTimeLabel(nowFrac: 24.0, blocks: blocks)
         #expect(label == nil)
     }
 
-    @Test("Free-time gap end is clamped to the window so a far block is bounded")
-    func freeTimeGapClampedToWindow() {
-        // Next block at 23.0 is outside the window; gapEnd clamps to 20.0.
-        // now = 19.0 → gap [19.0, 20.0] = 60 min = "free · 1h 0m".
+    @Test("Free-time gap spans up to a late evening block on the full-day axis")
+    func freeTimeGapToLateBlock() {
+        // On the full-day (0–24) axis a 23:00 block is in-window; gapEnd is the
+        // block start. now = 19.0 → gap [19.0, 23.0] = 4h → "free · 4h 0m".
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b", a: 23.0, b: 23.5, title: "Far", time: "23:00",
                 endTime: "23:30")
         ]
         let label = TodayDashboard.embeddedFreeTimeLabel(nowFrac: 19.0, blocks: blocks)
-        #expect(label?.text == "free · 1h 0m")
-        #expect(label?.midFrac == 19.5)
+        #expect(label?.text == "free · 4h 0m")
+        #expect(label?.midFrac == 21.0)
     }
 
-    // MARK: - Accessibility labels (embeddedTimelineAccessibilityLabels)
+}
+
+/// Accessibility-label coverage for `embeddedTimelineAccessibilityLabels`.
+/// Split into its own suite to keep each type body within the lint ceiling;
+/// shares `TimelineFixture`. `@MainActor` for the same actor-isolation reason
+/// as `EmbeddedTimelineBlocksTests`.
+@Suite("EmbeddedTimeline accessibility")
+@MainActor
+struct EmbeddedTimelineA11yTests {
 
     @Test("Empty blocks with now in window yields a single now element")
     func a11yLabelsNowOnlyNoBlocks() throws {
-        let calendar = utcCalendar
-        let now = date(hour: 11, minute: 30, calendar: calendar)
+        let calendar = TimelineFixture.utcCalendar
+        let now = TimelineFixture.date(hour: 11, minute: 30, calendar: calendar)
 
         let labels = TodayDashboard.embeddedTimelineAccessibilityLabels(
             blocks: [],
@@ -319,11 +362,12 @@ struct EmbeddedTimelineBlocksTests {
         #expect(labels == ["Now, 11:30"])
     }
 
-    @Test("Empty blocks with now outside window yields empty result")
-    func a11yLabelsNowOutsideWindowNoBlocks() throws {
-        let calendar = utcCalendar
-        // 07:00 is before the 9-20 window.
-        let now = date(hour: 7, minute: 0, calendar: calendar)
+    @Test("Early-morning now is in the full-day window and yields a now element")
+    func a11yLabelsEarlyMorningNow() throws {
+        let calendar = TimelineFixture.utcCalendar
+        // 07:00 was outside the old 9–20 window; on the full-day axis it is in
+        // window, so a now element is emitted.
+        let now = TimelineFixture.date(hour: 7, minute: 0, calendar: calendar)
 
         let labels = TodayDashboard.embeddedTimelineAccessibilityLabels(
             blocks: [],
@@ -331,14 +375,15 @@ struct EmbeddedTimelineBlocksTests {
             calendar: calendar
         )
 
-        #expect(labels.isEmpty)
+        #expect(labels == ["Now, 07:00"])
     }
 
     @Test("Block labels use title and real start–end times")
     func a11yBlockLabelFormat() throws {
-        let calendar = utcCalendar
-        // Block 10:00–11:00; now outside window so only block label appears.
-        let now = date(hour: 22, minute: 0, calendar: calendar)
+        let calendar = TimelineFixture.utcCalendar
+        // Block 10:00–11:00; now is at 00:00 (before the block) so the block
+        // label follows the now element — assert the block label format.
+        let now = TimelineFixture.date(hour: 0, minute: 0, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "t1", a: 10.0, b: 11.0, title: "Team standup",
@@ -351,14 +396,14 @@ struct EmbeddedTimelineBlocksTests {
             calendar: calendar
         )
 
-        #expect(labels == ["Team standup, 10:00–11:00"])
+        #expect(labels == ["Now, 00:00", "Team standup, 10:00–11:00"])
     }
 
     @Test("Now is interleaved chronologically between blocks")
     func a11yNowInterleaved() throws {
-        let calendar = utcCalendar
+        let calendar = TimelineFixture.utcCalendar
         // Two blocks around now (10:00–11:00, 13:00–14:00); now = 11:30.
-        let now = date(hour: 11, minute: 30, calendar: calendar)
+        let now = TimelineFixture.date(hour: 11, minute: 30, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b1", a: 10.0, b: 11.0, title: "Morning sync",
@@ -384,9 +429,9 @@ struct EmbeddedTimelineBlocksTests {
 
     @Test("Now before all blocks appears first")
     func a11yNowBeforeAllBlocks() throws {
-        let calendar = utcCalendar
+        let calendar = TimelineFixture.utcCalendar
         // now = 09:00, block starts at 10:00 → now first.
-        let now = date(hour: 9, minute: 0, calendar: calendar)
+        let now = TimelineFixture.date(hour: 9, minute: 0, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b1", a: 10.0, b: 11.0, title: "Call",
@@ -404,9 +449,9 @@ struct EmbeddedTimelineBlocksTests {
 
     @Test("Now after all blocks appears last")
     func a11yNowAfterAllBlocks() throws {
-        let calendar = utcCalendar
+        let calendar = TimelineFixture.utcCalendar
         // now = 18:00, block ends at 11:00 → now appended at end.
-        let now = date(hour: 18, minute: 0, calendar: calendar)
+        let now = TimelineFixture.date(hour: 18, minute: 0, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
                 id: "b1", a: 10.0, b: 11.0, title: "Retrospective",
@@ -422,10 +467,10 @@ struct EmbeddedTimelineBlocksTests {
         #expect(labels == ["Retrospective, 10:00–11:00", "Now, 18:00"])
     }
 
-    @Test("Now exactly at window boundary (20:00) is included")
-    func a11yNowAtWindowBoundary() throws {
-        let calendar = utcCalendar
-        let now = date(hour: 20, minute: 0, calendar: calendar)
+    @Test("Now at midnight (00:00) is the day's start boundary and is included")
+    func a11yNowAtDayStartBoundary() throws {
+        let calendar = TimelineFixture.utcCalendar
+        let now = TimelineFixture.date(hour: 0, minute: 0, calendar: calendar)
 
         let labels = TodayDashboard.embeddedTimelineAccessibilityLabels(
             blocks: [],
@@ -433,18 +478,18 @@ struct EmbeddedTimelineBlocksTests {
             calendar: calendar
         )
 
-        #expect(labels == ["Now, 20:00"])
+        #expect(labels == ["Now, 00:00"])
     }
 
-    @Test("endTime in block label reflects original (un-clamped) end time")
-    func a11yEndTimeIsUnclamped() throws {
-        let calendar = utcCalendar
-        // Block runs 19:00–21:00 but window clamps b to 20.0.
-        // endTime should be "21:00" (original), not "20:00" (clamped b).
-        let now = date(hour: 7, minute: 0, calendar: calendar)
+    @Test("endTime in block label reflects the original end time")
+    func a11yEndTimeFromOriginalEnd() throws {
+        let calendar = TimelineFixture.utcCalendar
+        // Block 19:00–21:00 renders at its true bounds on the full-day axis;
+        // now = 23:00 (after the block) so the now element is appended.
+        let now = TimelineFixture.date(hour: 23, minute: 0, calendar: calendar)
         let blocks = [
             TodayDashboard.EmbeddedTimelineBlock(
-                id: "b1", a: 19.0, b: 20.0, title: "Late event",
+                id: "b1", a: 19.0, b: 21.0, title: "Late event",
                 time: "19:00", endTime: "21:00")
         ]
 
@@ -454,18 +499,21 @@ struct EmbeddedTimelineBlocksTests {
             calendar: calendar
         )
 
-        #expect(labels == ["Late event, 19:00–21:00"])
+        #expect(labels == ["Late event, 19:00–21:00", "Now, 23:00"])
     }
 
-    // MARK: - Fixtures (ScheduleGroupingTests idiom)
+}
 
-    private var utcCalendar: Calendar {
+/// Shared fixtures (ScheduleGroupingTests idiom): a fixed UTC gregorian
+/// calendar + deterministic component-built dates, used by both suites.
+enum TimelineFixture {
+    static var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         return calendar
     }
 
-    private func date(
+    static func date(
         hour: Int,
         minute: Int,
         calendar: Calendar,

@@ -140,7 +140,12 @@ import Testing
     let vm = TranscriptViewModel(
         meetingID: meeting.id,
         repository: repo,
-        attendeeSeedProvider: { _ in ["Bob Calendar", "Carol Calendar"] }
+        attendeeSeedProvider: { _ in
+            [
+                MeetingAttendeeCandidate(name: "Bob Calendar"),
+                MeetingAttendeeCandidate(name: "Carol Calendar"),
+            ]
+        }
     )
     vm.load()
     try vm.rename(speaker: "Speaker_1", to: "Anna")
@@ -148,10 +153,84 @@ import Testing
     // Loading attendee suggestions is a pure suggestion surface; it must never
     // mutate the persisted manual mapping (I3).
     await vm.loadAttendeeSuggestions()
-    #expect(vm.attendeeSuggestions == ["Bob Calendar", "Carol Calendar"])
+    #expect(vm.attendeeSuggestions.map(\.name) == ["Bob Calendar", "Carol Calendar"])
     let reloaded = try #require(try repo.find(id: meeting.id))
     let participants = try MeetingParticipant.decode(reloaded.participantsJSON ?? Data())
     #expect(participants == [.init(speakerID: "Speaker_1", displayName: "Anna")])
+}
+
+@MainActor
+@Test func renameToPersonStoresPersonIDAndDisplayName() throws {
+    let container = try NexusModelContainer.makeInMemory(
+        extraModels: [Meeting.self, Person.self],
+        localOnlyExtraModels: [MeetingAudioStorage.self]
+    )
+    let context = ModelContext(container)
+    let repo = MeetingRepository(context: context)
+    let people = PersonRepository(context: context)
+    let alice = try people.create(displayName: "Alice Anderson", email: "alice@example.com")
+    let segments: [MeetingSpeakerSegment] = [
+        .init(startMs: 0, endMs: 1_000, speaker: "Speaker_1", text: "Hello")
+    ]
+    let meeting = MeetingsTestSupport.meeting()
+    meeting.segmentsJSON = try MeetingSpeakerSegment.encode(segments)
+    try repo.insert(meeting)
+
+    let vm = TranscriptViewModel(meetingID: meeting.id, repository: repo, personRepository: people)
+    vm.load()
+    try vm.rename(speaker: "Speaker_1", to: alice)
+
+    let reloaded = try #require(try repo.find(id: meeting.id))
+    let participants = try MeetingParticipant.decode(reloaded.participantsJSON ?? Data())
+    #expect(participants == [.init(speakerID: "Speaker_1", displayName: "Alice Anderson", personID: alice.id)])
+    #expect(vm.displayName(for: "Speaker_1") == "Alice Anderson")
+}
+
+@MainActor
+@Test func freeTextRenameClearsPriorPersonID() throws {
+    let container = try NexusModelContainer.makeInMemory(
+        extraModels: [Meeting.self, Person.self],
+        localOnlyExtraModels: [MeetingAudioStorage.self]
+    )
+    let context = ModelContext(container)
+    let repo = MeetingRepository(context: context)
+    let people = PersonRepository(context: context)
+    let alice = try people.create(displayName: "Alice Anderson")
+    let meeting = MeetingsTestSupport.meeting()
+    try repo.insert(meeting)
+
+    let vm = TranscriptViewModel(meetingID: meeting.id, repository: repo, personRepository: people)
+    vm.load()
+    try vm.rename(speaker: "Speaker_1", to: alice)
+    // Re-labeling to plain text means "not that tracked contact" — personID clears.
+    try vm.rename(speaker: "Speaker_1", to: "Someone Else")
+
+    let reloaded = try #require(try repo.find(id: meeting.id))
+    let participants = try MeetingParticipant.decode(reloaded.participantsJSON ?? Data())
+    #expect(participants == [.init(speakerID: "Speaker_1", displayName: "Someone Else", personID: nil)])
+}
+
+@MainActor
+@Test func loadFetchesActivePeopleWhenRepositoryWired() throws {
+    let container = try NexusModelContainer.makeInMemory(
+        extraModels: [Meeting.self, Person.self],
+        localOnlyExtraModels: [MeetingAudioStorage.self]
+    )
+    let context = ModelContext(container)
+    let repo = MeetingRepository(context: context)
+    let people = PersonRepository(context: context)
+    _ = try people.create(displayName: "Alice Anderson", email: "alice@example.com")
+    let meeting = MeetingsTestSupport.meeting()
+    try repo.insert(meeting)
+
+    let vm = TranscriptViewModel(meetingID: meeting.id, repository: repo, personRepository: people)
+    vm.load()
+    #expect(vm.people.map(\.displayName) == ["Alice Anderson"])
+
+    // existingPerson resolves an invite candidate by email.
+    let candidate = MeetingAttendeeCandidate(name: "Alice", email: "ALICE@example.com")
+    #expect(vm.existingPerson(forCandidate: candidate)?.displayName == "Alice Anderson")
+    #expect(vm.existingPerson(forCandidate: .init(name: "Nobody", email: "x@y.z")) == nil)
 }
 
 @MainActor

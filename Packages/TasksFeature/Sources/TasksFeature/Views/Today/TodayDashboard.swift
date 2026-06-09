@@ -11,6 +11,7 @@ public enum TodayNavSelection: Hashable, Sendable {
     case inbox
     case meetings
     case tasks
+    case projects
     case notes
     case calendar
     case people
@@ -37,9 +38,10 @@ enum TodayDashboardContentRoute: Equatable {
             return .meetings
         case .tasks:
             return .tasks
-        case .agent, .notes, .calendar, .people:
-            // Agent/Notes/Calendar/People are full shell destinations mounted
-            // directly in the app shell; this router is never reached on those paths.
+        case .agent, .notes, .calendar, .people, .projects:
+            // Agent/Notes/Calendar/People/Projects are full shell destinations
+            // mounted directly in the app shell; this router is never reached on
+            // those paths.
             return .today
         case .stats:
             return .productivity
@@ -461,6 +463,7 @@ public struct TodayDashboard: View {
         case .notes: return "Notes"
         case .calendar: return "Calendar"
         case .people: return "People"
+        case .projects: return "Projects"
         case .stats:
             return "Stats"
         case .settings:

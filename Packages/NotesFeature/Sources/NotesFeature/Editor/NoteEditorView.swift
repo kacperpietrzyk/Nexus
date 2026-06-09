@@ -2,14 +2,16 @@ import NexusCore
 import NexusUI
 import SwiftUI
 
-/// The native block editor for a single `Note` (spec §5). Title field + an ordered
-/// stack of per-block render/edit views, an "insert block" menu, a wikilink/embed
-/// picker, and a backlinks panel. Mac + iOS; the Watch projection is separate.
+/// The native block editor for a single `Note` (spec §5). Title field + a
+/// properties/metadata panel (tags, type, timestamps) + an ordered stack of
+/// per-block render/edit views, an "insert block" menu, a wikilink/embed picker,
+/// and a backlinks panel. Mac + iOS; the Watch projection is separate.
 struct NoteEditorView: View {
     @Environment(\.noteRepository) private var noteRepository
     @State private var model: NoteEditorModel
     @State private var pickerContext: PickerContext?
     @State private var backlinks: [BacklinkEntry] = []
+    @State private var newTag: String = ""
 
     private let note: Note
     /// Navigate to another note's editor (spec §10 "klik → otwórz obiekt").
@@ -30,6 +32,7 @@ struct NoteEditorView: View {
         ScrollViewReader { _ in
             List {
                 titleField
+                propertiesSection
                 blockRows
                 insertRow
                 if !backlinks.isEmpty {
@@ -64,6 +67,100 @@ struct NoteEditorView: View {
             .disabled(!model.canEdit)
             .onSubmit { model.commitTitle() }
             .listRowSeparator(.hidden)
+    }
+
+    /// Obsidian-style properties/metadata panel (A3): editable tag chips + read-only
+    /// type and timestamps, all from fields the `Note` model already carries (no
+    /// schema change). Status / extra typed properties lean on `tags` per the task's
+    /// guidance; a structured property bag is deferred (it would touch the schema).
+    private var propertiesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            propertyRow(label: "Tags") {
+                tagEditor
+            }
+            propertyRow(label: "Type") {
+                Text(roleLabel)
+                    .nexusType(.bodySmall)
+                    .foregroundStyle(NexusColor.Text.secondary)
+            }
+            propertyRow(label: "Created") {
+                Text(model.createdAt, format: .dateTime.day().month().year())
+                    .nexusType(.bodySmall)
+                    .foregroundStyle(NexusColor.Text.muted)
+            }
+            propertyRow(label: "Updated") {
+                Text(model.updatedAt, format: .dateTime.day().month().year().hour().minute())
+                    .nexusType(.bodySmall)
+                    .foregroundStyle(NexusColor.Text.muted)
+            }
+        }
+        .padding(.vertical, 8)
+        .listRowSeparator(.hidden)
+    }
+
+    private func propertyRow<Content: View>(
+        label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .nexusType(.eyebrow)
+                .foregroundStyle(NexusColor.Text.tertiary)
+                .frame(width: 64, alignment: .leading)
+            content()
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var tagEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !model.tags.isEmpty {
+                FlowChips(tags: model.tags) { tag in
+                    if model.canEdit { model.removeTag(tag) }
+                }
+            }
+            if model.canEdit {
+                HStack(spacing: 6) {
+                    Image(systemName: "number")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(NexusColor.Text.tertiary)
+                    tagInputField
+                }
+            }
+        }
+    }
+
+    /// The "add tag" text field. iOS-only autocorrect/capitalization suppression is
+    /// applied here (outside the `HStack` chain) so no `#if` sits mid-modifier-chain.
+    private var tagInputField: some View {
+        let field = TextField("Add tag", text: $newTag)
+            .textFieldStyle(.plain)
+            .nexusType(.bodySmall)
+            .foregroundStyle(NexusColor.Text.primary)
+            .onSubmit { commitTag() }
+        #if os(iOS)
+        return
+            field
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+        #else
+        return field
+        #endif
+    }
+
+    private var roleLabel: String {
+        switch model.role {
+        case .free: return "Note"
+        case .projectPage: return "Project Page"
+        case .dailyNote: return "Daily Note"
+        }
+    }
+
+    private func commitTag() {
+        let value = newTag
+        newTag = ""
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        model.addTag(value)
     }
 
     private var blockRows: some View {
@@ -166,6 +263,73 @@ struct NoteEditorView: View {
                 return nil
             }
             return BacklinkEntry(id: link.id, title: snapshot.title)
+        }
+    }
+}
+
+/// A wrapping row of removable tag chips. Uses a small flow `Layout` so chips wrap
+/// onto multiple lines instead of clipping or forcing a horizontal scroll inside
+/// the editor's property panel.
+private struct FlowChips: View {
+    let tags: [String]
+    let onRemove: (String) -> Void
+
+    var body: some View {
+        FlowLayout(spacing: 6) {
+            ForEach(tags, id: \.self) { tag in
+                NexusChip(tag, systemImage: "number", onRemove: { onRemove(tag) })
+            }
+        }
+    }
+}
+
+/// Minimal flow layout: lays subviews left-to-right, wrapping to the next line
+/// when the proposed width is exceeded. macOS/iOS 16+ `Layout`.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout Void
+    ) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var cursorX: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if cursorX + size.width > maxWidth, cursorX > 0 {
+                totalHeight += rowHeight + spacing
+                cursorX = 0
+                rowHeight = 0
+            }
+            cursorX += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        totalHeight += rowHeight
+        return CGSize(width: maxWidth == .infinity ? cursorX : maxWidth, height: totalHeight)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout Void
+    ) {
+        var cursorX = bounds.minX
+        var cursorY = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if cursorX + size.width > bounds.maxX, cursorX > bounds.minX {
+                cursorX = bounds.minX
+                cursorY += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: cursorX, y: cursorY), proposal: ProposedViewSize(size))
+            cursorX += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }

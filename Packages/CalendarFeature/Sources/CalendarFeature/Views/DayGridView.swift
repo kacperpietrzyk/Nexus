@@ -84,22 +84,61 @@ struct DayGridView: View {
             ForEach(startHour..<endHour, id: \.self) { hour in
                 HStack(alignment: .top, spacing: 8) {
                     Text(hourLabel(hour))
-                        .font(NexusType.caption)
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .font(NexusType.metaMono)
+                        .foregroundStyle(isPastHour(hour) ? NexusColor.Text.disabled : NexusColor.Text.muted)
                         .frame(width: gutter - 12, alignment: .trailing)
                     Rectangle()
-                        .fill(NexusColor.Line.hairline)
+                        .fill(hourLineColor(hour))
                         .frame(height: 1)
                 }
                 .frame(height: hourHeight, alignment: .top)
+                .background(alignment: .topLeading) {
+                    if isWorkingHour(hour) {
+                        NexusColor.Glass.surface1
+                            .frame(height: hourHeight)
+                            .padding(.leading, gutter - 4)
+                            .allowsHitTesting(false)
+                    }
+                }
             }
         }
     }
 
+    /// Hour lines aren't uniform hairlines: on-the-hour lines that haven't passed
+    /// read at the regular Line weight, while hours already behind the now-line
+    /// dim back to a fainter hairline so the eye tracks forward through the day.
+    private func hourLineColor(_ hour: Int) -> Color {
+        isPastHour(hour) ? NexusColor.Line.hairline.opacity(0.5) : NexusColor.Line.regular
+    }
+
+    /// True once the now-line has moved past this hour boundary (today only).
+    private func isPastHour(_ hour: Int) -> Bool {
+        guard calendar.isDate(now, inSameDayAs: day) else { return false }
+        return calendar.component(.hour, from: now) > hour
+    }
+
+    /// Working hours (09:00–17:00) get a faint surface band so the core of the
+    /// day reads slightly raised against the early/late margins.
+    private func isWorkingHour(_ hour: Int) -> Bool {
+        (9..<17).contains(hour)
+    }
+
+    /// Height of the now time-pill — used to vertically center it on the 1px rule.
+    private let nowPillHeight: CGFloat = 16
+
     @ViewBuilder
     private var nowLine: some View {
         if calendar.isDate(now, inSameDayAs: day), let offset = nowOffset {
-            HStack(spacing: 0) {
+            // Mirror the hour ruler's gutter geometry so the dot/line align with
+            // the hour grid: label width (gutter - 12) + the same 8pt spacing.
+            HStack(spacing: 8) {
+                Text(Self.nowFormatter.string(from: now))
+                    .font(NexusType.metaMono)
+                    .foregroundStyle(NexusColor.Accent.limeInk)
+                    .padding(.horizontal, 5)
+                    .frame(height: nowPillHeight)
+                    .background(NexusColor.Accent.lime, in: Capsule())
+                    .frame(width: gutter - 12, alignment: .trailing)
                 Circle()
                     .fill(NexusColor.Accent.lime)
                     .frame(width: 6, height: 6)
@@ -107,8 +146,9 @@ struct DayGridView: View {
                     .fill(NexusColor.Accent.lime)
                     .frame(height: 1)
             }
-            .padding(.leading, gutter - 3)
-            .offset(y: offset)
+            // Lift by half the pill height so the rule (HStack center) lands on
+            // the true now position rather than the pill's top edge.
+            .offset(y: offset - nowPillHeight / 2)
         }
     }
 
@@ -175,4 +215,10 @@ struct DayGridView: View {
     private func hourLabel(_ hour: Int) -> String {
         String(format: "%02d:00", hour)
     }
+
+    static let nowFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 }

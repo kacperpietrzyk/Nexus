@@ -67,13 +67,19 @@ final class FakeCalendarProvider: CalendarEventProviding, CalendarEventWriting, 
 
     @discardableResult
     func createEvent(_ draft: EventDraft) async throws -> String {
-        locked {
+        // #7: mirror the provider's skip contract — a nil calendar writes nothing
+        // (the draft is still recorded so a test can assert the skip).
+        guard let calendarID = draft.calendarID else {
+            locked { createdDrafts.append(draft) }
+            return Self.skippedEventID
+        }
+        return locked {
             nextSeq += 1
             let id = "evt-\(nextSeq)"
             createdDrafts.append(draft)
             store[id] = CalendarEventSnapshot(
                 eventID: id,
-                calendarID: draft.calendarID,
+                calendarID: calendarID,
                 title: draft.title,
                 start: draft.start,
                 end: draft.end
@@ -86,9 +92,13 @@ final class FakeCalendarProvider: CalendarEventProviding, CalendarEventWriting, 
         locked {
             updatedDrafts.append(draft)
             updatedIDs.append(id)
+            // #7: a nil calendarID on update leaves the event's current calendar in
+            // place (mirrors the real provider's `apply`), so fall back to whatever
+            // calendar the event already lived on.
+            let resolvedCalendarID = draft.calendarID ?? store[id]?.calendarID ?? ""
             store[id] = CalendarEventSnapshot(
                 eventID: id,
-                calendarID: draft.calendarID,
+                calendarID: resolvedCalendarID,
                 title: draft.title,
                 start: draft.start,
                 end: draft.end

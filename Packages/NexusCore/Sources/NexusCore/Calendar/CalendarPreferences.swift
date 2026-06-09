@@ -47,6 +47,24 @@ public struct CalendarPreferences: Codable, Equatable, Sendable {
 
     /// Spec §4.4 defaults (09:00 / 18:00, 15, 120, 0, [], nil, true).
     public static let `default` = CalendarPreferences()
+
+    /// Filter `events` to the calendars the user has chosen to read (#6). An empty
+    /// `readCalendarIDs` means "all granted calendars" (the store cannot enumerate
+    /// granted calendars; the consumer resolves the implicit set), so nothing is
+    /// hidden in that case. Events whose `calendarID` is unknown (`nil`) are kept
+    /// even when a filter is active — hiding what cannot be classified would silently
+    /// drop legitimate events.
+    ///
+    /// Shared by both the calendar views and the Today rail's feed so the visibility
+    /// toggle is honored uniformly.
+    public func visibleEvents(_ events: [CalendarEvent]) -> [CalendarEvent] {
+        guard !readCalendarIDs.isEmpty else { return events }
+        let allowed = Set(readCalendarIDs)
+        return events.filter { event in
+            guard let calendarID = event.calendarID else { return true }
+            return allowed.contains(calendarID)
+        }
+    }
 }
 
 /// `UserDefaults`-backed store for `CalendarPreferences`. Mirrors
