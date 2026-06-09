@@ -1,3 +1,4 @@
+import FluidAudio
 import Foundation
 import NexusAI
 import NexusCore
@@ -13,6 +14,7 @@ final class HelperComposition {
     let meetingsComposition: MeetingsComposition
     let statusBar: StatusBarController
     let xpcService: MeetingsHelperXPCService
+    let readinessCoordinator: HelperReadinessCoordinator
 
     private let xpcDelegate: MeetingsHelperXPCDelegate
     private let appPatternRegistryStore: UserDefaultsAppPatternRegistryStore
@@ -60,8 +62,33 @@ final class HelperComposition {
             retentionPolicyProvider: { retentionStore.load() }
         )
         xpcService = MeetingsHelperXPCService(delegate: xpcDelegate)
+        readinessCoordinator = Self.makeReadinessCoordinator()
         try recoverInterruptedRecordings(rootFolder: rootFolder)
         xpcService.resume()
+    }
+
+    private static func makeReadinessCoordinator() -> HelperReadinessCoordinator {
+        let modelProbe = DirectoryModelProbe(resolvers: [
+            DirectoryModelProbe.Resolver(id: .parakeet) {
+                AsrModels.defaultCacheDirectory(for: .v3)
+            },
+            DirectoryModelProbe.Resolver(id: .sortformer) {
+                MLModelConfigurationUtils.defaultModelsDirectory(for: .sortformer)
+            },
+            DirectoryModelProbe.Resolver(id: .whisperKit) {
+                WhisperKitMeetingProvider.defaultLocalModelFolder()
+            },
+        ])
+        let computer = MeetingsReadinessComputer(
+            permissions: LivePermissionProbe(),
+            models: modelProbe,
+            environment: LiveEnvironmentProbe()
+        )
+        return HelperReadinessCoordinator(
+            computer: computer,
+            store: UserDefaultsMeetingsReadinessStore.shared,
+            prefetcher: LiveMeetingsModelPrefetcher()
+        )
     }
 
     func startRecording(

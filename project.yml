@@ -347,6 +347,12 @@ targets:
       - package: NexusAI
       - package: NexusSync
       - package: TasksFeature
+      # FluidAudio is wired directly into the helper composition root so the
+      # readiness prefetcher can drive the same model download/load entry points
+      # the processing pipeline uses (`AsrModels`, `SortformerModels`,
+      # `MLModelConfigurationUtils`). It is already linked transitively via
+      # NexusMeetings; this only adds module visibility.
+      - package: FluidAudio
 
   # NexusMCPSidecar is a macOS command-line tool target embedded into NexusMac
   # at build time via the host app's postBuildScript. Its 7 unit tests live in
