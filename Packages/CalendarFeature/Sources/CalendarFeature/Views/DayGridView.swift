@@ -53,7 +53,9 @@ struct DayGridView: View {
         if !allDay.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(allDay) { item in
-                    Button { onTapItem(item) } label: {
+                    Button {
+                        onTapItem(item)
+                    } label: {
                         HStack(spacing: 8) {
                             Text("all-day")
                                 .font(NexusType.caption)

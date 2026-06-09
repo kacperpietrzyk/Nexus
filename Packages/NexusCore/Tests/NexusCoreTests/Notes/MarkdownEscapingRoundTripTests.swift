@@ -102,20 +102,23 @@ struct MarkdownEscapingRoundTripTests {
 
     @Test("an empty bullet round-trips as an empty bullet")
     func emptyBullet() {
-        #expect(kindFixpoint([Block(kind: .bulleted(runs: [InlineRun(text: "")]))])
-            == [.bulleted(runs: [InlineRun(text: "")])])
+        #expect(
+            kindFixpoint([Block(kind: .bulleted(runs: [InlineRun(text: "")]))])
+                == [.bulleted(runs: [InlineRun(text: "")])])
     }
 
     @Test("an empty numbered item round-trips as an empty numbered item")
     func emptyNumbered() {
-        #expect(kindFixpoint([Block(kind: .numbered(runs: [InlineRun(text: "")]))])
-            == [.numbered(runs: [InlineRun(text: "")])])
+        #expect(
+            kindFixpoint([Block(kind: .numbered(runs: [InlineRun(text: "")]))])
+                == [.numbered(runs: [InlineRun(text: "")])])
     }
 
     @Test("an empty quote round-trips as an empty quote")
     func emptyQuote() {
-        #expect(kindFixpoint([Block(kind: .quote(runs: [InlineRun(text: "")]))])
-            == [.quote(runs: [InlineRun(text: "")])])
+        #expect(
+            kindFixpoint([Block(kind: .quote(runs: [InlineRun(text: "")]))])
+                == [.quote(runs: [InlineRun(text: "")])])
     }
 
     // MARK: - Inbound: raw markdown with a backslash before a NON-escape char
