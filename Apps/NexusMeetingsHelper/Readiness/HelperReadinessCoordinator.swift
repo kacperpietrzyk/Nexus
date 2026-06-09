@@ -2,10 +2,15 @@ import AVFoundation
 import AppKit
 import Foundation
 import NexusMeetings
+import os
 
 /// Owns readiness snapshotting and app→helper command handling inside the helper process.
 @MainActor
 final class HelperReadinessCoordinator {
+    private static let logger = Logger(
+        subsystem: "com.kacperpietrzyk.nexus.meetings",
+        category: "MeetingsReadiness"
+    )
     private let computer: MeetingsReadinessComputer
     private let store: any MeetingsReadinessWriting
     private let prefetcher: any MeetingsModelPrefetching
@@ -55,8 +60,13 @@ final class HelperReadinessCoordinator {
 
     private func downloadModels() {
         Task { @MainActor in
-            try? await prefetcher.prefetchAll { [weak self] _, _ in
-                Task { @MainActor in self?.writeSnapshot() }
+            do {
+                try await prefetcher.prefetchAll { _, _ in }
+            } catch {
+                // Download failure: the directory probe will keep reporting the
+                // affected model(s) as absent, so the snapshot below stays honest;
+                // we only lose the in-flight progress, which we log here.
+                Self.logger.error("Meetings model prefetch failed: \(error.localizedDescription, privacy: .public)")
             }
             writeSnapshot()
         }
