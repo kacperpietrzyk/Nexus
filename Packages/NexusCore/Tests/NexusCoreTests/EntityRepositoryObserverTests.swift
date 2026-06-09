@@ -19,16 +19,14 @@ private actor CapturingObserver: LinkableObserver {
     func didSoftDelete(kind: ItemKind, id: UUID) async { deletes.append((kind, id)) }
 }
 
-/// Fan-out runs in a detached `Task { await ... }`, so a synchronous check right
-/// after the mutation races. Poll deterministically (mirrors
-/// `LinkableRepositoryObserverTests.waitUntil`).
-private func waitUntil(
-    timeout: Duration = .seconds(1),
-    _ condition: @Sendable () async -> Bool
-) async {
-    let deadline = ContinuousClock.now.advanced(by: timeout)
-    while ContinuousClock.now < deadline {
-        if await condition() { return }
+/// Fan-out runs in a fire-and-forget `Task { await ... }`, so a synchronous check
+/// right after the mutation races. Poll with NO wall-clock ceiling (mirrors
+/// `LinkableRepositoryObserverTests.waitUntil`): on a low-core CI runner the fan-out
+/// task can be starved past any fixed timeout, yet it is always eventually delivered.
+/// A `.timeLimit` trait on each test guards against a genuine never-fires regression.
+private func waitUntil(_ condition: @Sendable () async -> Bool) async {
+    while !(await condition()) {
+        if Task.isCancelled { return }
         try? await Task.sleep(for: .milliseconds(2))
     }
 }
@@ -36,7 +34,7 @@ private func waitUntil(
 // MARK: - NoteRepository
 
 @MainActor
-@Test func noteRepository_create_fansOutUpsert() async throws {
+@Test(.timeLimit(.minutes(1))) func noteRepository_create_fansOutUpsert() async throws {
     let context = try makeObserverContext()
     let observer = CapturingObserver()
     let repo = NoteRepository(context: context, observers: [observer])
@@ -53,7 +51,7 @@ private func waitUntil(
 }
 
 @MainActor
-@Test func noteRepository_delete_fansOutSoftDelete() async throws {
+@Test(.timeLimit(.minutes(1))) func noteRepository_delete_fansOutSoftDelete() async throws {
     let context = try makeObserverContext()
     let observer = CapturingObserver()
     let repo = NoteRepository(context: context, observers: [observer])
@@ -69,7 +67,7 @@ private func waitUntil(
 // MARK: - LabelRepository
 
 @MainActor
-@Test func labelRepository_create_fansOutUpsert() async throws {
+@Test(.timeLimit(.minutes(1))) func labelRepository_create_fansOutUpsert() async throws {
     let context = try makeObserverContext()
     let observer = CapturingObserver()
     let repo = LabelRepository(context: context, observers: [observer])
@@ -83,7 +81,7 @@ private func waitUntil(
 }
 
 @MainActor
-@Test func labelRepository_softDelete_fansOutSoftDelete() async throws {
+@Test(.timeLimit(.minutes(1))) func labelRepository_softDelete_fansOutSoftDelete() async throws {
     let context = try makeObserverContext()
     let observer = CapturingObserver()
     let repo = LabelRepository(context: context, observers: [observer])
@@ -99,7 +97,7 @@ private func waitUntil(
 // MARK: - PersonRepository
 
 @MainActor
-@Test func personRepository_create_fansOutUpsert() async throws {
+@Test(.timeLimit(.minutes(1))) func personRepository_create_fansOutUpsert() async throws {
     let context = try makeObserverContext()
     let observer = CapturingObserver()
     let repo = PersonRepository(context: context, observers: [observer])
@@ -113,7 +111,7 @@ private func waitUntil(
 }
 
 @MainActor
-@Test func personRepository_softDelete_fansOutSoftDelete() async throws {
+@Test(.timeLimit(.minutes(1))) func personRepository_softDelete_fansOutSoftDelete() async throws {
     let context = try makeObserverContext()
     let observer = CapturingObserver()
     let repo = PersonRepository(context: context, observers: [observer])
@@ -127,7 +125,7 @@ private func waitUntil(
 }
 
 @MainActor
-@Test func personRepository_mergePeople_reUpsertsSurvivor_softDeletesDuplicate() async throws {
+@Test(.timeLimit(.minutes(1))) func personRepository_mergePeople_reUpsertsSurvivor_softDeletesDuplicate() async throws {
     let context = try makeObserverContext()
     let observer = CapturingObserver()
     let repo = PersonRepository(context: context, observers: [observer])

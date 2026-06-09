@@ -19,23 +19,24 @@ private actor RecordingObserver: LinkableObserver {
     func didSoftDelete(kind: ItemKind, id: UUID) async { deletes.append((kind, id)) }
 }
 
-/// Polling helper. The repository fans out via `Task { ... }` (fire-and-forget,
-/// inheriting `@MainActor` isolation). Swift's task scheduler does not guarantee
-/// FIFO ordering between a yielded task and a newly-spawned task on the same actor,
-/// so a single `await Task.yield()` is racy. Polling avoids the race deterministically.
-private func waitUntil(
-    timeout: Duration = .seconds(1),
-    _ condition: @Sendable () async -> Bool
-) async {
-    let deadline = ContinuousClock.now.advanced(by: timeout)
-    while ContinuousClock.now < deadline {
-        if await condition() { return }
+/// Polls until `condition` holds. The repository fans out via a fire-and-forget
+/// `Task { ... }` (inheriting `@MainActor` isolation), so a synchronous check right
+/// after the mutation races. We poll with NO wall-clock ceiling: on a low-core CI
+/// runner many parallel `@MainActor` tests each run a long, non-suspending prefix
+/// (`ModelContainer` init + `save()`) that can starve the fan-out task for far longer
+/// than any fixed timeout we could justify — yet it is always *eventually* delivered
+/// (the unstructured `Task` is never cancelled and the observer actor only appends).
+/// A `.timeLimit` trait on each test is the coarse safety net that turns a genuine
+/// never-fires regression into a loud failure instead of an unbounded hang.
+private func waitUntil(_ condition: @Sendable () async -> Bool) async {
+    while !(await condition()) {
+        if Task.isCancelled { return }
         try? await Task.sleep(for: .milliseconds(2))
     }
 }
 
 @MainActor
-@Test func repository_insert_fanOutToObserver_async() async throws {
+@Test(.timeLimit(.minutes(1))) func repository_insert_fanOutToObserver_async() async throws {
     let context = try makeContext()
     let observer = RecordingObserver()
     let repo = LinkableRepository<DebugItem>(context: context, observers: [observer])
@@ -49,7 +50,7 @@ private func waitUntil(
 }
 
 @MainActor
-@Test func repository_softDelete_fanOutToObserver() async throws {
+@Test(.timeLimit(.minutes(1))) func repository_softDelete_fanOutToObserver() async throws {
     let context = try makeContext()
     let observer = RecordingObserver()
     let repo = LinkableRepository<DebugItem>(context: context, observers: [observer])
@@ -64,7 +65,7 @@ private func waitUntil(
 }
 
 @MainActor
-@Test func repository_restore_emitsUpsert() async throws {
+@Test(.timeLimit(.minutes(1))) func repository_restore_emitsUpsert() async throws {
     let context = try makeContext()
     let observer = RecordingObserver()
     let repo = LinkableRepository<DebugItem>(context: context, observers: [observer])
@@ -87,7 +88,7 @@ private func waitUntil(
 }
 
 @MainActor
-@Test func repository_multipleObservers_allReceiveEvents() async throws {
+@Test(.timeLimit(.minutes(1))) func repository_multipleObservers_allReceiveEvents() async throws {
     let context = try makeContext()
     let a = RecordingObserver()
     let b = RecordingObserver()
