@@ -29,7 +29,13 @@ public struct TaskBucket: Sendable {
     @MainActor
     public func apply(in context: ModelContext) throws -> [TaskItem] {
         let descriptor = FetchDescriptor<TaskItem>(predicate: predicate, sortBy: sort)
-        let filtered = try context.fetch(descriptor).filter(postFilter)
+        // `.dedupedByID()` is the universal guard for query-based reads: on a
+        // synced store a single logical task can be materialized as two same-`id`
+        // rows (one under a stale entity version from an older migration), so a
+        // raw fetch double-counts. Collapsing here keeps every facet that flows
+        // through a `TaskBucket` — Today's embedded list, the brief counts, the
+        // capture sheet — honest without a destructive write. No-op when clean.
+        let filtered = try context.fetch(descriptor).dedupedByID().filter(postFilter)
         guard let comparator else { return filtered }
         return filtered.sorted(by: comparator)
     }

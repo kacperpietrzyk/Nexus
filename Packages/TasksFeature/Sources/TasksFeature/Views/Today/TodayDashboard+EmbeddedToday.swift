@@ -572,6 +572,8 @@ extension TodayDashboard {
         let linkRepository = LinkRepository(context: modelContext)
         let archivedProjectIDs =
             (try? ProjectRepository(context: modelContext).archivedProjectIDs()) ?? []
+        // `TaskBucket.apply(in:)` already collapses the historical same-`id`
+        // synced-store duplicates, so these facets arrive deduped.
         let today = try query.today(now: now, excludingProjectIDs: archivedProjectIDs)
             .apply(in: modelContext)
         let awaiting = try query.awaiting(
