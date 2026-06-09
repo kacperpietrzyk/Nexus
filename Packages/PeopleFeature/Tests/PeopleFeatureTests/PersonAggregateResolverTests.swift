@@ -85,4 +85,31 @@ struct PersonAggregateResolverTests {
         #expect(try PersonAggregateResolver.resolveTasks(ids: [], in: context).isEmpty)
         #expect(try PersonAggregateResolver.resolveNotes(ids: [], in: context).isEmpty)
     }
+
+    @MainActor
+    @Test("Batched meeting counts tally attendee edges per person in one pass")
+    func batchedMeetingCounts() throws {
+        let context = try makeContext()
+        let repo = PersonRepository(context: context)
+
+        let alice = try repo.create(displayName: "Alice")
+        let bob = try repo.create(displayName: "Bob")
+        let carol = try repo.create(displayName: "Carol")  // no meetings
+
+        let m1 = UUID()
+        let m2 = UUID()
+        try repo.linkAttendee(meetingID: m1, personID: alice.id)
+        try repo.linkAttendee(meetingID: m2, personID: alice.id)
+        try repo.linkAttendee(meetingID: m1, personID: bob.id)
+        // A mention edge must NOT be counted as a meeting.
+        let task = TaskItem(title: "t")
+        context.insert(task)
+        try context.save()
+        try repo.linkMention(source: .task, sourceID: task.id, personID: bob.id)
+
+        let counts = try PersonAggregateResolver.meetingCounts(in: context)
+        #expect(counts[alice.id] == 2)
+        #expect(counts[bob.id] == 1)
+        #expect(counts[carol.id] == nil)
+    }
 }
