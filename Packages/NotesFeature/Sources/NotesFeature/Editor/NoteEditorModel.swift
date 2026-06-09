@@ -17,6 +17,10 @@ import SwiftUI
 public final class NoteEditorModel {
     public private(set) var blocks: [Block]
     public var title: String
+    /// The note's normalized tags (A2). Source of truth for the editor session;
+    /// each add/remove persists through `updateFields(tags:)` so the reconciler
+    /// and `plainText` cache stay consistent in one transaction.
+    public private(set) var tags: [String]
 
     private let note: Note
     private let repository: NoteRepository?
@@ -25,10 +29,36 @@ public final class NoteEditorModel {
         self.note = note
         self.repository = repository
         self.title = note.title
+        self.tags = NoteListGrouping.normalizedTags(note.tags)
         self.blocks = (try? NoteContentCoder.decode(note.contentData)) ?? []
     }
 
     public var canEdit: Bool { repository != nil }
+
+    // MARK: - Metadata (A3 properties panel)
+
+    public var role: NoteRole { note.role }
+    public var createdAt: Date { note.createdAt }
+    public var updatedAt: Date { note.updatedAt }
+
+    // MARK: - Tags (A2)
+
+    /// Add a typed tag (the field accepts an optional leading `#`), de-duplicated
+    /// and persisted. A blank or duplicate entry is a no-op beyond normalization.
+    public func addTag(_ raw: String) {
+        let updated = NoteListGrouping.addTag(raw, to: tags)
+        guard updated != tags else { return }
+        tags = updated
+        try? repository?.updateFields(note, tags: tags)
+    }
+
+    /// Remove a tag (case-insensitive) and persist.
+    public func removeTag(_ tag: String) {
+        let updated = NoteListGrouping.removeTag(tag, from: tags)
+        guard updated != tags else { return }
+        tags = updated
+        try? repository?.updateFields(note, tags: tags)
+    }
 
     // MARK: - Title
 
