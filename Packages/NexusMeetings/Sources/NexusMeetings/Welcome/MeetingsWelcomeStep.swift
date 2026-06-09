@@ -1,4 +1,5 @@
 #if os(macOS) && canImport(ServiceManagement)
+import Foundation
 import NexusUI
 @preconcurrency import ServiceManagement
 import SwiftUI
@@ -48,6 +49,13 @@ public final class MeetingsWelcomeStepViewModel: ObservableObject {
         }
 
         preferenceStore.save(enabled: true)
+        // Kick the (now-launching) helper to prompt for mic + open Accessibility
+        // Settings. The helper may still be starting up when this arrives — the
+        // Settings readiness panel's [Request] button re-posts if needed.
+        DistributedNotificationCenter.default().postNotificationName(
+            MeetingsReadinessNotification.requestPermissions,
+            object: nil, userInfo: nil, deliverImmediately: true
+        )
         onContinue(true)
     }
 

@@ -68,6 +68,16 @@ public final class MeetingsHelperSettingsViewModel: ObservableObject {
                 try registrar.unregister()
             }
             preferenceStore.save(enabled: enabled)
+            if enabled {
+                // Kick the (now-launching) helper to prompt for mic + open
+                // Accessibility Settings. The helper may still be starting up
+                // when this arrives — the readiness panel's [Request] button
+                // re-posts if needed.
+                DistributedNotificationCenter.default().postNotificationName(
+                    MeetingsReadinessNotification.requestPermissions,
+                    object: nil, userInfo: nil, deliverImmediately: true
+                )
+            }
             refresh()
         } catch {
             isEnabled = statusProvider() == .enabled

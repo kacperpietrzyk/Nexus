@@ -1,4 +1,5 @@
 #if os(macOS) && canImport(ServiceManagement)
+import Combine
 import NexusUI
 import SwiftUI
 
@@ -33,6 +34,14 @@ public struct MeetingsReadinessSection: View {
             }
         }
         .onAppear { viewModel.refresh() }
+        // Refresh whenever the helper posts a fresh snapshot so the panel
+        // updates live without requiring the user to re-open Settings.
+        .onReceive(
+            DistributedNotificationCenter.default()
+                .publisher(for: MeetingsReadinessNotification.readinessDidChange)
+        ) { _ in
+            viewModel.refresh()
+        }
     }
 
     @ViewBuilder
