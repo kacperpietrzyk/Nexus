@@ -48,7 +48,7 @@ struct MonthGridView: View {
                 Text(Self.dayNumberFormatter.string(from: day))
                     .font(NexusType.caption)
                     .foregroundStyle(dayNumberColor(inMonth: inMonth, isToday: isToday))
-                dots(for: items)
+                dots(for: items, inMonth: inMonth)
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
@@ -71,16 +71,26 @@ struct MonthGridView: View {
     }
 
     @ViewBuilder
-    private func dots(for items: [TimelineItem]) -> some View {
-        if !items.isEmpty {
+    private func dots(for items: [TimelineItem], inMonth: Bool) -> some View {
+        if items.isEmpty {
+            // Subtle "nothing scheduled" marker — a faint dot, not a blank gap.
+            // Only within the current month, so spill days stay clean and the
+            // grid doesn't read as a field of noise.
+            if inMonth {
+                Circle()
+                    .fill(NexusColor.Text.disabled)
+                    .frame(width: 3, height: 3)
+                    .accessibilityHidden(true)
+            }
+        } else {
             HStack(spacing: 2) {
                 ForEach(Array(items.prefix(4).enumerated()), id: \.offset) { _, item in
                     Circle().fill(dotColor(item)).frame(width: 4, height: 4)
                 }
                 if items.count > 4 {
                     Text("+\(items.count - 4)")
-                        .font(.system(size: 8))
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .font(NexusType.metaMono)
+                        .foregroundStyle(NexusColor.Text.tertiary)
                 }
             }
         }
@@ -88,7 +98,7 @@ struct MonthGridView: View {
 
     private func dotColor(_ item: TimelineItem) -> Color {
         switch item.kind {
-        case .event: return item.colorHex.flatMap { Color(calendarHex: $0) } ?? NexusColor.Text.tertiary
+        case .event: return item.colorHex.flatMap { Color(calendarHexDesaturated: $0) } ?? NexusColor.Text.tertiary
         case .proposedBlock: return NexusColor.Text.muted
         case .acceptedBlock: return NexusColor.Accent.lime
         }
