@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             let composition = try HelperComposition()
             self.composition = composition
+            composition.readinessCoordinator.start()
             startDetectionLoop(composition)
         } catch {
             NSAlert(error: error).runModal()

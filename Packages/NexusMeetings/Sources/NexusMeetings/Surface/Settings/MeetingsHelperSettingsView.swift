@@ -68,6 +68,16 @@ public final class MeetingsHelperSettingsViewModel: ObservableObject {
                 try registrar.unregister()
             }
             preferenceStore.save(enabled: enabled)
+            if enabled {
+                // Kick the (now-launching) helper to prompt for mic + open
+                // Accessibility Settings. The helper may still be starting up
+                // when this arrives — the readiness panel's [Request] button
+                // re-posts if needed.
+                DistributedNotificationCenter.default().postNotificationName(
+                    MeetingsReadinessNotification.requestPermissions,
+                    object: nil, userInfo: nil, deliverImmediately: true
+                )
+            }
             refresh()
         } catch {
             isEnabled = statusProvider() == .enabled
@@ -99,28 +109,31 @@ public struct MeetingsHelperSettingsView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader("Helper")
-            NexusSettingsCard {
-                VStack(alignment: .leading, spacing: 0) {
-                    NexusSettingsRow("Enable Meetings auto-record") {
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { viewModel.isEnabled },
-                                set: { viewModel.toggle(enabled: $0) }
+        VStack(alignment: .leading, spacing: NexusSpacing.s7) {
+            VStack(alignment: .leading, spacing: NexusSpacing.s3) {
+                nexusSettingsCardSectionHeader("Helper")
+                NexusSettingsCard {
+                    VStack(alignment: .leading, spacing: 0) {
+                        NexusSettingsRow("Enable Meetings auto-record") {
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { viewModel.isEnabled },
+                                    set: { viewModel.toggle(enabled: $0) }
+                                )
                             )
-                        )
-                        .labelsHidden()
+                            .labelsHidden()
+                        }
+                        Text(viewModel.statusLabel)
+                            .font(NexusType.caption)
+                            .foregroundStyle(NexusColor.Text.muted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, NexusSpacing.s4)
+                            .padding(.bottom, NexusSpacing.s3)
                     }
-                    Text(viewModel.statusLabel)
-                        .font(NexusType.caption)
-                        .foregroundStyle(NexusColor.Text.muted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, NexusSpacing.s4)
-                        .padding(.bottom, NexusSpacing.s3)
                 }
             }
+            MeetingsReadinessSection()
         }
         .onAppear {
             viewModel.refresh()

@@ -112,6 +112,20 @@ public final class CATapAppAudioTap: AppAudioTapping, @unchecked Sendable {
     }
 
     public func start(pid: pid_t) throws {
+        do {
+            try startTap(pid: pid)
+        } catch {
+            // Tap creation failing first surfaces as a TCC / audio-capture denial
+            // (`AudioHardwareCreateProcessTap` returns non-`noErr` when the user
+            // hasn't granted system-audio capture). Record the denial so the
+            // readiness snapshot reflects it, then rethrow unchanged.
+            AudioCaptureConsentStore.shared.record(.denied)
+            throw error
+        }
+        AudioCaptureConsentStore.shared.record(.granted)
+    }
+
+    private func startTap(pid: pid_t) throws {
         let processObjectID = try processObjectID(for: pid)
         let tap = CATapDescription(stereoMixdownOfProcesses: [processObjectID])
         var id: AudioObjectID = 0
