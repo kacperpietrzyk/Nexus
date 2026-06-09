@@ -26,8 +26,16 @@ public final class MeetingsReadinessViewModel {
         self.post = post
     }
 
+    /// Reads the latest snapshot from the shared store and re-renders. Pure
+    /// read — does NOT ping the helper (so it is safe to call from the
+    /// `readinessDidChange` observer without creating a feedback loop).
     public func refresh() {
         sections = mapper.sections(from: reader.read(), now: now())
+    }
+
+    /// Asks the helper to recompute and write a fresh snapshot (e.g. when the
+    /// panel appears, in case permissions changed while it was closed).
+    public func requestHelperRefresh() {
         post(MeetingsReadinessNotification.refreshReadiness)
     }
 

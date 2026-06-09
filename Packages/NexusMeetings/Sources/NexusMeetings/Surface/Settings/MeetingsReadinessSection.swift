@@ -33,7 +33,10 @@ public struct MeetingsReadinessSection: View {
                 }
             }
         }
-        .onAppear { viewModel.refresh() }
+        .onAppear {
+            viewModel.requestHelperRefresh()
+            viewModel.refresh()
+        }
         // Refresh whenever the helper posts a fresh snapshot so the panel
         // updates live without requiring the user to re-open Settings.
         .onReceive(
@@ -93,8 +96,8 @@ public struct MeetingsReadinessSection: View {
         case .openAccessibilitySettings: "Open Settings"
         case .downloadModel: "Download"
         case .downloadAllModels: "Download All"
-        case .startHelper: "Start"
-        case .enableAutoRecord: "Enable"
+        case .startHelper: nil
+        case .enableAutoRecord: nil
         case .info: nil
         }
     }
