@@ -22,8 +22,9 @@ struct ContentView: View {
     @Environment(\.agentChatViewModel) private var agentViewModel
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     @Environment(\.agentBriefService) var agentBriefService
-    @Environment(\.meetingsComposition) private var meetingsComposition
-    @Environment(\.meetingNavigationRouter) private var meetingNavigationRouter
+    // Internal (not `private`): read from the `ContentView+LiquidMeetings` extension.
+    @Environment(\.meetingsComposition) var meetingsComposition
+    @Environment(\.meetingNavigationRouter) var meetingNavigationRouter
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     @AppStorage(NexusPreferences.Keys.agentEnabled) var agentEnabled = true
 
@@ -56,6 +57,9 @@ struct ContentView: View {
     // Shared data feed for the Liquid Projects screen (Task 8); same one-model/
     // two-columns shape. Internal: see `ContentView+LiquidProjects`.
     @State var liquidProjectsModel = LiquidProjectsModel()
+    // Shared data feed for the Liquid Meetings screen (Task 10); same shape.
+    // Internal: see `ContentView+LiquidMeetings`.
+    @State var liquidMeetingsModel = LiquidMeetingsModel()
     // Quick Capture draft, hoisted (not inspector @State) so a half-typed capture
     // survives destination switches (the inspector slot unmounts off-Today).
     @State var todayCaptureText = ""
@@ -195,10 +199,11 @@ struct ContentView: View {
             },
             main: { destinationMain },
             // Per-destination inspector (04_LAYOUT_SYSTEM.md §Base shell
-            // "RightInspector … optional per page"): Today, Calendar, and
-            // Projects (while a project is selected) mount one; the slots are
-            // mutually exclusive by their `selection` guards.
+            // "RightInspector … optional per page"): Today, Calendar, Projects
+            // (while a project is selected), and Meetings mount one; the slots
+            // are mutually exclusive by their `selection` guards.
             inspector: todayInspectorSlot ?? calendarInspectorSlot ?? projectsInspectorSlot
+                ?? meetingsInspectorSlot
         )
     }
 
@@ -279,6 +284,11 @@ struct ContentView: View {
             // milestones + Kanban + table; replaces the `ProjectsRootView`
             // mount. See `ContentView+LiquidProjects`.
             liquidProjectsMain
+        } else if selection == .meetings {
+            // Liquid Meetings / Notes Intelligence (Task 10): list + detail +
+            // knowledge column; replaces the `MeetingsTabView` mount. See
+            // `ContentView+LiquidMeetings`.
+            liquidMeetingsMain
         } else if selection == .notes {
             // Notes content layer (spec §5): list + block editor; owns its own
             // NavigationStack.
@@ -335,7 +345,10 @@ struct ContentView: View {
             inboxActiveFilter: $inboxActiveFilter,
             onInboxItemsChanged: { inboxItems = $0 },
             onOpenTask: { openTask($0) },
-            meetingsContent: meetingsContent,
+            // `.meetings` mounts the Liquid Meetings screen in
+            // `destinationMain` (Task 10) and never reaches this dashboard
+            // router anymore — no embedded meetings content to inject.
+            meetingsContent: nil,
             onOpenCapture: { mode in
                 NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
             },
@@ -401,18 +414,6 @@ struct ContentView: View {
                 task.pinnedAsFocus.toggle()
             }
         } catch {}
-    }
-
-    private var meetingsContent: (() -> AnyView)? {
-        guard let meetingsComposition, let meetingNavigationRouter else { return nil }
-        return {
-            AnyView(
-                MeetingsTabView(
-                    router: meetingNavigationRouter,
-                    composition: meetingsComposition
-                )
-            )
-        }
     }
 
     private var activeFocusState: FocusModeState? {

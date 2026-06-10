@@ -16,6 +16,10 @@ public struct LiquidTodayMeetingIntel: Equatable, Sendable {
     public let occurredAt: Date
     public let durationSec: Int
     public let summary: String
+    /// Decisions parsed from the meeting's summary (the app layer runs
+    /// `MeetingSummarySections.parse` — TasksFeature still never imports
+    /// NexusMeetings). Empty when the summary carries no decisions section.
+    public let decisions: [String]
     public let actionItemCount: Int
     public let statusLabel: String
 
@@ -24,6 +28,7 @@ public struct LiquidTodayMeetingIntel: Equatable, Sendable {
         occurredAt: Date,
         durationSec: Int,
         summary: String,
+        decisions: [String] = [],
         actionItemCount: Int,
         statusLabel: String
     ) {
@@ -31,6 +36,7 @@ public struct LiquidTodayMeetingIntel: Equatable, Sendable {
         self.occurredAt = occurredAt
         self.durationSec = durationSec
         self.summary = summary
+        self.decisions = decisions
         self.actionItemCount = actionItemCount
         self.statusLabel = statusLabel
     }

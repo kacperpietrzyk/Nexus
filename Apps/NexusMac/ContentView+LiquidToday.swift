@@ -88,11 +88,15 @@ extension ContentView {
         descriptor.fetchLimit = 1
         guard let meeting = try? modelContext.fetch(descriptor).first else { return nil }
         let status = MeetingProcessingStatus(rawValue: meeting.processingStatus)
+        // Decisions are parsed HERE (app layer) so TasksFeature renders plain
+        // values without importing NexusMeetings; the Today card shows ≤3.
+        let decisions = MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
         return LiquidTodayMeetingIntel(
             title: meeting.title,
             occurredAt: meeting.startedAt,
             durationSec: meeting.durationSec,
             summary: meeting.summaryText,
+            decisions: Array(decisions.prefix(3)),
             actionItemCount: meeting.actionItemIDs.count,
             statusLabel: status == .ready ? "Processed" : (status == .failed ? "Failed" : "Processing")
         )

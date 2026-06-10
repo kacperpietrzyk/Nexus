@@ -59,6 +59,10 @@ struct MeetingIntelCard: View {
                     .lineLimit(3)
             }
 
+            if !intel.decisions.isEmpty {
+                decisionRows(intel.decisions)
+            }
+
             if intel.actionItemCount > 0 {
                 HStack(spacing: DS.Space.xs) {
                     // Spec §Meeting Intelligence: "action items use empty circles".
@@ -78,6 +82,24 @@ struct MeetingIntelCard: View {
             LiquidCardFooterLink("View full meeting", action: onOpenMeetings)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Up to three parsed decisions as green-check rows
+    /// (spec §Meeting Intelligence: "decisions use checkmarks").
+    private func decisionRows(_ decisions: [String]) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            ForEach(Array(decisions.prefix(3).enumerated()), id: \.offset) { _, decision in
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(DS.ColorToken.accentGreen)
+                    Text(decision)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+        }
     }
 
     static func metadataLine(for intel: LiquidTodayMeetingIntel) -> String {
