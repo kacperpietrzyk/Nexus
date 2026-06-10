@@ -11,7 +11,6 @@ public struct DesignSystemShowcase: View {
 }
 
 private struct ShowcaseState: View {
-    @State private var navSelection = "today"
     @State private var tabSelection = "open"
     @State private var checkedOn = true
     @State private var checkedOff = false
@@ -22,7 +21,6 @@ private struct ShowcaseState: View {
                 header
                 tokensSection
                 #if !os(watchOS)
-                navSection
                 topBarSection
                 tabBarSection
                 #endif
@@ -82,23 +80,6 @@ private struct ShowcaseState: View {
     }
 
     #if !os(watchOS)
-    private var navSection: some View {
-        section("NavRail") {
-            NexusNavRail(
-                items: [
-                    NexusNavRailItem(id: "today", systemImage: "sun.max.fill", label: "Today", count: 7),
-                    NexusNavRailItem(id: "inbox", systemImage: "tray", label: "Inbox", count: 3),
-                    NexusNavRailItem(id: "settings", systemImage: "gearshape", label: "Settings"),
-                ],
-                active: $navSelection,
-                logoTitle: "N",
-                avatar: { NexusAvatar(name: "Kacper Pietrzyk") }
-            )
-            .frame(height: 280)
-            .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
-        }
-    }
-
     private var topBarSection: some View {
         section("TopBar") {
             NexusTopBar(crumbs: ["Nexus", "Today"]) {

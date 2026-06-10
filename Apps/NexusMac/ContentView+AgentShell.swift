@@ -20,11 +20,11 @@ import SwiftUI
 /// §2 achromatic LabPalette→NexusColor map:
 /// `soft→Text.tertiary`, `ink→Text.primary`, `faint→Text.muted`,
 /// `glassRim→Line.hairline`, `dim→Text.disabled`. Not a primitive — a thin
-/// token composition, same status as the private `NexusCommandBar` /
-/// `InboxFilterTab`. Inter-SemiBold 13 / IBMPlexMono-Medium 11/10 are
-/// below/aside the `NexusType` scale, so raw `Font.custom` against the
-/// process-registered family is the honest §8 stopgap (same path
-/// `NexusCommandBar` uses for its ⌘K kbd chip).
+/// token composition, same status as the private `InboxFilterTab`.
+/// Inter-SemiBold 13 / IBMPlexMono-Medium 11/10 are below/aside the
+/// `NexusType` scale, so raw `Font.custom` against the process-registered
+/// family is the honest §8 stopgap (same path the old `NexusCommandBar`
+/// used for its ⌘K kbd chip before the Liquid rewrite deleted it).
 ///
 /// The thread label is derived from the live view-model (`threads` +
 /// `currentThreadID`, both already published — no new query / behaviour):

@@ -85,8 +85,8 @@ public struct NexusTopBar<Trailing: View>: View {
 
                 // ⌘K chip — the shared topbar/command-bar idiom:
                 // `Background.control` fill + `NexusType.metaMono` ink + a
-                // `Line.regular` hairline, flat r1 corners (identical to
-                // `NexusCommandBar`'s chip). The border is what reads the
+                // `Line.regular` hairline, flat r1 corners (the idiom the
+                // old Mac `NexusCommandBar` shared). The border is what reads the
                 // chip against the same-toned `Background.control` search
                 // field it nests inside.
                 Text("⌘K")

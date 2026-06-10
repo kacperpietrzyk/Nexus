@@ -1,4 +1,5 @@
 import Foundation
+import NexusCore
 
 /// Shared date formatters for the Liquid Projects surfaces.
 /// English UI rule: explicit en_US (system locale may be pl_PL).
@@ -17,4 +18,19 @@ enum ProjectFormatters {
         formatter.dateFormat = "MMM d"
         return formatter
     }()
+
+    /// Display label for a project's lifecycle status (`ProjectHeader` status
+    /// menu, `LiquidProjectScreen` picker rows). Formerly
+    /// `ProjectPageView.statusLabel` — relocated here when the superseded
+    /// pre-Liquid project page was deleted.
+    static func statusLabel(_ status: ProjectStatus) -> String {
+        switch status {
+        case .backlog: return "Backlog"
+        case .planned: return "Planned"
+        case .active: return "Active"
+        case .inReview: return "In Review"
+        case .completed: return "Completed"
+        case .cancelled: return "Cancelled"
+        }
+    }
 }

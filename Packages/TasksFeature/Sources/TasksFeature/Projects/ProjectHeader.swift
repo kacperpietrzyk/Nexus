@@ -119,15 +119,15 @@ struct ProjectHeader: View {
                     setStatus(status)
                 } label: {
                     if status == project.status {
-                        Label(ProjectPageView.statusLabel(status), systemImage: "checkmark")
+                        Label(ProjectFormatters.statusLabel(status), systemImage: "checkmark")
                     } else {
-                        Text(ProjectPageView.statusLabel(status))
+                        Text(ProjectFormatters.statusLabel(status))
                     }
                 }
             }
         } label: {
             LiquidPill(
-                ProjectPageView.statusLabel(project.status),
+                ProjectFormatters.statusLabel(project.status),
                 color: Self.statusColor(project.status),
                 filled: true
             )
@@ -136,7 +136,7 @@ struct ProjectHeader: View {
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .fixedSize()
-        .accessibilityLabel("Project status: \(ProjectPageView.statusLabel(project.status))")
+        .accessibilityLabel("Project status: \(ProjectFormatters.statusLabel(project.status))")
     }
 
     @MainActor

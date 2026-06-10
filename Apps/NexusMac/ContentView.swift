@@ -214,7 +214,8 @@ struct ContentView: View {
     // `LiquidAppShell` mount in `dashboardBody`. `LiquidSidebar` +
     // `LiquidToolbar` are stable across destination switches; only
     // `toolbarLeading` + `destinationMain` re-specialize per destination.
-    // `NexusShell.swift` is left in place (unused) for a later deletion task.
+    // (`NexusShell.swift` and the rest of the superseded chrome were deleted
+    // in the Task 12 dead-code pass.)
 
     /// Per-destination leading toolbar content. Inbox keeps its filter tabs +
     /// Mark Read (formerly the §1a control band); Agent keeps its control
@@ -361,16 +362,15 @@ struct ContentView: View {
         )
     }
 
-    /// Single chokepoint for *programmatic* nav-destination changes so they
-    /// share the rail tap's animated envelope (audit C3 follow-up).
-    /// `NexusNavRail` wraps its own tap in `withAnimation(NexusMotion.nav)`,
-    /// which is what makes the C1 content cross-fade and the C3
-    /// selection-pill hero-transition play. Programmatic writes
-    /// (goToToday/goToInbox notifications, ⌘⇧A → Agent, meeting/task
-    /// routing, the command-palette bootstrap closures) bypassed that and
-    /// snapped; routing every such write through here gives them the
-    /// identical slide. The `.onChange(of: selection)` "inspector ⊥ Agent"
-    /// chokepoint still fires regardless — orthogonal, unaffected.
+    /// Single chokepoint for ALL nav-destination changes — `LiquidSidebar`
+    /// taps (via `onNavigate`) and programmatic writes (goToToday/goToInbox
+    /// notifications, ⌘⇧A → Agent, meeting/task routing, the command-palette
+    /// bootstrap closures) — so every write shares the same
+    /// `withAnimation(NexusMotion.nav)` envelope: content cross-fade +
+    /// selection-pill hero-transition (audit C3 follow-up, carried over from
+    /// the pre-Liquid `NexusNavRail`). The `.onChange(of: selection)`
+    /// "inspector ⊥ Agent" chokepoint still fires regardless — orthogonal,
+    /// unaffected.
     /// Internal (not `private`): called from the `ContentView+LiquidToday` extension.
     @MainActor
     func navigate(to destination: TodayNavSelection) {
@@ -537,11 +537,11 @@ struct ContentView: View {
 /// `ink→Text.primary`, `read→Text.secondary`, `faint→Text.muted`,
 /// `dim→Text.disabled`, active fill→`Background.control` (the chrome
 /// selection tier, r1 corners). Not a primitive — a thin
-/// token composition, same status as the private `NexusCommandBar`.
+/// token composition, same status as the private `AgentTopControl`.
 /// Inter-Medium 12 / IBMPlexMono-Medium 10 are below the `NexusType` scale
 /// (which starts at 11 pt caption), so raw `Font.custom` against the
-/// process-registered family is the honest §8 stopgap (same path
-/// `NexusCommandBar` uses for its ⌘K kbd chip).
+/// process-registered family is the honest §8 stopgap (same path the old
+/// `NexusCommandBar` used for its ⌘K kbd chip before the Liquid rewrite).
 private struct InboxFilterTab: View {
     let label: String
     let count: Int

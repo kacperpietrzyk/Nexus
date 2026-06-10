@@ -237,7 +237,7 @@ private struct ProjectPickerRow: View {
                         .font(DS.FontToken.bodyStrong)
                         .foregroundStyle(DS.ColorToken.textPrimary)
                         .lineLimit(1)
-                    Text(ProjectPageView.statusLabel(project.status))
+                    Text(ProjectFormatters.statusLabel(project.status))
                         .font(DS.FontToken.metadata)
                         .foregroundStyle(DS.ColorToken.textTertiary)
                 }
