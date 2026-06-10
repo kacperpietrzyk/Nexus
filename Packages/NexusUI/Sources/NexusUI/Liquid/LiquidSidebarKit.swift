@@ -48,6 +48,10 @@ public struct LiquidSidebarNavRow: View {
         Button(action: action) {
             HStack(spacing: DS.Space.s) {
                 Image(systemName: systemImage)
+                    // 13 pt symbol inside the 16 pt icon slot (03_COMPONENTS.md §Sidebar:
+                    // "icon size: 16 pt" refers to the slot; symbol point size is optical).
+                    // Medium weight is deliberate — heavier than DS.FontToken.body's regular
+                    // so glyphs hold up against the 13 pt title at sidebar density.
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(isSelected ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
                     .frame(width: 16, height: 16)

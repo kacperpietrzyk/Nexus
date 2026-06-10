@@ -62,6 +62,10 @@ public struct LiquidGlassPanel: ViewModifier {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(DS.ColorToken.strokeInnerHighlight, lineWidth: 0.5)
                     .blendMode(.screen)
+                    // 0.55 softens the screen-blended highlight so it reads as a glass
+                    // glint, not a second border — ported from the starter
+                    // (liquid_productivity_design_system/swiftui/LiquidGlassComponents.swift),
+                    // visual calibration with no DS token.
                     .opacity(0.55)
             }
             .shadow(

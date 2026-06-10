@@ -89,6 +89,8 @@ public struct LiquidTaskRow<Accessory: View>: View {
                         Circle()
                             .fill(DS.ColorToken.accentPrimary)
                         Image(systemName: "checkmark")
+                            // 8 pt glyph fits inside the 13–15 pt checkbox circle
+                            // (03_COMPONENTS.md §TaskRow); no DS token at this scale.
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(DS.ColorToken.textPrimary)
                     }
@@ -207,6 +209,8 @@ public struct LiquidEmptyState<Actions: View>: View {
     public var body: some View {
         VStack(spacing: DS.Space.m) {
             Image(systemName: systemImage)
+                // Hero glyph sized between NexusEmptyState's 26 pt and list chrome;
+                // DS.FontToken has no display-icon size — visual calibration.
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(DS.ColorToken.textMuted)
 
@@ -251,6 +255,8 @@ public struct LiquidDropZone: View {
     public var body: some View {
         VStack(spacing: DS.Space.xs) {
             Image(systemName: systemImage)
+                // 16 pt center icon per 03_COMPONENTS.md §Empty / Drop Zone ("icon center");
+                // matches the sidebar's 16 pt icon scale, no DS token for icon sizes.
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(isTargeted ? DS.ColorToken.accentPrimary : DS.ColorToken.textMuted)
 
@@ -267,7 +273,10 @@ public struct LiquidDropZone: View {
         .overlay {
             RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
                 .stroke(
-                    isTargeted ? DS.ColorToken.accentPrimary : DS.ColorToken.strokeDefault,
+                    // Idle border: spec (03_COMPONENTS.md §Empty / Drop Zone) says
+                    // "dashed border white 18%"; strokeStrong (white ~17%) is the
+                    // closest token — strokeDefault (~11%) reads too faint here.
+                    isTargeted ? DS.ColorToken.accentPrimary : DS.ColorToken.strokeStrong,
                     style: StrokeStyle(lineWidth: 1, dash: [5, 4])
                 )
         }

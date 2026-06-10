@@ -29,6 +29,8 @@ public struct LiquidSearchField: View {
         Button(action: action) {
             HStack(spacing: DS.Space.xs) {
                 Image(systemName: "magnifyingglass")
+                    // 12 pt magnifier sits optically level with the 13 pt body placeholder
+                    // inside the 32 pt field (03_COMPONENTS.md §SearchField); no icon-size token.
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(DS.ColorToken.textTertiary)
 
