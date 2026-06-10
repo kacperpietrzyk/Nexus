@@ -53,6 +53,9 @@ struct ContentView: View {
     // Shared data feed for the Liquid Today screen (Task 5): one model drives both
     // the main column and the inspector slot. Internal: see `ContentView+LiquidToday`.
     @State var liquidTodayModel = LiquidTodayModel()
+    // Shared data feed for the Liquid Projects screen (Task 8); same one-model/
+    // two-columns shape. Internal: see `ContentView+LiquidProjects`.
+    @State var liquidProjectsModel = LiquidProjectsModel()
     // Quick Capture draft, hoisted (not inspector @State) so a half-typed capture
     // survives destination switches (the inspector slot unmounts off-Today).
     @State var todayCaptureText = ""
@@ -192,9 +195,10 @@ struct ContentView: View {
             },
             main: { destinationMain },
             // Per-destination inspector (04_LAYOUT_SYSTEM.md §Base shell
-            // "RightInspector … optional per page"): Today and Calendar mount
-            // one; the slots are mutually exclusive by their `selection` guards.
-            inspector: todayInspectorSlot ?? calendarInspectorSlot
+            // "RightInspector … optional per page"): Today, Calendar, and
+            // Projects (while a project is selected) mount one; the slots are
+            // mutually exclusive by their `selection` guards.
+            inspector: todayInspectorSlot ?? calendarInspectorSlot ?? projectsInspectorSlot
         )
     }
 
@@ -271,10 +275,10 @@ struct ContentView: View {
                     .padding(.bottom, 20)
             }
         } else if selection == .projects {
-            // Projects tier (#10): list → project page (header + lifecycle
-            // status + Kanban board). Opening a card routes through `openTask`
-            // (inspector ⊥ Agent invariant preserved).
-            ProjectsRootView(onOpenTask: { openTask($0) })
+            // Liquid Projects / Execution (Task 8): picker → header + tabs +
+            // milestones + Kanban + table; replaces the `ProjectsRootView`
+            // mount. See `ContentView+LiquidProjects`.
+            liquidProjectsMain
         } else if selection == .notes {
             // Notes content layer (spec §5): list + block editor; owns its own
             // NavigationStack.
