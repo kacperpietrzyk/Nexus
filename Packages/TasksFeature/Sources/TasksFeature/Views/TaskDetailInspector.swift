@@ -24,8 +24,9 @@ public struct TaskDetailInspector: View {
     public let layout: Layout
 
     @State private var allDay: Bool
-    @State private var recurrenceChoice: RecurrenceChoice
-    @State private var customRRule: String
+    @State var recurrenceChoice: RecurrenceChoice
+    @State var customRRule: String
+    @State var completionAnchored: Bool
     @State private var saveTask: _Concurrency.Task<Void, Never>?
     @State private var notesDraft: String
     @State private var notesSaveTask: _Concurrency.Task<Void, Never>?
@@ -52,6 +53,9 @@ public struct TaskDetailInspector: View {
             initialValue: RecurrenceChoice.from(rrule: task.recurrenceRule)
         )
         self._customRRule = State(initialValue: task.recurrenceRule ?? "")
+        self._completionAnchored = State(
+            initialValue: RRuleAnchorToken.isCompletionAnchored(task.recurrenceRule ?? "")
+        )
         self._notesDraft = State(initialValue: task.body)
     }
 
@@ -63,6 +67,7 @@ public struct TaskDetailInspector: View {
         allDay = task.startAt == nil
         recurrenceChoice = RecurrenceChoice.from(rrule: task.recurrenceRule)
         customRRule = task.recurrenceRule ?? ""
+        completionAnchored = RRuleAnchorToken.isCompletionAnchored(task.recurrenceRule ?? "")
     }
 
     public var body: some View {
@@ -216,39 +221,6 @@ public struct TaskDetailInspector: View {
                 .foregroundStyle(NexusColor.Text.secondary)
             Spacer(minLength: 8)
             field()
-        }
-    }
-
-    var recurrenceCard: some View {
-        inspectorCard("Recurrence") {
-            Picker("Repeat", selection: $recurrenceChoice) {
-                ForEach(RecurrenceChoice.allCases) { choice in
-                    Text(choice.label).tag(choice)
-                }
-            }
-            .onChange(of: recurrenceChoice) { _, choice in
-                if let rule = choice.rrule {
-                    task.recurrenceRule = rule
-                } else if choice == .custom {
-                    customRRule = task.recurrenceRule ?? ""
-                } else {
-                    task.recurrenceRule = nil
-                }
-                save()
-            }
-            if recurrenceChoice == .custom {
-                TextField("RRULE", text: $customRRule)
-                    .textFieldStyle(.plain)
-                    .padding(10)
-                    .background(
-                        NexusColor.Background.control,
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    )
-                    .onSubmit {
-                        task.recurrenceRule = customRRule.isEmpty ? nil : customRRule
-                        save()
-                    }
-            }
         }
     }
 
@@ -415,7 +387,7 @@ public struct TaskDetailInspector: View {
     }
 
     @MainActor
-    private func save() {
+    func save() {
         guard let repository else { return }
         try? repository.update(task) { _ in }
     }
@@ -456,38 +428,6 @@ public struct TaskDetailInspector: View {
             try repository?.update(task) { _ in }
         } catch {
             // Keep the editor responsive; the next explicit save/reload will retry through the same path.
-        }
-    }
-}
-
-enum TaskDetailRecurrenceChoice: String, Identifiable, CaseIterable {
-    case none, daily, weekly, monthly, custom
-    var id: String { rawValue }
-    var label: String {
-        switch self {
-        case .none: return "None"
-        case .daily: return "Daily"
-        case .weekly: return "Weekly"
-        case .monthly: return "Monthly"
-        case .custom: return "Custom RRULE"
-        }
-    }
-    var rrule: String? {
-        switch self {
-        case .none: return nil
-        case .daily: return "FREQ=DAILY"
-        case .weekly: return "FREQ=WEEKLY"
-        case .monthly: return "FREQ=MONTHLY"
-        case .custom: return nil
-        }
-    }
-    static func from(rrule: String?) -> Self {
-        guard let rrule else { return .none }
-        switch rrule {
-        case "FREQ=DAILY": return .daily
-        case "FREQ=WEEKLY": return .weekly
-        case "FREQ=MONTHLY": return .monthly
-        default: return .custom
         }
     }
 }
