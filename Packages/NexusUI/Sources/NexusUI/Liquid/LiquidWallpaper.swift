@@ -45,7 +45,7 @@ public struct LiquidWallpaper: View {
             // Real transparency: the blurred desktop shows through under a
             // dark glaze that preserves the design's darkness and contrast.
             WallpaperBlurBackdrop()
-            DS.ColorToken.backgroundApp.opacity(0.58)
+            DS.ColorToken.backgroundApp.opacity(0.4)
             #else
             DS.ColorToken.backgroundApp
             #endif
