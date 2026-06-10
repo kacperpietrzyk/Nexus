@@ -6,9 +6,12 @@ import SwiftUI
 /// up through Charcoal Grey (#23252A). Text and Line tokens carry deliberate cool
 /// bias (Light Steel, Storm Cloud) matching the Linear specification.
 ///
-/// Neon Lime (`Accent.lime`, #E4F222) is the **only** saturated accent and is
-/// reserved exclusively for primary-action surfaces — do NOT apply it to base
-/// tokens or secondary UI chrome.
+/// `Accent.lime` is the **only** saturated accent and is reserved exclusively
+/// for primary-action surfaces — do NOT apply it to base tokens or secondary
+/// UI chrome. Liquid re-skin: the token now resolves to the Liquid violet
+/// (`DS.ColorToken.accentPrimary`, #6D5DFB); the Linear Neon Lime value is
+/// superseded. The token NAME is kept so every existing call site re-points
+/// in one diff (cross-platform — iOS/Watch join the liquid family too).
 ///
 /// Token ladder: Background → Glass → Line → Text → Accent → Status.
 /// `Glass` is retained for incremental de-glass sweeps; prefer flat `Background`
@@ -43,13 +46,21 @@ public enum NexusColor {
         public static let disabled = Color(hex: 0x4A4D52)  // muted ash region
     }
 
-    /// Neon Lime accent — primary action surfaces only.
+    /// Primary accent — primary action surfaces only.
     /// Never apply `lime` to base backgrounds, borders, or secondary chrome.
+    ///
+    /// Liquid re-skin: re-valued from the Linear Neon Lime (#E4F222 / pitch-black
+    /// ink) to the Liquid violet (#6D5DFB == `DS.ColorToken.accentPrimary`) with
+    /// white ink. Contrast audit: every `limeInk` call site draws ink ON a `lime`
+    /// fill; white on #6D5DFB is ≈4.55:1 (WCAG AA), and all sites are small
+    /// semibold labels/icons.
     public enum Accent {
-        /// Neon Lime (#E4F222) — fill for primary action elements.
-        public static let lime = Color(hex: 0xE4F222)
-        /// Pitch Black (#08090A) — text/icon drawn on top of a lime surface.
-        public static let limeInk = Color(hex: 0x08090A)
+        /// Liquid violet (#6D5DFB) — fill for primary action elements.
+        /// (Historic name; the Linear lime value is superseded.)
+        public static let lime = Color(hex: 0x6D5DFB)
+        /// White — text/icon drawn on top of an accent surface.
+        /// (Historic name; was pitch black on the Linear lime.)
+        public static let limeInk = Color(hex: 0xFFFFFF)
     }
 
     /// Semantic status colors for success, informational, and danger states.

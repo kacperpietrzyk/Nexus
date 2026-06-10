@@ -40,10 +40,13 @@ struct NexusColorTests {
         assertColor(NexusColor.Text.disabled, r: 0.2901961, g: 0.3019608, b: 0.3215686)
     }
 
-    @Test("Accent tokens: Neon Lime primary action + Pitch Black ink on lime")
+    @Test("Accent tokens: Liquid violet primary action + white ink on accent")
     func accentTokens() {
-        assertColor(NexusColor.Accent.lime, r: 0.8941176, g: 0.9490196, b: 0.1333333)
-        assertColor(NexusColor.Accent.limeInk, r: 0.0313725, g: 0.0352941, b: 0.0392157)
+        // Liquid re-skin: `Accent.lime` re-valued to the Liquid violet
+        // (#6D5DFB == DS.ColorToken.accentPrimary) with white ink; the Linear
+        // Neon Lime (#E4F222 / pitch-black ink) is superseded.
+        assertColor(NexusColor.Accent.lime, r: 0.4274510, g: 0.3647059, b: 0.9843137)
+        assertColor(NexusColor.Accent.limeInk, r: 1.0, g: 1.0, b: 1.0)
     }
 
     @Test("Status tokens: Emerald success, Cyan Spark info, Warning Red danger")
