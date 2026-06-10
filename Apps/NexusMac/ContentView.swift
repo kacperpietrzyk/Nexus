@@ -548,31 +548,42 @@ private struct InboxFilterTab: View {
     let isActive: Bool
     let action: () -> Void
 
+    @State private var hovering = false
+
+    /// Idle hover wash one step below `glassSelected`, same ladder the Liquid
+    /// icon buttons use (03_COMPONENTS.md §IconButton hover #FFFFFF10).
+    private var fill: Color {
+        if isActive { return DS.ColorToken.glassSelected }
+        return hovering ? Color.white.opacity(0.04) : .clear
+    }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(Font.custom("Inter-Medium", size: 12))
+                    .font(DS.FontToken.body)
                 Text("\(count)")
-                    .font(NexusType.metaMono)
+                    .font(DS.FontToken.metadata)
                     .monospacedDigit()
                     .foregroundStyle(
-                        isActive ? NexusColor.Text.secondary : NexusColor.Text.disabled
+                        isActive ? DS.ColorToken.textSecondary : DS.ColorToken.textMuted
                     )
             }
-            .foregroundStyle(isActive ? NexusColor.Text.primary : NexusColor.Text.muted)
+            .foregroundStyle(isActive ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
-            .background(
-                // Liquid re-skin (Task 11): the active tab uses the DS
-                // glass-selected overlay — an opaque `Background.control`
-                // pill read as a dark slab on the glass toolbar band.
-                RoundedRectangle(cornerRadius: NexusRadius.r1)
-                    .fill(isActive ? DS.ColorToken.glassSelected : Color.clear)
-            )
-            .contentShape(Rectangle())
+            .background(Capsule(style: .continuous).fill(fill))
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(isActive ? DS.ColorToken.strokeHairline : .clear, lineWidth: 1)
+            }
+            .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        .animation(DS.Motion.selection, value: isActive)
         .accessibilityLabel(label)
         .accessibilityValue("\(count)")
         .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)

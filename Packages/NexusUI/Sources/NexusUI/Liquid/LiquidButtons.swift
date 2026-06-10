@@ -38,6 +38,9 @@ public struct LiquidPrimaryButton: View {
             }
             .font(DS.FontToken.button)
             .foregroundStyle(DS.ColorToken.textPrimary)
+            // A CTA label never wraps; the pill grows instead.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, DS.Space.m)
             .frame(height: 32)
             .background {

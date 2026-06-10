@@ -55,20 +55,20 @@ public struct InboxReaderPane: View {
         VStack(spacing: 0) {
             Circle()
                 .stroke(
-                    NexusColor.Text.disabled,
+                    DS.ColorToken.strokeStrong,
                     style: StrokeStyle(lineWidth: 1.3, dash: [2, 3.5])
                 )
                 .frame(width: 28, height: 28)
                 .frame(height: 38)
                 .padding(.bottom, 18)
             Text(emptyState.title)
-                .nexusType(.h3)
-                .foregroundStyle(NexusColor.Text.secondary)
+                .font(DS.FontToken.section)
+                .foregroundStyle(DS.ColorToken.textSecondary)
                 .multilineTextAlignment(.center)
             if let subtitle = emptyState.subtitle {
                 Text(subtitle)
-                    .nexusType(.meta)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textMuted)
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -95,7 +95,7 @@ public struct InboxReaderPane: View {
                 tagRow(item)
             }
             Rectangle()
-                .fill(NexusColor.Line.hairline)
+                .fill(DS.ColorToken.strokeHairline)
                 .frame(height: 1)
                 .padding(.bottom, 18)
             actionPills(item)
@@ -109,15 +109,16 @@ public struct InboxReaderPane: View {
         HStack(spacing: 7) {
             Image(systemName: item.nexusInboxSourceIcon)
                 .font(.system(size: 10))
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(DS.ColorToken.textMuted)
             Text(item.nexusInboxSourceLabel)
-                .font(NexusType.metaMono)
+                .font(DS.FontToken.caption)
                 .tracking(1.6)
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(DS.ColorToken.textMuted)
             Spacer()
             Text(item.nexusInboxRelativeTime)
-                .font(NexusType.metaMono)
-                .foregroundStyle(NexusColor.Text.disabled)
+                .font(DS.FontToken.metadata)
+                .monospacedDigit()
+                .foregroundStyle(DS.ColorToken.textTertiary)
         }
         .padding(.bottom, 16)
     }
@@ -125,8 +126,8 @@ public struct InboxReaderPane: View {
     // 2. Title
     private func titleText(_ item: InboxItem) -> some View {
         Text(item.title)
-            .font(Font.custom("Inter-SemiBold", size: 19))
-            .foregroundStyle(NexusColor.Text.primary)
+            .font(DS.FontToken.title)
+            .foregroundStyle(DS.ColorToken.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 10)
     }
@@ -134,8 +135,8 @@ public struct InboxReaderPane: View {
     // 3. Body — always rendered; empty string for bodyless items (§10: no placeholder copy)
     private func bodyText(_ item: InboxItem) -> some View {
         Text(item.body ?? "")
-            .nexusType(.bodySmall)
-            .foregroundStyle(NexusColor.Text.tertiary)
+            .font(DS.FontToken.body)
+            .foregroundStyle(DS.ColorToken.textSecondary)
             .lineSpacing(4)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 18)
@@ -145,7 +146,7 @@ public struct InboxReaderPane: View {
     private func tagRow(_ item: InboxItem) -> some View {
         HStack(spacing: 8) {
             ForEach(item.tags, id: \.self) { tag in
-                NexusChip(tag, tone: .neutral)
+                LiquidPill(tag, color: DS.ColorToken.statusNeutral)
             }
         }
         .padding(.bottom, 22)
@@ -154,41 +155,62 @@ public struct InboxReaderPane: View {
     // 6. Action pills wired to the real closures
     private func actionPills(_ item: InboxItem) -> some View {
         HStack(spacing: 9) {
-            NexusButton(
-                variant: .primary,
-                size: .sm,
-                action: { onOpen(item) },
-                label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "arrow.right.circle")
-                        Text("Send to Tasks")
-                    }
-                }
-            )
-            NexusButton(
-                variant: .default,
-                size: .sm,
-                action: { onSnooze(item, 24) },
-                label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "moon.zzz")
-                        Text("Snooze 1d")
-                    }
-                }
-            )
-            NexusButton(
-                variant: .default,
-                size: .sm,
-                action: { onArchive(item) },
-                label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "archivebox")
-                        Text("Archive")
-                    }
-                }
-            )
+            LiquidPrimaryButton("Send to Tasks", systemImage: "arrow.right.circle") {
+                onOpen(item)
+            }
+            ReaderGhostButton("Snooze 1d", systemImage: "moon.zzz") {
+                onSnooze(item, 24)
+            }
+            ReaderGhostButton("Archive", systemImage: "archivebox") {
+                onArchive(item)
+            }
         }
         .padding(.bottom, 16)
+    }
+}
+
+/// Secondary reader action: a quiet glass button (soft fill, hairline stroke,
+/// hover wash) one emphasis step below ``LiquidPrimaryButton`` — the
+/// 03_COMPONENTS.md §IconButton fill ladder applied to a labelled control.
+private struct ReaderGhostButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    init(_ title: String, systemImage: String, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                Text(title)
+            }
+            .font(DS.FontToken.button)
+            .foregroundStyle(hovering ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
+            .padding(.horizontal, DS.Space.m)
+            .frame(height: 32)
+            .background {
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .fill(hovering ? Color.white.opacity(0x10 / 255.0) : DS.ColorToken.glassSoft)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        #if os(macOS)
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        #endif
     }
 }
 
@@ -214,14 +236,13 @@ extension InboxReaderEmptyState {
 
 private struct InboxReaderPaneSurface: ViewModifier {
     func body(content: Content) -> some View {
-        // Liquid re-skin (container level): the liquid glass card recipe
-        // replaces the opaque `Background.raised` slab + manual Line.regular
-        // stroke + s1 shadow, so the reader pane sits on the shell's glass
-        // instead of reading as a black panel. Inner structure unchanged.
+        // Liquid reader surface: the inspector-grade `.sidebar` glass (denser
+        // tint than `.card`) so the reading pane reads as its own pane of
+        // glass beside the list, per the reference boards' right panes.
         content
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .liquidGlass(.card, radius: NexusRadius.r3)
+            .liquidGlass(.sidebar, radius: DS.Radius.l)
     }
 }
 
