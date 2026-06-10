@@ -36,64 +36,36 @@ public struct AgentEmptyStateView: View {
             // background (oracle `LabEmptyState.glyphView` `.invitation`).
             Image(systemName: "sparkles")
                 .font(.system(size: 21))
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .foregroundStyle(DS.ColorToken.textTertiary)
                 .frame(height: 38)
-                .padding(.bottom, 18)
+                .padding(.bottom, DS.Space.l)
                 .accessibilityHidden(true)
 
             Text("Ask Nexus")
-                .font(Font.custom("Inter-SemiBold", size: 17))
-                .foregroundStyle(NexusColor.Text.secondary)
+                .font(DS.FontToken.title)
+                .foregroundStyle(DS.ColorToken.textPrimary)
                 .multilineTextAlignment(.center)
 
             Text(
                 "Works on your tasks, notes, meetings, "
                     + "and calendar — locally, with undo for every action."
             )
-            .font(Font.custom("Inter-Regular", size: 12.5))
-            .foregroundStyle(NexusColor.Text.muted)
+            .font(DS.FontToken.body)
+            .foregroundStyle(DS.ColorToken.textTertiary)
             .multilineTextAlignment(.center)
             .lineSpacing(3)
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.top, 6)
+            .padding(.top, DS.Space.xs)
 
-            VStack(spacing: 8) {
+            VStack(spacing: DS.Space.s) {
                 ForEach(Self.samples, id: \.self) { sample in
-                    exampleChip(sample)
+                    ExamplePromptChip(text: sample) { onPick(sample) }
                 }
             }
-            .padding(.top, 20)
+            .padding(.top, DS.Space.xl)
         }
         .frame(maxWidth: 380)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// One example-prompt chip — structural mirror of the oracle's
-    /// `LabExampleChip` (`LabKit.swift:522-534`). The Lab chip is
-    /// non-interactive; here it stays a `Button` wired to the EXISTING
-    /// `viewModel.createThread(title:)` (a deliberate oracle deviation, the
-    /// adjudicated M1-class keep — an interactive affordance over backend
-    /// that already exists, zero new behaviour; recorded in counts §12 at
-    /// MP-3.2 closeout).
-    private func exampleChip(_ text: String) -> some View {
-        Button {
-            onPick(text)
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: "arrow.turn.down.left")
-                    .font(.system(size: 9))
-                    .foregroundStyle(NexusColor.Text.disabled)
-                Text(text)
-                    .font(NexusType.meta)
-                    .foregroundStyle(NexusColor.Text.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(NexusColor.Background.control, in: Capsule())
-            .overlay(Capsule().strokeBorder(NexusColor.Line.hairline, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(text)
     }
 
     nonisolated private static let samples = [
@@ -102,4 +74,48 @@ public struct AgentEmptyStateView: View {
         "Summarise the Design crit meeting",
         "What did Codex change since this morning?",
     ]
+}
+
+/// One example-prompt chip — a Liquid glass capsule. The Lab-era chip was
+/// non-interactive; this stays a `Button` wired to the EXISTING
+/// `viewModel.createThread(title:)` (the adjudicated M1-class keep — an
+/// interactive affordance over backend that already exists, zero new
+/// behaviour).
+private struct ExamplePromptChip: View {
+    let text: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: "arrow.turn.down.left")
+                    .font(.system(size: 9))
+                    .foregroundStyle(DS.ColorToken.textMuted)
+                Text(text)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(hovering ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
+            }
+            .padding(.horizontal, DS.Space.m)
+            .padding(.vertical, 7)
+            .background(
+                hovering ? DS.ColorToken.glassSelected : DS.ColorToken.glassSoft,
+                in: Capsule()
+            )
+            .overlay(
+                Capsule().strokeBorder(
+                    hovering ? DS.ColorToken.strokeDefault : DS.ColorToken.strokeHairline,
+                    lineWidth: 1
+                )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(text)
+        #if os(macOS)
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        #endif
+    }
 }

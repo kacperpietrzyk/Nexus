@@ -86,36 +86,53 @@ private struct ThreadRow: View {
     let thread: AgentThread
     let isSelected: Bool
 
+    @State private var hovering = false
+
     var body: some View {
         HStack(spacing: 10) {
             selectedIndicator
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(Self.displayTitle(for: thread))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isSelected ? NexusColor.Text.primary : NexusColor.Text.secondary)
+                    .font(isSelected ? DS.FontToken.bodyStrong : DS.FontToken.body)
+                    .foregroundStyle(isSelected ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
                     .lineLimit(1)
 
                 Text(thread.updatedAt, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                    .monospacedDigit()
                     .lineLimit(1)
             }
 
             Spacer(minLength: 0)
         }
         .padding(.vertical, 6)
+        .padding(.horizontal, DS.Space.xs)
+        .background {
+            // Hover wash one step below the glass-selected row background the
+            // List supplies for the active thread (macOS only — `hovering`
+            // never flips elsewhere).
+            if hovering && !isSelected {
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            }
+        }
         .contentShape(Rectangle())
+        #if os(macOS)
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        #endif
         .accessibilityElement(children: .combine)
     }
 
     private var selectedIndicator: some View {
-        // Linear active-selection: lime indicator bar (the single primary-action
-        // accent for this surface). Hidden when unselected; Line.regular fill
-        // is moot at opacity 0 but kept for zero-cost intent clarity.
+        // Liquid active-selection: a 2pt accent glow line on the leading edge
+        // of the selected row (03_COMPONENTS §SidebarNavRow idiom).
         Capsule()
-            .fill(isSelected ? NexusColor.Accent.lime : NexusColor.Line.regular)
-            .frame(width: 4, height: 28)
+            .fill(DS.ColorToken.accentPrimary)
+            .frame(width: 3, height: 28)
             .opacity(isSelected ? 1 : 0)
             .accessibilityHidden(true)
     }

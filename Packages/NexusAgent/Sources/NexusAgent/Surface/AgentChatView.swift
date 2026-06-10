@@ -100,28 +100,24 @@ public struct AgentChatView: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .foregroundStyle(DS.ColorToken.statusWarning)
                     .frame(width: 18, height: 18)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("On-device model not downloaded")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .font(DS.FontToken.bodyStrong)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
                     Text("Nexus needs the on-device AI model to answer. Download it in Settings → Manage Models.")
-                        .font(.caption2)
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 0)
             }
-            .padding(12)
+            .padding(DS.Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(NexusColor.Background.raised.opacity(0.84), in: RoundedRectangle(cornerRadius: 14))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(NexusColor.Line.regular.opacity(0.9), lineWidth: 1)
-            )
+            .liquidGlass(.strong, radius: DS.Radius.m)
             .accessibilityElement(children: .combine)
         }
     }
@@ -223,8 +219,8 @@ public struct AgentChatView: View {
                     // The `listRowInsets` become an equivalent `.padding`
                     // in the `ScrollView`/`LazyVStack` context.
                     Text(lastError)
-                        .font(.caption)
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
                         .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -278,16 +274,16 @@ public struct AgentChatView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "wrench.and.screwdriver")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                         .frame(width: 12, height: 12)
 
-                    // Oracle `eyebrow(_:)`: mono SemiBold 10 / tracking
-                    // 1.8 / §2 `faint` → `Text.muted`, optically lifted here
-                    // so the rail remains discoverable over the dark wallpaper.
-                    Text("RECENT TOOLS")
-                        .font(Font.custom("IBMPlexMono-SemiBold", size: 10))
-                        .tracking(1.8)
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                    // Liquid tracked-caption eyebrow (replaces the Lab-era
+                    // mono uppercase), kept discoverable over the dark glass.
+                    Text("Recent tools")
+                        .font(DS.FontToken.caption)
+                        .tracking(1.4)
+                        .textCase(.uppercase)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                 }
 
                 if let rows = recentToolRows, !rows.isEmpty {
@@ -295,13 +291,12 @@ public struct AgentChatView: View {
                         toolRow(row)
                     }
                 } else {
-                    // Oracle empty branch: meta 12 / §2 `dim` →
-                    // `Text.muted`. Fires when there is no thread OR no
+                    // Empty branch fires when there is no thread OR no
                     // §10-reachable tool call yet (both fall here — a thread
                     // with no tool messages must not render a blank body).
                     Text("No activity")
-                        .font(NexusType.meta)
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textMuted)
                 }
             }
         }
@@ -334,18 +329,19 @@ public struct AgentChatView: View {
     }
 
     /// One rail row — the oracle `tool(_:_:_:)` layout minus the §10-OMITTED
-    /// `detail` (and its fake `"·"` separator), name + age only. §2:
-    /// `soft → Text.tertiary` for the name, `dim → Text.disabled` for the
-    /// age; both IBMPlexMono SemiBold at size 10.
+    /// `detail` (and its fake `"·"` separator), name + age only. Tool names
+    /// keep a monospaced face (they are code identifiers, not prose); inks
+    /// come from DS.
     private func toolRow(_ row: AgentRecentToolRow) -> some View {
         HStack(spacing: 8) {
             Text(row.name)
-                .font(Font.custom("IBMPlexMono-SemiBold", size: 10))
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(DS.ColorToken.textSecondary)
             Spacer()
             Text(row.age)
-                .font(NexusType.metaMono)
-                .foregroundStyle(NexusColor.Text.disabled)
+                .font(DS.FontToken.metadata)
+                .monospacedDigit()
+                .foregroundStyle(DS.ColorToken.textMuted)
         }
     }
 }

@@ -80,11 +80,14 @@ private struct AgentInputBarImageButtonLabel: View {
     var body: some View {
         Image(systemName: "photo")
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(isDisabled ? NexusColor.Text.tertiary : foreground)
+            .foregroundStyle(isDisabled ? DS.ColorToken.textTertiary : foreground)
             .frame(width: 30, height: 30)
-            .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+            .background(
+                DS.ColorToken.glassSoft,
+                in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+            )
             .overlay(
-                RoundedRectangle(cornerRadius: NexusRadius.r2)
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
                     .strokeBorder(border, lineWidth: 1)
             )
     }
@@ -176,24 +179,23 @@ public struct AgentInputBar: View {
                 TextField("Message Nexus…", text: $input, axis: .vertical)
                     .lineLimit(1...6)
                     .textFieldStyle(.plain)
-                    .foregroundStyle(NexusColor.Text.primary)
-                    .padding(.horizontal, 12)
+                    .font(DS.FontToken.body)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                    .padding(.horizontal, DS.Space.m)
                     .padding(.vertical, 9)
-                    .background(NexusColor.Background.control, in: fieldShape)
-                    .overlay(fieldShape.strokeBorder(NexusColor.Line.hairline, lineWidth: 1))
+                    .background(DS.ColorToken.glassSoft, in: fieldShape)
+                    .overlay(fieldShape.strokeBorder(DS.ColorToken.strokeHairline, lineWidth: 1))
                     .disabled(isThinking || isSending)
                     .focused($isInputFocused)
                     .submitLabel(.send)
                     .onSubmit { Task { await send() } }
 
-                NexusButton(
-                    variant: .primary,
-                    size: .md,
-                    action: { Task { await send() } },
-                    label: {
-                        Text(isThinking || isSending ? "..." : "Send")
-                    }
-                )
+                LiquidPrimaryButton(
+                    isThinking || isSending ? "…" : "Send",
+                    systemImage: "arrow.up"
+                ) {
+                    Task { await send() }
+                }
                 .disabled(!canSend)
                 .opacity(canSend ? 1 : 0.56)
                 .accessibilityLabel("Send message")
@@ -201,41 +203,41 @@ public struct AgentInputBar: View {
 
             if isThinking {
                 Text("Nexus is thinking...")
-                    .font(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
                     .accessibilityLabel("Nexus is thinking")
             } else if isVoiceTranscribing {
                 Text("Transcribing voice...")
-                    .font(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
                     .accessibilityLabel("Nexus is transcribing voice")
             } else if let voiceError {
                 Text(voiceError)
-                    .font(.caption)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                     .accessibilityLabel("Voice capture failed")
             } else if let imageError {
                 Text(imageError)
-                    .font(.caption)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                     .accessibilityLabel("Image attachment failed")
             } else if let fileError {
                 Text(fileError)
-                    .font(.caption)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                     .accessibilityLabel("File attachment failed")
             }
         }
-        .padding(12)
+        .padding(DS.Space.m)
         // Liquid re-skin (container level): the liquid glass card recipe
         // replaces the opaque `Background.raised` composer slab + manual
         // Line.regular stroke + raw black shadow. The active-drop ring overlay
         // stays on top of the glass (behavior unchanged).
-        .liquidGlass(.card, radius: 18)
+        .liquidGlass(.card, radius: DS.Radius.l)
         .overlay {
             if shouldShowActiveDropRing {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(NexusColor.Line.strong, lineWidth: 1)
+                RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous)
+                    .strokeBorder(DS.ColorToken.accentPrimary.opacity(0.55), lineWidth: 1)
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -389,7 +391,7 @@ extension AgentInputBar {
     }
 
     private var fieldShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
+        RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
     }
 
     private var imageDropTargetingEnabled: Bool {
@@ -424,11 +426,11 @@ extension AgentInputBar {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Remove file context")
                 }
-                .foregroundStyle(NexusColor.Text.secondary)
-                .padding(.horizontal, 8)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .padding(.horizontal, DS.Space.s)
                 .padding(.vertical, 5)
-                .background(NexusColor.Background.control, in: Capsule())
-                .overlay(Capsule().strokeBorder(NexusColor.Line.regular, lineWidth: 1))
+                .background(DS.ColorToken.glassSoft, in: Capsule())
+                .overlay(Capsule().strokeBorder(DS.ColorToken.strokeDefault, lineWidth: 1))
             }
         }
         .accessibilityElement(children: .contain)
@@ -437,13 +439,13 @@ extension AgentInputBar {
 
     private var fileDropChip: some View {
         Label("Drop a file", systemImage: "doc.text")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(NexusColor.Text.primary)
-            .padding(.horizontal, 8)
+            .font(DS.FontToken.caption)
+            .foregroundStyle(DS.ColorToken.textPrimary)
+            .padding(.horizontal, DS.Space.s)
             .padding(.vertical, 5)
-            .background(NexusColor.Background.control, in: Capsule())
-            .overlay(Capsule().strokeBorder(NexusColor.Line.strong, lineWidth: 1))
-            .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+            .background(DS.ColorToken.glassStrong, in: Capsule())
+            .overlay(Capsule().strokeBorder(DS.ColorToken.accentPrimary.opacity(0.55), lineWidth: 1))
+            .shadow(color: DS.ColorToken.shadowEdge, radius: 8, x: 0, y: 4)
             .accessibilityLabel("Drop a file")
     }
 
@@ -451,21 +453,24 @@ extension AgentInputBar {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "photo.badge.clock")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .foregroundStyle(DS.ColorToken.textTertiary)
                 .frame(width: 18, height: 18)
 
             Text(Self.localizedImageDeferralMessage(reason: reason))
-                .font(.footnote)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NexusColor.Background.control.opacity(0.54), in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+        .background(
+            DS.ColorToken.glassSoft,
+            in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: NexusRadius.r2)
-                .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                .strokeBorder(DS.ColorToken.strokeHairline, lineWidth: 1)
         )
         .accessibilityLabel(Self.localizedImageDeferralMessage(reason: reason))
     }
@@ -490,11 +495,11 @@ extension AgentInputBar {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Remove image attachment")
                 }
-                .foregroundStyle(NexusColor.Text.secondary)
-                .padding(.horizontal, 8)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .padding(.horizontal, DS.Space.s)
                 .padding(.vertical, 5)
-                .background(NexusColor.Background.control, in: Capsule())
-                .overlay(Capsule().strokeBorder(NexusColor.Line.regular, lineWidth: 1))
+                .background(DS.ColorToken.glassSoft, in: Capsule())
+                .overlay(Capsule().strokeBorder(DS.ColorToken.strokeDefault, lineWidth: 1))
             }
         }
         .accessibilityElement(children: .contain)
@@ -537,15 +542,15 @@ extension AgentInputBar {
     }
 
     private var imageButtonForeground: Color {
-        attachedImages.isEmpty ? NexusColor.Text.secondary : NexusColor.Text.primary
+        attachedImages.isEmpty ? DS.ColorToken.textSecondary : DS.ColorToken.textPrimary
     }
 
     private var imageButtonBorder: Color {
         if imageButtonDisabled {
-            return NexusColor.Line.hairline
+            return DS.ColorToken.strokeHairline
         }
 
-        return attachedImages.isEmpty ? NexusColor.Line.regular : NexusColor.Line.strong
+        return attachedImages.isEmpty ? DS.ColorToken.strokeDefault : DS.ColorToken.strokeStrong
     }
 
     private var imageButtonDisabled: Bool {
@@ -561,12 +566,20 @@ extension AgentInputBar {
             label: {
                 Image(systemName: voiceIsActive ? "mic.fill" : "mic")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(voiceIsActive ? NexusColor.Text.primary : NexusColor.Text.secondary)
+                    .foregroundStyle(voiceIsActive ? DS.ColorToken.accentPrimary : DS.ColorToken.textSecondary)
                     .frame(width: 30, height: 30)
-                    .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+                    .background(
+                        DS.ColorToken.glassSoft,
+                        in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    )
                     .overlay(
-                        RoundedRectangle(cornerRadius: NexusRadius.r2)
-                            .strokeBorder(voiceIsActive ? NexusColor.Line.strong : NexusColor.Line.regular, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                            .strokeBorder(
+                                voiceIsActive
+                                    ? DS.ColorToken.accentPrimary.opacity(0.55)
+                                    : DS.ColorToken.strokeDefault,
+                                lineWidth: 1
+                            )
                     )
             }
         )

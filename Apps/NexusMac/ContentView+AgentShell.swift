@@ -57,30 +57,30 @@ struct AgentTopControl: View {
         HStack(spacing: 14) {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(NexusColor.Text.tertiary)
+                    .fill(DS.ColorToken.accentPrimary)
                     .frame(width: 5, height: 5)
                 Text("Nexus")
-                    .font(Font.custom("Inter-SemiBold", size: 13))
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.bodyStrong)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
             }
 
             Text("ready")
-                .font(Font.custom("IBMPlexMono-Medium", size: 11))
-                .foregroundStyle(NexusColor.Text.secondary)
-                .padding(.horizontal, 8)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .padding(.horizontal, DS.Space.s)
                 .padding(.vertical, 3)
                 .background(DS.ColorToken.glassSelected, in: Capsule())
-                .overlay(Capsule().strokeBorder(NexusColor.Line.hairline, lineWidth: 1))
+                .overlay(Capsule().strokeBorder(DS.ColorToken.strokeHairline, lineWidth: 1))
 
             Spacer()
 
             Text(threadLabel)
-                .font(Font.custom("IBMPlexMono-Medium", size: 11))
-                .foregroundStyle(NexusColor.Text.muted)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textTertiary)
                 .lineLimit(1)
 
             Rectangle()
-                .fill(NexusColor.Line.hairline)
+                .fill(DS.ColorToken.strokeHairline)
                 .frame(width: 1, height: 12)
 
             // Deliberate oracle deviation: an interactive affordance over the
@@ -93,13 +93,13 @@ struct AgentTopControl: View {
                         Image(systemName: "plus")
                             .font(.system(size: 10, weight: .semibold))
                         Text("New")
-                            .font(Font.custom("Inter-SemiBold", size: 12))
+                            .font(DS.FontToken.button)
                     }
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(DS.ColorToken.glassSelected, in: Capsule())
-                    .overlay(Capsule().strokeBorder(NexusColor.Line.regular, lineWidth: 1))
+                    .overlay(Capsule().strokeBorder(DS.ColorToken.strokeDefault, lineWidth: 1))
                 }
             )
             .buttonStyle(.plain)

@@ -13,14 +13,11 @@ import SwiftUI
 // a non-`TaskItem` model, so this is a faithful rebuild, same class as
 // MP-3.1's `InboxRowView` rebuild.
 //
-// §2 map applied here: ink→`Text.primary` · read→`Text.secondary` ·
-// soft→`Text.tertiary` · faint→`Text.muted` · dim→`Text.disabled` ·
-// block→`Glass.surface1`.
-//
-// Fonts: Geist-* → Inter-*, GeistMono-* → IBMPlexMono-* per Linear redesign.
-// body-role (14 pt Regular) routes to NexusType.body; sub-scale mono (9/10 pt
-// SemiBold) and tool-row mono (10 pt SemiBold) use IBMPlexMono-SemiBold directly
-// (NexusType.metaMono is IBMPlexMono-Medium 10 pt — weight differs; preserve).
+// Liquid re-skin: inks/fonts/radii now come from the DS token namespace
+// (NexusUI/Tokens/LiquidTokens.swift). The user's turn sits on a quiet
+// glass-selected wash; the agent's turn stays flat on the shell glass with
+// its tool cluster on a soft glass tier. Tool names keep a monospaced face
+// (code identifiers, not prose).
 
 struct MessageBubbleView: View {
     let block: AgentMessageBlock
@@ -38,24 +35,37 @@ struct MessageBubbleView: View {
         }
     }
 
-    // Oracle `msg("TY", text)`.
+    // The user's turn sits on a quiet glass-selected wash so the
+    // conversation alternation is scannable at a glance (the agent's turns
+    // stay flat on the shell glass — the calmer of the two).
     private var userBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(block.eyebrow)
-                .font(Font.custom("IBMPlexMono-SemiBold", size: 9))
-                .tracking(2)
-                .foregroundStyle(NexusColor.Text.disabled)  // §2 dim
+                .font(DS.FontToken.caption)
+                .tracking(1.4)
+                .textCase(.uppercase)
+                .foregroundStyle(DS.ColorToken.textMuted)
             // LabKit Phase1l#4 interim: strip the prepended OCR/attachment
             // markers so the user's own bubble shows what they typed (the
             // markers stay in persisted `content` for multi-turn context).
             Text(AgentOCRMarker.userFacingText(block.text))
-                .font(NexusType.body)
-                .foregroundStyle(NexusColor.Text.secondary)  // §2 read
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textSecondary)
                 .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         }
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.s + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            DS.ColorToken.glassSelected,
+            in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .strokeBorder(DS.ColorToken.strokeHairline, lineWidth: 1)
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -71,9 +81,10 @@ struct MessageBubbleView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(block.eyebrow)
-                    .font(Font.custom("IBMPlexMono-SemiBold", size: 9))
-                    .tracking(2)
-                    .foregroundStyle(NexusColor.Text.muted)  // §2 faint
+                    .font(DS.FontToken.caption)
+                    .tracking(1.4)
+                    .textCase(.uppercase)
+                    .foregroundStyle(DS.ColorToken.accentPrimary.opacity(0.85))
 
                 // Adjudicated-keep (M1-class, same call as the `nowy ⌘⇧A`
                 // top-bar keep): `redactedContent` is REAL data and the badge
@@ -92,8 +103,8 @@ struct MessageBubbleView: View {
 
             if !block.text.isEmpty {
                 Text(block.text)
-                    .font(NexusType.body)
-                    .foregroundStyle(NexusColor.Text.primary)  // §2 ink
+                    .font(DS.FontToken.body)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
@@ -111,17 +122,16 @@ struct MessageBubbleView: View {
                     }
                 }
                 // Tool-call group gets its own tier so it reads as a distinct
-                // cluster against the flat message body: `control` is one step
-                // lighter than the `raised` rows it contains (clean two-tier
-                // nest), with a faint hairline. Neutral, no lime.
-                .padding(8)
+                // cluster against the flat message body: soft glass under
+                // selected-glass rows (clean two-tier nest), faint hairline.
+                .padding(DS.Space.s)
                 .background(
-                    NexusColor.Background.control,
-                    in: RoundedRectangle(cornerRadius: NexusRadius.r3)
+                    DS.ColorToken.glassSoft,
+                    in: RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
                 )
                 .overlay {
-                    RoundedRectangle(cornerRadius: NexusRadius.r3)
-                        .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                        .strokeBorder(DS.ColorToken.strokeHairline, lineWidth: 1)
                 }
             }
         }
@@ -141,17 +151,17 @@ struct MessageBubbleView: View {
         HStack(spacing: 8) {
             Image(systemName: tool.icon)
                 .font(.system(size: 9))
-                .foregroundStyle(NexusColor.Text.muted)  // §2 faint
+                .foregroundStyle(DS.ColorToken.textMuted)
             Text(tool.name)
-                .font(Font.custom("IBMPlexMono-SemiBold", size: 10))
-                .foregroundStyle(NexusColor.Text.tertiary)  // §2 soft
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(DS.ColorToken.textSecondary)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            NexusColor.Background.raised,
-            in: RoundedRectangle(cornerRadius: NexusRadius.r1)
+            DS.ColorToken.glassSelected,
+            in: RoundedRectangle(cornerRadius: DS.Radius.xs, style: .continuous)
         )
     }
 
