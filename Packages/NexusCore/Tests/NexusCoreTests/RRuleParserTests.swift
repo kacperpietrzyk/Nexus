@@ -45,4 +45,24 @@ struct RRuleParserTests {
             _ = try RRuleParser.parse("FREQ=WEEKLY;BYDAY=XX")
         }
     }
+
+    @Test("parses ANCHOR=COMPLETION")
+    func anchorCompletion() throws {
+        let rule = try RRuleParser.parse("FREQ=DAILY;ANCHOR=COMPLETION")
+        #expect(rule.anchor == .completion)
+        #expect(rule.frequency == .daily)
+    }
+
+    @Test("ANCHOR=DUE and an absent ANCHOR both mean dueDate")
+    func anchorDue() throws {
+        #expect(try RRuleParser.parse("FREQ=DAILY;ANCHOR=DUE").anchor == .dueDate)
+        #expect(try RRuleParser.parse("FREQ=DAILY").anchor == .dueDate)
+    }
+
+    @Test("rejects an unknown ANCHOR value")
+    func anchorInvalid() {
+        #expect(throws: RRuleParseError.invalidValue(field: "ANCHOR", value: "WHENEVER")) {
+            _ = try RRuleParser.parse("FREQ=DAILY;ANCHOR=WHENEVER")
+        }
+    }
 }
