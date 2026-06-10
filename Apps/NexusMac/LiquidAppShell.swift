@@ -49,20 +49,9 @@ struct LiquidAppShell<Sidebar: View, Toolbar: View, Main: View, Inspector: View>
 
     var body: some View {
         ZStack {
-            DS.ColorToken.backgroundApp.ignoresSafeArea()
-
-            // Wallpaper-like gradient under the glass panels, per the
-            // design-system shell scaffold (LiquidAppShellExample.swift).
-            LinearGradient(
-                colors: [
-                    DS.ColorToken.accentBlue.opacity(0.10),
-                    DS.ColorToken.backgroundApp,
-                    DS.ColorToken.accentAmber.opacity(0.08),
-                ],
-                startPoint: .topTrailing,
-                endPoint: .bottomLeading
-            )
-            .ignoresSafeArea()
+            // Shared liquid ground (app background + wallpaper gradient) under
+            // the glass panels — the same layer the Settings window paints.
+            LiquidWallpaper()
 
             HStack(spacing: DS.Space.m) {
                 sidebar()

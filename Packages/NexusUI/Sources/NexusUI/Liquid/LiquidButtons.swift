@@ -52,6 +52,10 @@ public struct LiquidPrimaryButton: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    // Deliberate calibration, not a token: white at 0.16 sits
+                    // between strokeDefault (0.11) and strokeStrong (0.17) so
+                    // the rim reads on the bright accent fill without hardening
+                    // into a border (ported from the design-system starter).
                     .stroke(Color.white.opacity(0.16), lineWidth: 1)
             }
             .shadow(color: DS.ColorToken.accentPrimary.opacity(0.30), radius: 14, x: 0, y: 4)

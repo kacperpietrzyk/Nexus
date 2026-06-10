@@ -42,8 +42,10 @@ public struct CommandPaletteView: View {
         // Liquid re-skin (container level): the strong liquid glass recipe
         // replaces the opaque `Background.raised` panel + manual Line.regular
         // stroke + pop shadow, so the palette floats as glass over the scrim.
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .liquidGlass(.strong, radius: 18)
+        // DS.Radius.xl: the shared radius of all three `.strong` glass modal
+        // surfaces (command palette, capture overlay, task modal).
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous))
+        .liquidGlass(.strong, radius: DS.Radius.xl)
         .nexusOverlayEnter()
         .padding(.bottom, 120)
         .task { await reload(for: query) }

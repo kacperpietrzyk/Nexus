@@ -253,9 +253,10 @@ struct NexusMacApp: App {
             .environment(\.calendarEventWriter, EventKitCalendarProvider.shared)
                 #endif
                 // Cheap insurance for non-dashboard states (Focus mode, future
-                // sheets) where `NexusWallpaper` is not painted; wallpaper-bearing
-                // dashboard ignores safe area and covers this anyway.
-                .containerBackground(NexusColor.Background.base, for: .window)
+                // sheets) where the shell background is not painted; the
+                // dashboard ignores safe area and covers this anyway. Liquid
+                // re-skin: DS app background (matches the Settings scene).
+                .containerBackground(DS.ColorToken.backgroundApp, for: .window)
                 // Achromatic control tint for the WHOLE main window — mirrors the
                 // Settings scene (line ~413). Without it, native Toggle / Picker /
                 // segmented / DatePicker controls in the main window (the task

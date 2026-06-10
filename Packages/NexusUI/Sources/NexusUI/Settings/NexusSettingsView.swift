@@ -83,21 +83,11 @@ public struct NexusSettingsView: View {
     public var body: some View {
         #if os(macOS)
         // Liquid re-skin (container level): the Settings window chrome joins
-        // the liquid background family — the DS app background with the same
-        // subtle wallpaper gradient the main shell paints, replacing the flat
-        // Linear `NexusWallpaper` + `Background.base` slab. Content unchanged.
+        // the liquid background family — the shared `LiquidWallpaper` ground
+        // the main shell paints, replacing the flat Linear `NexusWallpaper` +
+        // `Background.base` slab. Content unchanged.
         ZStack {
-            DS.ColorToken.backgroundApp.ignoresSafeArea()
-            LinearGradient(
-                colors: [
-                    DS.ColorToken.accentBlue.opacity(0.10),
-                    DS.ColorToken.backgroundApp,
-                    DS.ColorToken.accentAmber.opacity(0.08),
-                ],
-                startPoint: .topTrailing,
-                endPoint: .bottomLeading
-            )
-            .ignoresSafeArea()
+            LiquidWallpaper()
             macSettingsScroll
         }
         .background(DS.ColorToken.backgroundApp)

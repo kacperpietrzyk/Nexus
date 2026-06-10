@@ -76,11 +76,13 @@ extension ContentView {
                 // glass recipe replaces the opaque base slab + manual stroke +
                 // pop shadow; the inspector's own `.tint` now carries the
                 // liquid accent for its native controls.
+                // DS.Radius.xl: the shared radius of all three `.strong` glass
+                // modal surfaces (task modal, capture overlay, command palette).
                 TaskDetailInspector(task: task, onClose: { selectedTask = nil }, layout: .wide)
                     .frame(width: 720)
                     .frame(maxHeight: 760)
-                    .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
-                    .liquidGlass(.strong, radius: NexusRadius.r3)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous))
+                    .liquidGlass(.strong, radius: DS.Radius.xl)
                     .transition(.scale(scale: 0.97).combined(with: .opacity))
             }
         }
