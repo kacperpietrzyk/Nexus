@@ -33,20 +33,22 @@ public enum DS {
         public static let glassCard = Color(hex: 0x0F151F, alpha: 0xB8 / 255.0)
         /// #172131 at CC/255 ≈ 0.80
         public static let glassCardHover = Color(hex: 0x172131, alpha: 0xCC / 255.0)
-        /// white at 12/255 ≈ 0.07
-        public static let glassSelected = Color.white.opacity(0x12 / 255.0)
+        /// White at 12/255 ≈ 0.07. Intentionally the same value as `strokeHairline`
+        /// (#FFFFFF12 in the source JSON) but with a distinct semantic role:
+        /// selected surface overlay, not a border.
+        public static let glassSelected = Color(hex: 0xFFFFFF, alpha: 0x12 / 255.0)
 
         // Stroke
         /// white at 12/255 ≈ 0.07
-        public static let strokeHairline = Color.white.opacity(0x12 / 255.0)
+        public static let strokeHairline = Color(hex: 0xFFFFFF, alpha: 0x12 / 255.0)
         /// white at 1C/255 ≈ 0.11
-        public static let strokeDefault = Color.white.opacity(0x1C / 255.0)
+        public static let strokeDefault = Color(hex: 0xFFFFFF, alpha: 0x1C / 255.0)
         /// white at 2B/255 ≈ 0.17
-        public static let strokeStrong = Color.white.opacity(0x2B / 255.0)
+        public static let strokeStrong = Color(hex: 0xFFFFFF, alpha: 0x2B / 255.0)
         /// white at 26/255 ≈ 0.15
-        public static let strokeInnerHighlight = Color.white.opacity(0x26 / 255.0)
+        public static let strokeInnerHighlight = Color(hex: 0xFFFFFF, alpha: 0x26 / 255.0)
         /// black at 66/255 ≈ 0.40
-        public static let shadowEdge = Color.black.opacity(0x66 / 255.0)
+        public static let shadowEdge = Color(hex: 0x000000, alpha: 0x66 / 255.0)
 
         // Text
         public static let textPrimary = Color(hex: 0xF4F7FB)
@@ -85,7 +87,7 @@ public enum DS {
         public static let eventPersonalStroke = Color(hex: 0x37D67A, alpha: 0x66 / 255.0)
         public static let eventAdminFill = Color(hex: 0x1B2432, alpha: 0xA6 / 255.0)
         /// white at 1F/255 ≈ 0.12
-        public static let eventAdminStroke = Color.white.opacity(0x1F / 255.0)
+        public static let eventAdminStroke = Color(hex: 0xFFFFFF, alpha: 0x1F / 255.0)
     }
 
     // MARK: Space
@@ -116,15 +118,19 @@ public enum DS {
     // MARK: Size
 
     public enum Size {
+        public static let navItemHeight: CGFloat = 34
+        public static let cardMinHeight: CGFloat = 120
+
+        // macOS-only desktop window/chrome metrics.
+        #if os(macOS)
         public static let sidebarWidth: CGFloat = 224
         public static let rightInspectorWidth: CGFloat = 304
         public static let toolbarHeight: CGFloat = 58
-        public static let navItemHeight: CGFloat = 34
-        public static let cardMinHeight: CGFloat = 120
         public static let contentMinWidth: CGFloat = 760
         public static let windowMinWidth: CGFloat = 1180
         public static let windowIdealWidth: CGFloat = 1448
         public static let windowIdealHeight: CGFloat = 1086
+        #endif
     }
 
     // MARK: FontToken
