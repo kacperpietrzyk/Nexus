@@ -104,14 +104,23 @@ public struct LiquidAgendaItem: Identifiable, Equatable, Sendable {
 }
 
 /// Top Priorities section: tasks due today/overdue sharing one priority bucket.
-public struct LiquidPriorityGroup: Identifiable {
+/// Equatable over the bucket + task identity (`===` — `TaskItem` is a model
+/// reference) so `ForEach`/`.animation` can diff reloads cheaply.
+public struct LiquidPriorityGroup: Identifiable, Equatable {
     public let priority: TaskPriority
     public let tasks: [TaskItem]
     public var id: Int { priority.rawValue }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.priority == rhs.priority
+            && lhs.tasks.count == rhs.tasks.count
+            && zip(lhs.tasks, rhs.tasks).allSatisfy { $0 === $1 }
+    }
 }
 
 /// Projects-card row: an active project + its real task completion ratio.
-public struct LiquidProjectProgress: Identifiable {
+/// Equatable via model-reference identity + the value fields.
+public struct LiquidProjectProgress: Identifiable, Equatable {
     public let project: Project
     public let doneCount: Int
     public let totalCount: Int
@@ -121,13 +130,24 @@ public struct LiquidProjectProgress: Identifiable {
     public var fraction: Double {
         totalCount > 0 ? Double(doneCount) / Double(totalCount) : 0
     }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.project === rhs.project
+            && lhs.doneCount == rhs.doneCount
+            && lhs.totalCount == rhs.totalCount
+    }
 }
 
 /// Notes-card row: a recent note + its Link-graph degree (in + out).
-public struct LiquidNoteSummary: Identifiable {
+/// Equatable via model-reference identity + the value field.
+public struct LiquidNoteSummary: Identifiable, Equatable {
     public let note: Note
     public let linkCount: Int
     public var id: UUID { note.id }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.note === rhs.note && lhs.linkCount == rhs.linkCount
+    }
 }
 
 // MARK: - Model
@@ -144,8 +164,12 @@ public struct LiquidNoteSummary: Identifiable {
 public final class LiquidTodayModel {
 
     public private(set) var agendaItems: [LiquidAgendaItem] = []
-    /// Today's visible calendar events (kept raw for the focus-gap seam).
+    /// Today's visible calendar events (raw input to the focus-gap seam).
     public private(set) var events: [CalendarEvent] = []
+    /// First free focus gap left in today's workday, computed during reload
+    /// through the injected `LiquidTodayFocusGapProvider` — the inspector
+    /// renders this stored value instead of recomputing in `body`.
+    public private(set) var focusSuggestion: DateInterval?
     public private(set) var priorityGroups: [LiquidPriorityGroup] = []
     public private(set) var projects: [LiquidProjectProgress] = []
     public private(set) var notes: [LiquidNoteSummary] = []
@@ -164,8 +188,13 @@ public final class LiquidTodayModel {
 
     private var reloadGeneration = 0
     private var lastBriefInput: LiquidTodayBriefInput?
+    /// Calendar visibility preferences — held (not constructed per reload) so
+    /// tests can inject a store with controlled defaults.
+    private let calendarPreferencesStore: UserDefaultsCalendarPreferencesStore
 
-    public init() {}
+    public init(calendarPreferencesStore: UserDefaultsCalendarPreferencesStore = UserDefaultsCalendarPreferencesStore()) {
+        self.calendarPreferencesStore = calendarPreferencesStore
+    }
 
     /// Reloads every card feed. Mirrors `TodayDashboard.reloadScheduleData()`'s
     /// generation guard so an overlapping reload can never interleave stale data.
@@ -175,6 +204,7 @@ public final class LiquidTodayModel {
         calendarEventsEnabled: Bool,
         meetingIntelProvider: LiquidTodayMeetingIntelProvider?,
         briefProvider: LiquidTodayBriefProvider?,
+        focusGapProvider: LiquidTodayFocusGapProvider? = nil,
         now: Date = .now
     ) async {
         reloadGeneration += 1
@@ -185,14 +215,16 @@ public final class LiquidTodayModel {
         var fetchedEvents: [CalendarEvent] = []
         if calendarEventsEnabled {
             let raw = (try? await calendarProvider.eventsToday(now: now)) ?? []
-            fetchedEvents = UserDefaultsCalendarPreferencesStore().load().visibleEvents(raw)
+            fetchedEvents = calendarPreferencesStore.load().visibleEvents(raw)
         }
 
         guard generation == reloadGeneration else { return }
+        let focusGap = Self.suggestedFocusGap(events: fetchedEvents, provider: focusGapProvider, now: now)
 
         do {
             let snapshot = try Self.loadStoreSnapshot(modelContext: modelContext, now: now)
             events = fetchedEvents
+            focusSuggestion = focusGap
             agendaItems = Self.agendaItems(events: fetchedEvents, blocks: snapshot.acceptedBlocks)
             priorityGroups = Self.priorityGroups(overdue: snapshot.overdue, today: snapshot.today)
             projects = snapshot.projects
@@ -206,6 +238,7 @@ public final class LiquidTodayModel {
         } catch {
             guard generation == reloadGeneration else { return }
             events = fetchedEvents
+            focusSuggestion = focusGap
             agendaItems = []
             priorityGroups = []
             projects = []
@@ -223,7 +256,46 @@ public final class LiquidTodayModel {
             .min { $0.start < $1.start }
     }
 
+    // MARK: - Focus gap
+
+    /// Workday window for the Focus Suggestion gap search: a standard
+    /// 08:00–18:00 day (the design references morning→evening focus gaps;
+    /// no workday token exists). The remaining window is clamped to `now`.
+    static let workdayStartHour = 8
+    static let workdayEndHour = 18
+
+    /// First ≥1 h free gap between `now` and the end of the workday, via the
+    /// injected `SchedulingIntelligence` seam over today's loaded events.
+    static func suggestedFocusGap(
+        events: [CalendarEvent],
+        provider: LiquidTodayFocusGapProvider?,
+        now: Date
+    ) -> DateInterval? {
+        guard let provider else { return nil }
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: now)
+        guard
+            let workStart = calendar.date(byAdding: .hour, value: workdayStartHour, to: dayStart),
+            let workEnd = calendar.date(byAdding: .hour, value: workdayEndHour, to: dayStart)
+        else { return nil }
+        let start = max(now, workStart)
+        guard start < workEnd else { return nil }
+        return provider(events, DateInterval(start: start, end: workEnd)).first
+    }
+
     // MARK: - Brief
+
+    /// Pure regeneration decision: skip only when the input is unchanged AND a
+    /// non-empty brief is already held (the agent service additionally caches
+    /// per (day, counts, titles) upstream). Extracted static so the dedup rule
+    /// is unit-testable without driving the async provider.
+    static func shouldRegenerateBrief(
+        lastInput: LiquidTodayBriefInput?,
+        newInput: LiquidTodayBriefInput,
+        currentBrief: String
+    ) -> Bool {
+        !(lastInput == newInput && !currentBrief.isEmpty)
+    }
 
     private func loadBriefIfNeeded(
         input: LiquidTodayBriefInput,
@@ -235,9 +307,9 @@ public final class LiquidTodayModel {
             briefIsLoading = false
             return
         }
-        // The agent service caches per (day, counts, titles); skip only when the
-        // input is unchanged AND we already hold a non-empty brief.
-        if lastBriefInput == input && !brief.isEmpty { return }
+        guard Self.shouldRegenerateBrief(lastInput: lastBriefInput, newInput: input, currentBrief: brief) else {
+            return
+        }
         briefIsLoading = true
         let text = await provider(input)
         guard generation == reloadGeneration else { return }
@@ -325,7 +397,8 @@ public final class LiquidTodayModel {
 
     /// Real progress = done/total over each active project's non-deleted tasks
     /// (single fetch, grouped in memory — same data `ProjectPageView` reads).
-    private static func projectProgress(
+    /// Internal (not `private`) so the ordering contract is unit-testable.
+    static func projectProgress(
         activeProjects: [Project],
         modelContext: ModelContext
     ) throws -> [LiquidProjectProgress] {
@@ -386,11 +459,15 @@ public final class LiquidTodayModel {
             }
         }
         guard !noteIDs.isEmpty else { return [] }
-        let descriptor = FetchDescriptor<Note>(
-            predicate: #Predicate { $0.deletedAt == nil },
+        // Bounded fetch: predicate on the collected IDs + fetchLimit, instead
+        // of scanning the whole Note table and filtering in memory.
+        let idArray = Array(noteIDs)
+        var descriptor = FetchDescriptor<Note>(
+            predicate: #Predicate { idArray.contains($0.id) && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        return Array(try modelContext.fetch(descriptor).filter { noteIDs.contains($0.id) }.prefix(3))
+        descriptor.fetchLimit = 3
+        return try modelContext.fetch(descriptor)
     }
 
     /// First open pinned-as-focus task (earliest due first) — the same

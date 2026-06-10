@@ -50,12 +50,12 @@ struct ContentView: View {
     // container + the shared EventKit provider so its scope/anchor state survives
     // rail switches.
     @State private var calendarViewModel: CalendarViewModel?
-    // Shared data feed for the Liquid Today screen (Task 5): one model drives
-    // BOTH the main column and the right inspector, so the two slots always
-    // render the same load. Owned here (not inside the screen) because the
-    // inspector mounts through a separate `LiquidAppShell` slot.
-    // Internal (not `private`): shared with the `ContentView+LiquidToday` extension.
+    // Shared data feed for the Liquid Today screen (Task 5): one model drives both
+    // the main column and the inspector slot. Internal: see `ContentView+LiquidToday`.
     @State var liquidTodayModel = LiquidTodayModel()
+    // Quick Capture draft, hoisted (not inspector @State) so a half-typed capture
+    // survives destination switches (the inspector slot unmounts off-Today).
+    @State var todayCaptureText = ""
 
     var body: some View {
         Group {

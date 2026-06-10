@@ -20,6 +20,12 @@ extension ContentView {
             model: liquidTodayModel,
             meetingIntelProvider: { fetchTodayMeetingIntel() },
             briefProvider: dailyBriefProvider,
+            // Focus Suggestion seam: CalendarFeature's scheduling intelligence,
+            // injected so TasksFeature stays decoupled. The model computes and
+            // stores the gap during reload; the inspector renders the result.
+            focusGapProvider: { events, window in
+                SchedulingIntelligence.suggestedFocusBlocks(events: events, within: window)
+            },
             onNavigate: { navigate(to: $0) },
             onOpenTask: { openTask($0) },
             onOpenCapture: { mode in
@@ -33,15 +39,12 @@ extension ContentView {
     var todayInspectorSlot: (() -> AnyView)? {
         guard selection == .today else { return nil }
         let model = liquidTodayModel
+        let captureText = $todayCaptureText
         return {
             AnyView(
                 TodayInspector(
                     model: model,
-                    // Focus Suggestion seam: CalendarFeature's scheduling
-                    // intelligence, injected so TasksFeature stays decoupled.
-                    focusGaps: { events, window in
-                        SchedulingIntelligence.suggestedFocusBlocks(events: events, within: window)
-                    },
+                    captureText: captureText,
                     onNavigate: { self.navigate(to: $0) },
                     onOpenCapture: { mode in
                         NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)

@@ -1,5 +1,6 @@
 import Foundation
 import NexusCore
+import SwiftData
 import Testing
 
 @testable import TasksFeature
@@ -89,6 +90,65 @@ struct LiquidTodayModelTests {
         let raw = "## Three things matter today\n[[accent]]Push the auth flow[[/accent]] and [[mono]]review[[/mono]]."
         let cleaned = LiquidTodayText.strippingMarkers(from: raw)
         #expect(cleaned == "Three things matter today\nPush the auth flow and review.")
+    }
+
+    // MARK: - Brief regeneration decision
+
+    @Test("Brief regenerates on changed input or empty brief; skips on identical input with content")
+    @MainActor
+    func briefRegenerationDecision() {
+        let now = Date.now
+        let input = LiquidTodayBriefInput(overdue: 1, today: 2, noDate: 3, awaiting: 0, firstTitles: ["a"], now: now)
+        let sameInput = LiquidTodayBriefInput(overdue: 1, today: 2, noDate: 3, awaiting: 0, firstTitles: ["a"], now: now)
+        let changedInput = LiquidTodayBriefInput(overdue: 2, today: 2, noDate: 3, awaiting: 0, firstTitles: ["a"], now: now)
+
+        // Identical input + held brief -> skip.
+        #expect(!LiquidTodayModel.shouldRegenerateBrief(lastInput: input, newInput: sameInput, currentBrief: "held"))
+        // Changed counts -> regenerate.
+        #expect(LiquidTodayModel.shouldRegenerateBrief(lastInput: input, newInput: changedInput, currentBrief: "held"))
+        // Identical input but no brief held yet -> regenerate.
+        #expect(LiquidTodayModel.shouldRegenerateBrief(lastInput: input, newInput: sameInput, currentBrief: ""))
+        // First load (no prior input) -> regenerate.
+        #expect(LiquidTodayModel.shouldRegenerateBrief(lastInput: nil, newInput: input, currentBrief: ""))
+    }
+
+    // MARK: - Project progress
+
+    @Test("Project progress orders by updatedAt desc and counts done/total per project")
+    @MainActor
+    func projectProgressOrdering() throws {
+        let container = try ModelContainer(
+            for: Project.self, TaskItem.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+
+        let older = Project(name: "Older", status: .active)
+        older.updatedAt = Date(timeIntervalSince1970: 1_000)
+        let newer = Project(name: "Newer", status: .active)
+        newer.updatedAt = Date(timeIntervalSince1970: 2_000)
+        context.insert(older)
+        context.insert(newer)
+
+        let doneTask = TaskItem(title: "done")
+        doneTask.statusRaw = TaskStatus.done.rawValue
+        doneTask.projectID = newer.id
+        let openTask = TaskItem(title: "open")
+        openTask.projectID = newer.id
+        context.insert(doneTask)
+        context.insert(openTask)
+
+        let progress = try LiquidTodayModel.projectProgress(
+            activeProjects: [older, newer],
+            modelContext: context
+        )
+
+        #expect(progress.map(\.project.name) == ["Newer", "Older"])
+        #expect(progress[0].doneCount == 1)
+        #expect(progress[0].totalCount == 2)
+        #expect(progress[0].fraction == 0.5)
+        #expect(progress[1].totalCount == 0)
+        #expect(progress[1].fraction == 0)
     }
 
     // MARK: - Focus timer label

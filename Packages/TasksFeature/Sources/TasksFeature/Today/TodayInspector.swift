@@ -6,10 +6,6 @@ import SwiftUI
 private let quickCaptureMinHeight: CGFloat = 72
 /// Spec §Focus Timer: "circular progress 62–70 pt".
 private let focusRingSize: CGFloat = 66
-/// Focus Suggestion gap detection window: a standard 08:00–18:00 workday
-/// (the design references morning→evening focus gaps; no workday token exists).
-private let workdayStartHour = 8
-private let workdayEndHour = 18
 
 /// The Today right inspector (spec §Right inspector): Daily Brief, Focus
 /// Suggestion, Up Next, Linked Notes, Focus Timer, and Quick Capture as
@@ -23,23 +19,25 @@ public struct TodayInspector: View {
     @Environment(\.taskRepository) private var taskRepository
 
     private let model: LiquidTodayModel
-    private let focusGaps: LiquidTodayFocusGapProvider?
     private let onNavigate: (TodayNavSelection) -> Void
     private let onOpenCapture: (CapturePane.Mode) -> Void
 
-    @State private var captureText = ""
+    /// Draft text lives in the HOST (`ContentView.todayCaptureText`), not in
+    /// local `@State`: the inspector slot unmounts on every destination
+    /// switch, and a half-typed capture must survive a tab round-trip.
+    @Binding private var captureText: String
     @State private var captureIsSaving = false
     @State private var captureSavedFeedback = false
     @State private var captureError: String?
 
     public init(
         model: LiquidTodayModel,
-        focusGaps: LiquidTodayFocusGapProvider?,
+        captureText: Binding<String>,
         onNavigate: @escaping (TodayNavSelection) -> Void,
         onOpenCapture: @escaping (CapturePane.Mode) -> Void
     ) {
         self.model = model
-        self.focusGaps = focusGaps
+        self._captureText = captureText
         self.onNavigate = onNavigate
         self.onOpenCapture = onOpenCapture
     }
@@ -96,7 +94,9 @@ public struct TodayInspector: View {
     @ViewBuilder
     private var focusSuggestionCard: some View {
         LiquidGlassCard("Focus Suggestion") {
-            if let gap = suggestedFocusGap {
+            // Stored on the model (computed during reload via the injected
+            // SchedulingIntelligence seam) — no per-render recomputation.
+            if let gap = model.focusSuggestion {
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     Text(
                         "You have \(Self.durationText(gap.duration)) of focus time "
@@ -113,22 +113,6 @@ public struct TodayInspector: View {
                 )
             }
         }
-    }
-
-    /// First ≥1 h free gap between now and the end of the workday, computed by
-    /// the injected `SchedulingIntelligence` seam over today's loaded events.
-    private var suggestedFocusGap: DateInterval? {
-        guard let focusGaps else { return nil }
-        let now = Date.now
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: now)
-        guard
-            let workStart = calendar.date(byAdding: .hour, value: workdayStartHour, to: dayStart),
-            let workEnd = calendar.date(byAdding: .hour, value: workdayEndHour, to: dayStart)
-        else { return nil }
-        let start = max(now, workStart)
-        guard start < workEnd else { return nil }
-        return focusGaps(model.events, DateInterval(start: start, end: workEnd)).first
     }
 
     static func durationText(_ duration: TimeInterval) -> String {
@@ -177,6 +161,8 @@ public struct TodayInspector: View {
 
     // MARK: - Linked Notes
 
+    // Rows route to the Notes destination; a per-note open seam (onOpenNote
+    // targeting the specific note) is deferred to a later task.
     @ViewBuilder
     private var linkedNotesCard: some View {
         LiquidGlassCard("Linked Notes") {

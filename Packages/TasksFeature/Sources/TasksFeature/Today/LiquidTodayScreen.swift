@@ -36,6 +36,7 @@ public struct LiquidTodayScreen: View {
     private let model: LiquidTodayModel
     private let meetingIntelProvider: LiquidTodayMeetingIntelProvider?
     private let briefProvider: LiquidTodayBriefProvider?
+    private let focusGapProvider: LiquidTodayFocusGapProvider?
     private let onNavigate: (TodayNavSelection) -> Void
     private let onOpenTask: (TaskItem) -> Void
     private let onOpenCapture: (CapturePane.Mode) -> Void
@@ -47,6 +48,7 @@ public struct LiquidTodayScreen: View {
         model: LiquidTodayModel,
         meetingIntelProvider: LiquidTodayMeetingIntelProvider?,
         briefProvider: LiquidTodayBriefProvider?,
+        focusGapProvider: LiquidTodayFocusGapProvider? = nil,
         onNavigate: @escaping (TodayNavSelection) -> Void,
         onOpenTask: @escaping (TaskItem) -> Void,
         onOpenCapture: @escaping (CapturePane.Mode) -> Void
@@ -54,6 +56,7 @@ public struct LiquidTodayScreen: View {
         self.model = model
         self.meetingIntelProvider = meetingIntelProvider
         self.briefProvider = briefProvider
+        self.focusGapProvider = focusGapProvider
         self.onNavigate = onNavigate
         self.onOpenTask = onOpenTask
         self.onOpenCapture = onOpenCapture
@@ -179,7 +182,8 @@ public struct LiquidTodayScreen: View {
             calendarProvider: calendarProvider,
             calendarEventsEnabled: calendarEventsEnabled,
             meetingIntelProvider: meetingIntelProvider,
-            briefProvider: briefProvider
+            briefProvider: briefProvider,
+            focusGapProvider: focusGapProvider
         )
     }
 
@@ -195,6 +199,9 @@ public struct LiquidTodayScreen: View {
                 try TaskCompletionAction.complete(task, repository: taskRepository)
             }
             actionError = nil
+            // Refresh the buckets immediately (mirrors the store-change hook;
+            // don't leave the row stale until the autosave notification lands).
+            _Concurrency.Task { await reload() }
         } catch let error as TaskItemRepositoryError {
             if case .parentHasOpenSubtasks(let parentID, let openCount) = error, parentID == task.id {
                 cascadePrompt = CascadeCompletionPrompt(task: task, openCount: openCount)
@@ -211,6 +218,8 @@ public struct LiquidTodayScreen: View {
         do {
             try TaskCompletionAction.cascadeComplete(prompt.task, repository: taskRepository)
             actionError = nil
+            // Same immediate refresh as toggleDone's success path.
+            _Concurrency.Task { await reload() }
         } catch {
             actionError = String(describing: error)
         }
