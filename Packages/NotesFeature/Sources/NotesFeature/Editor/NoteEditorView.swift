@@ -30,16 +30,7 @@ struct NoteEditorView: View {
 
     var body: some View {
         ScrollViewReader { _ in
-            List {
-                titleField
-                propertiesSection
-                blockRows
-                insertRow
-                if !backlinks.isEmpty {
-                    backlinksSection
-                }
-            }
-            .listStyle(.plain)
+            editorList
         }
         .navigationTitle(model.title.isEmpty ? "Untitled" : model.title)
         #if os(iOS)
@@ -59,11 +50,38 @@ struct NoteEditorView: View {
 
     // MARK: - Sections
 
+    /// The block list. On macOS it is hosted as a Liquid glass document panel
+    /// (the platform `List` background is hidden so the glass shows through);
+    /// iOS keeps the platform-native list. Same rows, same interactions.
+    private var editorList: some View {
+        let list = List {
+            titleField
+            propertiesSection
+            blockRows
+            insertRow
+            if !backlinks.isEmpty {
+                backlinksSection
+            }
+        }
+        .listStyle(.plain)
+        #if os(macOS)
+        return
+            list
+            .scrollContentBackground(.hidden)
+            .padding(.vertical, DS.Space.s)
+            .liquidGlass(.card, radius: DS.Radius.l)
+            .padding(.horizontal, DS.Space.xl)
+            .padding(.vertical, DS.Space.l)
+        #else
+        return list
+        #endif
+    }
+
     private var titleField: some View {
         TextField("Title", text: $model.title)
             .textFieldStyle(.plain)
-            .font(NexusType.h2)
-            .foregroundStyle(NexusColor.Text.primary)
+            .font(DS.FontToken.displayMedium)
+            .foregroundStyle(DS.ColorToken.textPrimary)
             .disabled(!model.canEdit)
             .onSubmit { model.commitTitle() }
             .listRowSeparator(.hidden)
@@ -74,27 +92,36 @@ struct NoteEditorView: View {
     /// schema change). Status / extra typed properties lean on `tags` per the task's
     /// guidance; a structured property bag is deferred (it would touch the schema).
     private var propertiesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.s + 2) {
             propertyRow(label: "Tags") {
                 tagEditor
             }
             propertyRow(label: "Type") {
                 Text(roleLabel)
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
             }
             propertyRow(label: "Created") {
                 Text(model.createdAt, format: .dateTime.day().month().year())
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textMuted)
             }
             propertyRow(label: "Updated") {
                 Text(model.updatedAt, format: .dateTime.day().month().year().hour().minute())
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textMuted)
             }
         }
-        .padding(.vertical, 8)
+        .padding(DS.Space.m)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .fill(DS.ColorToken.glassSoft)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+        }
+        .padding(.vertical, DS.Space.s)
         .listRowSeparator(.hidden)
     }
 
@@ -102,10 +129,11 @@ struct NoteEditorView: View {
         label: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
-                .nexusType(.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
+            Text(label.uppercased())
+                .font(DS.FontToken.caption)
+                .kerning(0.6)
+                .foregroundStyle(DS.ColorToken.textTertiary)
                 .frame(width: 64, alignment: .leading)
             content()
             Spacer(minLength: 0)
@@ -123,7 +151,7 @@ struct NoteEditorView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "number")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                     tagInputField
                 }
             }
@@ -135,8 +163,8 @@ struct NoteEditorView: View {
     private var tagInputField: some View {
         let field = TextField("Add tag", text: $newTag)
             .textFieldStyle(.plain)
-            .nexusType(.bodySmall)
-            .foregroundStyle(NexusColor.Text.primary)
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textPrimary)
             .onSubmit { commitTag() }
         #if os(iOS)
         return
@@ -202,8 +230,8 @@ struct NoteEditorView: View {
                 }
             } label: {
                 Label("Add block", systemImage: "plus.circle")
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             }
             .menuStyle(.borderlessButton)
             .listRowSeparator(.hidden)
@@ -211,23 +239,33 @@ struct NoteEditorView: View {
     }
 
     private var backlinksSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Backlinks")
-                .nexusType(.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            Text("BACKLINKS")
+                .font(DS.FontToken.caption)
+                .kerning(0.6)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             ForEach(backlinks) { entry in
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     Image(systemName: "arrow.turn.up.left")
-                        .font(.caption)
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                     Text(entry.title)
-                        .nexusType(.bodySmall)
-                        .foregroundStyle(NexusColor.Text.secondary)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
                         .lineLimit(1)
                 }
             }
         }
-        .padding(.top, 16)
+        .padding(DS.Space.m)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .fill(DS.ColorToken.glassSoft)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+        }
+        .padding(.top, DS.Space.m)
         .listRowSeparator(.hidden)
     }
 

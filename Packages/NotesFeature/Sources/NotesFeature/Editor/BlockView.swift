@@ -31,7 +31,7 @@ struct BlockView: View {
         case .code(let language, let text):
             CodeBlockView(block: block, model: model, language: language, text: text)
         case .divider:
-            Divider().overlay(NexusColor.Line.strong)
+            Divider().overlay(DS.ColorToken.strokeDefault)
         case .image(let ref, let asset):
             ImageBlockView(ref: ref, asset: asset)
         case .embed(let ref, let kind):
