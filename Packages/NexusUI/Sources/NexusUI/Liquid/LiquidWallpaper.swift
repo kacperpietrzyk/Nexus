@@ -44,13 +44,28 @@ public struct LiquidWallpaper: View {
     public var body: some View {
         ZStack {
             #if os(macOS)
-            // Real transparency: the blurred desktop shows through under a
-            // dark glaze that preserves the design's darkness and contrast.
+            // Behind-window blur stays as a living hint of the desktop, but
+            // the glaze is thick enough that the wallpaper's own light — not
+            // the user's desktop — sets the frame's luminance. The reference
+            // boards are lit by their bundled dusk photo; a 0.4 glaze made
+            // the whole app read flat black on a dark desktop.
             WallpaperBlurBackdrop()
-            DS.ColorToken.backgroundApp.opacity(0.4)
+            DS.ColorToken.backgroundApp.opacity(0.78)
             #else
             DS.ColorToken.backgroundApp
             #endif
+
+            // Mid-frame violet haze: a quiet wash so the glass picks up the
+            // boards' violet-navy cast through its ~28% transmission. The
+            // panel luminance itself comes from the glass tints (JSON
+            // alphas); margins between panels must stay dark navy
+            // (reference margins measure ~rgb(15,19,27)).
+            RadialGradient(
+                colors: [DS.ColorToken.accentPrimary.opacity(0.16), .clear],
+                center: UnitPoint(x: 0.52, y: 0.46),
+                startRadius: 0,
+                endRadius: 900
+            )
 
             // Faint cool sky wash so the top margin reads navy, not black.
             LinearGradient(
@@ -111,19 +126,19 @@ public struct LiquidWallpaper: View {
             // Warm ember patches: lower-left edge, bottom-center-left, and
             // bottom-right corner — the sunset side of the frame.
             RadialGradient(
-                colors: [DS.ColorToken.accentAmber.opacity(0.16), .clear],
+                colors: [DS.ColorToken.accentAmber.opacity(0.12), .clear],
                 center: UnitPoint(x: -0.04, y: 0.82),
                 startRadius: 0,
                 endRadius: 360
             )
             RadialGradient(
-                colors: [DS.ColorToken.accentOrange.opacity(0.30), .clear],
+                colors: [DS.ColorToken.accentOrange.opacity(0.20), .clear],
                 center: UnitPoint(x: 0.30, y: 1.08),
                 startRadius: 0,
                 endRadius: 420
             )
             RadialGradient(
-                colors: [DS.ColorToken.accentAmber.opacity(0.24), .clear],
+                colors: [DS.ColorToken.accentAmber.opacity(0.16), .clear],
                 center: UnitPoint(x: 0.94, y: 1.08),
                 startRadius: 0,
                 endRadius: 340
@@ -135,8 +150,8 @@ public struct LiquidWallpaper: View {
                 stops: [
                     .init(color: .clear, location: 0.0),
                     .init(color: .clear, location: 0.66),
-                    .init(color: DS.ColorToken.accentBlue.opacity(0.06), location: 0.84),
-                    .init(color: DS.ColorToken.accentAmber.opacity(0.10), location: 1.0),
+                    .init(color: DS.ColorToken.accentBlue.opacity(0.04), location: 0.84),
+                    .init(color: DS.ColorToken.accentAmber.opacity(0.06), location: 1.0),
                 ],
                 startPoint: .top,
                 endPoint: .bottom

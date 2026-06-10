@@ -18,23 +18,22 @@ public enum DS {
         /// #02050A at CC/255 ≈ 0.80 opacity
         public static let backgroundWallpaperScrim = Color(hex: 0x02050A, alpha: 0xCC / 255.0)
 
-        // Glass — RGB values from JSON; alpha from trailing byte of 8-digit hex.
-        // The three big window surfaces (base/sidebar/toolbar) diverge from the
-        // JSON alphas: user transparency calibration 2026-06-10 — the JSON
-        // values were authored for an opaque in-app wallpaper, and over the
-        // real behind-window desktop blur they swallowed it (~1% measured
-        // transmission). Card/strong tints keep JSON values for content
-        // contrast.
-        /// #111824 at 0.55 (JSON: B8 ≈ 0.72)
-        public static let glassBase = Color(hex: 0x111824, alpha: 0.55)
+        // Glass — RGB values and alphas from JSON (8-digit hex trailing byte).
+        // The big window surfaces (base/sidebar/toolbar) are back on the JSON
+        // alphas: the tint itself supplies the boards' panel luminance
+        // (measured ~rgb(18,22,30) interiors). The 2026-06-10 lowered-alpha
+        // calibration chased behind-window desktop transparency and made the
+        // whole frame track the desktop — dark desktop = flat black app.
+        /// #111824 at B8/255 ≈ 0.72
+        public static let glassBase = Color(hex: 0x111824, alpha: 0xB8 / 255.0)
         /// #121A26 at 7A/255 ≈ 0.48
         public static let glassSoft = Color(hex: 0x121A26, alpha: 0x7A / 255.0)
         /// #151E2B at CC/255 ≈ 0.80
         public static let glassStrong = Color(hex: 0x151E2B, alpha: 0xCC / 255.0)
-        /// #111722 at 0.46 (JSON: 99 ≈ 0.60)
-        public static let glassToolbar = Color(hex: 0x111722, alpha: 0.46)
-        /// #101722 at 0.50 (JSON: A8 ≈ 0.66)
-        public static let glassSidebar = Color(hex: 0x101722, alpha: 0.50)
+        /// #111722 at 99/255 ≈ 0.60
+        public static let glassToolbar = Color(hex: 0x111722, alpha: 0x99 / 255.0)
+        /// #101722 at A8/255 ≈ 0.66
+        public static let glassSidebar = Color(hex: 0x101722, alpha: 0xA8 / 255.0)
         /// #0F151F at B8/255 ≈ 0.72
         public static let glassCard = Color(hex: 0x0F151F, alpha: 0xB8 / 255.0)
         /// #172131 at CC/255 ≈ 0.80
