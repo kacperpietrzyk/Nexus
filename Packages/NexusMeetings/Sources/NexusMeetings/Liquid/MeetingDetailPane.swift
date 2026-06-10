@@ -81,6 +81,7 @@ struct MeetingDetailPane: View {
                 ForEach(statusBadges(meeting), id: \.label) { badge in
                     LiquidPill(badge.label, color: badge.color)
                 }
+                shareButton(meeting)
             }
         }
     }
@@ -145,6 +146,31 @@ struct MeetingDetailPane: View {
             badges.append(("Processing", DS.ColorToken.statusWarning))
         }
         return badges
+    }
+
+    /// System share picker over the full meeting Markdown document (frontmatter
+    /// + summary + action items + transcript) — the same `ShareLink` idiom as
+    /// the inspector's "Share summary…" (`NSSharingServicePicker` on macOS).
+    /// The document is rendered eagerly on header rebuild: pure string work
+    /// over already-loaded fields, cheap at single-meeting scale.
+    private func shareButton(_ meeting: Meeting) -> some View {
+        ShareLink(item: meeting.exportMarkdownDocument(in: composition.meetingRepository.context)) {
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .frame(width: 24, height: 24)
+                .background {
+                    RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                        .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Share meeting as Markdown")
     }
 
     // MARK: - Tabs
