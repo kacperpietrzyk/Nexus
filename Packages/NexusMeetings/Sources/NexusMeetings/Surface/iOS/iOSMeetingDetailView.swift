@@ -42,6 +42,20 @@ public struct iOSMeetingDetailView: View {  // swiftlint:disable:this type_name
         .background(NexusColor.Background.base)
         .navigationTitle(meeting?.title ?? "Meeting")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let meeting {
+                ToolbarItem(placement: .topBarTrailing) {
+                    // Same document the Mac detail pane shares — system share
+                    // sheet via ShareLink (C1 parity). Default ShareLink label
+                    // (share icon) matches the platform idiom.
+                    ShareLink(
+                        item: meeting.exportMarkdownDocument(
+                            in: composition.meetingRepository.context)
+                    )
+                    .accessibilityLabel("Share meeting as Markdown")
+                }
+            }
+        }
         .onAppear {
             reload()
         }
