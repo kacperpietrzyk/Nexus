@@ -62,3 +62,46 @@ import Testing
     )
     #expect(doc.filename == "11111111-1111-1111-1111-111111111111.md")
 }
+
+@Test func markdownDocument_render_emitsExtraFrontmatterBetweenDeletedAtAndLinks() {
+    let id = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let doc = MarkdownDocument(
+        id: id,
+        kind: .meeting,
+        title: "Standup",
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: nil,
+        extraFrontmatter: [
+            ("startedAt", .date(Date(timeIntervalSince1970: 1_699_999_000))),
+            ("durationSec", .string("1800")),
+            ("attendees", .list([.string("Alice"), .string("Bob")])),
+            ("calendarEventID", .none),
+        ],
+        outgoingLinks: [],
+        body: ""
+    )
+    let expected = """
+        ---
+        id: 11111111-1111-1111-1111-111111111111
+        kind: meeting
+        title: Standup
+        createdAt: 2023-11-14T22:13:20Z
+        updatedAt: 2023-11-14T22:13:20Z
+        deletedAt: null
+        startedAt: 2023-11-14T21:56:40Z
+        durationSec: 1800
+        attendees:
+          - Alice
+          - Bob
+        calendarEventID: null
+        links: []
+        ---
+
+        # Standup
+
+
+        """
+    #expect(doc.render() == expected)
+}

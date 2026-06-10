@@ -69,6 +69,18 @@ public enum MarkdownExporter {
                     linkKind: link.linkKind
                 )
             }
+            // Feature-module Linkables (e.g. `Meeting`) own their export via
+            // `MarkdownExportRenderable`; NexusCore's built-in note-body
+            // resolution covers everything else.
+            let extras: [(String, FrontmatterValue)]
+            let bodyText: String
+            if let renderable = item as? any MarkdownExportRenderable {
+                extras = renderable.exportFrontmatterExtras()
+                bodyText = renderable.exportMarkdownBody(in: context)
+            } else {
+                extras = []
+                bodyText = body(for: item, in: context, noteBodyCache: &noteBodyCache)
+            }
             let doc = MarkdownDocument(
                 id: item.id,
                 kind: item.kind,
@@ -76,8 +88,9 @@ public enum MarkdownExporter {
                 createdAt: item.createdAt,
                 updatedAt: item.updatedAt,
                 deletedAt: item.deletedAt,
+                extraFrontmatter: extras,
                 outgoingLinks: outgoing,
-                body: body(for: item, in: context, noteBodyCache: &noteBodyCache)
+                body: bodyText
             )
             let path = folder.appendingPathComponent(
                 uniqueFilename(for: doc, used: &counters.usedFilenames)
