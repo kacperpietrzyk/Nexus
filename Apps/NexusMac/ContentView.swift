@@ -12,12 +12,8 @@ import SwiftUI
 import TasksFeature
 
 // The Mac dashboard shell mounts one full-screen destination per feature
-// (Today/Inbox/Meetings/Tasks/Notes/Calendar/Agent/Stats/Settings); it grows by a
-// rail item + a `dashboardShell` branch + a title case per feature by design — the
-// same structural per-feature growth that disables `file_length` on
-// `NexusMacApp`. The Calendar mount crossed the type_body_length threshold.
-// swiftlint:disable file_length
-// swiftlint:disable:next type_body_length
+// (Today/Inbox/Meetings/Tasks/Notes/Calendar/Agent/Stats/Settings) inside the
+// Liquid chrome (`LiquidAppShell` + `LiquidSidebar` + `LiquidToolbar`).
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.taskRepository) private var taskRepository
@@ -74,22 +70,33 @@ struct ContentView: View {
 
     @ViewBuilder
     private var dashboardBody: some View {
-        // Audit C3 hoist "D": the invariant chrome (wallpaper + icon-rail)
-        // is composed HERE so it survives `dashboardShell`'s per-destination
-        // re-specialization — the rail's pill `matchedGeometryEffect` is
-        // never torn down and slides on every transition. Only the right
-        // column (`dashboardShell` = NexusShell's band stack) re-specializes;
-        // a destination still owns the whole content area and is exclusive
-        // of the task-detail inspector (§1 invariant "inspector ⊥ Agent").
-        ZStack {
-            NexusWallpaper()
-            HStack(spacing: 0) {
-                navRail
-                dashboardShell
-            }
-        }
+        // Liquid chrome (Task 3): the old `NexusWallpaper` + 54pt `NexusNavRail`
+        // + `NexusShell` band stack is replaced by `LiquidAppShell` — three
+        // floating glass columns over a dark wallpaper gradient. The sidebar
+        // binds to the SAME `TodayNavSelection` state through the
+        // `navigate(to:)` chokepoint, and a destination still owns the whole
+        // content slot, exclusive of the task-detail inspector (§1 invariant
+        // "inspector ⊥ Agent" — enforced by the `.onChange` below, unchanged).
+        LiquidAppShell(
+            sidebar: {
+                LiquidSidebar(
+                    selection: selection,
+                    inboxUnreadCount: inboxUnreadCount,
+                    onNavigate: { navigate(to: $0) }
+                )
+            },
+            toolbar: {
+                LiquidToolbar(
+                    leading: { toolbarLeading },
+                    onOpenCommandPalette: { commandPalettePresented = true },
+                    onOpenInbox: { navigate(to: .inbox) },
+                    onOpenCapture: openTaskCapture
+                )
+            },
+            main: { destinationMain }
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .containerBackground(NexusColor.Background.base, for: .window)
+        .containerBackground(DS.ColorToken.backgroundApp, for: .window)
         // List stays FULL-WIDTH; task detail opens as a CENTERED MODAL over a
         // dimmed scrim (see `taskModal`) — the old trailing peek was too narrow
         // for the inspector's content. Gated on the UNCHANGED `inspectorBinding`
@@ -169,231 +176,94 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Invariant chrome (audit C3 hoist "D")
+    // MARK: - Liquid chrome slots (Task 3)
     //
-    // `NexusWallpaper` + the 54pt `NexusNavRail` are composed HERE, in
-    // `dashboardBody`, NOT inside `NexusShell`. `ContentView` does not
-    // re-specialize, so the rail (and wallpaper) are never torn down — the
-    // rail's selection-pill `matchedGeometryEffect` therefore survives every
-    // navigation and SLIDES instead of snapping.
-    //
-    // HISTORY — A11 → C3. A11 accepted the per-destination NexusShell
-    // re-specialization (each `dashboardShell` branch is a distinct generic
-    // type; the constrained-extension-init "both-slots" compile-time safety
-    // is worth it; AnyView collapse is **still rejected**). Its two cosmetic
-    // side-effects were: (a) the bottom bar's @State is torn down with the
-    // old specialization (post-B1: the inline composer's in-progress
-    // `CapturePaneState` — unsent typed text lost on an Inbox/Agent toggle;
-    // still acceptable, not C3 scope); (b) the nav-rail pill snapped because
-    // the rail lived inside the rebuilt subtree. C3's first attempt injected
-    // a stable `@Namespace` into the still-in-shell rail — that was
-    // necessary but NOT sufficient (the old rail was removed without a
-    // transition, so the matched source ceased to exist outside the
-    // animation envelope; user smoke confirmed it still snapped). C3's
-    // converged fix is this structural hoist: the rail is no longer in the
-    // re-specialized subtree at all, so (b) is structurally eliminated.
-    // (a) is unchanged. `railSelectionNamespace` stays as an additive
-    // optional on `NexusNavRail` (iOS/Watch may inject their own; frozen-API
-    // rule). Build + lint is the gate; the slide itself is manual-smoke.
-    @Namespace private var railSelectionNamespace
+    // The old invariant chrome (NexusWallpaper + 54pt NexusNavRail) and the
+    // per-destination `NexusShell` band stack were replaced by the
+    // `LiquidAppShell` mount in `dashboardBody`. `LiquidSidebar` +
+    // `LiquidToolbar` are stable across destination switches; only
+    // `toolbarLeading` + `destinationMain` re-specialize per destination.
+    // `NexusShell.swift` is left in place (unused) for a later deletion task.
 
-    private var railItems: [NexusNavRailItem<TodayNavSelection>] {
-        [
-            .init(id: .today, systemImage: "circle.dotted", label: "Today"),
-            .init(id: .inbox, systemImage: "tray", label: "Inbox", count: inboxUnreadCount),
-            .init(id: .meetings, systemImage: "person.wave.2", label: "Meetings"),
-            .init(id: .tasks, systemImage: "checkmark.square", label: "Tasks"),
-            .init(id: .projects, systemImage: "square.stack.3d.up", label: "Projects"),
-            .init(id: .notes, systemImage: "note.text", label: "Notes"),
-            .init(id: .calendar, systemImage: "calendar", label: "Calendar"),
-            .init(id: .people, systemImage: "person.crop.circle", label: "People"),
-            .init(id: .agent, systemImage: "sparkles", label: "Agent"),
-            .init(id: .stats, systemImage: "chart.bar", label: "Stats"),
-        ]
-    }
-
-    private var railSettingsItem: NexusNavRailItem<TodayNavSelection> {
-        .init(id: .settings, systemImage: "gearshape", label: "Settings")
-    }
-
-    /// The invariant icon-rail. Lives in `ContentView` (stable) so its
-    /// pill `matchedGeometryEffect` is never regenerated. `NexusNavRail`
-    /// wraps the `active` mutation in `withAnimation(NexusMotion.nav)`
-    /// internally, so a rail tap animates; programmatic nav animates via
-    /// the `navigate(to:)` chokepoint.
-    private var navRail: some View {
-        NexusNavRail(
-            items: railItems,
-            active: $selection,
-            logoTitle: "Nexus",
-            bottomItem: railSettingsItem,
-            selectionNamespace: railSelectionNamespace
-        )
-    }
-
+    /// Per-destination leading toolbar content. Inbox keeps its filter tabs +
+    /// Mark Read (formerly the §1a control band); Agent keeps its control
+    /// strip (`AgentTopControl`); everything else shows the breadcrumb the old
+    /// `NexusTopBar` carried. The old per-destination trailing "New Task"
+    /// action is covered by the toolbar's fixed `New` button (same capture
+    /// seam).
     @ViewBuilder
-    private var dashboardShell: some View {
+    private var toolbarLeading: some View {
         if selection == .inbox {
-            // §1a control mode: bespoke top bar = relocated filter tabs
-            // (leading) + the existing Read + New actions (trailing). The
-            // oracle's static right-side timestamp is dropped (§10 — no
-            // backend). `NexusTopBar` is NOT used.
-            NexusShell(
-                crumbs: ["Personal", shellTitle],
-                onOpenCommandPalette: { commandPalettePresented = true },
-                onOpenCapture: { mode in
-                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
-                },
-                topControl: { inboxTopControl },
-                content: { dashboardContent }
-            )
+            HStack(spacing: 8) {
+                ForEach(InboxFilter.allCases, id: \.self) { filter in
+                    InboxFilterTab(
+                        label: filter.displayLabel,
+                        count: filter.count(in: inboxItems),
+                        isActive: inboxActiveFilter == filter
+                    ) {
+                        inboxActiveFilter = filter
+                    }
+                }
+
+                Spacer(minLength: 12)
+
+                NexusButton(variant: .ghost, size: .sm, action: markInboxRead) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "envelope.open")
+                        Text("Mark Read")
+                    }
+                }
+                .help("Mark inbox items read")
+                .accessibilityLabel("Mark inbox items read")
+            }
         } else if selection == .agent, let agentViewModel {
-            // §1a control mode + §1c surface-input mode: Agent's oracle
-            // `LabTopBar` is an interactive control strip → control mode (NOT
-            // `NexusTopBar`); its oracle bottom band is a real message
-            // composer ("Napisz do Nexusa…"), so the shell renders the
-            // surface-supplied `AgentBottomInput` in place of the generic
-            // `NexusCommandBar` (§1c). `AgentChatView`'s now-redundant inner
-            // `AgentInputBar` was removed (its `else` branch is just
-            // `messageList`), closing the slice-1 transient double-bottom-bar
-            // seam. The same shared upstream `agentViewModel`
-            // (`AgentComposition.chatViewModel`, env-injected) drives BOTH
-            // `AgentChatView` (content) and `AgentBottomInput` (bottom band):
-            // `AgentChatView` wraps it once via `StateObject(wrappedValue:)`
-            // returning the same singleton, and `AgentBottomInput` observes
-            // it via `@ObservedObject`, so a `send` from the bottom bar
-            // re-renders the message list and `isThinking` flows to both.
-            // Thread management on macOS: `AgentThreadRail` fronts the chat with
-            // a persistent, selectable/archivable thread list (see its doc for
-            // why this is an `HStack` rail, not a nested `NavigationSplitView`).
-            NexusShell(
-                crumbs: ["Personal", shellTitle],
-                onOpenCommandPalette: { commandPalettePresented = true },
-                onOpenCapture: { mode in
-                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
-                },
-                topControl: { AgentTopControl(viewModel: agentViewModel) },
-                bottomBar: { AgentBottomInput(viewModel: agentViewModel) },
-                content: { AgentThreadRail(viewModel: agentViewModel) }
-            )
-        } else if selection == .projects {
-            // Projects tier (#10): a full shell destination mounting the
-            // Linear-style project list → project page (header + lifecycle
-            // status + Kanban board). `ProjectsRootView` owns its own
-            // list/detail routing, so it slots straight into the shell content
-            // area. Opening a card routes through `openTask` (inspector ⊥ Agent
-            // invariant preserved). Before this destination the only project UI
-            // lived in the standalone-chrome sidebar the embedded Mac never
-            // mounts — projects were effectively unreachable.
-            NexusShell(
-                crumbs: ["Personal", shellTitle],
-                onOpenCommandPalette: { commandPalettePresented = true },
-                onOpenCapture: { mode in
-                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
-                },
-                topControl: { EmptyView() },
-                content: { ProjectsRootView(onOpenTask: { openTask($0) }) }
-            )
-        } else if selection == .notes {
-            // Notes content layer (spec §5): a full shell destination mounting
-            // the NotesFeature list + block editor. `NotesListView` owns its own
-            // NavigationStack, so it slots straight into the shell content area.
-            NexusShell(
-                crumbs: ["Personal", shellTitle],
-                onOpenCommandPalette: { commandPalettePresented = true },
-                onOpenCapture: { mode in
-                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
-                },
-                topControl: { EmptyView() },
-                content: { NotesListView() }
-            )
-        } else if selection == .calendar {
-            // Calendar/Motion-AI surface (spec §9): the full Month/Week/Day grid +
-            // event editor + multi-cal Settings, mounted directly in the shell
-            // content slot. `CalendarView` owns its own header/navigation.
-            NexusShell(
-                crumbs: ["Personal", shellTitle],
-                onOpenCommandPalette: { commandPalettePresented = true },
-                onOpenCapture: { mode in
-                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
-                },
-                topControl: { EmptyView() },
-                content: { calendarContent }
-            )
-        } else if selection == .people {
-            // People / Contacts surface (spec §6): the searchable people list +
-            // profile ("everything about X") + field editor + merge UI, mounted
-            // directly in the shell content slot. `PeopleListView` owns its own
-            // NavigationStack.
-            NexusShell(
-                crumbs: ["Personal", shellTitle],
-                onOpenCommandPalette: { commandPalettePresented = true },
-                onOpenCapture: { mode in
-                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
-                },
-                topControl: { EmptyView() },
-                content: { PeopleListView() }
-            )
+            AgentTopControl(viewModel: agentViewModel)
         } else {
-            NexusShell(
-                crumbs: ["Personal", shellTitle],
-                onOpenCommandPalette: { commandPalettePresented = true },
-                onOpenCapture: { mode in
-                    NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
-                },
-                topTrailing: { shellTopTrailing },
-                content: { dashboardContent }
-            )
+            LiquidToolbarBreadcrumb(crumbs: ["Personal", shellTitle])
         }
     }
 
-    /// §1a control-mode top-bar content for Inbox: filter tabs leading
-    /// (matching the accepted Inbox oracle's `InboxTab` idiom 1:1
-    /// via the §2 achromatic token map) + the existing Read + New actions
-    /// trailing. No new primitive — a thin token composition, mirroring the
-    /// `NexusCommandBar` precedent in `NexusShell.swift`.
+    /// Per-destination page content inside the glass content shell.
     @ViewBuilder
-    private var inboxTopControl: some View {
-        ForEach(InboxFilter.allCases, id: \.self) { filter in
-            InboxFilterTab(
-                label: filter.displayLabel,
-                count: filter.count(in: inboxItems),
-                isActive: inboxActiveFilter == filter
-            ) {
-                inboxActiveFilter = filter
+    private var destinationMain: some View {
+        if selection == .agent, let agentViewModel {
+            // Agent owns the whole content slot: thread rail + chat above the
+            // real message composer. The same shared upstream `agentViewModel`
+            // (`AgentComposition.chatViewModel`, env-injected) drives BOTH
+            // `AgentChatView` (inside `AgentThreadRail`) and
+            // `AgentBottomInput`, so a `send` from the bottom bar re-renders
+            // the message list and `isThinking` flows to both. The composer
+            // keeps its established placement padding (it carries its own
+            // background + hairline — never re-wrapped in chrome).
+            VStack(spacing: 0) {
+                AgentThreadRail(viewModel: agentViewModel)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                AgentBottomInput(viewModel: agentViewModel)
+                    .padding(.horizontal, 26)
+                    .padding(.top, 14)
+                    .padding(.bottom, 20)
             }
+        } else if selection == .projects {
+            // Projects tier (#10): list → project page (header + lifecycle
+            // status + Kanban board). Opening a card routes through `openTask`
+            // (inspector ⊥ Agent invariant preserved).
+            ProjectsRootView(onOpenTask: { openTask($0) })
+        } else if selection == .notes {
+            // Notes content layer (spec §5): list + block editor; owns its own
+            // NavigationStack.
+            NotesListView()
+        } else if selection == .calendar {
+            // Calendar/Motion-AI surface (spec §9): Month/Week/Day grid +
+            // event editor; owns its own header/navigation.
+            calendarContent
+        } else if selection == .people {
+            // People / Contacts surface (spec §6); owns its own NavigationStack.
+            PeopleListView()
+        } else {
+            // Today / Inbox / Tasks / Stats / Settings routes inside
+            // `TodayDashboard` (embedded chrome).
+            dashboardContent
         }
-
-        Spacer(minLength: 12)
-
-        NexusButton(variant: .ghost, size: .sm, action: markInboxRead) {
-            HStack(spacing: 4) {
-                Image(systemName: "envelope.open")
-                Text("Mark Read")
-            }
-        }
-        .help("Mark inbox items read")
-        .accessibilityLabel("Mark inbox items read")
-
-        newTaskButton
-    }
-
-    /// The capture-launching "New" button, shared verbatim by
-    /// `inboxTopControl` and `shellTopTrailing` (was duplicated byte-for-byte).
-    private var newTaskButton: some View {
-        NexusButton(variant: .primary, size: .sm, action: openTaskCapture) {
-            HStack(spacing: 4) {
-                Image(systemName: "plus")
-                Text("New Task")
-            }
-        }
-        .help("New task (⌘N)")
-        .accessibilityLabel("New task")
-    }
-
-    @ViewBuilder
-    private var shellTopTrailing: some View {
-        newTaskButton
     }
 
     private func openTaskCapture() {
