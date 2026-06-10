@@ -19,7 +19,7 @@ public struct LiquidSearchField: View {
     public let shortcutHint: String?
     public let action: () -> Void
 
-    public init(_ placeholder: String = "Search…", shortcutHint: String? = "⌘ K", action: @escaping () -> Void = {}) {
+    public init(_ placeholder: String = "Search…", shortcutHint: String? = "⌘ K", action: @escaping () -> Void) {
         self.placeholder = placeholder
         self.shortcutHint = shortcutHint
         self.action = action
@@ -146,7 +146,7 @@ public struct LiquidSegmentedControl<Value: Hashable>: View {
         @State private var scope = "week"
         var body: some View {
             HStack(spacing: DS.Space.m) {
-                LiquidSearchField()
+                LiquidSearchField(action: {})
                     .frame(width: 280)
                 LiquidSegmentedControl(
                     options: [

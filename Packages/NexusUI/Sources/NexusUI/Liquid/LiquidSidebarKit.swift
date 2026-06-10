@@ -29,7 +29,7 @@ public struct LiquidSidebarNavRow: View {
         badge: Int? = nil,
         isSelected: Bool = false,
         showsSelectionAccent: Bool = true,
-        action: @escaping () -> Void = {}
+        action: @escaping () -> Void
     ) {
         self.title = title
         self.systemImage = systemImage
@@ -100,6 +100,7 @@ public struct LiquidSidebarNavRow: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(badge.map { "\(title), \($0) items" } ?? title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         #if os(macOS)
         .onHover { value in
@@ -131,8 +132,8 @@ public struct LiquidSidebarSectionHeader: View {
 #Preview("Sidebar rows") {
     VStack(alignment: .leading, spacing: DS.Space.xxs) {
         LiquidSidebarSectionHeader("Views")
-        LiquidSidebarNavRow("Today", systemImage: "sun.max", isSelected: true)
-        LiquidSidebarNavRow("Inbox", systemImage: "tray", badge: 4)
+        LiquidSidebarNavRow("Today", systemImage: "sun.max", isSelected: true, action: {})
+        LiquidSidebarNavRow("Inbox", systemImage: "tray", badge: 4, action: {})
     }
     .padding(DS.Space.m)
     .frame(width: 224)

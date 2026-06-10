@@ -2,8 +2,15 @@ import SwiftUI
 
 /// Hover fill for icon buttons — `docs/03_COMPONENTS.md` §IconButton: "hover fill #FFFFFF10".
 private let iconButtonHoverFill = Color.white.opacity(0x10 / 255.0)
-/// Default (idle) icon button fill — subtle glass wash, between transparent and hover.
+#if os(macOS)
+/// Idle icon-button fill: a subtle glass wash one step below the hover fill,
+/// so the macOS hover ladder reads idle 4% → hover 10% → selected.
 private let iconButtonIdleFill = Color.white.opacity(0.04)
+#else
+/// No hover affordance on touch platforms (the design system is macOS-first),
+/// so idle icon buttons sit flat on the glass — the stroke alone bounds them.
+private let iconButtonIdleFill = Color.clear
+#endif
 
 /// Primary gradient CTA per `docs/03_COMPONENTS.md` §PrimaryButton —
 /// `+ New`, `Protect this time`, `Generate plan`, etc.
@@ -15,7 +22,7 @@ public struct LiquidPrimaryButton: View {
     public let systemImage: String?
     public let action: () -> Void
 
-    public init(_ title: String, systemImage: String? = nil, action: @escaping () -> Void = {}) {
+    public init(_ title: String, systemImage: String? = nil, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = systemImage
         self.action = action
@@ -61,13 +68,20 @@ public struct LiquidIconButton: View {
 
     public let systemImage: String
     public let isSelected: Bool
+    public let accessibilityLabel: String?
     public let action: () -> Void
 
     @State private var hovering = false
 
-    public init(systemImage: String, isSelected: Bool = false, action: @escaping () -> Void = {}) {
+    public init(
+        systemImage: String,
+        isSelected: Bool = false,
+        accessibilityLabel: String? = nil,
+        action: @escaping () -> Void
+    ) {
         self.systemImage = systemImage
         self.isSelected = isSelected
+        self.accessibilityLabel = accessibilityLabel
         self.action = action
     }
 
@@ -77,6 +91,14 @@ public struct LiquidIconButton: View {
     }
 
     public var body: some View {
+        if let accessibilityLabel {
+            core.accessibilityLabel(accessibilityLabel)
+        } else {
+            core
+        }
+    }
+
+    private var core: some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 13, weight: .semibold))

@@ -96,8 +96,15 @@ public struct LiquidTaskRow<Accessory: View>: View {
                     }
                 }
                 .frame(width: 14, height: 14)
+                // Visual circle stays 14 pt; pad to a 32×32 hit target
+                // (01_FOUNDATIONS.md §Dostępność: prefer 32×32 pt click targets).
+                .padding(9)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // Layout-neutral: cancel the hit-target padding so the row still
+            // aligns to the 14 pt circle; the enlarged contentShape keeps hit-testing.
+            .padding(-9)
             .accessibilityLabel(isDone ? "Mark as not done" : "Mark as done")
 
             Text(title)
@@ -218,7 +225,7 @@ public struct LiquidEmptyState<Actions: View>: View {
                 .font(DS.FontToken.metadata)
                 .foregroundStyle(DS.ColorToken.textSecondary)
                 .multilineTextAlignment(.center)
-                .lineLimit(1)
+                .lineLimit(3)
 
             actions()
         }

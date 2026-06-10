@@ -5,6 +5,10 @@ import SwiftUI
 /// Anatomy per `docs/03_COMPONENTS.md` §GlassCard: optional header row
 /// (section-font title + trailing accessory slot), then the body content.
 /// On macOS the card brightens on hover.
+///
+/// The `trailing` slot is a header-row accessory: it renders only when
+/// `title != nil` (intentional — without a title there is no header row to
+/// host it; put standalone chrome in `content` instead).
 public struct LiquidGlassCard<Content: View, Trailing: View>: View {
 
     public let title: String?
