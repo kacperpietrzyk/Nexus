@@ -42,8 +42,9 @@ public struct NexusButton<Label: View>: View {
 
     // Linear flat button: a contained surface (no glass, no glow) with a 1px
     // Line rim and a small `s1` drop. `.primary` is the only variant that
-    // breaks neutrality — a solid Neon Lime fill with limeInk ink, the single
-    // accent the component is allowed. `.default`/`.outline` are neutral flat
+    // breaks neutrality — a solid liquid-violet `Accent.lime` fill with white
+    // `limeInk` ink (token re-valued; historic names), the single accent the
+    // component is allowed. `.default`/`.outline` are neutral flat
     // substrates over the Background ladder. `.ghost` drops the surface
     // entirely (transparent, no rim, no shadow) — foreground + press only.
     @ViewBuilder private var styledLabel: some View {
@@ -91,9 +92,9 @@ public struct NexusButton<Label: View>: View {
         }
     }
 
-    /// Linear foreground ink. `.primary` draws on a Neon Lime fill, so it uses
-    /// `Accent.limeInk` (pitch black) for legible contrast; every neutral
-    /// variant uses the secondary read ink. No accent appears on text.
+    /// Foreground ink. `.primary` draws on the liquid-violet `Accent.lime`
+    /// fill, so it uses `Accent.limeInk` (white) for legible contrast; every
+    /// neutral variant uses the secondary read ink. No accent appears on text.
     internal var textColor: Color {
         variant == .primary ? NexusColor.Accent.limeInk : NexusColor.Text.secondary
     }

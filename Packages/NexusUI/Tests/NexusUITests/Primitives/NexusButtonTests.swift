@@ -70,7 +70,7 @@ struct NexusButtonTests {
     }
 
     @MainActor
-    @Test("Button variants resolve Linear foreground (primary=limeInk on lime, others=read)")
+    @Test("Button variants resolve foreground (primary=white ink on violet accent, others=read)")
     func variantColors() {
         let expected: [VariantExpectation] = [
             .init(variant: .default, text: NexusColor.Text.secondary),
