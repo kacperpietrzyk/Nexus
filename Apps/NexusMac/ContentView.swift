@@ -303,7 +303,7 @@ struct ContentView: View {
             // People / Contacts surface (spec §6); owns its own NavigationStack.
             PeopleListView()
         } else {
-            // Today / Inbox / Tasks / Stats / Settings routes inside
+            // Inbox / Tasks / Stats / Settings routes inside
             // `TodayDashboard` (embedded chrome).
             dashboardContent
         }

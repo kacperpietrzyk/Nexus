@@ -3,10 +3,11 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
-/// The capture surface. Used both as the Mac floating-window content
-/// (CaptureWindowController hosts it via NSHostingView) and as the iOS
-/// quick-capture sheet body. Built around `CapturePaneState` — drives parsing
-/// debounced on input change.
+/// The capture surface. Used both as the Mac in-window capture overlay
+/// (`captureOverlay` in the app's `ContentView+CaptureAndPeek` extension
+/// hosts it over a dimmed scrim) and as the iOS quick-capture sheet body.
+/// Built around `CapturePaneState` — drives parsing debounced on input
+/// change.
 public struct CapturePane: View {
     public enum Mode: String, Sendable, Hashable {
         case task
