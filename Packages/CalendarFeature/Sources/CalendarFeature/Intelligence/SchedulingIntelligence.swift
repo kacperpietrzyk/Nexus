@@ -18,10 +18,14 @@ public enum SchedulingIntelligence {
     /// Two non-all-day events whose time ranges genuinely overlap, plus the
     /// overlapping interval. `first` starts no later than `second` (ties broken
     /// by end, then id), and each unordered pair is reported once.
-    public struct EventConflict: Equatable, Sendable {
+    public struct EventConflict: Equatable, Sendable, Identifiable {
         public let first: CalendarEvent
         public let second: CalendarEvent
         public let overlap: DateInterval
+
+        /// Stable composite id: pairs are deterministically ordered and each
+        /// unordered pair is reported once, so this is unique per conflict.
+        public var id: String { "\(first.id)|\(second.id)" }
 
         public init(first: CalendarEvent, second: CalendarEvent, overlap: DateInterval) {
             self.first = first
@@ -43,7 +47,12 @@ public enum SchedulingIntelligence {
         var conflicts: [EventConflict] = []
         for (index, first) in timed.enumerated() {
             for second in timed.dropFirst(index + 1) {
-                guard second.start < first.end else { break }  // sorted by start → no later overlap with `first`
+                // Sweep-line cutoff only: events are sorted by start, so once
+                // `second` starts at/after `first.end`, no later event can
+                // overlap `first`. This does NOT filter zero-duration overlaps —
+                // the `overlapStart < overlapEnd` guard below is the real
+                // strict-overlap filter (e.g. zero-length `first`); keep both.
+                guard second.start < first.end else { break }
                 let overlapStart = max(first.start, second.start)
                 let overlapEnd = min(first.end, second.end)
                 guard overlapStart < overlapEnd else { continue }

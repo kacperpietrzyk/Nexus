@@ -6,8 +6,8 @@ import Testing
 
 @Suite("SchedulingIntelligence")
 struct SchedulingIntelligenceTests {
-    // 2026-06-08 00:00:00 UTC — fixed absolute anchor; all offsets are plain
-    // seconds so the suite is timezone- and DST-agnostic.
+    // 2026-06-05 (Friday) 00:00:00 UTC — fixed absolute anchor; all offsets are
+    // plain seconds so the suite is timezone- and DST-agnostic.
     private static let day = Date(timeIntervalSince1970: 1_780_617_600)
 
     /// Event at `hours` offsets from the fixed day anchor.
@@ -239,6 +239,23 @@ struct SchedulingIntelligenceTests {
         #expect(blocks == [workday])
     }
 
+    @Test("A gap exactly equal to the minimum duration is included")
+    func focusBlocksGapExactlyMinimum() {
+        // Busy 10–13 in a 9–17 workday → free 9–10 is exactly 3600 s, the
+        // default minimum, and must be kept (>= is inclusive).
+        let busy = event("busy", from: 10, to: 13)
+
+        let blocks = SchedulingIntelligence.suggestedFocusBlocks(events: [busy], within: workday)
+
+        #expect(
+            blocks == [
+                DateInterval(start: hours(9), end: hours(10)),
+                DateInterval(start: hours(13), end: hours(17)),
+            ]
+        )
+        #expect(blocks.first?.duration == 3600)
+    }
+
     @Test("A custom minimum duration is honored")
     func focusBlocksCustomMinimum() {
         // Free 9–10 (1 h) and 11–17 (6 h); 2 h minimum keeps only the second.
@@ -251,7 +268,7 @@ struct SchedulingIntelligenceTests {
 
     // MARK: - timeInsights(events:week:classify:)
 
-    /// Mon 2026-06-08 00:00 UTC → Mon 2026-06-15 00:00 UTC.
+    /// Seven days from the anchor: Fri 2026-06-05 00:00 UTC → Fri 2026-06-12 00:00 UTC.
     private var week: DateInterval { DateInterval(start: hours(0), end: hours(7 * 24)) }
 
     @Test("Empty input yields empty insights")
