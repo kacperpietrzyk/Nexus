@@ -6,8 +6,6 @@ import SwiftUI
 /// Picker list cap width — same readable column the old `ProjectsRootView`
 /// list used (no spec value; the execution screen itself is full-width).
 private let pickerMaxWidth: CGFloat = 720
-/// Mini progress line width on a picker row.
-private let pickerProgressWidth: CGFloat = 90
 
 /// Tabs (spec §Tabs). Only surfaces that really exist ship: Overview (the
 /// milestones + board + table scroll) and List (the table full-height). The
@@ -126,7 +124,11 @@ public struct LiquidProjectScreen: View {
                         .foregroundStyle(DS.ColorToken.statusDanger)
                 }
 
-                VStack(spacing: DS.Space.s) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 280), spacing: DS.Space.m)],
+                    alignment: .leading,
+                    spacing: DS.Space.m
+                ) {
                     ForEach(model.projects) { project in
                         ProjectPickerRow(
                             project: project,
@@ -223,45 +225,48 @@ private struct ProjectPickerRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: DS.Space.m) {
-                Image(systemName: nexusProjectGlyph(named: project.color))
-                    // 14 pt identity glyph on a 48 pt row, same scale the old
-                    // root-view rows used; no DS icon-size token.
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    .frame(width: 20)
-                    .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+                HStack(spacing: DS.Space.s) {
+                    Image(systemName: nexusProjectGlyph(named: project.color))
+                        // 14 pt identity glyph, same scale the old root-view
+                        // rows used; no DS icon-size token.
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                        .frame(width: 20)
+                        .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 2) {
                     Text(project.name)
                         .font(DS.FontToken.bodyStrong)
                         .foregroundStyle(DS.ColorToken.textPrimary)
                         .lineLimit(1)
-                    Text(ProjectFormatters.statusLabel(project.status))
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textTertiary)
+
+                    Spacer(minLength: DS.Space.s)
+
+                    Image(systemName: "chevron.right")
+                        // 10 pt disclosure chevron; no DS icon-size token.
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(DS.ColorToken.textMuted)
+                        .accessibilityHidden(true)
                 }
 
-                Spacer(minLength: DS.Space.s)
-
-                LiquidProgressLine(value: progress)
-                    .frame(width: pickerProgressWidth)
-                    .accessibilityHidden(true)
-
-                Text("\(openCount) open")
-                    .font(DS.FontToken.metadata.monospacedDigit())
+                Text(ProjectFormatters.statusLabel(project.status))
+                    .font(DS.FontToken.metadata)
                     .foregroundStyle(DS.ColorToken.textTertiary)
 
-                Image(systemName: "chevron.right")
-                    // 10 pt disclosure chevron; no DS icon-size token.
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(DS.ColorToken.textMuted)
-                    .accessibilityHidden(true)
+                HStack(spacing: DS.Space.s) {
+                    LiquidProgressLine(value: progress)
+                        .accessibilityHidden(true)
+
+                    Text("\(openCount) open")
+                        .font(DS.FontToken.metadata.monospacedDigit())
+                        .foregroundStyle(DS.ColorToken.textTertiary)
+                        .fixedSize()
+                }
             }
-            .padding(.horizontal, DS.Space.m)
-            .frame(height: 48)
+            .padding(DS.Space.l)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .liquidGlass(.card, radius: DS.Radius.m, isHovering: hovering)
+            .liquidGlass(.card, radius: DS.Radius.l, isHovering: hovering)
         }
         .buttonStyle(.plain)
         #if os(macOS)
