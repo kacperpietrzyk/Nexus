@@ -1,5 +1,25 @@
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+
+/// Behind-window vibrancy backdrop: blurs whatever is behind the WINDOW
+/// (desktop wallpaper, other windows) so the app reads as real glass on the
+/// desktop, not a painted-on dark sheet. `NSVisualEffectView` honors the
+/// system Reduce-Transparency setting by flattening to an opaque material.
+private struct WallpaperBlurBackdrop: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.material = .underWindowBackground
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+#endif
+
 /// The Liquid wallpaper layer: a dark "dusk landscape" ground that sits UNDER
 /// the glass panels. Shared by the main app shell and the Settings window so
 /// every Liquid window paints the same ground. Pure decoration — no layout,
@@ -21,7 +41,14 @@ public struct LiquidWallpaper: View {
 
     public var body: some View {
         ZStack {
+            #if os(macOS)
+            // Real transparency: the blurred desktop shows through under a
+            // dark glaze that preserves the design's darkness and contrast.
+            WallpaperBlurBackdrop()
+            DS.ColorToken.backgroundApp.opacity(0.58)
+            #else
             DS.ColorToken.backgroundApp
+            #endif
 
             // Faint cool sky wash so the top margin reads navy, not black.
             LinearGradient(
