@@ -113,6 +113,11 @@ public struct LiquidMeetingsScreen: View {
     private var detailColumn: some View {
         if model.meeting != nil {
             MeetingDetailPane(model: model, composition: composition)
+                // Load-bearing identity pin (same as the SummaryView /
+                // TranscriptView pins inside the pane): without it SwiftUI
+                // reuses the pane across selection changes and its local
+                // @State (`tab`, `summaryExpanded`) leaks between meetings.
+                .id(router.selectedMeetingID)
         } else {
             LiquidEmptyState(
                 systemImage: "person.wave.2",
@@ -153,8 +158,10 @@ public struct LiquidMeetingsScreen: View {
     private func reloadSelectingDefault() {
         reload()
         if router.selectedMeetingID == nil, let first = model.meetings.first {
+            // No manual reload here: writing the selection re-fires the
+            // `.task(id: router.selectedMeetingID)` handler, which performs
+            // the single deferred reload for the new selection.
             router.selectedMeetingID = first.id
-            reload()
         }
     }
 }

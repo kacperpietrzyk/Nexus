@@ -54,6 +54,12 @@ public struct MeetingActionsInspector: View {
             .padding(DS.Space.m)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // The transient "Copied" state belongs to the meeting it was copied
+        // from — clear it on selection change so a quick switch never shows
+        // a stale confirmation for a summary that was never copied.
+        .onChange(of: router.selectedMeetingID) { _, _ in
+            copiedFeedback = false
+        }
     }
 
     // MARK: - Follow-up Tasks

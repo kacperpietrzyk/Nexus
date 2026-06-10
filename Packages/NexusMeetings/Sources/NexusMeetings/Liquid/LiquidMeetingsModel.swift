@@ -247,7 +247,7 @@ public final class LiquidMeetingsModel {
             .prefix(Self.maxGraphNodes)
             .map { $0 }
 
-        relatedNotes = relatedNotes(
+        relatedNotes = computeRelatedNotes(
             neighbours: outgoingItems + backlinkItems,
             directNoteIDs: Set((outgoingItems + backlinkItems).filter { $0.kind == .note }.map(\.targetID)),
             composition: composition
@@ -277,7 +277,7 @@ public final class LiquidMeetingsModel {
     /// direction) to any of the meeting's direct neighbours (tasks, projects,
     /// people, notes) count as related. Directly linked notes are excluded
     /// (they're already "Linked to" rows), output is deduped and capped.
-    private func relatedNotes(
+    private func computeRelatedNotes(
         neighbours: [LinkedItem], directNoteIDs: Set<UUID>, composition: MeetingsComposition
     ) -> [RelatedNote] {
         let context = composition.meetingRepository.context
