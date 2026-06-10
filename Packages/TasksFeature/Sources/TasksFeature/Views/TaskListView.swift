@@ -51,7 +51,7 @@ public struct TaskListView: View {
                 taskListContent
             }
         }
-        .background(NexusColor.Background.base)
+        .background(containerBackground)
         .safeAreaInset(edge: .top, spacing: 0) {
             TaskListFilterBar(refinement: $refinement, availableLabels: refinementLabels)
         }
@@ -142,7 +142,7 @@ public struct TaskListView: View {
             // error legibility is carried by contrast/weight, not color).
             .foregroundStyle(NexusColor.Text.primary)
             .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-            .listRowBackground(NexusColor.Background.base)
+            .listRowBackground(containerBackground)
             .listRowSeparator(.hidden)
     }
 
@@ -154,14 +154,14 @@ public struct TaskListView: View {
                 systemImage: "line.3.horizontal.decrease.circle",
                 description: Text(error)
             )
-            .listRowBackground(NexusColor.Background.base)
+            .listRowBackground(containerBackground)
         } else if flatList.isEmpty {
             ContentUnavailableView(
                 "No matching tasks",
                 systemImage: "line.3.horizontal.decrease.circle",
                 description: Text("This Smart List has no open root tasks right now.")
             )
-            .listRowBackground(NexusColor.Background.base)
+            .listRowBackground(containerBackground)
         } else {
             ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                 row(for: item, appearIndex: i)
@@ -233,7 +233,7 @@ public struct TaskListView: View {
             onSnooze: { snooze(item, by: .oneHour) }
         )
         .listRowInsets(EdgeInsets())
-        .listRowBackground(NexusColor.Background.base)
+        .listRowBackground(containerBackground)
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
         .onTapGesture { onSelect?(item) }

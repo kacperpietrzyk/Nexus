@@ -52,6 +52,20 @@ extension TaskListView {
     /// composes uniformly with every `TaskFilter` case — no `TaskFilter` cases
     /// added (advisor note: refinement-within-a-list, not a new destination).
     @MainActor
+    /// Liquid re-skin (container level): on macOS the shell already paints the
+    /// glass content panel, so the list container + rows are transparent — an
+    /// opaque `Background.base` here read as a black slab over glass. iOS still
+    /// hosts this list on its own opaque Linear surface, so it keeps the base
+    /// fill until the iOS shell gets its own liquid pass. (Lives here, not in
+    /// TaskListView.swift, for that file's `file_length` headroom.)
+    var containerBackground: Color {
+        #if os(macOS)
+        return Color.clear
+        #else
+        return NexusColor.Background.base
+        #endif
+    }
+
     func applyRefinement() {
         guard refinement.isActive else { return }
         let labeledIDs = refinement.labeledTaskIDs(in: modelContext)
@@ -87,9 +101,20 @@ struct TaskListFilterBar: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(NexusColor.Background.base)
+            .background(barBackground)
             .tint(NexusColor.Text.primary)
         }
+    }
+
+    /// Liquid re-skin (container level): transparent on macOS so the bar sits
+    /// on the shell's glass content panel (the opaque base read as a black
+    /// strip over glass); iOS keeps the opaque Linear base under its own shell.
+    private var barBackground: Color {
+        #if os(macOS)
+        return Color.clear
+        #else
+        return NexusColor.Background.base
+        #endif
     }
 
     private var labelMenu: some View {
