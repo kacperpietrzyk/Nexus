@@ -54,13 +54,15 @@ internal func suppressesDeadlineChip(
     return false
 }
 
-/// One row in `TaskListView`. Displays status glyph, title, due chip,
-/// priority pill, tag chips, and recurrence icon. Uses `NexusUI`
-/// primitives so styling stays consistent with the design system.
+/// One row in `TaskListView`. Displays the Liquid circle checkbox, title,
+/// priority pill, tag pills, and trailing due metadata, per
+/// `docs/03_COMPONENTS.md` §TaskRow.
 ///
-/// MP-2 (LabKit migration): checkbox replaced by `NexusStatusGlyph`;
-/// Mac hover reveals `NexusRowQuickActions`; touch platforms keep a visible
-/// trailing menu affordance for row actions. Accent/semantic hues removed.
+/// Liquid re-skin: the LabKit status glyph becomes the 14 pt circle checkbox
+/// (`LiquidTaskCheckbox`), chips become `LiquidPill`s with deterministic tag
+/// accents, and the due date renders as plain right-aligned metadata with
+/// overdue as the single red token. Mac hover reveals `NexusRowQuickActions`;
+/// touch platforms keep a visible trailing menu affordance for row actions.
 public struct TaskRowView: View {
 
     @Bindable public var task: TaskItem
@@ -151,24 +153,32 @@ private struct RowBody: View {
     private var isCompact: Bool { false }
     #endif
 
+    /// Row hover wash — same calibration as NexusUI's LiquidListKit rows
+    /// (09_SWIFTUI_IMPLEMENTATION_GUIDE §Hover: subtle fill, no scale in
+    /// dense lists); the constant is private there so it is mirrored here.
+    private static let hoverWash = Color.white.opacity(0.04)
+
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             disclosureControl
-            // Leading status glyph — LabKit row anatomy: glyph → title → spacer → trailing meta.
-            // Snoozed maps to `.inReview` (dashed ring); override the glyph's own
-            // a11y label so VoiceOver announces the truth ("Snoozed"), not "In review".
+            // Leading Liquid checkbox — row anatomy: checkbox → title → spacer
+            // → trailing meta. Snoozed renders a dashed ring; the button's a11y
+            // value announces the truth ("Snoozed").
             statusToggleButton
             if isCompact {
                 compactCentralContent
             } else {
-                // Dense single scan-line: title dominates, with the achromatic
-                // ranked priority bars immediately after it (every level distinct).
-                // The body line is dropped in the list — density over preview text
-                // (Linear/Raycast idiom). All meta moves to the trailing cluster.
+                // Dense single scan-line: title dominates, with the priority
+                // pill immediately after it. The body line is dropped in the
+                // list — density over preview text. All meta moves to the
+                // trailing cluster.
                 HStack(spacing: 6) {
                     Text(task.title)
-                        .nexusType(.body)
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .font(DS.FontToken.body)
+                        .strikethrough(task.status == .done)
+                        .foregroundStyle(
+                            task.status == .done ? DS.ColorToken.textTertiary : DS.ColorToken.textPrimary
+                        )
                         .lineLimit(1)
                         .truncationMode(.tail)
                     priorityIndicator
@@ -183,65 +193,49 @@ private struct RowBody: View {
                 metaCluster
             }
             // Trailing slot: resting meta fades out, hover cluster fades in —
-            // matches LabRowView ZStack anatomy, no layout jump.
+            // no layout jump.
             trailingSlot
         }
         .padding(.leading, horizontalPadding + indentation)
         .padding(.trailing, horizontalPadding)
         .padding(.vertical, verticalPadding)
-        // Audit #15: the row base is now flat (`rowBackground == .clear`) so
-        // a single task no longer reads as a stray dark rounded rectangle.
-        // The ZStack keeps the same stacking order (single `.background`;
-        // chained `.background` is inside-out and would occlude) so the
-        // hover lift still renders ABOVE the (now transparent) base.
-        // Glass.surface1 (0.05) ≈ LabKit white.opacity(0.035).
+        // Flat base + a subtle hover wash on glass: the row never paints an
+        // opaque slab over the shell panel; hover lift is a translucent white
+        // fill per the Liquid list idiom.
         .background(
             ZStack {
                 rowBackground
-                RoundedRectangle(cornerRadius: NexusRadius.r2)
-                    .fill(isHovering ? NexusColor.Background.controlHover : Color.clear)
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .fill(isHovering ? Self.hoverWash : Color.clear)
             }
         )
         .overlay(alignment: .bottom) {
-            Rectangle().fill(NexusColor.Line.hairline).frame(height: 1)
+            Rectangle().fill(DS.ColorToken.strokeHairline).frame(height: 1)
         }
         .draggable(TaskItemDropPayload(taskID: task.id)) {
             dragPreview
         }
-        .animation(NexusMotion.standard, value: isHovering)
+        .animation(DS.Motion.hover, value: isHovering)
         #if os(macOS)
         .onHover { isHovering = $0 }
         #endif
         .nexusPressable()
     }
 
-    // MARK: Leading status glyph
+    // MARK: Leading Liquid checkbox
 
     private var statusToggleButton: some View {
         Button(action: onToggleDone) {
-            statusGlyph
+            LiquidTaskCheckbox(state: liquidCheckboxState(for: task.status), isHovering: isHovering)
                 .accessibilityHidden(true)
-                .frame(width: statusVisualSize, height: statusVisualSize)
                 .frame(width: statusHitSize, height: statusHitSize)
-                .background(statusButtonBackground, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+                .background(statusButtonBackground, in: RoundedRectangle(cornerRadius: DS.Radius.s))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(task.status == .done ? "Reopen task" : "Mark task done")
         .accessibilityValue(taskStatusAccessibilityValue)
         .accessibilityHint("Updates the task completion status.")
-    }
-
-    @ViewBuilder
-    private var statusGlyph: some View {
-        let glyph = NexusStatusGlyph(taskNexusStatus(for: task.status))
-        if task.status == .snoozed {
-            // `.inReview` glyph's built-in label is "In review"; snoozed tasks
-            // must announce "Snoozed" to be truthful for VoiceOver.
-            glyph.accessibilityLabel("Snoozed")
-        } else {
-            glyph
-        }
     }
 
     // MARK: Trailing slot (ZStack — resting vs hover, LabRowView pattern)
@@ -304,12 +298,12 @@ private struct RowBody: View {
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .foregroundStyle(DS.ColorToken.textTertiary)
                 .frame(width: 30, height: 30)
-                .background(NexusColor.Background.control, in: Circle())
+                .background(DS.ColorToken.glassSoft, in: Circle())
                 .overlay {
                     Circle()
-                        .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                        .strokeBorder(DS.ColorToken.strokeDefault, lineWidth: 1)
                 }
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -322,7 +316,7 @@ private struct RowBody: View {
 
     // MARK: Helpers
 
-    private var horizontalPadding: CGFloat { depth == 0 ? 16 : 12 }
+    private var horizontalPadding: CGFloat { depth == 0 ? DS.Space.l : DS.Space.m }
     private var verticalPadding: CGFloat {
         // Tightened for the dense single-line row (Linear/Raycast density).
         #if os(macOS)
@@ -331,9 +325,9 @@ private struct RowBody: View {
         depth == 0 ? 9 : 8
         #endif
     }
-    private var indentation: CGFloat { CGFloat(min(depth, 6)) * 20 }
-    private var statusVisualSize: CGFloat { 18 }
+    private var indentation: CGFloat { CGFloat(min(depth, 6)) * DS.Space.xl }
     private var statusHitSize: CGFloat {
+        // 01_FOUNDATIONS §Dostępność: ≥28 pt targets on macOS; 44 pt on touch.
         #if os(macOS)
         28
         #else
@@ -345,7 +339,7 @@ private struct RowBody: View {
         #if os(macOS)
         .clear
         #else
-        NexusColor.Background.control
+        DS.ColorToken.glassSoft
         #endif
     }
 
@@ -357,13 +351,10 @@ private struct RowBody: View {
         }
     }
 
-    // Audit #15: flat by default (was depth-0 `Background.raised` /
-    // subtask `Background.base` — an opaque per-row card that, with one
-    // isolated task, looked like a stray dark rectangle). `.clear` lets
-    // the page show through; the `.background` ZStack's hover overlay
-    // (`Glass.surface1`) still supplies the raised lift on hover and the
-    // bottom hairline keeps list structure. Applies wherever `TaskRowView`
-    // renders (Tasks list / subtasks / embedded Today) — consistent.
+    // Flat by default: `.clear` lets the glass panel show through; the hover
+    // wash supplies the lift and the bottom hairline keeps list structure.
+    // Applies wherever `TaskRowView` renders (Tasks list / subtasks /
+    // embedded Today) — consistent.
     private var rowBackground: Color { .clear }
 
     @ViewBuilder
@@ -372,7 +363,7 @@ private struct RowBody: View {
             Button(action: onToggleSubtasks) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
                     .frame(width: 18, height: 18)
                     .rotationEffect(isSubtasksExpanded ? .degrees(90) : .zero)
                     .contentShape(Rectangle())
@@ -388,15 +379,18 @@ private struct RowBody: View {
 
     private var dragPreview: some View {
         Text(task.title)
-            .nexusType(.bodySmall)
-            .foregroundStyle(NexusColor.Text.primary)
+            .font(DS.FontToken.body)
+            .foregroundStyle(DS.ColorToken.textPrimary)
             .lineLimit(1)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+            .padding(.horizontal, DS.Space.m)
+            .padding(.vertical, DS.Space.s)
+            .background(
+                DS.ColorToken.glassStrong,
+                in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+            )
             .overlay {
-                RoundedRectangle(cornerRadius: NexusRadius.r2)
-                    .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .strokeBorder(DS.ColorToken.strokeDefault, lineWidth: 1)
             }
     }
 
@@ -419,8 +413,11 @@ private struct RowBody: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 Text(task.title)
-                    .nexusType(.body)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.body)
+                    .strikethrough(task.status == .done)
+                    .foregroundStyle(
+                        task.status == .done ? DS.ColorToken.textTertiary : DS.ColorToken.textPrimary
+                    )
                     .lineLimit(1)
                     .truncationMode(.tail)
                 priorityIndicator
@@ -443,28 +440,16 @@ private struct RowBody: View {
         let hasSubtasks = (subtaskProgress?.total ?? 0) > 0
         if hasTags || hasRecurrence || hasBlocks || hasSubtasks || showsDeadline {
             HStack(spacing: 6) {
-                ForEach(Array(task.tags.prefix(3).enumerated()), id: \.offset) { _, tag in
-                    NexusChip("#\(tag)")
-                }
-                if task.tags.count > 3 {
-                    NexusChip("+\(task.tags.count - 3)")
-                }
+                tagPills
                 if hasRecurrence {
-                    Image(systemName: "repeat")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                    recurrenceGlyph
                 }
                 if let blockedCount, blockedCount > 0 {
-                    NexusChip("blocks \(blockedCount)", tone: .neutral)
+                    LiquidPill("blocks \(blockedCount)", color: DS.ColorToken.statusNeutral)
                 }
-                if let subtaskProgress, subtaskProgress.total > 0 {
-                    NexusChip(
-                        subtaskProgress.label,
-                        systemImage: "checklist",
-                        tone: subtaskProgress.isComplete ? .positive : .neutral)
-                }
+                subtaskPill
                 if let deadline, showsDeadline {
-                    NexusChip(deadline.label, systemImage: deadline.systemImage, tone: deadline.tone)
+                    LiquidPill(deadline.label, color: TaskRowLiquidStyle.pillColor(for: deadline.tone))
                 }
                 Spacer(minLength: 0)
             }
@@ -481,32 +466,50 @@ private struct RowBody: View {
         )
         let showsDeadline = deadline != nil && !suppressesDeadlineChip(due: due, deadline: deadline)
         HStack(spacing: 6) {
-            ForEach(Array(task.tags.prefix(3).enumerated()), id: \.offset) { _, tag in
-                NexusChip("#\(tag)")
-            }
-            if task.tags.count > 3 {
-                NexusChip("+\(task.tags.count - 3)")
-            }
+            tagPills
             if task.recurrenceRule != nil {
-                Image(systemName: "repeat")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                recurrenceGlyph
             }
             if let blockedCount, blockedCount > 0 {
-                NexusChip("blocks \(blockedCount)", tone: .neutral)
+                LiquidPill("blocks \(blockedCount)", color: DS.ColorToken.statusNeutral)
             }
-            if let subtaskProgress, subtaskProgress.total > 0 {
-                NexusChip(
-                    subtaskProgress.label,
-                    systemImage: "checklist",
-                    tone: subtaskProgress.isComplete ? .positive : .neutral
-                )
-            }
+            subtaskPill
             if let deadline, showsDeadline {
-                NexusChip(deadline.label, systemImage: deadline.systemImage, tone: deadline.tone)
+                LiquidPill(deadline.label, color: TaskRowLiquidStyle.pillColor(for: deadline.tone))
             }
             dueChipView(due)
         }
+    }
+
+    /// Tag pills with deterministic quiet accents, capped at 2 + a real "+N".
+    @ViewBuilder
+    private var tagPills: some View {
+        let split = TaskRowLiquidStyle.visibleTags(task.tags)
+        // `id: \.offset` — user tags may repeat; offsets are unique.
+        ForEach(Array(split.visible.enumerated()), id: \.offset) { _, tag in
+            LiquidPill(tag, color: TaskRowLiquidStyle.tagAccent(for: tag))
+        }
+        if split.overflow > 0 {
+            LiquidPill("+\(split.overflow)", color: DS.ColorToken.statusNeutral)
+        }
+    }
+
+    @ViewBuilder
+    private var subtaskPill: some View {
+        if let subtaskProgress, subtaskProgress.total > 0 {
+            LiquidPill(
+                subtaskProgress.label,
+                color: subtaskProgress.isComplete
+                    ? DS.ColorToken.statusSuccess : DS.ColorToken.statusNeutral
+            )
+        }
+    }
+
+    private var recurrenceGlyph: some View {
+        Image(systemName: "repeat")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(DS.ColorToken.textTertiary)
+            .accessibilityLabel("Repeats")
     }
 
     private static let chipCalendar: Calendar = {
@@ -515,44 +518,29 @@ private struct RowBody: View {
         return calendar
     }()
 
+    /// Trailing due metadata — plain right-aligned text per the reference
+    /// rows. Overdue is the single red token (semibold); today reads in
+    /// accent blue; everything later stays tertiary ink.
     @ViewBuilder
     private func dueChipView(_ label: DueChipFormatter.DueChipLabel) -> some View {
-        switch label {
-        case .noDate:
-            EmptyView()
-        case .overdue(let daysLate):
-            // The single red urgency token — restrained tinted-ink chip.
-            NexusChip("\(daysLate)d late", systemImage: "exclamationmark.triangle.fill", tone: .rose)
-        case .today(let timeOfDay):
-            NexusChip(timeOfDay.map { "Today \($0)" } ?? "Today", systemImage: "calendar")
-        case .tomorrow(let timeOfDay):
-            NexusChip(timeOfDay.map { "Tomorrow \($0)" } ?? "Tomorrow", systemImage: "calendar")
-        case .future(let date, let timeOfDay):
-            let label = timeOfDay.map { "\(date) \($0)" } ?? date
-            NexusChip(label, systemImage: "calendar")
+        if let due = TaskRowLiquidStyle.dueMetadata(for: label) {
+            Text(due.text)
+                .font(due.role == .overdue ? DS.FontToken.metadata.weight(.semibold) : DS.FontToken.metadata)
+                .monospacedDigit()
+                .foregroundStyle(TaskRowLiquidStyle.dueColor(for: due.role))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 
-    // Priority is ranked on a non-color channel (red is spent on the temporal
-    // axis). The shipped achromatic `NexusPriorityBars` ranks EVERY level
-    // (low = 1 / medium = 2 / high = 3 filled bars, with a weight ramp and the
-    // single lime accent reserved for the urgent crest); no-priority tasks omit
-    // it. This restores the P2/P3 distinction the dense list had dropped — the
-    // brief's rule is "rank, don't strip" — by reusing the purpose-built
-    // primitive rather than re-inventing a P1-only glyph.
+    /// Priority pill in the design system's priority colors (03_COMPONENTS.md
+    /// §Pills / Tags: high = red, medium = amber, low = blue via
+    /// `TopPrioritiesCard.color(for:)` — one hue source for list + Today card).
+    /// No-priority rows omit it.
     @ViewBuilder
     private var priorityIndicator: some View {
-        if let level = priorityLevel {
-            NexusPriorityBars(level)
-        }
-    }
-
-    private var priorityLevel: NexusPriorityLevel? {
-        switch task.priority {
-        case .none: return nil
-        case .low: return .low
-        case .medium: return .medium
-        case .high: return .high
+        if let label = TaskRowLiquidStyle.priorityLabel(for: task.priority) {
+            LiquidPill(label, color: TopPrioritiesCard.color(for: task.priority))
         }
     }
 }
@@ -568,6 +556,6 @@ private struct RowBody: View {
             onToggleDone: {}
         )
     }
-    .background(NexusColor.Background.base)
     .padding(40)
+    .background(DS.ColorToken.backgroundApp)
 }

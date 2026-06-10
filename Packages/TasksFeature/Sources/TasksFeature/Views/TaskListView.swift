@@ -110,37 +110,39 @@ public struct TaskListView: View {
         .scrollContentBackground(.hidden)
     }
 
+    /// Liquid empty state (calm, title + one line) — same idiom as
+    /// `LiquidEmptyState`, plus the title line the per-filter resolver carries.
     private func taskEmptyState(title: String, systemImage: String, message: String) -> some View {
-        VStack(spacing: 13) {
+        VStack(spacing: DS.Space.m) {
             Image(systemName: systemImage)
-                .font(.system(size: 35, weight: .medium))
-                .foregroundStyle(NexusColor.Text.muted)
+                // 22 pt hero glyph — matches LiquidEmptyState's calibration.
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textMuted)
                 .symbolRenderingMode(.hierarchical)
 
-            VStack(spacing: 8) {
+            VStack(spacing: DS.Space.xs) {
                 Text(title)
-                    .font(NexusType.h2)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.section)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
 
                 Text(message)
-                    .font(NexusType.body)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
         }
         .frame(maxWidth: 440)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding(.horizontal, 32)
+        .padding(.horizontal, DS.Space.xxxl)
         .padding(.bottom, 118)
     }
 
     private func errorRow(_ message: String) -> some View {
         Text(message)
-            .font(.caption)
-            // MP-2 burned: error text renders via primary ink (hue symbol retired;
-            // error legibility is carried by contrast/weight, not color).
-            .foregroundStyle(NexusColor.Text.primary)
+            .font(DS.FontToken.metadata)
+            // Error legibility is carried by contrast/weight, not color.
+            .foregroundStyle(DS.ColorToken.textPrimary)
             .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
             .listRowBackground(containerBackground)
             .listRowSeparator(.hidden)
@@ -179,9 +181,7 @@ public struct TaskListView: View {
                 }
                 .onMove { from, to in moveToday(from: from, to: to) }
             } header: {
-                Text("TODAY")
-                    .nexusType(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                sectionHeader("TODAY")
             }
         }
     }
@@ -195,11 +195,17 @@ public struct TaskListView: View {
                     row(for: item, appearIndex: i)
                 }
             } header: {
-                Text(title.uppercased())
-                    .nexusType(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                sectionHeader(title.uppercased())
             }
         }
+    }
+
+    /// Tracked-caps Liquid section header (01_FOUNDATIONS §Gęstość informacji).
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(DS.FontToken.caption)
+            .tracking(0.8)
+            .foregroundStyle(DS.ColorToken.textTertiary)
     }
 
     @ViewBuilder
@@ -243,10 +249,10 @@ public struct TaskListView: View {
             } label: {
                 Label(item.status == .done ? "Reopen" : "Done", systemImage: "checkmark.circle")
             }
-            // MP-2 canonical achromatic swipe fill: controlHover (0x1E1F25) is a
-            // solid dark control surface so the white system label stays legible
-            // (Text.primary would be white-on-white). Zero hue. Propagates.
-            .tint(NexusColor.Background.controlHover)
+            // Solid dark swipe fill (backgroundElevated) so the white system
+            // label stays legible; glass tokens are translucent and would let
+            // the row bleed through mid-swipe.
+            .tint(DS.ColorToken.backgroundElevated)
         }
         .swipeActions(edge: .trailing) {
             Button {
@@ -254,14 +260,14 @@ public struct TaskListView: View {
             } label: {
                 Label("1h", systemImage: "clock")
             }
-            // MP-2 canonical achromatic swipe fill (see leading edge).
-            .tint(NexusColor.Background.controlHover)
+            // Solid dark swipe fill (see leading edge).
+            .tint(DS.ColorToken.backgroundElevated)
             Button {
                 snooze(item, by: .tomorrow)
             } label: {
                 Label("Tomorrow", systemImage: "sun.haze")
             }
-            .tint(NexusColor.Background.controlHover)
+            .tint(DS.ColorToken.backgroundElevated)
         }
         .taskAssistContextMenu(for: item) { actions in
             Button(item.status == .done ? "Reopen" : "Mark done") { toggleDone(item) }
