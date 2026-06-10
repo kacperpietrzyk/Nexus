@@ -3,9 +3,20 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
+#if os(macOS)
+/// Readable single-column width for the profile on the wide Mac content panel —
+/// visual calibration (no DS column token); matches the People list column.
+private let profileColumnMaxWidth: CGFloat = 720
+#endif
+
 /// "Show me everything about X" (spec §1, §6): a person's contact fields plus the
 /// graph-aggregated meeting history (`.attendee`), mentioning tasks and mentioning
 /// notes (`.mentions`) — one reverse-query, no manual bridging (spec §7).
+///
+/// Liquid: contact + aggregate sections sit on glass cards; on macOS the
+/// back/edit/merge actions live in the in-panel header (never window-toolbar
+/// items — the Liquid shell owns the window chrome). iOS keeps the navigation
+/// bar.
 ///
 /// Cross-module resolution asymmetry (spec §6 / CLAUDE.md isolation): `TaskItem`
 /// and `Note` live in NexusCore so this view fetches them directly by id;
@@ -15,6 +26,7 @@ public struct PersonProfileView: View {
     @Environment(\.personRepository) private var personRepository
     @Environment(\.personMeetingResolver) private var meetingResolver
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
 
     let personID: UUID
 
@@ -33,36 +45,44 @@ public struct PersonProfileView: View {
     public var body: some View {
         ScrollView {
             if let person {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: DS.Space.l) {
                     header(person)
                     contactFields(person)
                     aggregateSection(
                         title: "Meetings",
+                        systemImage: "person.2",
                         emptyMessage: "No meetings linked yet.",
                         rows: meetingRows
                     )
                     aggregateSection(
                         title: "Tasks",
+                        systemImage: "checkmark.circle",
                         emptyMessage: "No tasks mention this person.",
                         rows: taskRows
                     )
                     aggregateSection(
                         title: "Notes",
+                        systemImage: "doc.text",
                         emptyMessage: "No notes mention this person.",
                         rows: noteRows
                     )
                 }
-                .padding(20)
+                .padding(DS.Space.xl)
+                #if os(macOS)
+                .frame(maxWidth: profileColumnMaxWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                #else
                 .frame(maxWidth: .infinity, alignment: .leading)
+                #endif
             } else {
-                NexusEmptyState(
+                LiquidEmptyState(
                     systemImage: "person.crop.circle.badge.questionmark",
-                    title: "Person not found",
-                    message: loadError
+                    message: loadError ?? "Person not found."
                 )
-                .padding(40)
+                .padding(DS.Space.xxxl)
             }
         }
+        #if os(iOS)
         .navigationTitle(person?.displayName.isEmpty == false ? person!.displayName : "Person")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -81,6 +101,7 @@ public struct PersonProfileView: View {
                 .disabled(person == nil || personRepository == nil)
             }
         }
+        #endif
         .sheet(isPresented: $editorPresented, onDismiss: reload) {
             if let person {
                 PersonEditorView(person: person)
@@ -96,19 +117,38 @@ public struct PersonProfileView: View {
 
     @ViewBuilder
     private func header(_ person: Person) -> some View {
-        HStack(spacing: 14) {
-            NexusAvatar(name: person.displayName, size: 48)
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: DS.Space.m) {
+            #if os(macOS)
+            LiquidIconButton(systemImage: "chevron.left", accessibilityLabel: "Back") {
+                dismiss()
+            }
+            #endif
+
+            LiquidAvatar(name: person.displayName, size: 48)
+
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text(person.displayName.isEmpty ? "Unnamed" : person.displayName)
-                    .nexusType(.h2)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.displayMedium)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                 if let company = person.company, !company.isEmpty {
                     Text(company)
-                        .nexusType(.bodySmall)
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                 }
             }
+
             Spacer(minLength: 0)
+
+            #if os(macOS)
+            LiquidIconButton(systemImage: "arrow.triangle.merge", accessibilityLabel: "Merge") {
+                mergePresented = true
+            }
+            .disabled(personRepository == nil)
+            LiquidIconButton(systemImage: "pencil", accessibilityLabel: "Edit") {
+                editorPresented = true
+            }
+            .disabled(personRepository == nil)
+            #endif
         }
     }
 
@@ -116,19 +156,16 @@ public struct PersonProfileView: View {
     private func contactFields(_ person: Person) -> some View {
         let fields = PersonProfileFields.fields(for: person)
         if !fields.isEmpty {
-            NexusCard(padding: 16) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Contact")
-                        .nexusType(.eyebrow)
-                        .foregroundStyle(NexusColor.Text.tertiary)
+            LiquidGlassCard("Contact") {
+                VStack(alignment: .leading, spacing: DS.Space.m) {
                     ForEach(fields) { field in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(field.label)
-                                .nexusType(.caption)
-                                .foregroundStyle(NexusColor.Text.tertiary)
+                                .font(DS.FontToken.caption)
+                                .foregroundStyle(DS.ColorToken.textTertiary)
                             Text(field.value)
-                                .nexusType(.bodySmall)
-                                .foregroundStyle(NexusColor.Text.secondary)
+                                .font(DS.FontToken.body)
+                                .foregroundStyle(DS.ColorToken.textSecondary)
                                 .textSelection(.enabled)
                         }
                     }
@@ -137,25 +174,26 @@ public struct PersonProfileView: View {
         }
     }
 
-    private func aggregateSection(title: String, emptyMessage: String, rows: [any Linkable]) -> some View {
-        // Inlined rather than `BacklinksView` (which hardcodes its own "Backlinks"
-        // eyebrow) so each section carries its own Meetings/Tasks/Notes header.
-        // `ItemRow` is the same primitive `BacklinksView` renders internally.
-        NexusCard(padding: 16) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(title)
-                    .nexusType(.eyebrow)
-                    .foregroundStyle(NexusColor.Text.tertiary)
-                if rows.isEmpty {
-                    Text(emptyMessage)
-                        .nexusType(.bodySmall)
-                        .foregroundStyle(NexusColor.Text.muted)
-                        .padding(.vertical, 4)
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(rows, id: \.id) { row in
-                            ItemRow(item: row)
-                        }
+    private func aggregateSection(
+        title: String,
+        systemImage: String,
+        emptyMessage: String,
+        rows: [any Linkable]
+    ) -> some View {
+        LiquidGlassCard(title) {
+            if rows.isEmpty {
+                Text(emptyMessage)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textMuted)
+                    .padding(.vertical, DS.Space.xxs)
+            } else {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    ForEach(rows, id: \.id) { row in
+                        LiquidLinkableRow(
+                            title: row.title,
+                            systemImage: systemImage,
+                            updatedAt: row.updatedAt
+                        )
                     }
                 }
             }
@@ -186,5 +224,37 @@ public struct PersonProfileView: View {
         guard let meetingResolver else { return [] }
         return ids.compactMap { meetingResolver.resolve($0) }
             .sorted { $0.updatedAt > $1.updatedAt }
+    }
+}
+
+/// One aggregate row inside a profile card: kind glyph + title + relative
+/// timestamp. Display-only (matches the pre-Liquid profile, whose rows were not
+/// interactive); the section header already names the kind, so the glyph is
+/// decorative.
+private struct LiquidLinkableRow: View {
+    let title: String
+    let systemImage: String
+    let updatedAt: Date
+
+    var body: some View {
+        HStack(spacing: DS.Space.s) {
+            Image(systemName: systemImage)
+                // 11 pt glyph rides the 13 pt body line (Liquid metadata-glyph
+                // scale); no icon-size token.
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textMuted)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: DS.Space.s)
+            Text(updatedAt, style: .relative)
+                .font(DS.FontToken.metadata)
+                .monospacedDigit()
+                .foregroundStyle(DS.ColorToken.textTertiary)
+        }
+        .padding(.vertical, DS.Space.xxs)
     }
 }
