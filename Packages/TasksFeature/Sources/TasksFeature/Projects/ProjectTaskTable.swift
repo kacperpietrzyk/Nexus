@@ -279,7 +279,7 @@ private struct TaskTableRow: View {
 
                 Group {
                     if let due = task.dueAt {
-                        Text(Self.dueFormatter.string(from: due))
+                        Text(ProjectFormatters.monthDay.string(from: due))
                             .font(DS.FontToken.metadata)
                             .foregroundStyle(
                                 isOverdue ? DS.ColorToken.statusDanger : DS.ColorToken.textSecondary
@@ -326,12 +326,4 @@ private struct TaskTableRow: View {
             .font(DS.FontToken.metadata)
             .foregroundStyle(DS.ColorToken.textMuted)
     }
-
-    /// English UI rule: explicit en_US (system locale may be pl_PL).
-    private static let dueFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
 }

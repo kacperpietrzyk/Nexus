@@ -190,11 +190,26 @@ public final class LiquidProjectsModel {
             counts[comment.itemID, default: 0] += 1
         }
 
+        // Project-scoped in-store. #Predicate can't unwrap optionals with
+        // postfix `!`, and the `?? sentinel` nil-coalescing form fails SQL
+        // generation at runtime ("unimplemented SQL generation … bad LHS" —
+        // TERNARY is not a valid IN lhs). The `if let` membership form below
+        // IS translatable — it's the same shape `SubtaskListView.progress`
+        // already ships, and `LiquidProjectsModelTests` exercises this fetch
+        // against a real store.
         let subtasks = try modelContext.fetch(
-            FetchDescriptor<TaskItem>(predicate: #Predicate { $0.parentTaskID != nil && $0.deletedAt == nil })
+            FetchDescriptor<TaskItem>(
+                predicate: #Predicate { task in
+                    if let parentTaskID = task.parentTaskID {
+                        task.deletedAt == nil && taskIDs.contains(parentTaskID)
+                    } else {
+                        false
+                    }
+                }
+            )
         )
         subtaskCountsByTask = subtasks.reduce(into: [:]) { counts, subtask in
-            guard let parent = subtask.parentTaskID, taskIDs.contains(parent) else { return }
+            guard let parent = subtask.parentTaskID else { return }
             counts[parent, default: 0] += 1
         }
     }

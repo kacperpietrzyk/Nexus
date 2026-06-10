@@ -351,7 +351,7 @@ private struct KanbanCard: View {
             }
 
             if let due = task.dueAt {
-                Label(Self.dueFormatter.string(from: due), systemImage: "calendar")
+                Label(ProjectFormatters.monthDay.string(from: due), systemImage: "calendar")
                     .font(DS.FontToken.caption)
                     .foregroundStyle(DS.ColorToken.textTertiary)
                     .labelStyle(.titleAndIcon)
@@ -375,12 +375,4 @@ private struct KanbanCard: View {
             }
         }
     }
-
-    /// English UI rule: explicit en_US (system locale may be pl_PL).
-    private static let dueFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
 }

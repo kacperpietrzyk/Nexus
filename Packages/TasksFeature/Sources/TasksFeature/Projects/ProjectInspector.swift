@@ -151,7 +151,7 @@ public struct ProjectInspector: View {
                         color: risk.kind == .overdue ? DS.ColorToken.statusDanger : DS.ColorToken.statusWarning
                     )
                     if let anchor = risk.kind == .overdue ? risk.dueAt : risk.deadlineAt {
-                        Text(Self.dateFormatter.string(from: anchor))
+                        Text(ProjectFormatters.monthDay.string(from: anchor))
                             .font(DS.FontToken.metadata)
                             .foregroundStyle(DS.ColorToken.textTertiary)
                     }
@@ -240,14 +240,6 @@ public struct ProjectInspector: View {
         case .noteUpdated: return "Note updated"
         }
     }
-
-    /// English UI rule: explicit en_US (system locale may be pl_PL).
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
