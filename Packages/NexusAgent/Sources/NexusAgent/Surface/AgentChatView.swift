@@ -156,9 +156,14 @@ public struct AgentChatView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
                 .padding(.top, 160)
 
-            railPanel
-                .padding(.top, 150)
-                .padding(.trailing, 26)
+            // Omitted-as-unit until the first §10-reachable tool call lands:
+            // a floating "No activity" glass box over an empty canvas reads
+            // as orphaned chrome, not as a calm empty state.
+            if let rows = recentToolRows, !rows.isEmpty {
+                railPanel(rows)
+                    .padding(.top, 150)
+                    .padding(.trailing, 26)
+            }
         }
     }
 
@@ -268,7 +273,7 @@ public struct AgentChatView: View {
     // (the only one derivable from already-loaded state). MEMORY +
     // SCHEDULES are GONE ENTIRELY — no headers, no empty bodies, and no
     // orphan dividers (a lone section needs no separator).
-    private var rail: some View {
+    private func rail(_ rows: [AgentRecentToolRow]) -> some View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
@@ -286,29 +291,20 @@ public struct AgentChatView: View {
                         .foregroundStyle(DS.ColorToken.textTertiary)
                 }
 
-                if let rows = recentToolRows, !rows.isEmpty {
-                    ForEach(rows) { row in
-                        toolRow(row)
-                    }
-                } else {
-                    // Empty branch fires when there is no thread OR no
-                    // §10-reachable tool call yet (both fall here — a thread
-                    // with no tool messages must not render a blank body).
-                    Text("No activity")
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textMuted)
+                ForEach(rows) { row in
+                    toolRow(row)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var railPanel: some View {
+    private func railPanel(_ rows: [AgentRecentToolRow]) -> some View {
         // Liquid re-skin (container level): the liquid glass card recipe
         // replaces the opaque Linear control→raised→panel gradient + manual
         // Line.strong stroke + raw black glow (the slab clashed inside the
         // shell's glass content column). Rail content unchanged.
-        rail
+        rail(rows)
             .padding(.horizontal, 20)
             .padding(.vertical, 18)
             .frame(width: 374, alignment: .topLeading)
@@ -316,8 +312,8 @@ public struct AgentChatView: View {
             .liquidGlass(.card, radius: DS.Radius.xl)
     }
 
-    /// `nil` when there is no active thread (the rail then shows the oracle
-    /// empty branch). Otherwise the §10-reachable newest-first tool list,
+    /// `nil` when there is no active thread (the rail is then omitted
+    /// entirely). Otherwise the §10-reachable newest-first tool list,
     /// derived purely from the already-loaded `messages` (see
     /// `AgentRecentTools` — §1b/§11, no new query). `Date()` at body-eval is
     /// sufficient (the derivation stays pure via the injected `now`); a
