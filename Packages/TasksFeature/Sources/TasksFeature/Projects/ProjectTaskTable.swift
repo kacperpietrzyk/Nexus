@@ -76,7 +76,7 @@ struct ProjectTaskTable: View {
                 if tasks.isEmpty {
                     LiquidEmptyState(
                         systemImage: "checklist",
-                        message: "No tasks in this project yet. Add one from the board."
+                        message: "No tasks in this project yet — add one from the board."
                     )
                 } else if filteredTasks.isEmpty {
                     LiquidEmptyState(

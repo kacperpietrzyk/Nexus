@@ -224,7 +224,7 @@ struct WeekGrid: View {
             Color.clear
             ForEach(1..<WeekGridMetrics.totalHours, id: \.self) { hour in
                 Text(Self.hourLabel(hour))
-                    .font(DS.FontToken.caption)
+                    .font(DS.FontToken.caption.monospacedDigit())
                     .foregroundStyle(DS.ColorToken.textMuted)
                     .padding(.trailing, DS.Space.s)
                     // Center the label on its hour line (cap height ≈ 12 pt).
@@ -324,7 +324,7 @@ struct WeekGrid: View {
         let totalMinutes = (minutes.hour ?? 0) * 60 + (minutes.minute ?? 0)
         return HStack(spacing: DS.Space.xxs) {
             Text(WeekEventBlock.timeFormatter.string(from: instant))
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
                 .foregroundStyle(DS.ColorToken.textPrimary)
                 // Never let the HStack's greedy line squeeze the label.
                 .fixedSize()

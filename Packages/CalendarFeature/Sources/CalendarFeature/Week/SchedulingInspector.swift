@@ -228,7 +228,7 @@ public struct SchedulingInspector: View {
         } trailing: {
             if !conflicts.isEmpty {
                 Text("\(conflicts.count)")
-                    .font(DS.FontToken.bodyStrong)
+                    .font(DS.FontToken.bodyStrong.monospacedDigit())
                     .foregroundStyle(DS.ColorToken.statusDanger)
             }
         }

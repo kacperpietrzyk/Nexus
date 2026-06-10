@@ -131,7 +131,7 @@ struct SchedulingStrip: View {
         } trailing: {
             if !tasks.isEmpty {
                 Text("\(tasks.count)")
-                    .font(DS.FontToken.metadata)
+                    .font(DS.FontToken.metadata.monospacedDigit())
                     .foregroundStyle(DS.ColorToken.textTertiary)
             }
         }
@@ -196,7 +196,7 @@ struct SchedulingStrip: View {
                         "\(WeekEventBlock.timeFormatter.string(from: gap.start)) – "
                             + WeekEventBlock.timeFormatter.string(from: gap.end)
                     )
-                    .font(DS.FontToken.bodyStrong)
+                    .font(DS.FontToken.bodyStrong.monospacedDigit())
                     .foregroundStyle(DS.ColorToken.textPrimary)
                     // Real reason only: the gap is genuinely free in the loaded
                     // calendar — no fabricated "energy" rationale.

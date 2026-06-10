@@ -134,7 +134,7 @@ public struct LiquidMeetingsScreen: View {
     private var emptyStore: some View {
         LiquidEmptyState(
             systemImage: "person.wave.2",
-            message: "No meetings yet. Nexus records and transcribes meetings automatically once detection is set up."
+            message: "No meetings yet — recording starts automatically once detection is set up."
         ) {
             LiquidPrimaryButton("Open Settings", action: navigation.openSettings)
         }

@@ -96,7 +96,7 @@ public struct LiquidProjectScreen: View {
     private var emptyStore: some View {
         LiquidEmptyState(
             systemImage: "square.stack.3d.up",
-            message: "No projects yet. Group related tasks into a project and track them on a board."
+            message: "No projects yet — group related tasks and track them on a board."
         ) {
             LiquidPrimaryButton("Create your first project", systemImage: "plus") {
                 editorPresented = true

@@ -76,7 +76,7 @@ struct WeekEventBlock: View {
     /// metadata (11) tokens, so a commented local per the token rule.
     private static let titleFont = Font.system(size: 12, weight: .semibold)
     /// Spec §Week grid: time line 10–11 pt secondary.
-    private static let timeFont = Font.system(size: 10, weight: .regular)
+    private static let timeFont = Font.system(size: 10, weight: .regular).monospacedDigit()
     /// Title (~15 pt) + time (~13 pt) + 2×8 pt padding need ≥ ~46 pt; below
     /// that only the title fits without clipping.
     private static let timeLineMinHeight: CGFloat = 46
