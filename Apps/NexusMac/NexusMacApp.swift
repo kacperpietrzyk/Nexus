@@ -271,7 +271,7 @@ struct NexusMacApp: App {
                             do {
                                 let result = try await MarkdownExporter.export(
                                     container: container,
-                                    types: TaskItem.self,
+                                    types: TaskItem.self, Meeting.self,
                                     to: folder
                                 )
                                 lastExportResult = result

@@ -571,7 +571,7 @@ private struct NexusiOSRootView: View {
                     _Concurrency.Task {
                         _ = try? await MarkdownExporter.export(
                             container: container,
-                            types: TaskItem.self,
+                            types: TaskItem.self, Meeting.self,
                             to: folder
                         )
                     }
