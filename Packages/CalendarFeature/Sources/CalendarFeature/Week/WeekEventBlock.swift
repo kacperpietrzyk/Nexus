@@ -83,6 +83,14 @@ struct WeekEventBlock: View {
 
     private var kind: LiquidEventKind { WeekEventClassifier.kind(for: item) }
 
+    /// External events carry their EventKit calendar color (real presentation
+    /// metadata, the same hue Apple Calendar shows); blocks and colorless
+    /// events fall back to the kind tokens.
+    private var calendarTint: LiquidCalendarTint? {
+        guard item.kind == .event else { return nil }
+        return LiquidCalendarTint(calendarHex: item.colorHex)
+    }
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 2) {
@@ -101,7 +109,7 @@ struct WeekEventBlock: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
                 RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                    .fill(kind.fill)
+                    .fill(calendarTint?.fill ?? kind.fill)
             }
             .overlay { strokeOverlay }
             .contentShape(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
@@ -120,7 +128,7 @@ struct WeekEventBlock: View {
     @ViewBuilder
     private var strokeOverlay: some View {
         let shape = RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-        let color = hovering ? DS.ColorToken.strokeStrong : kind.stroke
+        let color = hovering ? DS.ColorToken.strokeStrong : (calendarTint?.stroke ?? kind.stroke)
         if item.kind == .proposedBlock {
             shape.strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
         } else {

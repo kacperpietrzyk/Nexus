@@ -151,7 +151,11 @@ struct WeekGrid: View {
                 let allDay = DayTimelineLayout.allDayItems(itemsForDay(day))
                 HStack(spacing: DS.Space.xxs) {
                     ForEach(allDay.prefix(2)) { item in
-                        LiquidPill(item.title, color: WeekEventClassifier.kind(for: item).accent)
+                        LiquidPill(
+                            item.title,
+                            color: LiquidCalendarTint(calendarHex: item.colorHex)?.accent
+                                ?? WeekEventClassifier.kind(for: item).accent
+                        )
                     }
                     if allDay.count > 2 {
                         Text("+\(allDay.count - 2)")
