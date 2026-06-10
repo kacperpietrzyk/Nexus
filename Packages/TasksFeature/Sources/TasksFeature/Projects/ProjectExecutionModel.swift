@@ -63,6 +63,10 @@ public enum ProjectExecutionModel {
     ///   task in an in-flight workflow lane (`inProgress`/`inReview`).
     ///   `backlog`/`todo` are queued, not in-flight.
     /// - `.upcoming` — everything else, including empty sections.
+    ///
+    /// Callers must pass only live (non-deleted) sections — this function does
+    /// not filter `Section.deletedAt` (tasks are defensively filtered, sections
+    /// are not).
     /// (`Section` here is `NexusCore.Section` — this file imports no SwiftUI,
     /// so the bare name is unambiguous; UI callers go through `ProjectSection`.)
     public static func milestones(
@@ -93,9 +97,10 @@ public enum ProjectExecutionModel {
 
     // MARK: - Progress
 
-    /// done/total over the live tasks, in `[0, 1]`; empty input is `0`. Same
-    /// counting rule as `LiquidTodayModel.projectProgress` (one source of truth
-    /// for what "project progress" means).
+    /// done/total over the live tasks, in `[0, 1]`; empty input is `0`. Counts
+    /// the same way as `LiquidTodayModel.projectProgress` — a separate
+    /// implementation that must be kept aligned manually if either definition
+    /// of "project progress" changes.
     public static func progress(tasks: [TaskItem]) -> Double {
         let tasks = live(tasks)
         guard !tasks.isEmpty else { return 0 }
@@ -191,6 +196,8 @@ public enum ProjectExecutionModel {
             .sorted {
                 if $0.anchor != $1.anchor { return $0.anchor < $1.anchor }
                 if $0.risk.title != $1.risk.title { return $0.risk.title < $1.risk.title }
+                // UUID-order is a stability guarantee only (deterministic output
+                // for equal anchor+title), not a semantic ranking.
                 return $0.risk.taskID.uuidString < $1.risk.taskID.uuidString
             }
             .prefix(limit)
@@ -270,15 +277,15 @@ public enum ProjectExecutionModel {
             )
         }
 
-        return
+        return Array(
             entries
-            .sorted {
-                if $0.timestamp != $1.timestamp { return $0.timestamp > $1.timestamp }
-                if $0.kind != $1.kind { return rank($0.kind) < rank($1.kind) }
-                return $0.id < $1.id
-            }
-            .prefix(limit)
-            .map { $0 }
+                .sorted {
+                    if $0.timestamp != $1.timestamp { return $0.timestamp > $1.timestamp }
+                    if $0.kind != $1.kind { return rank($0.kind) < rank($1.kind) }
+                    return $0.id < $1.id
+                }
+                .prefix(limit)
+        )
     }
 
     private static func rank(_ kind: ActivityKind) -> Int {

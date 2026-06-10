@@ -306,14 +306,12 @@ struct ProjectExecutionModelTests {
             updatedAt: Date(timeIntervalSince1970: 50),
             lastCompletedAt: Date(timeIntervalSince1970: 400)
         )
-        _ = completed
         let created = makeTask(
             context,
             title: "fresh",
             createdAt: Date(timeIntervalSince1970: 300),
             updatedAt: Date(timeIntervalSince1970: 300)
         )
-        _ = created
         let note = Note(title: "Spec", plainText: "spec")
         note.updatedAt = Date(timeIntervalSince1970: 200)
         note.createdAt = base
@@ -343,7 +341,6 @@ struct ProjectExecutionModelTests {
             status: .done,
             updatedAt: Date(timeIntervalSince1970: 700)
         )
-        _ = noStamp
         // Production reconcile forces status == .done on a canceled workflow
         // (WorkflowState.forcedStatus); mirror that here so the
         // isTerminalNonCompletion guard is actually exercised — without .done
@@ -356,7 +353,6 @@ struct ProjectExecutionModelTests {
             createdAt: Date(timeIntervalSince1970: 600),
             updatedAt: Date(timeIntervalSince1970: 800)
         )
-        _ = canceled
 
         let entries = ProjectExecutionModel.activity(tasks: [noStamp, canceled], notes: [])
 
