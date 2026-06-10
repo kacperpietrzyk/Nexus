@@ -117,6 +117,19 @@ struct LiquidWeekTests {
         #expect(WeekEventClassifier.category(for: external, mirroredEventIDs: mirrored) == .meeting)
     }
 
+    // MARK: - Duration clamp
+
+    @Test("clampDuration defaults to 1h, floors at one snap step, and caps at the gap")
+    func clampDuration() {
+        let gap = DateInterval(start: date(hours: 9), duration: 2 * 3600)
+        // No estimate → the 1 h default.
+        #expect(WeekUnscheduledLoader.clampDuration(estimate: nil, gap: gap) == 3600)
+        // Tiny estimate floors at one 15-min snap step.
+        #expect(WeekUnscheduledLoader.clampDuration(estimate: 60, gap: gap) == 15 * 60)
+        // Oversized estimate caps at the gap.
+        #expect(WeekUnscheduledLoader.clampDuration(estimate: 10 * 3600, gap: gap) == 2 * 3600)
+    }
+
     // MARK: - Error copy
 
     @Test("Provider errors surface their user-facing message, not the enum debug shape")

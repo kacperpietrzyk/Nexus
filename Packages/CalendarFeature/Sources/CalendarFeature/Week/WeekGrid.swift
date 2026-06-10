@@ -169,12 +169,16 @@ struct WeekGrid: View {
     // MARK: - Hour axis
 
     private var hourAxis: some View {
-        ScrollViewReader { proxy in
+        // Hoisted: one layout pass for all 7 columns per render, instead of
+        // recomputing inside each column (the GeometryReader below only reads
+        // the column width for lane sizing).
+        let positionedByDay = positionedItemsByDay
+        return ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
                 HStack(alignment: .top, spacing: 0) {
                     gutterColumn
                     ForEach(days, id: \.self) { day in
-                        dayColumn(day)
+                        dayColumn(day, positioned: positionedByDay[day] ?? [])
                     }
                 }
                 .frame(height: WeekGridMetrics.gridHeight)
@@ -185,6 +189,23 @@ struct WeekGrid: View {
                 proxy.scrollTo(WeekGridMetrics.firstVisibleHour, anchor: .top)
             }
         }
+    }
+
+    /// Positioned hour-axis items for every visible day, computed once per
+    /// render at the grid level.
+    private var positionedItemsByDay: [Date: [PositionedTimelineItem]] {
+        let metrics = AxisMetrics(
+            startHour: 0,
+            endHour: WeekGridMetrics.totalHours,
+            hourHeight: WeekGridMetrics.hourHeight,
+            minItemHeight: WeekGridMetrics.minBlockHeight
+        )
+        return Dictionary(
+            days.map { day in
+                (day, DayTimelineLayout.layout(itemsForDay(day), forDay: day, metrics: metrics, calendar: calendar))
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
     /// Invisible per-hour markers so `scrollTo(hour)` can land on 8 AM.
@@ -214,15 +235,8 @@ struct WeekGrid: View {
         .accessibilityHidden(true)
     }
 
-    private func dayColumn(_ day: Date) -> some View {
-        let metrics = AxisMetrics(
-            startHour: 0,
-            endHour: WeekGridMetrics.totalHours,
-            hourHeight: WeekGridMetrics.hourHeight,
-            minItemHeight: WeekGridMetrics.minBlockHeight
-        )
-        let positioned = DayTimelineLayout.layout(itemsForDay(day), forDay: day, metrics: metrics, calendar: calendar)
-        return GeometryReader { proxy in
+    private func dayColumn(_ day: Date, positioned: [PositionedTimelineItem]) -> some View {
+        GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
                 gridLines
                 eventBlocks(positioned, columnWidth: proxy.size.width)
@@ -230,7 +244,12 @@ struct WeekGrid: View {
                     dropHighlight(slot)
                 }
                 if calendar.isDate(day, inSameDayAs: now) {
-                    currentTimeLine
+                    // Re-render once a minute so the line/pill keeps moving
+                    // while the grid stays open (the `now` property is only a
+                    // per-mount snapshot).
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        currentTimeLine(at: context.date)
+                    }
                 }
             }
             .contentShape(Rectangle())
@@ -298,12 +317,13 @@ struct WeekGrid: View {
     }
 
     /// Spec §Current time indicator: 1 px accent line + 20 pt pill label with
-    /// 10 pt semibold text, on today's column only.
-    private var currentTimeLine: some View {
-        let minutes = calendar.dateComponents([.hour, .minute], from: now)
+    /// 10 pt semibold text, on today's column only. `instant` comes from the
+    /// enclosing minute-periodic `TimelineView`.
+    private func currentTimeLine(at instant: Date) -> some View {
+        let minutes = calendar.dateComponents([.hour, .minute], from: instant)
         let totalMinutes = (minutes.hour ?? 0) * 60 + (minutes.minute ?? 0)
         return HStack(spacing: DS.Space.xxs) {
-            Text(WeekEventBlock.timeFormatter.string(from: now))
+            Text(WeekEventBlock.timeFormatter.string(from: instant))
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(DS.ColorToken.textPrimary)
                 // Never let the HStack's greedy line squeeze the label.

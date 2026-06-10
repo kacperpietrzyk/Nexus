@@ -143,6 +143,18 @@ public final class CalendarViewModel {
         blocks = (try? blockRepository.blocks(from: win.start, to: win.end)) ?? []
     }
 
+    /// Unscheduled-task feed for the liquid Week strip + Scheduling Inspector.
+    /// Owned HERE (not per-view `@State`): the two columns are sibling mounts
+    /// sharing this view-model, so a schedule action from either side updates
+    /// the one observable list. Internal — not part of the public surface.
+    private(set) var unscheduledTasks: [WeekUnscheduledTask] = []
+
+    /// Refreshes `unscheduledTasks`; the Week surfaces call this on mount and
+    /// after every scheduling mutation.
+    func reloadUnscheduledTasks() {
+        unscheduledTasks = WeekUnscheduledLoader.load(modelContext: context)
+    }
+
     /// Items laid out on the hour axis for a single `day`.
     public func timelineItems(forDay day: Date) -> [TimelineItem] {
         DayTimelineLayout.items(forDay: day, events: events, blocks: blocks, calendar: calendar)

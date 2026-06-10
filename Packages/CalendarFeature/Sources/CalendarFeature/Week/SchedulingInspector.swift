@@ -1,7 +1,6 @@
 import Foundation
 import NexusCore
 import NexusUI
-import SwiftData
 import SwiftUI
 
 /// Pure week-scope derivations over `SchedulingIntelligence` (unit-tested):
@@ -106,15 +105,12 @@ enum WeekIntelligence {
 /// column renders, via the `SchedulingIntelligence` seams.
 public struct SchedulingInspector: View {
 
-    @Environment(\.modelContext) private var modelContext
-
     private let viewModel: CalendarViewModel
     private let calendar: Calendar
     private let now: () -> Date
 
     @State private var editorTarget: WeekEditorTarget?
     @State private var availableCalendars: [CalendarInfo] = []
-    @State private var unscheduled: [WeekUnscheduledTask] = []
 
     /// Spec §Meeting Load mirrors the Today Focus Timer ring scale (62–70 pt).
     private static let ringSize: CGFloat = 66
@@ -148,7 +144,10 @@ public struct SchedulingInspector: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task {
             availableCalendars = await viewModel.availableCalendars()
-            unscheduled = WeekUnscheduledLoader.load(modelContext: modelContext)
+            // Single source of truth: the unscheduled list lives on the shared
+            // view-model (see `CalendarViewModel.unscheduledTasks`), so a
+            // schedule action from either column updates both.
+            viewModel.reloadUnscheduledTasks()
         }
         .weekEventEditorSheet(target: $editorTarget, viewModel: viewModel, calendars: availableCalendars)
     }
@@ -182,6 +181,9 @@ public struct SchedulingInspector: View {
     }
 
     private var weekWindow: DateInterval {
+        // `viewModel.window` is a named tuple `(start: Date, end: Date)`, not
+        // a DateInterval — the conversion here is intentional, for the
+        // interval-based SchedulingIntelligence API.
         let window = viewModel.window
         return DateInterval(start: window.start, end: window.end)
     }
@@ -308,16 +310,17 @@ public struct SchedulingInspector: View {
             }
             .buttonStyle(.plain)
             .font(DS.FontToken.caption)
-            .foregroundStyle(unscheduled.isEmpty ? DS.ColorToken.textMuted : DS.ColorToken.accentPrimaryHover)
-            .disabled(unscheduled.isEmpty)
+            .foregroundStyle(
+                viewModel.unscheduledTasks.isEmpty ? DS.ColorToken.textMuted : DS.ColorToken.accentPrimaryHover
+            )
+            .disabled(viewModel.unscheduledTasks.isEmpty)
             .accessibilityLabel("Schedule top unscheduled task into this gap")
         }
     }
 
     private func scheduleTopTask(into gap: DateInterval) {
-        guard let task = unscheduled.first else { return }
-        let estimate = task.estimatedSeconds.map(TimeInterval.init) ?? WeekGridMetrics.defaultBlockDuration
-        let duration = min(max(estimate, TimeInterval(WeekGridMetrics.snapMinutes * 60)), gap.duration)
+        guard let task = viewModel.unscheduledTasks.first else { return }
+        let duration = WeekUnscheduledLoader.clampDuration(estimate: task.estimatedSeconds, gap: gap)
         _Concurrency.Task { @MainActor in
             await viewModel.addManualBlock(
                 taskID: task.id,
@@ -325,7 +328,7 @@ public struct SchedulingInspector: View {
                 start: gap.start,
                 end: gap.start.addingTimeInterval(duration)
             )
-            unscheduled = WeekUnscheduledLoader.load(modelContext: modelContext)
+            viewModel.reloadUnscheduledTasks()
         }
     }
 

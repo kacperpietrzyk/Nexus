@@ -1,7 +1,6 @@
 import Foundation
 import NexusCore
 import NexusUI
-import SwiftData
 import SwiftUI
 
 /// An external event opened in the existing editor (shared by the main column
@@ -55,8 +54,6 @@ extension View {
 /// the existing `addManualBlock` (accepted block + mirror event) seam.
 public struct LiquidWeekScreen: View {
 
-    @Environment(\.modelContext) private var modelContext
-
     @Bindable private var viewModel: CalendarViewModel
     private let calendar: Calendar
     private let now: () -> Date
@@ -67,7 +64,6 @@ public struct LiquidWeekScreen: View {
     @State private var editorTarget: WeekEditorTarget?
     @State private var manualBlockRequest: ManualBlockRequest?
     @State private var availableCalendars: [CalendarInfo] = []
-    @State private var unscheduled: [WeekUnscheduledTask] = []
 
     private struct ManualBlockRequest: Identifiable {
         let taskID: UUID
@@ -102,7 +98,7 @@ public struct LiquidWeekScreen: View {
         .task {
             await viewModel.load()
             availableCalendars = await viewModel.availableCalendars()
-            reloadUnscheduled()
+            viewModel.reloadUnscheduledTasks()
         }
         .onChange(of: viewModel.scope) { _, _ in
             _Concurrency.Task { await viewModel.load() }
@@ -247,7 +243,7 @@ public struct LiquidWeekScreen: View {
             // (04_LAYOUT_SYSTEM.md §Calendar Week — grid over a bottom strip).
             .layoutPriority(1)
             SchedulingStrip(
-                tasks: unscheduled,
+                tasks: viewModel.unscheduledTasks,
                 focusGap: WeekIntelligence.todayFocusGaps(
                     events: viewModel.events,
                     days: viewModel.visibleDays,
@@ -310,10 +306,6 @@ public struct LiquidWeekScreen: View {
         editorTarget = WeekEditorTarget(eventID: String(item.id.dropFirst("event-".count)))
     }
 
-    private func reloadUnscheduled() {
-        unscheduled = WeekUnscheduledLoader.load(modelContext: modelContext)
-    }
-
     // MARK: - Scheduling actions (existing manual-block seam)
 
     /// Drop on the grid: schedule the task at the snapped slot for its own
@@ -321,7 +313,7 @@ public struct LiquidWeekScreen: View {
     /// mirror-event path `ManualBlockView` commits through.
     @MainActor
     private func schedule(taskID: UUID, at start: Date) async {
-        guard let task = unscheduled.first(where: { $0.id == taskID }) else { return }
+        guard let task = viewModel.unscheduledTasks.first(where: { $0.id == taskID }) else { return }
         let duration = task.estimatedSeconds.map(TimeInterval.init) ?? WeekGridMetrics.defaultBlockDuration
         await viewModel.addManualBlock(
             taskID: task.id,
@@ -329,15 +321,14 @@ public struct LiquidWeekScreen: View {
             start: start,
             end: start.addingTimeInterval(duration)
         )
-        reloadUnscheduled()
+        viewModel.reloadUnscheduledTasks()
     }
 
     /// Focus-card CTA: top unscheduled task into the recommended gap, clamped
     /// to the gap.
     private func scheduleTopTask(into gap: DateInterval) {
-        guard let task = unscheduled.first else { return }
-        let estimate = task.estimatedSeconds.map(TimeInterval.init) ?? WeekGridMetrics.defaultBlockDuration
-        let duration = min(max(estimate, TimeInterval(WeekGridMetrics.snapMinutes * 60)), gap.duration)
+        guard let task = viewModel.unscheduledTasks.first else { return }
+        let duration = WeekUnscheduledLoader.clampDuration(estimate: task.estimatedSeconds, gap: gap)
         _Concurrency.Task { @MainActor in
             await viewModel.addManualBlock(
                 taskID: task.id,
@@ -345,7 +336,7 @@ public struct LiquidWeekScreen: View {
                 start: gap.start,
                 end: gap.start.addingTimeInterval(duration)
             )
-            reloadUnscheduled()
+            viewModel.reloadUnscheduledTasks()
         }
     }
 
@@ -363,7 +354,7 @@ public struct LiquidWeekScreen: View {
                 _Concurrency.Task { @MainActor in
                     await viewModel.addManualBlock(taskID: taskID, title: title, start: start, end: end)
                     manualBlockRequest = nil
-                    reloadUnscheduled()
+                    viewModel.reloadUnscheduledTasks()
                 }
             },
             onCancel: { manualBlockRequest = nil }

@@ -19,6 +19,15 @@ struct WeekUnscheduledTask: Identifiable, Equatable {
 /// already have a live `ScheduledBlock` (so a drop visibly moves the task out
 /// of the strip), with project names resolved for the tag pills.
 enum WeekUnscheduledLoader {
+    /// Scheduled-block length when placing a task into a free gap: the task's
+    /// own estimate (1 h default), floored at one snap step and capped at the
+    /// gap — shared by the strip's Focus CTA and the inspector's Schedule
+    /// action.
+    static func clampDuration(estimate: Int?, gap: DateInterval) -> TimeInterval {
+        let raw = estimate.map(TimeInterval.init) ?? WeekGridMetrics.defaultBlockDuration
+        return min(max(raw, TimeInterval(WeekGridMetrics.snapMinutes * 60)), gap.duration)
+    }
+
     @MainActor
     static func load(modelContext: ModelContext) -> [WeekUnscheduledTask] {
         let archivedProjectIDs =
