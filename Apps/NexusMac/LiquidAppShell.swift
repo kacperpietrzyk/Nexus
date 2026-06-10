@@ -31,6 +31,22 @@ struct LiquidAppShell<Sidebar: View, Toolbar: View, Main: View, Inspector: View>
         self.inspector = inspector
     }
 
+    /// Per-destination inspector mount: the host passes `nil` on destinations
+    /// without a right column (the column disappears entirely) and a closure
+    /// on those with one (e.g. Today). Distinct from the `@ViewBuilder`
+    /// initializer above, which always renders the column.
+    init(
+        @ViewBuilder sidebar: @escaping () -> Sidebar,
+        @ViewBuilder toolbar: @escaping () -> Toolbar,
+        @ViewBuilder main: @escaping () -> Main,
+        inspector: (() -> Inspector)?
+    ) {
+        self.sidebar = sidebar
+        self.toolbar = toolbar
+        self.main = main
+        self.inspector = inspector
+    }
+
     var body: some View {
         ZStack {
             DS.ColorToken.backgroundApp.ignoresSafeArea()
