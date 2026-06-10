@@ -11,7 +11,9 @@ private struct WallpaperBlurBackdrop: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.blendingMode = .behindWindow
-        view.material = .underWindowBackground
+        // .hudWindow is the most translucent dark material — .underWindowBackground
+        // measured ~1% desktop transmission (nearly opaque in dark mode).
+        view.material = .hudWindow
         view.state = .active
         return view
     }
