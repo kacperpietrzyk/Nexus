@@ -214,18 +214,14 @@ extension InboxReaderEmptyState {
 
 private struct InboxReaderPaneSurface: ViewModifier {
     func body(content: Content) -> some View {
+        // Liquid re-skin (container level): the liquid glass card recipe
+        // replaces the opaque `Background.raised` slab + manual Line.regular
+        // stroke + s1 shadow, so the reader pane sits on the shell's glass
+        // instead of reading as a black panel. Inner structure unchanged.
         content
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
-                    .fill(NexusColor.Background.raised)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
-                    .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
-            }
-            .nexusShadow(NexusShadow.s1)
+            .liquidGlass(.card, radius: NexusRadius.r3)
     }
 }
 

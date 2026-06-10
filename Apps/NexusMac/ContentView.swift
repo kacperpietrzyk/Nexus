@@ -564,8 +564,11 @@ private struct InboxFilterTab: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
             .background(
+                // Liquid re-skin (Task 11): the active tab uses the DS
+                // glass-selected overlay — an opaque `Background.control`
+                // pill read as a dark slab on the glass toolbar band.
                 RoundedRectangle(cornerRadius: NexusRadius.r1)
-                    .fill(isActive ? NexusColor.Background.control : Color.clear)
+                    .fill(isActive ? DS.ColorToken.glassSelected : Color.clear)
             )
             .contentShape(Rectangle())
         }
