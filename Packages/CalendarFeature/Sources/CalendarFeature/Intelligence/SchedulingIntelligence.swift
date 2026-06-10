@@ -90,10 +90,15 @@ public enum SchedulingIntelligence {
     ///
     /// Implemented locally rather than via NexusCore's `FreeSlotComputer` — see
     /// the type-level reuse note.
+    /// `maximumDuration` (default unbounded) chunks each free gap into
+    /// block-sized suggestions — a 10 h empty workday should propose 2 h focus
+    /// blocks, not one all-day slab. Chunk remainders below `minimumDuration`
+    /// are dropped.
     public static func suggestedFocusBlocks(
         events: [CalendarEvent],
         within workday: DateInterval,
-        minimumDuration: TimeInterval = 3600
+        minimumDuration: TimeInterval = 3600,
+        maximumDuration: TimeInterval = .infinity
     ) -> [DateInterval] {
         let busy = mergedIntervals(events.compactMap { clip($0, to: workday) })
 
@@ -108,7 +113,25 @@ public enum SchedulingIntelligence {
         if workday.end.timeIntervalSince(cursor) >= minimumDuration {
             gaps.append(DateInterval(start: cursor, end: workday.end))
         }
-        return gaps
+        guard maximumDuration < .infinity else { return gaps }
+        return gaps.flatMap { chunked($0, minimum: minimumDuration, maximum: maximumDuration) }
+    }
+
+    /// Split one free gap into consecutive `maximum`-long blocks; the trailing
+    /// remainder survives only when it still clears `minimum`.
+    private static func chunked(
+        _ gap: DateInterval,
+        minimum: TimeInterval,
+        maximum: TimeInterval
+    ) -> [DateInterval] {
+        var blocks: [DateInterval] = []
+        var cursor = gap.start
+        while gap.end.timeIntervalSince(cursor) >= minimum {
+            let end = min(cursor.addingTimeInterval(maximum), gap.end)
+            blocks.append(DateInterval(start: cursor, end: end))
+            cursor = end
+        }
+        return blocks
     }
 
     /// How an event spends time, for weekly insights. Mirrors the semantics of

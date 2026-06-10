@@ -194,8 +194,16 @@ struct LiquidWeekTests {
             calendar: Self.calendar,
             now: now
         )
-        #expect(gaps.first == DateInterval(start: date(hours: 10), end: date(hours: 12)))
-        #expect(gaps.last == DateInterval(start: date(hours: 13), end: date(hours: 18)))
+        // Free 10–12 and 13–18, chunked into ≤2 h suggestions (the 13–18 gap
+        // splits 13–15 / 15–17 / 17–18).
+        #expect(
+            gaps == [
+                DateInterval(start: date(hours: 10), end: date(hours: 12)),
+                DateInterval(start: date(hours: 13), end: date(hours: 15)),
+                DateInterval(start: date(hours: 15), end: date(hours: 17)),
+                DateInterval(start: date(hours: 17), end: date(hours: 18)),
+            ]
+        )
 
         // A visible week that does not contain "today" yields nothing.
         let otherWeek = (7..<14).map { Self.monday.addingTimeInterval(Double($0) * 86_400) }

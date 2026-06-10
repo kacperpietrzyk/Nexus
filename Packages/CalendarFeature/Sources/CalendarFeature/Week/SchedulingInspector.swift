@@ -64,7 +64,10 @@ enum WeekIntelligence {
         guard start < window.end else { return [] }
         return SchedulingIntelligence.suggestedFocusBlocks(
             events: events,
-            within: DateInterval(start: start, end: window.end)
+            within: DateInterval(start: start, end: window.end),
+            // Discrete 2 h suggestions per the reference board — an empty
+            // workday must not read as one 10 h "focus block".
+            maximumDuration: 2 * 3600
         )
     }
 

@@ -232,6 +232,56 @@ struct SchedulingIntelligenceTests {
         #expect(blocks == [workday])
     }
 
+    @Test("A maximum duration chunks long gaps into block-sized suggestions")
+    func focusBlocksChunkedByMaximum() {
+        // Busy 13–14 in a 9–17 workday → free 9–13 and 14–17. With a 2 h cap
+        // the 4 h gap splits into 9–11 and 11–13; the 3 h gap into 14–16 and
+        // a 1 h remainder 16–17 (kept: remainder ≥ the 1 h minimum).
+        let a = event("a", from: 13, to: 14)
+
+        let blocks = SchedulingIntelligence.suggestedFocusBlocks(
+            events: [a],
+            within: workday,
+            maximumDuration: 2 * 3600
+        )
+
+        #expect(
+            blocks == [
+                DateInterval(start: hours(9), end: hours(11)),
+                DateInterval(start: hours(11), end: hours(13)),
+                DateInterval(start: hours(14), end: hours(16)),
+                DateInterval(start: hours(16), end: hours(17)),
+            ]
+        )
+    }
+
+    @Test("Chunk remainders below the minimum are dropped")
+    func focusBlocksChunkRemainderDropped() {
+        // Free 9–11:30 with a 2 h cap → 9–11 plus a 30 min remainder, which
+        // is below the 1 h minimum and must not be suggested.
+        let a = event("a", from: 11.5, to: 17)
+
+        let blocks = SchedulingIntelligence.suggestedFocusBlocks(
+            events: [a],
+            within: workday,
+            maximumDuration: 2 * 3600
+        )
+
+        #expect(blocks == [DateInterval(start: hours(9), end: hours(11))])
+    }
+
+    @Test("No maximum duration keeps whole gaps (default unchanged)")
+    func focusBlocksNoMaximumKeepsGaps() {
+        let a = event("a", from: 13, to: 14)
+        let blocks = SchedulingIntelligence.suggestedFocusBlocks(events: [a], within: workday)
+        #expect(
+            blocks == [
+                DateInterval(start: hours(9), end: hours(13)),
+                DateInterval(start: hours(14), end: hours(17)),
+            ]
+        )
+    }
+
     @Test("Zero-length events do not split a gap")
     func focusBlocksZeroLengthEvent() {
         let instant = event("instant", from: 12, to: 12)
