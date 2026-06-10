@@ -92,6 +92,22 @@ struct LiquidTodayModelTests {
         #expect(cleaned == "Three things matter today\nPush the auth flow and review.")
     }
 
+    @Test("Strips disobedient single-bracket markers and Markdown bold runs")
+    @MainActor
+    func briefStrippingModelDrift() {
+        let raw = "**Three things matter today - [accent]push the auth flow[/accent], review Sam's PR.**"
+        let cleaned = LiquidTodayText.strippingMarkers(from: raw)
+        #expect(cleaned == "Three things matter today - push the auth flow, review Sam's PR.")
+    }
+
+    @Test("Normalizes Markdown bullet lines to typographic bullets")
+    @MainActor
+    func briefStrippingBullets() {
+        let raw = "Przegląd\n* Główny problem: instalacja\n- Drugi punkt"
+        let cleaned = LiquidTodayText.strippingMarkers(from: raw)
+        #expect(cleaned == "Przegląd\n• Główny problem: instalacja\n• Drugi punkt")
+    }
+
     // MARK: - Brief regeneration decision
 
     @Test("Brief regenerates on changed input or empty brief; skips on identical input with content")

@@ -85,11 +85,21 @@ public typealias LiquidTodayFocusGapProvider = @MainActor ([CalendarEvent], Date
 enum LiquidTodayText {
     static func strippingMarkers(from text: String) -> String {
         var result = text
-        for marker in ["[[accent]]", "[[/accent]]", "[[mono]]", "[[/mono]]"] {
+        // Both the wire form ([[accent]]) and the single-bracket drift the
+        // model falls back into when it half-remembers the format.
+        for marker in [
+            "[[accent]]", "[[/accent]]", "[[mono]]", "[[/mono]]",
+            "[accent]", "[/accent]", "[mono]", "[/mono]",
+            "**", "__",
+        ] {
             result = result.replacingOccurrences(of: marker, with: "")
         }
-        let lines = result.split(separator: "\n", omittingEmptySubsequences: false).map { line in
-            line.drop(while: { $0 == "#" }).drop(while: { $0 == " " })
+        let lines = result.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            let stripped = line.drop(while: { $0 == "#" }).drop(while: { $0 == " " })
+            if stripped.hasPrefix("* ") || stripped.hasPrefix("- ") {
+                return "• " + stripped.dropFirst(2)
+            }
+            return String(stripped)
         }
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
