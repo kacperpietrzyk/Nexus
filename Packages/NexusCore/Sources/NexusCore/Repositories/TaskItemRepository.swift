@@ -413,11 +413,15 @@ public final class TaskItemRepository {
         let rule = try RRuleParser.parse(newRule)
         let parentID = task.recurrenceParentId ?? task.id
         let occurrencesSoFar = try countSiblings(parentID: parentID) + 1
-        let recurrenceAnchor = task.dueAt ?? now()
+        // This path only runs on a done task (guard above), so the completion
+        // stamp is its real `lastCompletedAt`; `now()` is a defensive fallback.
+        let stamp = task.lastCompletedAt ?? now()
+        let recurrenceAnchor = task.dueAt ?? stamp
         guard
-            let nextDate = scheduler.next(
-                after: recurrenceAnchor,
+            let nextDate = nextOccurrenceDate(
                 rule: rule,
+                dueAt: task.dueAt,
+                completedAt: stamp,
                 occurrencesSoFar: occurrencesSoFar
             )
         else {

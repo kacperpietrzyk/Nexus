@@ -124,4 +124,27 @@ struct TaskItemCompletionAnchorTests {
         #expect(next.dueAt == Self.date(2026, 1, 11, 9))
         #expect(next.startAt == Self.date(2026, 1, 11, 8))
     }
+
+    @MainActor
+    @Test("editing the rule on a done task regenerates the spawn from the completion date")
+    func regenerateHonorsCompletionAnchor() throws {
+        let completion = Self.date(2026, 1, 10, 14, 30)
+        let (context, repo) = try makeRepo(now: completion)
+        let task = TaskItem(
+            title: "water plants",
+            dueAt: Self.date(2026, 1, 1, 9),
+            recurrenceRule: "FREQ=DAILY"
+        )
+        try repo.insert(task)
+        try repo.markDone(task)
+        let originalSpawn = try spawn(of: task, in: context)
+        #expect(originalSpawn.dueAt == Self.date(2026, 1, 2, 9))
+        let originalSpawnID = originalSpawn.id
+
+        try repo.update(task) { $0.recurrenceRule = "FREQ=DAILY;ANCHOR=COMPLETION" }
+
+        let regenerated = try spawn(of: task, in: context)
+        #expect(regenerated.id != originalSpawnID)
+        #expect(regenerated.dueAt == Self.date(2026, 1, 11, 9))
+    }
 }
