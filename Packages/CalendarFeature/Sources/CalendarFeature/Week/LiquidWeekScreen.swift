@@ -322,7 +322,7 @@ public struct LiquidWeekScreen: View {
     @MainActor
     private func schedule(taskID: UUID, at start: Date) async {
         guard let task = unscheduled.first(where: { $0.id == taskID }) else { return }
-        let duration = TimeInterval(task.estimatedSeconds ?? 3600)
+        let duration = task.estimatedSeconds.map(TimeInterval.init) ?? WeekGridMetrics.defaultBlockDuration
         await viewModel.addManualBlock(
             taskID: task.id,
             title: task.title,
@@ -336,7 +336,7 @@ public struct LiquidWeekScreen: View {
     /// to the gap.
     private func scheduleTopTask(into gap: DateInterval) {
         guard let task = unscheduled.first else { return }
-        let estimate = TimeInterval(task.estimatedSeconds ?? 3600)
+        let estimate = task.estimatedSeconds.map(TimeInterval.init) ?? WeekGridMetrics.defaultBlockDuration
         let duration = min(max(estimate, TimeInterval(WeekGridMetrics.snapMinutes * 60)), gap.duration)
         _Concurrency.Task { @MainActor in
             await viewModel.addManualBlock(

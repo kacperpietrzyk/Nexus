@@ -133,7 +133,7 @@ public final class CalendarViewModel {
             events = preferences.visibleEvents(fetched)
         } catch {
             events = []
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
         reloadBlocks()
     }
@@ -159,7 +159,7 @@ public final class CalendarViewModel {
                 authorization = try await reader.requestAccess()
             }
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
         await load()
         return authorization
@@ -194,7 +194,7 @@ public final class CalendarViewModel {
                 ? "It's past today's working hours — plan tomorrow instead."
                 : nil
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
         reloadBlocks()
     }
@@ -226,7 +226,7 @@ public final class CalendarViewModel {
         do {
             _ = try await reconciler.accept(block)
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
         reloadBlocks()
     }
@@ -292,7 +292,7 @@ public final class CalendarViewModel {
                 with: EventDraft(calendarID: calendarID, title: block.title, start: block.start, end: block.end)
             )
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
     }
 
@@ -306,7 +306,7 @@ public final class CalendarViewModel {
             await load()
             return id
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
             return nil
         }
     }
@@ -317,7 +317,7 @@ public final class CalendarViewModel {
             try await writer.updateEvent(id: id, with: draft, span: span)
             await load()
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
     }
 
@@ -327,7 +327,7 @@ public final class CalendarViewModel {
             try await writer.deleteEvent(id: id, span: span)
             await load()
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
     }
 
@@ -378,6 +378,19 @@ public final class CalendarViewModel {
 
     public func savePreferences(_ prefs: CalendarPreferences) {
         preferencesStore.save(prefs)
+    }
+
+    // MARK: - Error copy
+
+    /// User-facing `lastError` copy: `CalendarProviderError` carries its own
+    /// message (`LocalizedError`), so surfaces never render the enum's debug
+    /// shape (`underlying("…")`); anything else falls back to the debug
+    /// description as before.
+    nonisolated static func errorMessage(_ error: any Error) -> String {
+        if let providerError = error as? CalendarProviderError {
+            return providerError.errorDescription ?? String(describing: error)
+        }
+        return String(describing: error)
     }
 
     // MARK: - Calendar math

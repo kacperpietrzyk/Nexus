@@ -117,6 +117,21 @@ struct LiquidWeekTests {
         #expect(WeekEventClassifier.category(for: external, mirroredEventIDs: mirrored) == .meeting)
     }
 
+    // MARK: - Error copy
+
+    @Test("Provider errors surface their user-facing message, not the enum debug shape")
+    func errorMessageHumanized() {
+        #expect(
+            CalendarViewModel.errorMessage(
+                CalendarProviderError.underlying("No writable calendar source available")
+            ) == "No writable calendar source available"
+        )
+        #expect(
+            CalendarViewModel.errorMessage(CalendarProviderError.accessDenied)
+                == "Calendar access was denied."
+        )
+    }
+
     // MARK: - WeekIntelligence
 
     @Test("Workday window spans 8 AM – 6 PM")

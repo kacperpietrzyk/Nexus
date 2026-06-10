@@ -13,6 +13,20 @@ public enum CalendarProviderError: Error, Sendable {
     case underlying(String)
 }
 
+extension CalendarProviderError: LocalizedError {
+    /// User-facing message, so surfaces never render the enum's debug shape
+    /// (`underlying("…")`): `.underlying` already carries provider copy;
+    /// `.accessDenied` gets the one readable sentence the UI needs.
+    public var errorDescription: String? {
+        switch self {
+        case .accessDenied:
+            return "Calendar access was denied."
+        case .underlying(let message):
+            return message
+        }
+    }
+}
+
 public protocol CalendarEventProviding: Sendable {
     func authorizationStatus() -> CalendarAuthorizationStatus
 

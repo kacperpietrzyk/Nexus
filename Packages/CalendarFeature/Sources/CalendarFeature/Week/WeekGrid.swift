@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 enum WeekGridMetrics {
     /// "time gutter: 56 pt".
     static let gutterWidth: CGFloat = 56
+    /// "day column min width: 92 pt".
+    static let dayColumnMinWidth: CGFloat = 92
     /// "hour row height: 58–64 pt".
     static let hourHeight: CGFloat = 60
     /// "all-day row height: 34 pt".
@@ -23,6 +25,9 @@ enum WeekGridMetrics {
     /// "Drag to resize changes duration with snap 15 min" — the same snap is
     /// used for drop targeting.
     static let snapMinutes = 15
+    /// Default scheduled-block length (1 h) when the scheduled task carries no
+    /// duration estimate — the drop highlight previews a slot of this length.
+    static let defaultBlockDuration: TimeInterval = 3600
 
     static var gridHeight: CGFloat { CGFloat(totalHours) * hourHeight }
 }
@@ -239,7 +244,9 @@ struct WeekGrid: View {
                 )
             )
         }
-        .frame(maxWidth: .infinity)
+        // 06_MODULE_CALENDAR.md §Dimensions: "day column min width: 92 pt" —
+        // columns never compress below spec at narrow windows.
+        .frame(minWidth: WeekGridMetrics.dayColumnMinWidth, maxWidth: .infinity)
         .frame(height: WeekGridMetrics.gridHeight)
     }
 

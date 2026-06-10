@@ -316,7 +316,7 @@ public struct SchedulingInspector: View {
 
     private func scheduleTopTask(into gap: DateInterval) {
         guard let task = unscheduled.first else { return }
-        let estimate = TimeInterval(task.estimatedSeconds ?? 3600)
+        let estimate = task.estimatedSeconds.map(TimeInterval.init) ?? WeekGridMetrics.defaultBlockDuration
         let duration = min(max(estimate, TimeInterval(WeekGridMetrics.snapMinutes * 60)), gap.duration)
         _Concurrency.Task { @MainActor in
             await viewModel.addManualBlock(
