@@ -344,9 +344,14 @@ struct ProjectExecutionModelTests {
             updatedAt: Date(timeIntervalSince1970: 700)
         )
         _ = noStamp
+        // Production reconcile forces status == .done on a canceled workflow
+        // (WorkflowState.forcedStatus); mirror that here so the
+        // isTerminalNonCompletion guard is actually exercised — without .done
+        // the status check would short-circuit first.
         let canceled = makeTask(
             context,
             title: "canceled",
+            status: .done,
             workflowState: .canceled,
             createdAt: Date(timeIntervalSince1970: 600),
             updatedAt: Date(timeIntervalSince1970: 800)
