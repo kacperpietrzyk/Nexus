@@ -274,6 +274,11 @@ struct ContentView: View {
     private var calendarContent: some View {
         if let calendarViewModel {
             CalendarView(viewModel: calendarViewModel)
+                // Pin the view's structural identity so `destinationMain`
+                // branch re-evaluations (e.g. a future per-destination
+                // inspector slot changing the enclosing generic shape) never
+                // tear down CalendarView's internal @State.
+                .id(TodayNavSelection.calendar)
         } else {
             Color.clear
                 .onAppear {

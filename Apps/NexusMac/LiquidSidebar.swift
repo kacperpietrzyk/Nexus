@@ -30,7 +30,7 @@ struct LiquidSidebar: View {
     let inboxUnreadCount: Int
     let onNavigate: (TodayNavSelection) -> Void
 
-    @Query(sort: \Project.updatedAt, order: .reverse) private var projects: [Project]
+    @Query private var projects: [Project]
     @Query(sort: \SavedFilter.orderIndex) private var savedFilters: [SavedFilter]
 
     /// Same destinations the old rail exposed (minus the bottom-pinned
@@ -52,6 +52,7 @@ struct LiquidSidebar: View {
     private var activeProjects: [Project] {
         projects
             .filter { $0.deletedAt == nil && $0.archivedAt == nil && $0.status == .active }
+            .sorted { $0.updatedAt > $1.updatedAt }
             .prefix(5)
             .map { $0 }
     }
@@ -85,7 +86,7 @@ struct LiquidSidebar: View {
                     ForEach(activeProjects) { project in
                         LiquidSidebarNavRow(
                             project.name,
-                            systemImage: projectGlyph(named: project.color),
+                            systemImage: nexusProjectGlyph(named: project.color),
                             showsSelectionAccent: false
                         ) {
                             // No public project-selection seam on
@@ -193,20 +194,4 @@ private struct SidebarNavEntry: Identifiable {
     let id: TodayNavSelection
     let label: String
     let systemImage: String
-}
-
-/// Project token-name → SF Symbol glyph. Mirrors TasksFeature's internal
-/// `nexusProjectGlyph(named:)` (`Views/Project/ProjectGlyph.swift` — the
-/// source of truth, not exported by the package), so the sidebar shows the
-/// SAME identity glyph the Projects screen renders for each project.
-private func projectGlyph(named tokenName: String) -> String {
-    switch tokenName {
-    case "azure": return "circle.fill"
-    case "gold": return "square.fill"
-    case "emerald": return "triangle.fill"
-    case "rose": return "diamond.fill"
-    case "violet": return "hexagon.fill"
-    case "slate": return "seal.fill"
-    default: return "circle.fill"
-    }
 }
