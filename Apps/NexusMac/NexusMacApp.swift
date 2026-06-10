@@ -467,13 +467,14 @@ struct NexusMacApp: App {
             // Models renders empty (no model rows — the Mac-only "can't manage
             // models" bug). The main window already attaches the same container.
             .modelContainer(container)
-            // MP-4.1 §3: native Toggle/DatePicker/Button controls in the
-            // Settings Form inherit this scene tint — burning it
-            // achromatic is what makes the whole Form render without
-            // accent hue. `Text.primary` matches the oracle
-            // `SettingsPreview.toggle(_:)` "on"-knob fill (§2
-            // LabPalette.ink).
-            .tint(NexusColor.Text.primary)
+            // Native Toggle/DatePicker/Button controls in the Settings Form
+            // inherit this scene tint. Liquid re-skin (Task 11): re-pointed
+            // from the achromatic `Text.primary` (MP-4.1 §3 Linear burn) to
+            // the liquid accent so Settings controls match the app family.
+            .tint(DS.ColorToken.accentPrimary)
+            // Liquid re-skin: the Settings window chrome joins the liquid
+            // background family (same token the main window uses).
+            .containerBackground(DS.ColorToken.backgroundApp, for: .window)
             .task { await permissionState.refresh() }
             .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
                 syncAgentListener(
