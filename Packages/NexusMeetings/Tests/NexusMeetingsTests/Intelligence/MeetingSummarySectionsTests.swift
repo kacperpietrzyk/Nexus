@@ -281,7 +281,15 @@ import Testing
     #expect(insights.topTerms == ["apple", "mango", "zebra"])
 }
 
+@Test func insightsTopTermsMergeDiacriticVariants() {
+    let transcript = "wdrożenie wdrozenie wdrożenie budżet"
+    let insights = MeetingInsights.insights(durationSec: nil, segments: [], transcriptText: transcript)
+    // Folded forms merge into one count; the first-seen original spelling is displayed.
+    #expect(insights.topTerms == ["wdrożenie", "budżet"])
+}
+
 @Test func insightsTopTermsCapAtFive() {
+    // all words ≥ minTermLength (3), none in stopwords
     let transcript = "alpha bravo charlie delta echo foxtrot golf"
     let insights = MeetingInsights.insights(durationSec: nil, segments: [], transcriptText: transcript)
     #expect(insights.topTerms.count == 5)

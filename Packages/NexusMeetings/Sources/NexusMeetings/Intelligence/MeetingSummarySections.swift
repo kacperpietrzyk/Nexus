@@ -34,6 +34,8 @@ public struct MeetingSummarySections: Equatable, Sendable {
     /// title matches an overview keyword (TL;DR / Summary / Overview /
     /// Przegląd / Podsumowanie), else any preamble before the first heading,
     /// else — when the text has no headings at all — the whole text.
+    /// Bullet/number prefixes are stripped from each line, so a bullet-style
+    /// overview section (Circleback's `* …` lines) reads as plain paragraphs.
     public let overview: String?
     /// Bullet-stripped lines of every section whose heading matches a decisions
     /// keyword (Decision(s) / Decyzje / Ustalenia), in document order.
@@ -101,6 +103,8 @@ public struct MeetingSummarySections: Equatable, Sendable {
 
     /// Keywords are matched against a lowercased, diacritic-folded heading title.
     private static let overviewKeywords = ["tl;dr", "tldr", "summary", "overview", "przeglad", "podsumowanie"]
+    /// "decyzj" is an intentional stem: it matches the Polish inflections
+    /// decyzje / decyzja / decyzji / decyzją from a single entry.
     private static let decisionsKeywords = ["decision", "decyzj", "ustalenia"]
 
     // Computed (not stored) because `Regex` is not `Sendable`; literals are cheap to build.
@@ -258,23 +262,25 @@ public struct MeetingInsights: Equatable, Sendable {
     }
 
     private static func topTerms(words: [String]) -> [String] {
-        var counts: [String: Int] = [:]
+        // Counts are keyed by the diacritic-folded form so spelling variants like
+        // "wdrożenie"/"wdrozenie" merge into one term; the first-seen original
+        // spelling is kept for display.
+        var counts: [String: (display: String, count: Int)] = [:]
         for word in words {
-            let term = word.lowercased()
-                .components(separatedBy: CharacterSet.alphanumerics.inverted)
-                .joined()
+            let scalars = word.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+            let term = String(String.UnicodeScalarView(scalars))
             guard term.count >= minTermLength else { continue }
             let folded = term.folding(options: .diacriticInsensitive, locale: nil)
             guard stopwords.contains(folded) == false else { continue }
-            counts[term, default: 0] += 1
+            counts[folded, default: (display: term, count: 0)].count += 1
         }
         return
             counts
             .sorted { lhs, rhs in
-                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                if lhs.value.count != rhs.value.count { return lhs.value.count > rhs.value.count }
                 return lhs.key < rhs.key
             }
             .prefix(maxTopTerms)
-            .map(\.key)
+            .map(\.value.display)
     }
 }
