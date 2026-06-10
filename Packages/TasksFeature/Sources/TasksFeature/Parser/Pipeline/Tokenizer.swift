@@ -37,22 +37,38 @@ internal struct Tokenizer: Sendable {
         at index: Int,
         locale: LocalePhrases
     ) -> (Token, Int)? {
+        // Todoist "every!" semantics (T1): a trailing "!" on the first keyword
+        // word ("every!", "co!", "daily!", "codziennie!") marks the rule as
+        // completion-anchored — the next occurrence advances from the
+        // completion date, not the due date. The marker is stripped before the
+        // table lookup and re-encoded as the `ANCHOR=COMPLETION` RRULE token,
+        // so both locale tables stay untouched.
+        let (firstWord, completionAnchored) = strippingCompletionMarker(words[index].lowercased())
         // Two-word recurrence keyword (e.g. "co poniedziałek", "every monday")
         if index + 1 < words.count {
-            let twoWord = "\(words[index].lowercased()) \(words[index + 1].lowercased())"
+            let twoWord = "\(firstWord) \(words[index + 1].lowercased())"
             if let rrule = locale.recurrenceKeywords[twoWord] {
-                return (.recurrence(rrule: rrule, confidence: 0.95), 2)
+                return (.recurrence(rrule: anchored(rrule, completionAnchored), confidence: 0.95), 2)
             }
             if let rrule = locale.recurrenceFrequency[twoWord] {
-                return (.recurrence(rrule: rrule, confidence: 0.95), 2)
+                return (.recurrence(rrule: anchored(rrule, completionAnchored), confidence: 0.95), 2)
             }
         }
         // Single-word frequency (e.g. "daily", "codziennie")
-        let oneWord = words[index].lowercased()
-        if let rrule = locale.recurrenceFrequency[oneWord] {
-            return (.recurrence(rrule: rrule, confidence: 0.9), 1)
+        if let rrule = locale.recurrenceFrequency[firstWord] {
+            return (.recurrence(rrule: anchored(rrule, completionAnchored), confidence: 0.9), 1)
         }
         return nil
+    }
+
+    private func strippingCompletionMarker(_ word: String) -> (word: String, hasMarker: Bool) {
+        guard word.count > 1, word.hasSuffix("!") else { return (word, false) }
+        return (String(word.dropLast()), true)
+    }
+
+    private func anchored(_ rrule: String, _ completionAnchored: Bool) -> String {
+        guard completionAnchored else { return rrule }
+        return RRuleAnchorToken.applying(completionAnchor: true, to: rrule)
     }
 
     private func matchTimeOfDayPhrase(
