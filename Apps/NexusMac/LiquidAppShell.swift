@@ -74,6 +74,11 @@ struct LiquidAppShell<Sidebar: View, Toolbar: View, Main: View, Inspector: View>
                         .frame(width: DS.Size.rightInspectorWidth)
                         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.window, style: .continuous))
                         .liquidGlass(.sidebar, radius: DS.Radius.window)
+                        // Panel reveal per 01_FOUNDATIONS §Ruch: the column
+                        // slides in from the window edge instead of popping.
+                        // The host's `withAnimation(NexusMotion.nav)` around
+                        // selection writes drives this transition.
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
             .padding(DS.Space.m)

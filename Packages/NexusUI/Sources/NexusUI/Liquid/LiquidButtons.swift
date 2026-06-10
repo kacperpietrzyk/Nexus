@@ -22,6 +22,8 @@ public struct LiquidPrimaryButton: View {
     public let systemImage: String?
     public let action: () -> Void
 
+    @State private var hovering = false
+
     public init(_ title: String, systemImage: String? = nil, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = systemImage
@@ -47,7 +49,9 @@ public struct LiquidPrimaryButton: View {
                 RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [DS.ColorToken.accentPrimary, DS.ColorToken.accentPrimaryHover],
+                            colors: hovering
+                                ? [DS.ColorToken.accentPrimaryHover, DS.ColorToken.accentPrimaryHover]
+                                : [DS.ColorToken.accentPrimary, DS.ColorToken.accentPrimaryHover],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -59,11 +63,21 @@ public struct LiquidPrimaryButton: View {
                     // between strokeDefault (0.11) and strokeStrong (0.17) so
                     // the rim reads on the bright accent fill without hardening
                     // into a border (ported from the design-system starter).
-                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                    .stroke(Color.white.opacity(hovering ? 0.24 : 0.16), lineWidth: 1)
             }
-            .shadow(color: DS.ColorToken.accentPrimary.opacity(0.30), radius: 14, x: 0, y: 4)
+            .shadow(
+                color: DS.ColorToken.accentPrimary.opacity(hovering ? 0.42 : 0.30),
+                radius: 14,
+                x: 0,
+                y: 4
+            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NexusPressableButtonStyle())
+        #if os(macOS)
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        #endif
     }
 }
 
@@ -120,7 +134,7 @@ public struct LiquidIconButton: View {
                         .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NexusPressableButtonStyle())
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         #if os(macOS)
         .onHover { value in
