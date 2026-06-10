@@ -272,11 +272,15 @@ public final class TaskItemRepository {
         let rule = try RRuleParser.parse(ruleText)
         let parentID = task.recurrenceParentId ?? task.id
         let occurrencesSoFar = try countSiblings(parentID: parentID) + 1
+        // Delta base for shifting startAt/endAt/deadlineAt onto the next
+        // occurrence — always the old due date, in BOTH anchor modes, so the
+        // relative offsets survive however the next due date was computed.
         let recurrenceAnchor = task.dueAt ?? stamp
         guard
-            let nextDate = scheduler.next(
-                after: recurrenceAnchor,
+            let nextDate = nextOccurrenceDate(
                 rule: rule,
+                dueAt: task.dueAt,
+                completedAt: stamp,
                 occurrencesSoFar: occurrencesSoFar
             )
         else {
