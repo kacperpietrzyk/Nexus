@@ -67,12 +67,12 @@ public struct TaskDetailInspector: View {
 
     public var body: some View {
         layoutBody
-            .background(NexusColor.Background.base)
-            // This panel hosts in a detached overlay (Mac modal) / sheet that does
-            // NOT inherit the app-root `.tint`, so its native controls (segmented
-            // Priority picker, toggles, DatePickers) would fall back to system blue.
-            // Re-assert the achromatic control tint here (lime stays for actions).
-            .tint(NexusColor.Text.primary)
+            // Liquid re-skin: `.wide` is transparent (the Mac modal host paints
+            // liquid glass behind it); `.column` (iOS) keeps the opaque base.
+            .background(layout == .wide ? Color.clear : NexusColor.Background.base)
+            // Detached overlay/sheet hosts don't inherit the app-root `.tint`;
+            // re-assert the liquid accent for native controls (was Text.primary).
+            .tint(DS.ColorToken.accentPrimary)
             .navigationTitle(task.title.isEmpty ? "Task" : task.title)
             .task {
                 loadLinkState()

@@ -39,10 +39,11 @@ public struct CommandPaletteView: View {
         .containerRelativeFrame(.horizontal) { length, _ in
             min(Self.maxPaletteWidth, length)
         }
-        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        // Liquid re-skin (container level): the strong liquid glass recipe
+        // replaces the opaque `Background.raised` panel + manual Line.regular
+        // stroke + pop shadow, so the palette floats as glass over the scrim.
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(NexusColor.Line.regular, lineWidth: 1))
-        .nexusShadow(NexusShadow.pop)
+        .liquidGlass(.strong, radius: 18)
         .nexusOverlayEnter()
         .padding(.bottom, 120)
         .task { await reload(for: query) }

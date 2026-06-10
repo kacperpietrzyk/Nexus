@@ -85,6 +85,8 @@ extension TaskDetailInspector {
             commentsCard
         }
         .padding(20)
-        .background(NexusWallpaper())
+        // Liquid re-skin: the wallpaper background is dropped — the Mac modal
+        // host paints the liquid glass panel; an opaque wallpaper here would
+        // occlude it. (Sizing is unaffected: a `.background` never drove it.)
     }
 }

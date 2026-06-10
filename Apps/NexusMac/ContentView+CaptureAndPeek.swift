@@ -20,7 +20,7 @@ extension ContentView {
                 Rectangle()
                     .fill(.ultraThinMaterial)
                     .ignoresSafeArea()
-                Color.black.opacity(0.5)
+                DS.ColorToken.backgroundWallpaperScrim
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { commandPalettePresented = false }
@@ -53,17 +53,17 @@ extension ContentView {
     /// "inspector ⊥ Agent" still holds and its test is untouched). The hosted
     /// `TaskDetailInspector` is reused verbatim (all field logic + auto-save) and
     /// is shared with iOS, so its single-column internals are NOT reshaped here —
-    /// only the container changes. It paints its own base background + wallpaper,
-    /// clipped to the dialog's rounded rect, and scrolls internally past the cap.
-    /// `.tint(Text.primary)` keeps its native segmented Priority picker /
-    /// DatePickers / toggles achromatic. Escape closes via the inspector's own
+    /// only the container changes. The `.wide` layout is background-transparent,
+    /// so the host's liquid glass panel shows through, clipped to the dialog's
+    /// rounded rect; the inspector asserts its own liquid `.tint` for native
+    /// controls. Escape closes via the inspector's own
     /// `.cancelAction` close button (no duplicate key-equivalent here); the scrim
     /// tap and the × both clear `selectedTask`.
     @ViewBuilder
     var taskModal: some View {
         if inspectorBinding.wrappedValue, let task = selectedTask {
             ZStack {
-                Color.black.opacity(0.5)
+                DS.ColorToken.backgroundWallpaperScrim
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { selectedTask = nil }
@@ -72,17 +72,15 @@ extension ContentView {
                 // dialog sizes to its content — short task → short modal, no
                 // phantom scrollbar. `maxHeight` only CAPS (it never stretches an
                 // intrinsically-sized view), keeping a very tall task off the
-                // window edges.
+                // window edges. Liquid re-skin (Task 11): the strong liquid
+                // glass recipe replaces the opaque base slab + manual stroke +
+                // pop shadow; the inspector's own `.tint` now carries the
+                // liquid accent for its native controls.
                 TaskDetailInspector(task: task, onClose: { selectedTask = nil }, layout: .wide)
                     .frame(width: 720)
                     .frame(maxHeight: 760)
                     .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
-                            .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
-                    )
-                    .nexusShadow(NexusShadow.pop)
-                    .tint(NexusColor.Text.primary)
+                    .liquidGlass(.strong, radius: NexusRadius.r3)
                     .transition(.scale(scale: 0.97).combined(with: .opacity))
             }
         }
@@ -101,20 +99,20 @@ extension ContentView {
     var captureOverlay: some View {
         if capturePresented {
             ZStack {
-                Color.black.opacity(0.5)
+                DS.ColorToken.backgroundWallpaperScrim
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { capturePresented = false }
 
-                NexusCard(.elev2, padding: 0) {
-                    CapturePane(
-                        mode: captureMode,
-                        onSaved: { capturePresented = false },
-                        onCancelled: { capturePresented = false }
-                    )
-                }
+                // Liquid re-skin (Task 11): the strong liquid glass recipe
+                // replaces the flat `NexusCard(.elev2)` + pop shadow chrome.
+                CapturePane(
+                    mode: captureMode,
+                    onSaved: { capturePresented = false },
+                    onCancelled: { capturePresented = false }
+                )
                 .fixedSize()
-                .nexusShadow(NexusShadow.pop)
+                .liquidGlass(.strong, radius: DS.Radius.xl)
 
                 // Escape dismisses the in-window capture overlay. This `.cancelAction`
                 // key-equivalent fires via `performKeyEquivalent:` BEFORE the focused
