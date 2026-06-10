@@ -46,10 +46,10 @@ struct ContentView: View {
     // renders (handed up via `InboxView.onItemsChanged`) — no new query.
     @State private var inboxActiveFilter: InboxFilter = .all
     @State private var inboxItems: [InboxItem] = []
-    // Calendar/Motion-AI surface (spec §9). Lazily built once from the live
-    // container + the shared EventKit provider so its scope/anchor state survives
-    // rail switches.
-    @State private var calendarViewModel: CalendarViewModel?
+    // Calendar surface view-model. Lazily built once from the live container +
+    // the shared EventKit provider so its scope/anchor state survives rail
+    // switches. Internal (not `private`): read from `ContentView+LiquidCalendar`.
+    @State var calendarViewModel: CalendarViewModel?
     // Shared data feed for the Liquid Today screen (Task 5): one model drives both
     // the main column and the inspector slot. Internal: see `ContentView+LiquidToday`.
     @State var liquidTodayModel = LiquidTodayModel()
@@ -192,8 +192,9 @@ struct ContentView: View {
             },
             main: { destinationMain },
             // Per-destination inspector (04_LAYOUT_SYSTEM.md §Base shell
-            // "RightInspector … optional per page"): only Today mounts one.
-            inspector: todayInspectorSlot
+            // "RightInspector … optional per page"): Today and Calendar mount
+            // one; the slots are mutually exclusive by their `selection` guards.
+            inspector: todayInspectorSlot ?? calendarInspectorSlot
         )
     }
 
@@ -279,9 +280,10 @@ struct ContentView: View {
             // NavigationStack.
             NotesListView()
         } else if selection == .calendar {
-            // Calendar/Motion-AI surface (spec §9): Month/Week/Day grid +
-            // event editor; owns its own header/navigation.
-            calendarContent
+            // Liquid Calendar / Week Planning (Task 6): custom week grid +
+            // scheduling strip; Day/Month re-mount the existing grids. See
+            // `ContentView+LiquidCalendar`.
+            liquidCalendarMain
         } else if selection == .people {
             // People / Contacts surface (spec §6); owns its own NavigationStack.
             PeopleListView()
@@ -294,31 +296,6 @@ struct ContentView: View {
 
     private func openTaskCapture() {
         NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)
-    }
-
-    @ViewBuilder
-    private var calendarContent: some View {
-        if let calendarViewModel {
-            CalendarView(viewModel: calendarViewModel)
-                // Pin the view's structural identity so `destinationMain`
-                // branch re-evaluations (e.g. a future per-destination
-                // inspector slot changing the enclosing generic shape) never
-                // tear down CalendarView's internal @State.
-                .id(TodayNavSelection.calendar)
-        } else {
-            Color.clear
-                .onAppear {
-                    #if canImport(EventKit) && !os(watchOS)
-                    let provider = EventKitCalendarProvider.shared
-                    calendarViewModel = CalendarViewModel(
-                        context: modelContext,
-                        reader: provider,
-                        writer: provider,
-                        listing: provider
-                    )
-                    #endif
-                }
-        }
     }
 
     private var shellTitle: String {
