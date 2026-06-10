@@ -36,4 +36,30 @@ struct RRuleTests {
         let decoded = try JSONDecoder().decode(RRule.self, from: encoded)
         #expect(decoded == rule)
     }
+
+    @Test("anchor defaults to dueDate")
+    func anchorDefault() {
+        let rule = RRule(frequency: .daily)
+        #expect(rule.anchor == .dueDate)
+    }
+
+    @Test("legacy JSON without an anchor key decodes as dueDate")
+    func legacyDecode() throws {
+        let legacy = Data(
+            """
+            {"frequency":"DAILY","interval":1,"byWeekday":[]}
+            """.utf8)
+        let decoded = try JSONDecoder().decode(RRule.self, from: legacy)
+        #expect(decoded.anchor == .dueDate)
+        #expect(decoded.frequency == .daily)
+        #expect(decoded.interval == 1)
+    }
+
+    @Test("Codable round-trips the completion anchor")
+    func completionRoundTrip() throws {
+        let rule = RRule(frequency: .weekly, interval: 2, anchor: .completion)
+        let decoded = try JSONDecoder().decode(RRule.self, from: JSONEncoder().encode(rule))
+        #expect(decoded == rule)
+        #expect(decoded.anchor == .completion)
+    }
 }
