@@ -227,18 +227,17 @@ public struct AgentInputBar: View {
             }
         }
         .padding(12)
-        .background(NexusColor.Background.raised.opacity(0.84), in: RoundedRectangle(cornerRadius: 18))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(NexusColor.Line.regular.opacity(0.9), lineWidth: 1)
-        }
+        // Liquid re-skin (container level): the liquid glass card recipe
+        // replaces the opaque `Background.raised` composer slab + manual
+        // Line.regular stroke + raw black shadow. The active-drop ring overlay
+        // stays on top of the glass (behavior unchanged).
+        .liquidGlass(.card, radius: 18)
         .overlay {
             if shouldShowActiveDropRing {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(NexusColor.Line.strong, lineWidth: 1)
             }
         }
-        .shadow(color: .black.opacity(0.24), radius: 18, x: 0, y: 10)
         .overlay(alignment: .topTrailing) {
             if isFileDropTargeted {
                 fileDropChip

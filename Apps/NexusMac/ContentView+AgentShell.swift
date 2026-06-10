@@ -69,7 +69,7 @@ struct AgentTopControl: View {
                 .foregroundStyle(NexusColor.Text.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(NexusColor.Background.control.opacity(0.72), in: Capsule())
+                .background(DS.ColorToken.glassSelected, in: Capsule())
                 .overlay(Capsule().strokeBorder(NexusColor.Line.hairline, lineWidth: 1))
 
             Spacer()
@@ -98,7 +98,7 @@ struct AgentTopControl: View {
                     .foregroundStyle(NexusColor.Text.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(NexusColor.Background.control.opacity(0.72), in: Capsule())
+                    .background(DS.ColorToken.glassSelected, in: Capsule())
                     .overlay(Capsule().strokeBorder(NexusColor.Line.regular, lineWidth: 1))
                 }
             )

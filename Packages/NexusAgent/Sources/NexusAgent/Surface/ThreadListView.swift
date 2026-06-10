@@ -43,7 +43,18 @@ public struct ThreadListView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(NexusColor.Background.panel)
+        .background(containerBackground)
+    }
+
+    /// Liquid re-skin (container level): transparent on macOS so the thread
+    /// rail sits on the shell's glass content panel instead of an opaque
+    /// graphite slab; iOS keeps the Linear panel surface under its own shell.
+    private var containerBackground: Color {
+        #if os(macOS)
+        return Color.clear
+        #else
+        return NexusColor.Background.panel
+        #endif
     }
 
     nonisolated public static func sorted(threads: [AgentThread]) -> [AgentThread] {
@@ -60,9 +71,14 @@ public struct ThreadListView: View {
     }
 
     private func rowBackground(for thread: AgentThread) -> Color {
-        // Linear flat surface: selected row uses Background.raised for subtle
-        // elevation contrast over the panel background; unselected stays panel.
-        thread.id == currentThreadID ? NexusColor.Background.raised : NexusColor.Background.panel
+        // Liquid re-skin (macOS): rows are transparent over the shell's glass;
+        // the selected row uses the DS glass-selected overlay. iOS keeps the
+        // Linear panel/raised pairing under its own opaque shell.
+        #if os(macOS)
+        return thread.id == currentThreadID ? DS.ColorToken.glassSelected : Color.clear
+        #else
+        return thread.id == currentThreadID ? NexusColor.Background.raised : NexusColor.Background.panel
+        #endif
     }
 }
 

@@ -309,30 +309,16 @@ public struct AgentChatView: View {
     }
 
     private var railPanel: some View {
+        // Liquid re-skin (container level): the liquid glass card recipe
+        // replaces the opaque Linear control→raised→panel gradient + manual
+        // Line.strong stroke + raw black glow (the slab clashed inside the
+        // shell's glass content column). Rail content unchanged.
         rail
             .padding(.horizontal, 20)
             .padding(.vertical, 18)
             .frame(width: 374, alignment: .topLeading)
             .frame(minHeight: 134, alignment: .topLeading)
-            .background {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                NexusColor.Background.control.opacity(0.86),
-                                NexusColor.Background.raised.opacity(0.93),
-                                NexusColor.Background.panel.opacity(0.94),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(NexusColor.Line.strong.opacity(0.78), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.40), radius: 24, x: 0, y: 16)
+            .liquidGlass(.card, radius: DS.Radius.xl)
     }
 
     /// `nil` when there is no active thread (the rail then shows the oracle
