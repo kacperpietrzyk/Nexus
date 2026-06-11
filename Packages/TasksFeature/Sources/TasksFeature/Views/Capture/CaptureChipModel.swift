@@ -11,8 +11,14 @@ import SwiftUI
 enum CaptureChipModel {
 
     /// Ordered chip list from a `ParseResult`. Emit order:
-    /// date → timeRange → priority → tags → recurrence → lowConfidence.
-    static func chips(for result: ParseResult, now: Date) -> [(icon: String?, label: String)] {
+    /// date → timeRange → priority → tags → project → recurrence → lowConfidence.
+    /// `resolvedProjectName` is the canonical project name when the capture
+    /// layer resolved `result.projectToken`; nil renders the unresolved state.
+    static func chips(
+        for result: ParseResult,
+        now: Date,
+        resolvedProjectName: String? = nil
+    ) -> [(icon: String?, label: String)] {
         var chips: [(icon: String?, label: String)] = []
         if result.dueAt != nil || result.startAt != nil {
             chips.append((icon: "calendar", label: formatDate(result, now: now)))
@@ -28,6 +34,13 @@ enum CaptureChipModel {
         }
         for tag in result.tags {
             chips.append((icon: nil, label: "#\(tag)"))
+        }
+        if let token = result.projectToken {
+            if let resolvedProjectName {
+                chips.append((icon: "folder", label: resolvedProjectName))
+            } else {
+                chips.append((icon: "folder.badge.questionmark", label: "@\(token)"))
+            }
         }
         if result.recurrence != nil {
             chips.append((icon: "repeat", label: "Repeats"))

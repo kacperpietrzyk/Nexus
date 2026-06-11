@@ -42,8 +42,10 @@ public actor CompositeNLParser: NLParser {
         )
         // FM successfully added structure → use it. Otherwise, fall back to
         // handcoded result so a failed FM round-trip never *removes* data.
-        if pass2.dueAt != nil || pass2.deadlineAt != nil || pass2.recurrence != nil || pass2.priority != nil
-            || !pass2.tags.isEmpty || pass2.projectToken != nil {
+        let fmAddedStructure =
+            pass2.dueAt != nil || pass2.deadlineAt != nil || pass2.recurrence != nil || pass2.priority != nil
+            || !pass2.tags.isEmpty || pass2.projectToken != nil
+        if fmAddedStructure {
             return enrichDurationIfNeeded(pass2, input: workingInput, locale: effectiveLocale, calendar: calendar)
         }
         return enrichDurationIfNeeded(pass1, input: workingInput, locale: effectiveLocale, calendar: calendar)
