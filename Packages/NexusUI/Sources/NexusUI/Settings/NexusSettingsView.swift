@@ -25,6 +25,7 @@ public struct NexusSettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var liveData: AISettingsLiveData?
     @State private var calendarPermission = CalendarPermissionState()
+    @State private var goalsState = GoalsSettingsState()
     @AppStorage(NexusPreferences.Keys.theme) private var theme: String = NexusTheme.amberDark.rawValue
     @AppStorage(NexusPreferences.Keys.advancedEnabled) private var advancedEnabled: Bool = false
     @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) private var calendarEventsInTodayEnabled = false
@@ -126,6 +127,7 @@ public struct NexusSettingsView: View {
         macGeneralSection
         macSyncSection
         macTasksSection
+        macGoalsSection
         macProvidersSection
         macVoiceSection
         macNavigationSection(
@@ -263,6 +265,16 @@ public struct NexusSettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var macGoalsSection: some View {
+        macSettingsSection(
+            "Goals",
+            footer: "Daily and weekly completion targets drive the Goals card on the productivity dashboard. "
+                + "Set a target to 0 to hide it."
+        ) {
+            goalsRows
         }
     }
 
@@ -497,6 +509,7 @@ public struct NexusSettingsView: View {
                 iosGeneralSection
                 iosSyncSection
                 iosTasksSection
+                iosGoalsSection
                 #if os(iOS)
                 iosAppleWatchSection
                 #endif
@@ -673,6 +686,48 @@ public struct NexusSettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var iosGoalsSection: some View {
+        iosSettingsSection(
+            "Goals",
+            footer: "Daily and weekly completion targets drive the Goals card on the productivity dashboard. "
+                + "Set a target to 0 to hide it."
+        ) {
+            goalsRows
+        }
+    }
+
+    private var goalsRows: some View {
+        @Bindable var goals = goalsState
+        return VStack(spacing: 0) {
+            NexusSettingsRow("Daily goal") {
+                goalStepper(value: $goals.dailyTarget)
+            }
+            NexusSettingsDivider()
+            NexusSettingsRow("Weekly goal") {
+                goalStepper(value: $goals.weeklyTarget)
+            }
+        }
+    }
+
+    private func goalStepper(value: Binding<Int>) -> some View {
+        HStack(spacing: NexusSpacing.s3) {
+            Text(goalLabel(for: value.wrappedValue))
+                .font(NexusType.bodySmall.weight(.medium))
+                .foregroundStyle(NexusColor.Text.secondary)
+                .monospacedDigit()
+            Stepper("", value: value, in: 0...99)
+                .labelsHidden()
+        }
+    }
+
+    private func goalLabel(for target: Int) -> String {
+        switch target {
+        case 0: return "Off"
+        case 1: return "1 task"
+        default: return "\(target) tasks"
         }
     }
 
