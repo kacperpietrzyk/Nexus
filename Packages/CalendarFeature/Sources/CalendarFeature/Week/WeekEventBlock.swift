@@ -115,7 +115,7 @@ struct WeekEventBlock: View {
             .contentShape(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(item.title), \(timeText)")
+        .accessibilityLabel("\(item.title), \(timeText)\(item.isConflicted ? ", conflicts with a calendar event" : "")")
         #if os(macOS)
         .onHover { value in
             withAnimation(DS.Motion.hover) { hovering = value }
@@ -125,10 +125,12 @@ struct WeekEventBlock: View {
 
     /// Proposed (not yet accepted) blocks keep the dashed-border affordance the
     /// existing day/week views use, so a proposal still reads as tentative.
+    /// Conflicted blocks (M1) get the warning stroke regardless of kind.
     @ViewBuilder
     private var strokeOverlay: some View {
         let shape = RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-        let color = hovering ? DS.ColorToken.strokeStrong : (calendarTint?.stroke ?? kind.stroke)
+        let base = hovering ? DS.ColorToken.strokeStrong : (calendarTint?.stroke ?? kind.stroke)
+        let color = item.isConflicted ? DS.ColorToken.statusWarning : base
         if item.kind == .proposedBlock {
             shape.strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
         } else {

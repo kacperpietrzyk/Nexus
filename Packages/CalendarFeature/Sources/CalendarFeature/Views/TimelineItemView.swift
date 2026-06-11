@@ -19,10 +19,18 @@ struct TimelineItemView: View {
             HStack(alignment: .top, spacing: 6) {
                 accentBar
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.title)
-                        .font(NexusType.bodySmall)
-                        .foregroundStyle(NexusColor.Text.primary)
-                        .lineLimit(positioned.height > 34 ? 2 : 1)
+                    HStack(spacing: 4) {
+                        if item.isConflicted {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(NexusColor.Status.danger)
+                                .accessibilityHidden(true)
+                        }
+                        Text(item.title)
+                            .font(NexusType.bodySmall)
+                            .foregroundStyle(NexusColor.Text.primary)
+                            .lineLimit(positioned.height > 34 ? 2 : 1)
+                    }
                     if positioned.height > 40 {
                         Text(timeRange)
                             .font(NexusType.metaMono)
@@ -84,6 +92,9 @@ struct TimelineItemView: View {
     }
 
     private var accentColor: Color {
+        if item.isConflicted {
+            return NexusColor.Status.danger
+        }
         switch item.kind {
         case .event:
             return calendarTint ?? NexusColor.Text.tertiary
@@ -121,18 +132,22 @@ struct TimelineItemView: View {
     @ViewBuilder
     private var border: some View {
         let shape = RoundedRectangle(cornerRadius: NexusRadius.r2, style: .continuous)
-        switch item.kind {
-        case .proposedBlock:
-            shape.strokeBorder(
-                NexusColor.Line.strong,
-                style: StrokeStyle(lineWidth: 1, dash: [4, 3])
-            )
-        case .acceptedBlock:
-            shape.strokeBorder(NexusColor.Accent.lime.opacity(0.5), lineWidth: 1)
-        case .event:
-            // A faint tint-tinged rim keeps the card edge legible without the
-            // hard saturated border the raw color produced.
-            shape.strokeBorder((calendarTint ?? NexusColor.Line.hairline).opacity(0.4), lineWidth: 1)
+        if item.isConflicted {
+            shape.strokeBorder(NexusColor.Status.danger.opacity(0.7), lineWidth: 1)
+        } else {
+            switch item.kind {
+            case .proposedBlock:
+                shape.strokeBorder(
+                    NexusColor.Line.strong,
+                    style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                )
+            case .acceptedBlock:
+                shape.strokeBorder(NexusColor.Accent.lime.opacity(0.5), lineWidth: 1)
+            case .event:
+                // A faint tint-tinged rim keeps the card edge legible without the
+                // hard saturated border the raw color produced.
+                shape.strokeBorder((calendarTint ?? NexusColor.Line.hairline).opacity(0.4), lineWidth: 1)
+            }
         }
     }
 
@@ -147,7 +162,8 @@ struct TimelineItemView: View {
         case .proposedBlock: kind = "Proposed block"
         case .acceptedBlock: kind = "Scheduled block"
         }
-        return "\(kind): \(item.title), \(timeRange)"
+        let suffix = item.isConflicted ? ", conflicts with a calendar event" : ""
+        return "\(kind): \(item.title), \(timeRange)\(suffix)"
     }
 
     static let timeFormatter: DateFormatter = {

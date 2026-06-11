@@ -91,6 +91,9 @@ public struct LiquidWeekScreen: View {
             if let message = viewModel.lastError {
                 errorRow(message)
             }
+            if !viewModel.conflictedBlockIDs.isEmpty {
+                conflictRow(count: viewModel.conflictedBlockIDs.count)
+            }
             content
         }
         .padding(DS.Space.l)
@@ -222,6 +225,31 @@ public struct LiquidWeekScreen: View {
         .liquidGlass(.card, radius: DS.Radius.m)
     }
 
+    /// M1 non-blocking conflict affordance (mirrors `errorRow` chrome):
+    /// "Replan" tears the conflicted blocks down and re-proposes their tasks.
+    private func conflictRow(count: Int) -> some View {
+        HStack(spacing: DS.Space.s) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(DS.ColorToken.statusWarning)
+                .accessibilityHidden(true)
+            Text(CalendarViewModel.conflictNotice(count: count))
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+            Spacer(minLength: DS.Space.s)
+            LiquidPrimaryButton("Replan") {
+                _Concurrency.Task { await viewModel.replanConflicted() }
+            }
+            LiquidIconButton(
+                systemImage: "xmark",
+                accessibilityLabel: "Dismiss conflict notice",
+                action: { viewModel.dismissConflicts() }
+            )
+        }
+        .padding(DS.Space.s)
+        .liquidGlass(.card, radius: DS.Radius.m)
+    }
+
     // MARK: - Content per scope
 
     @ViewBuilder
@@ -296,7 +324,13 @@ public struct LiquidWeekScreen: View {
     private func weekItems(forDay day: Date) -> [TimelineItem] {
         let mirroredEventIDs = Set(viewModel.blocks.compactMap(\.externalEventID))
         let events = viewModel.events.filter { !mirroredEventIDs.contains($0.id) }
-        return DayTimelineLayout.items(forDay: day, events: events, blocks: viewModel.blocks, calendar: calendar)
+        return DayTimelineLayout.items(
+            forDay: day,
+            events: events,
+            blocks: viewModel.blocks,
+            calendar: calendar,
+            conflictedBlockIDs: viewModel.conflictedBlockIDs
+        )
     }
 
     /// Tapping an external event opens the editor (spec §Interaction rules);
