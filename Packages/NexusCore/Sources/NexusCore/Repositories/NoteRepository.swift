@@ -17,6 +17,12 @@ import SwiftData
 /// op, so reconcile never has to refresh labels (no per-load blob churn).
 /// `toggleTodo` drives `complete()`/reopen on the task — the single source of
 /// truth — so the change is visible everywhere the task appears.
+/// Errors thrown by the note-template operations on `NoteRepository`.
+public enum NoteTemplateError: Error, Equatable {
+    /// `instantiateTemplate` was called with a note whose `role != .template`.
+    case notATemplate(noteID: UUID)
+}
+
 @MainActor
 public final class NoteRepository {
     public let context: ModelContext
@@ -111,6 +117,36 @@ public final class NoteRepository {
         try reconciler.reconcile(note)
         try context.save()
         broadcastUpsert(for: note)
+    }
+
+    /// Instantiate a note template (Tranche 2 Plan D, Obsidian O3 — spec §4.3):
+    /// copy `contentData`/`plainText`/`tags`/`propertiesJSON` into a fresh
+    /// `.free` note; `folderPath` is copied verbatim; fresh id/timestamps.
+    ///
+    /// The copy is inserted WITHOUT reconcile, following the
+    /// `duplicatedNoteRef` (T1) precedent: the template's derived graph edges
+    /// (e.g. `containsTask` for embedded todos) are NOT mirrored onto the
+    /// copy, so instantiation can never cross-link the template's tasks.
+    /// `plainText` is copied verbatim, so list/search stay consistent without
+    /// a reconcile pass.
+    @discardableResult
+    public func instantiateTemplate(_ template: Note) throws -> Note {
+        guard template.role == .template else {
+            throw NoteTemplateError.notATemplate(noteID: template.id)
+        }
+        let copy = Note(
+            title: template.title,
+            contentData: template.contentData,
+            plainText: template.plainText,
+            role: .free,
+            tags: template.tags
+        )
+        copy.propertiesJSON = template.propertiesJSON
+        copy.folderPath = template.folderPath
+        context.insert(copy)
+        try context.save()
+        broadcastUpsert(for: copy)
+        return copy
     }
 
     /// Recompute-on-load (spec §6.2): repair any blob↔graph drift from a crash
