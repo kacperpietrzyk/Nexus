@@ -279,7 +279,7 @@ struct NexusMacApp: App {
                             do {
                                 let result = try await MarkdownExporter.export(
                                     container: container,
-                                    types: TaskItem.self, Meeting.self, Cycle.self,
+                                    types: TaskItem.self, Meeting.self, Cycle.self, Note.self,
                                     to: folder
                                 )
                                 lastExportResult = result
