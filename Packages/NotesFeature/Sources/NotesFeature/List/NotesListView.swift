@@ -63,6 +63,12 @@ public struct NotesListView: View {
                 } message: {
                     Text(newNoteError ?? "")
                 }
+                .task { consumePendingDailyNoteRequest() }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: .notesOpenDailyNote)
+                ) { _ in
+                    consumePendingDailyNoteRequest()
+                }
         }
     }
 
@@ -75,6 +81,14 @@ public struct NotesListView: View {
         iosContent
             .navigationTitle("Notes")
             .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        openTodaysDailyNote()
+                    } label: {
+                        Label("Today's Note", systemImage: "calendar")
+                    }
+                    .disabled(noteRepository == nil)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         createNote()
@@ -134,6 +148,15 @@ public struct NotesListView: View {
             )
 
             Spacer(minLength: DS.Space.m)
+
+            LiquidIconButton(
+                systemImage: "calendar",
+                accessibilityLabel: "Open today's note"
+            ) {
+                openTodaysDailyNote()
+            }
+            .disabled(noteRepository == nil)
+            .help("Open today's note (⌘⇧D)")
 
             LiquidPrimaryButton("New Note", systemImage: "square.and.pencil") {
                 createNote()
@@ -245,6 +268,24 @@ public struct NotesListView: View {
 
     private func deleteNote(_ note: Note) {
         try? noteRepository?.delete(note)
+    }
+
+    /// O4 "Today's note": idempotent open-or-create via `DailyNoteService`
+    /// (shared identity with the agent's brief note), then push the editor.
+    private func openTodaysDailyNote() {
+        guard let noteRepository else { return }
+        do {
+            let note = try DailyNoteService(repository: noteRepository)
+                .openOrCreate(for: Date.now)
+            path.append(note.id)
+        } catch {
+            newNoteError = error.localizedDescription
+        }
+    }
+
+    private func consumePendingDailyNoteRequest() {
+        guard DailyNoteOpenRequest.shared.consume() else { return }
+        openTodaysDailyNote()
     }
 }
 
