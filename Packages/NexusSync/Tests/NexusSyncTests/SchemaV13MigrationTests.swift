@@ -47,4 +47,88 @@ import Testing
         #expect(v12ToV13.count == 1)
         #expect(v12ToV13.allSatisfy { $0.contains("lightweight") })
     }
+
+    // MARK: - Partitions (synced, NOT local-only)
+
+    /// `Cycle` is a SYNCED partition: sprints travel with the user's tasks
+    /// across devices (CloudKit private DB). It must NOT slip into
+    /// `localOnlyBaseline`. The on-disk crown-jewel test runs with CloudKit
+    /// off (both partitions local), so it cannot tell the two apart — this is
+    /// the discriminating check (the V12 `personIsASyncedPartition` pattern).
+    @Test func cycleIsASyncedPartitionNotLocalOnly() {
+        let partitions = NexusModelContainer.modelPartitions(extraModels: [StubSyncedExtra.self])
+        #expect(partitions.syncedModels.contains { String(describing: $0) == "Cycle" })
+        #expect(!partitions.localOnlyModels.contains { String(describing: $0) == "Cycle" })
+    }
+
+    /// Same pin for `ActivityEntry` (the audit log syncs — events recorded on
+    /// one device render on another).
+    @Test func activityEntryIsASyncedPartitionNotLocalOnly() {
+        let partitions = NexusModelContainer.modelPartitions(extraModels: [StubSyncedExtra.self])
+        #expect(partitions.syncedModels.contains { String(describing: $0) == "ActivityEntry" })
+        #expect(!partitions.localOnlyModels.contains { String(describing: $0) == "ActivityEntry" })
+    }
+
+    // MARK: - Fresh V13 store (persist / fetch)
+
+    /// A fresh V13 store accepts `Cycle` + `ActivityEntry` inserts and
+    /// round-trips their fields. Proves the additive entities persist and fetch.
+    @Test func freshV13StoreRoundTripsCycleAndActivityEntry() throws {
+        let container = try ModelContainer(
+            for: Schema(NexusSchemaV13.models, version: NexusSchemaV13.versionIdentifier),
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+
+        let taskID = UUID()
+        let cycle = Cycle(
+            name: "Sprint 1",
+            startAt: Date(timeIntervalSince1970: 1_700_000_000),
+            endAt: Date(timeIntervalSince1970: 1_700_600_000),
+            status: .active
+        )
+        context.insert(cycle)
+        context.insert(
+            ActivityEntry(
+                itemID: taskID,
+                itemKind: .task,
+                eventKind: .workflowChanged,
+                payloadJSON: "{\"old\":\"todo\",\"new\":\"inProgress\"}"
+            )
+        )
+        try context.save()
+
+        let cycles = try context.fetch(FetchDescriptor<Cycle>())
+        #expect(cycles.count == 1)
+        #expect(cycles.first?.kind == .cycle)
+        #expect(cycles.first?.status == .active)
+
+        let events = try context.fetch(FetchDescriptor<ActivityEntry>())
+        #expect(events.count == 1)
+        #expect(events.first?.itemID == taskID)
+        #expect(events.first?.eventKind == .workflowChanged)
+        #expect(events.first?.payloadJSON == "{\"old\":\"todo\",\"new\":\"inProgress\"}")
+    }
+
+    /// A fresh V13 store gives plain `TaskItem`/`Note` rows the defaulted new
+    /// columns (the additive-column half of the delta).
+    @Test func freshV13StoreDefaultsNewTaskAndNoteColumns() throws {
+        let container = try ModelContainer(
+            for: Schema(NexusSchemaV13.models, version: NexusSchemaV13.versionIdentifier),
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+
+        context.insert(TaskItem(title: "plain"))
+        context.insert(Note(title: "plain note"))
+        try context.save()
+
+        let task = try #require(try context.fetch(FetchDescriptor<TaskItem>()).first)
+        #expect(task.cycleID == nil)
+        #expect(!task.isTemplate)
+
+        let note = try #require(try context.fetch(FetchDescriptor<Note>()).first)
+        #expect(note.propertiesJSON == nil)
+        #expect(note.folderPath == nil)
+    }
 }

@@ -108,7 +108,7 @@ struct NexusMacApp: App {
         DebugDemoSeed.seedIfRequested(context: made.mainContext, noteRepository: self.noteRepository)
         #endif
         // People / Contacts (spec §6). `Person` is already a synced model in
-        // NexusSchemaV12, so the main window + Settings `.modelContainer(container)`
+        // NexusSchemaV13, so the main window + Settings `.modelContainer(container)`
         // already register it — no separate container registration is needed.
         self.personRepository = PeopleComposition.makeRepository(
             for: made.mainContext,
