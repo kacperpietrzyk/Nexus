@@ -163,6 +163,7 @@ struct ContentView: View {
             }
         }
         .task {
+            await NotesComposition.bootstrap(openDailyNote: { openTodaysDailyNote() })
             guard let taskRepository else { return }
             await TasksComposition.bootstrap(
                 repository: taskRepository,
@@ -215,6 +216,14 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .nexusGoToSettings)) { _ in
             selectedTab = .settings
         }
+    }
+
+    /// O4: pending-flag first, then switch to the Notes tab — same two-path
+    /// delivery as macOS (`DailyNoteOpenRequest` doc).
+    @MainActor
+    private func openTodaysDailyNote() {
+        DailyNoteOpenRequest.shared.request()
+        selectedTab = .notes
     }
 
     private var compactTabShell: some View {

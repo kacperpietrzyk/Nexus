@@ -13,7 +13,11 @@ import TasksFeature
 
 // The Mac dashboard shell mounts one full-screen destination per feature
 // (Today/Inbox/Meetings/Tasks/Notes/Calendar/Agent/Stats/Settings) inside the
-// Liquid chrome (`LiquidAppShell` + `LiquidSidebar` + `LiquidToolbar`).
+// Liquid chrome (`LiquidAppShell` + `LiquidSidebar` + `LiquidToolbar`); it
+// grows by an `.onReceive` + helper per cross-feature affordance by design —
+// the same structural growth that disables `file_length` on the iOS shell.
+// The daily-note (O4) wiring crossed 600 lines.
+// swiftlint:disable file_length
 struct ContentView: View {
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     @Environment(\.modelContext) var modelContext
@@ -89,35 +93,11 @@ struct ContentView: View {
 
     @ViewBuilder
     private var dashboardBody: some View {
-        // Liquid chrome (Task 3): the old `NexusWallpaper` + 54pt `NexusNavRail`
-        // + `NexusShell` band stack is replaced by `LiquidAppShell` — three
-        // floating glass columns over a dark wallpaper gradient. The sidebar
-        // binds to the SAME `TodayNavSelection` state through the
-        // `navigate(to:)` chokepoint, and a destination still owns the whole
-        // content slot, exclusive of the task-detail inspector (§1 invariant
-        // "inspector ⊥ Agent" — enforced by the `.onChange` below, unchanged).
-        appShell
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .containerBackground(DS.ColorToken.backgroundApp, for: .window)
-            // List stays FULL-WIDTH; task detail opens as a CENTERED MODAL over a
-            // dimmed scrim (see `taskModal`) — the old trailing peek was too narrow
-            // for the inspector's content. Gated on the UNCHANGED `inspectorBinding`
-            // predicate (§1 "inspector ⊥ Agent" + its test hold).
-            .overlay { taskModal }
-            .animation(NexusMotion.standard, value: inspectorBinding.wrappedValue)
-            .sheet(item: $customSnoozeTask) { task in
-                CustomSnoozeSheet(task: task)
-            }
-            .onOpenURL { url in handleOpenURL(url) }
-            .overlay { commandPaletteOverlay }
-            .overlay { captureOverlay }
-            .task {
-                await bootstrapNavigation()
-                await reloadInboxCount()
-            }
-            .task(id: selection) {
-                await reloadInboxCount()
-            }
+        // Notification routing lives here; the chrome (overlays/sheets/tasks)
+        // is staged in `dashboardChrome` — one long modifier chain blew the
+        // type-checker's budget once the daily-note receive (O4) was added,
+        // the same reason `appShell` is extracted below.
+        dashboardChrome
             .onReceive(NotificationCenter.default.publisher(for: .nexusOpenCommandPalette)) { _ in
                 commandPalettePresented = true
             }
@@ -156,6 +136,9 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .nexusGoToSettings)) { _ in
                 navigate(to: .settings)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .nexusOpenDailyNote)) { _ in
+                openTodaysDailyNote()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .nexusCompleteSelectedTask)) { _ in
                 completeSelectedTask()
             }
@@ -175,6 +158,42 @@ struct ContentView: View {
                 if newValue == .agent {
                     selectedTask = nil
                 }
+            }
+    }
+
+    /// The shell + window chrome (overlays, sheets, bootstrap tasks), staged out
+    /// of `dashboardBody` so neither modifier chain exceeds the type-checker's
+    /// budget. Behavior-identical to the previous single chain.
+    private var dashboardChrome: some View {
+        // Liquid chrome (Task 3): the old `NexusWallpaper` + 54pt `NexusNavRail`
+        // + `NexusShell` band stack is replaced by `LiquidAppShell` — three
+        // floating glass columns over a dark wallpaper gradient. The sidebar
+        // binds to the SAME `TodayNavSelection` state through the
+        // `navigate(to:)` chokepoint, and a destination still owns the whole
+        // content slot, exclusive of the task-detail inspector (§1 invariant
+        // "inspector ⊥ Agent" — enforced by the `.onChange` in `dashboardBody`,
+        // unchanged).
+        appShell
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .containerBackground(DS.ColorToken.backgroundApp, for: .window)
+            // List stays FULL-WIDTH; task detail opens as a CENTERED MODAL over a
+            // dimmed scrim (see `taskModal`) — the old trailing peek was too narrow
+            // for the inspector's content. Gated on the UNCHANGED `inspectorBinding`
+            // predicate (§1 "inspector ⊥ Agent" + its test hold).
+            .overlay { taskModal }
+            .animation(NexusMotion.standard, value: inspectorBinding.wrappedValue)
+            .sheet(item: $customSnoozeTask) { task in
+                CustomSnoozeSheet(task: task)
+            }
+            .onOpenURL { url in handleOpenURL(url) }
+            .overlay { commandPaletteOverlay }
+            .overlay { captureOverlay }
+            .task {
+                await bootstrapNavigation()
+                await reloadInboxCount()
+            }
+            .task(id: selection) {
+                await reloadInboxCount()
             }
     }
 
@@ -455,7 +474,18 @@ struct ContentView: View {
         )
     }
 
+    /// O4 "Today's note, one action away": mark the pending open FIRST, then
+    /// route to Notes — a mounted `NotesListView` reacts to the notification
+    /// `DailyNoteOpenRequest` posts; an unmounted one consumes the pending flag
+    /// in its `.task` on appear. Shared by the menu item (⌘⇧D) and the palette.
+    @MainActor
+    private func openTodaysDailyNote() {
+        DailyNoteOpenRequest.shared.request()
+        navigate(to: .notes)
+    }
+
     private func bootstrapNavigation() async {
+        await NotesComposition.bootstrap(openDailyNote: { openTodaysDailyNote() })
         guard let taskRepository else { return }
         await TasksComposition.bootstrap(
             repository: taskRepository,

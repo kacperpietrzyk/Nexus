@@ -381,6 +381,13 @@ struct NexusMacApp: App {
                     NotificationCenter.default.post(name: .nexusGoToSettings, object: nil)
                 }
                 .keyboardShortcut("7", modifiers: [.command])
+
+                Divider()
+
+                Button("Today's Note") {
+                    NotificationCenter.default.post(name: .nexusOpenDailyNote, object: nil)
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
             }
 
             CommandMenu("Tasks") {
@@ -791,6 +798,7 @@ extension Notification.Name {
     static let nexusGoToMeetings = Notification.Name("nexus.goToMeetings")
     static let nexusGoToTasks = Notification.Name("nexus.goToTasks")
     static let nexusGoToStats = Notification.Name("nexus.goToStats")
+    static let nexusOpenDailyNote = Notification.Name("nexus.openDailyNote")
     static let nexusOpenCommandPalette = Notification.Name("nexus.openCommandPalette")
     static let nexusOpenCapture = Notification.Name("nexus.openCapture")
     static let nexusToggleAgentSidebar = Notification.Name("nexus.toggleAgentSidebar")
