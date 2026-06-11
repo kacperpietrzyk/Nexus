@@ -72,6 +72,17 @@ public struct CalendarSettingsView: View {
                 Toggle("Auto-rollover unfinished tasks", isOn: $prefs.rolloverEnabled)
             }
 
+            Section("Recurring series") {
+                Stepper(
+                    "Preview horizon: \(prefs.seriesPreviewHorizonDays) days",
+                    value: $prefs.seriesPreviewHorizonDays,
+                    in: 0...30
+                )
+                Text("Show ghost blocks for upcoming occurrences of recurring tasks this many days ahead. 0 turns previews off.")
+                    .font(NexusType.caption)
+                    .foregroundStyle(NexusColor.Text.muted)
+            }
+
             Section {
                 Button("Save", action: persist)
             }
