@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The scheduler's candidate pool is the open worklist: **overdue**
 /// (`dueAt < startOfDay`) + **due-today** + **pinned** (`pinnedAsFocus`). Only
-/// `.open` tasks qualify (done/snoozed are excluded). "Later"-dated tasks are
+/// `.open` tasks qualify (done/snoozed/templates are excluded). "Later"-dated tasks are
 /// pulled in only by pinning. Deterministic and timezone-explicit — `now` and
 /// `calendar` are injected so the same input yields the same candidates, which
 /// keeps the downstream `DayScheduler` deterministic (spec §6 / §14).
@@ -23,7 +23,7 @@ public enum DayPlanCandidates {
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
 
         return tasks.filter { task in
-            guard task.deletedAt == nil, task.status == .open else { return false }
+            guard task.deletedAt == nil, task.status == .open, !task.isTemplate else { return false }
             if task.pinnedAsFocus { return true }
             guard let due = task.dueAt else { return false }
             // Overdue (before today) or due today.

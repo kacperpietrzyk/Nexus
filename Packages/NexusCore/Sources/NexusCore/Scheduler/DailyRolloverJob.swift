@@ -52,6 +52,7 @@ public enum DailyRolloverJob {
                 task.deletedAt == nil
                     && task.statusRaw == openRaw
                     && task.dueAt != nil
+                    && task.isTemplate == false
             }
         )
         let target = nextWorkday(after: now, calendar: calendar)
