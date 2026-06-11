@@ -1,6 +1,20 @@
 import Foundation
 import NexusCore
 
+#if os(iOS)
+import PhotosUI
+
+@MainActor
+enum NotePhotosImageWriter {
+    static func writeTemporaryPNGData(_ data: Data) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nexus-photo-\(UUID().uuidString).png")
+        try data.write(to: url, options: [.atomic])
+        return url
+    }
+}
+#endif
+
 @MainActor
 struct NoteImageImporter {
     let noteRepository: NoteRepository
