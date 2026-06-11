@@ -26,6 +26,20 @@ enum ProjectScreenTab: String, CaseIterable, Identifiable {
     }
 }
 
+enum ProjectsPickerMode: String, CaseIterable, Identifiable {
+    case grid
+    case roadmap
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .grid: return "Grid"
+        case .roadmap: return "Roadmap"
+        }
+    }
+}
+
 /// The Liquid Projects / Execution main column (Task 8, spec
 /// `docs/07_MODULE_PROJECTS.md`): project picker list → per-project execution
 /// screen (header + tabs + milestones + Kanban + all-tasks table). The
@@ -45,6 +59,7 @@ public struct LiquidProjectScreen: View {
     private let onOpenTask: (TaskItem) -> Void
 
     @State private var tab: ProjectScreenTab = .overview
+    @State private var pickerMode: ProjectsPickerMode = .grid
     @State private var editorPresented = false
     @State private var editingProject: Project?
 
@@ -107,42 +122,117 @@ public struct LiquidProjectScreen: View {
 
     private var pickerList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: DS.Space.m) {
-                HStack {
-                    Text("Projects")
-                        .font(DS.FontToken.displayMedium)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                    Spacer()
-                    LiquidPrimaryButton("New Project", systemImage: "plus") {
-                        editorPresented = true
-                    }
-                }
-
-                if let error = model.loadError {
-                    Text(error)
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.statusDanger)
-                }
-
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 280), spacing: DS.Space.m)],
-                    alignment: .leading,
-                    spacing: DS.Space.m
-                ) {
-                    ForEach(model.projects) { project in
-                        ProjectPickerRow(
-                            project: project,
-                            openCount: model.openCountsByProject[project.id] ?? 0,
-                            progress: model.progressByProject[project.id] ?? 0
-                        ) {
-                            select(project)
-                        }
-                    }
+            Group {
+                switch pickerMode {
+                case .grid:
+                    pickerGridMode
+                        .frame(maxWidth: pickerMaxWidth, alignment: .topLeading)
+                case .roadmap:
+                    pickerRoadmapMode
                 }
             }
             .padding(DS.Space.l)
-            .frame(maxWidth: pickerMaxWidth, alignment: .topLeading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private var pickerGridMode: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            pickerHeader
+            pickerLoadError
+            pickerGrid
+        }
+    }
+
+    private var pickerRoadmapMode: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            pickerHeader
+            pickerLoadError
+            ProjectRoadmap(
+                bars: model.roadmapBars,
+                cycles: model.roadmapCycles,
+                now: .now,
+                calendar: .current,
+                onSelectProject: { projectID in
+                    guard let project = model.projects.first(where: { $0.id == projectID }) else { return }
+                    select(project)
+                }
+            )
+        }
+    }
+
+    private var pickerHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: DS.Space.m) {
+                pickerTitle
+                Spacer(minLength: DS.Space.m)
+                pickerControls
+            }
+
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                pickerTitle
+                pickerControls
+            }
+        }
+    }
+
+    private var pickerTitle: some View {
+        Text("Projects")
+            .font(DS.FontToken.displayMedium)
+            .foregroundStyle(DS.ColorToken.textPrimary)
+    }
+
+    private var pickerControls: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: DS.Space.s) {
+                pickerModeControl
+                pickerNewProjectButton
+            }
+
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                pickerModeControl
+                pickerNewProjectButton
+            }
+        }
+    }
+
+    private var pickerModeControl: some View {
+        LiquidSegmentedControl(
+            options: ProjectsPickerMode.allCases.map { .init($0, label: $0.label) },
+            selection: $pickerMode
+        )
+    }
+
+    private var pickerNewProjectButton: some View {
+        LiquidPrimaryButton("New Project", systemImage: "plus") {
+            editorPresented = true
+        }
+    }
+
+    @ViewBuilder
+    private var pickerLoadError: some View {
+        if let error = model.loadError {
+            Text(error)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.statusDanger)
+        }
+    }
+
+    private var pickerGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 280), spacing: DS.Space.m)],
+            alignment: .leading,
+            spacing: DS.Space.m
+        ) {
+            ForEach(model.projects) { project in
+                ProjectPickerRow(
+                    project: project,
+                    openCount: model.openCountsByProject[project.id] ?? 0,
+                    progress: model.progressByProject[project.id] ?? 0
+                ) {
+                    select(project)
+                }
+            }
         }
     }
 
