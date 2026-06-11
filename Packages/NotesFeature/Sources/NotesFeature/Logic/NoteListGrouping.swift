@@ -15,10 +15,12 @@ public typealias GraphLink = Link
 public enum NoteListGrouping {
 
     /// How the flat note list is sectioned. `role` is the always-available
-    /// organization story while folders (a schema change) are deferred.
+    /// organization story; `folder` sections by the derived `folderPath` tree
+    /// (Tranche 2 Plan E).
     public enum Mode: String, CaseIterable, Sendable {
         case role
         case tag
+        case folder
     }
 
     /// A resolved section: a stable key, a human title, and its notes (already in
@@ -47,9 +49,10 @@ public enum NoteListGrouping {
     public static func groups(for notes: [Note], mode: Mode) -> [Group] {
         switch mode {
         case .role: return roleGroups(notes)
-        // Templates are excluded from the tag view entirely (Tranche 2 Plan D):
-        // they surface only via their dedicated role section.
+        // Templates are excluded from the tag and folder views entirely
+        // (Tranche 2 Plan D): they surface only via their dedicated role section.
         case .tag: return tagGroups(notes.filter { $0.role != .template })
+        case .folder: return folderGroups(notes.filter { $0.role != .template })
         }
     }
 
@@ -98,6 +101,37 @@ public enum NoteListGrouping {
 
         if !untagged.isEmpty {
             groups.append(Group(id: untaggedGroupID, title: "No tags", notes: untagged))
+        }
+        return groups
+    }
+
+    // MARK: - Folder (Tranche 2 Plan E)
+
+    /// Sentinel id for the root ("no folder") bucket. Contains `\0`, which a
+    /// normalized folder path can never equal.
+    public static let noFolderGroupID = "\u{0000}nofolder"
+
+    /// Section by `folderPath` (already normalized by every write path); folder
+    /// groups sort case-insensitively (a parent sorts before its children since
+    /// `"a" < "a/b"`), the root bucket goes LAST — mirroring tag mode's
+    /// "No tags" bucket. Incoming note order is preserved inside each group.
+    private static func folderGroups(_ notes: [Note]) -> [Group] {
+        var byFolder: [String: [Note]] = [:]
+        var rootNotes: [Note] = []
+        for note in notes {
+            if let path = note.folderPath {
+                byFolder[path, default: []].append(note)
+            } else {
+                rootNotes.append(note)
+            }
+        }
+
+        var groups = byFolder.keys
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            .map { path in Group(id: path, title: path, notes: byFolder[path] ?? []) }
+
+        if !rootNotes.isEmpty {
+            groups.append(Group(id: noFolderGroupID, title: "No folder", notes: rootNotes))
         }
         return groups
     }

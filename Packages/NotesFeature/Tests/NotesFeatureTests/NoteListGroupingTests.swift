@@ -117,4 +117,60 @@ struct NoteListGroupingTests {
         #expect(counts[noteB] == 1)
         #expect(counts[taskID] == nil)
     }
+
+    // MARK: - Folder grouping (Tranche 2 Plan E)
+
+    @Test("folder mode sections by folderPath, sorted case-insensitively, root bucket last")
+    func folderGroups() {
+        let inNexus = Note(title: "in nexus")
+        inNexus.folderPath = "projects/nexus"
+        let inArea = Note(title: "in area")
+        inArea.folderPath = "Area"
+        let atRoot = Note(title: "at root")
+
+        let groups = NoteListGrouping.groups(for: [inNexus, atRoot, inArea], mode: .folder)
+
+        #expect(groups.map(\.id) == ["Area", "projects/nexus", NoteListGrouping.noFolderGroupID])
+        #expect(groups.map(\.title) == ["Area", "projects/nexus", "No folder"])
+        #expect(groups[0].notes.map(\.id) == [inArea.id])
+        #expect(groups[1].notes.map(\.id) == [inNexus.id])
+        #expect(groups[2].notes.map(\.id) == [atRoot.id])
+    }
+
+    @Test("folder mode with only root notes yields a single No folder bucket")
+    func folderGroupsAllRoot() {
+        let a = Note(title: "a")
+        let b = Note(title: "b")
+
+        let groups = NoteListGrouping.groups(for: [a, b], mode: .folder)
+
+        #expect(groups.count == 1)
+        #expect(groups[0].id == NoteListGrouping.noFolderGroupID)
+        #expect(groups[0].notes.map(\.id) == [a.id, b.id])  // incoming order preserved
+    }
+
+    @Test("folder mode preserves incoming note order inside each folder")
+    func folderGroupsPreserveOrder() {
+        let first = Note(title: "first")
+        first.folderPath = "f"
+        let second = Note(title: "second")
+        second.folderPath = "f"
+
+        let groups = NoteListGrouping.groups(for: [first, second], mode: .folder)
+
+        #expect(groups[0].notes.map(\.id) == [first.id, second.id])
+    }
+
+    @Test("folder mode excludes templates, mirroring tag mode (Plan D)")
+    func folderGroupsExcludeTemplates() {
+        let regular = Note(title: "regular")
+        regular.folderPath = "f"
+        let template = Note(title: "tpl", role: .template)
+        template.folderPath = "f"
+
+        let groups = NoteListGrouping.groups(for: [regular, template], mode: .folder)
+
+        #expect(groups.map(\.id) == ["f"])
+        #expect(groups[0].notes.map(\.id) == [regular.id])
+    }
 }
