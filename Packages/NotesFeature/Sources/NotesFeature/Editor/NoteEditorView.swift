@@ -1,6 +1,7 @@
 import NexusCore
 import NexusUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The native block editor for a single `Note` (spec §5). Title field + a
 /// properties/metadata panel (tags, type, timestamps) + an ordered stack of
@@ -14,6 +15,8 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     @State private var newTag: String = ""
     @State private var folderText: String = ""
     @State private var newPropertyKey: String = ""
+    @State private var imageImporterPresented = false
+    @State private var imageImportError: String?
 
     // O4 daily-note navigation: adjacent EXISTING daily notes + today check.
     @State private var previousDailyNoteID: UUID?
@@ -52,6 +55,35 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: note.id) { rebindModel() }
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    imageImporterPresented = true
+                } label: {
+                    Image(systemName: "photo.badge.plus")
+                }
+                .accessibilityLabel("Insert image")
+                .disabled(!model.canEdit)
+            }
+        }
+        .fileImporter(
+            isPresented: $imageImporterPresented,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImageImport(result)
+        }
+        .alert(
+            "Image import failed",
+            isPresented: Binding(
+                get: { imageImportError != nil },
+                set: { if !$0 { imageImportError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { imageImportError = nil }
+        } message: {
+            Text(imageImportError ?? "")
+        }
         .sheet(item: $pickerContext) { context in
             LinkPickerView(
                 noteRepository: noteRepository,
@@ -449,6 +481,27 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
 
     private var lastBlockID: UUID? { model.blocks.last?.id }
+
+    // MARK: - Image import
+
+    private func handleImageImport(_ result: Result<[URL], any Error>) {
+        do {
+            guard let source = try result.get().first else { return }
+            let accessing = source.startAccessingSecurityScopedResource()
+            defer {
+                if accessing { source.stopAccessingSecurityScopedResource() }
+            }
+            guard let noteRepository else { return }
+            let importer = NoteImageImporter(
+                noteRepository: noteRepository,
+                attachmentRoot: try NoteAttachmentRoot.url()
+            )
+            _ = try importer.importImage(from: source, into: note, after: lastBlockID)
+            rebindModel()
+        } catch {
+            imageImportError = String(describing: error)
+        }
+    }
 
     // MARK: - Wiring
 
