@@ -154,6 +154,63 @@ public final class NoteRepository {
         try context.save()
     }
 
+    /// Rename/move a derived folder (spec §4.5): one prefix rewrite over every
+    /// live note whose `folderPath == old || hasPrefix(old + "/")`, ONE save.
+    /// Returns the number of notes rewritten. A target that normalizes to nil
+    /// (empty/junk) is rejected as a no-op — use `removeFolder` to dissolve a
+    /// folder to root. Tombstoned notes are left untouched.
+    @discardableResult
+    public func renameFolder(from oldRaw: String, to newRaw: String) throws -> Int {
+        guard
+            let old = NoteFolderPath.normalize(oldRaw),
+            let new = NoteFolderPath.normalize(newRaw),
+            old != new
+        else { return 0 }
+        let prefix = old + "/"
+        let stamp = now()
+        var moved = 0
+        let live = try context.fetch(
+            FetchDescriptor<Note>(predicate: #Predicate { $0.deletedAt == nil })
+        )
+        for note in live {
+            guard let path = note.folderPath else { continue }
+            if path == old {
+                note.folderPath = new
+            } else if path.hasPrefix(prefix) {
+                note.folderPath = new + "/" + String(path.dropFirst(prefix.count))
+            } else {
+                continue
+            }
+            note.updatedAt = stamp
+            moved += 1
+        }
+        if moved > 0 { try context.save() }
+        return moved
+    }
+
+    /// Remove a derived folder, KEEPING its notes (spec §4.5 "remove folder
+    /// (keep notes)"): every live note at the path or under it moves to root
+    /// (`folderPath = nil`), ONE save. Never deletes a note. Returns the number
+    /// of notes moved.
+    @discardableResult
+    public func removeFolder(_ rawPath: String) throws -> Int {
+        guard let target = NoteFolderPath.normalize(rawPath) else { return 0 }
+        let prefix = target + "/"
+        let stamp = now()
+        var moved = 0
+        let live = try context.fetch(
+            FetchDescriptor<Note>(predicate: #Predicate { $0.deletedAt == nil })
+        )
+        for note in live {
+            guard let path = note.folderPath, path == target || path.hasPrefix(prefix) else { continue }
+            note.folderPath = nil
+            note.updatedAt = stamp
+            moved += 1
+        }
+        if moved > 0 { try context.save() }
+        return moved
+    }
+
     /// Instantiate a note template (Tranche 2 Plan D, Obsidian O3 — spec §4.3):
     /// copy `contentData`/`plainText`/`tags`/`propertiesJSON` into a fresh
     /// `.free` note; `folderPath` is copied verbatim; fresh id/timestamps.

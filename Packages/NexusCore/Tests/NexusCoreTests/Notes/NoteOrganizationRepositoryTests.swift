@@ -114,4 +114,68 @@ struct NoteOrganizationRepositoryTests {
 
         #expect(note.updatedAt == before)
     }
+
+    // MARK: - renameFolder
+
+    @Test func renameFolderRewritesExactAndDescendantPaths() throws {
+        let context = try makeContext()
+        let repo = NoteRepository(context: context)
+        let exact = try repo.create(title: "exact")
+        let nested = try repo.create(title: "nested")
+        let sibling = try repo.create(title: "sibling")
+        let prefixLookalike = try repo.create(title: "lookalike")
+        try repo.setFolderPath(exact, "area")
+        try repo.setFolderPath(nested, "area/sub")
+        try repo.setFolderPath(sibling, "other")
+        try repo.setFolderPath(prefixLookalike, "areaX")  // "area" prefix but NOT a descendant
+
+        let moved = try repo.renameFolder(from: "area", to: "zone/renamed")
+
+        #expect(moved == 2)
+        #expect(exact.folderPath == "zone/renamed")
+        #expect(nested.folderPath == "zone/renamed/sub")
+        #expect(sibling.folderPath == "other")
+        #expect(prefixLookalike.folderPath == "areaX")
+    }
+
+    @Test func renameFolderSkipsDeletedNotesAndInvalidTargets() throws {
+        let context = try makeContext()
+        let repo = NoteRepository(context: context)
+        let live = try repo.create(title: "live")
+        let dead = try repo.create(title: "dead")
+        try repo.setFolderPath(live, "area")
+        try repo.setFolderPath(dead, "area")
+        try repo.delete(dead)
+
+        // Invalid (empty after normalization) target → no-op.
+        #expect(try repo.renameFolder(from: "area", to: "  / ") == 0)
+        #expect(live.folderPath == "area")
+
+        // Valid rename touches only the live note.
+        #expect(try repo.renameFolder(from: "area", to: "zone") == 1)
+        #expect(live.folderPath == "zone")
+        #expect(dead.folderPath == "area")
+    }
+
+    // MARK: - removeFolder
+
+    @Test func removeFolderMovesExactAndDescendantNotesToRootKeepingNotes() throws {
+        let context = try makeContext()
+        let repo = NoteRepository(context: context)
+        let exact = try repo.create(title: "exact")
+        let nested = try repo.create(title: "nested")
+        let other = try repo.create(title: "other")
+        try repo.setFolderPath(exact, "area")
+        try repo.setFolderPath(nested, "area/sub/deep")
+        try repo.setFolderPath(other, "other")
+
+        let moved = try repo.removeFolder("area")
+
+        #expect(moved == 2)
+        #expect(exact.folderPath == nil)
+        #expect(nested.folderPath == nil)
+        #expect(other.folderPath == "other")
+        #expect(exact.deletedAt == nil)  // never deletes notes
+        #expect(nested.deletedAt == nil)
+    }
 }
