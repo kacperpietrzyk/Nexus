@@ -3,6 +3,10 @@ import NexusUI
 import SwiftUI
 import UniformTypeIdentifiers
 
+#if os(iOS)
+import PhotosUI
+#endif
+
 /// The native block editor for a single `Note` (spec §5). Title field + a
 /// properties/metadata panel (tags, type, timestamps) + an ordered stack of
 /// per-block render/edit views, an "insert block" menu, a wikilink/embed picker,
@@ -17,6 +21,9 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     @State private var newPropertyKey: String = ""
     @State private var imageImporterPresented = false
     @State private var imageImportError: String?
+    #if os(iOS)
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    #endif
 
     // O4 daily-note navigation: adjacent EXISTING daily notes + today check.
     @State private var previousDailyNoteID: UUID?
@@ -55,8 +62,30 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: note.id) { rebindModel() }
+        #if os(iOS)
+        .task(id: selectedPhotoItem) {
+            await handleSelectedPhotoItem(selectedPhotoItem)
+        }
+        #endif
         .toolbar {
-            ToolbarItem {
+            ToolbarItemGroup {
+                #if os(iOS)
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Image(systemName: "photo.badge.plus")
+                }
+                .accessibilityLabel("Insert image")
+                .disabled(!model.canEdit)
+
+                Menu {
+                    Button("Insert image file") {
+                        imageImporterPresented = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("More image import options")
+                .disabled(!model.canEdit)
+                #else
                 Button {
                     imageImporterPresented = true
                 } label: {
@@ -64,6 +93,7 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
                 }
                 .accessibilityLabel("Insert image")
                 .disabled(!model.canEdit)
+                #endif
             }
         }
         .fileImporter(
@@ -502,6 +532,21 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             imageImportError = String(describing: error)
         }
     }
+
+    #if os(iOS)
+    private func handleSelectedPhotoItem(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        defer { selectedPhotoItem = nil }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else { return }
+            let temporaryURL = try NotePhotosImageWriter.writeTemporaryPNGData(data)
+            handleImageImport(.success([temporaryURL]))
+            try? FileManager.default.removeItem(at: temporaryURL)
+        } catch {
+            imageImportError = String(describing: error)
+        }
+    }
+    #endif
 
     // MARK: - Wiring
 
