@@ -32,11 +32,11 @@ import SwiftData
 ///
 /// ## Scope
 /// The reconciler owns only the edge kinds it derives — `containsTask`, `embed`,
-/// `mentions` — scoped to `fromID == note.id`. It never touches other edges, and
-/// never deletes *incoming* links (their owners recreate them on their own
-/// recompute). Cross-module `ItemKind`s (e.g. `meeting`, which is not a NexusCore
-/// `@Model`) cannot be probed here; an embed's parser-defaulted kind is corrected
-/// only when the target resolves to a NexusCore-resident type.
+/// `mentions`, `attachment` — scoped to `fromID == note.id`. It never touches other
+/// edges, and never deletes *incoming* links (their owners recreate them on their
+/// own recompute). Cross-module `ItemKind`s (e.g. `meeting`, which is not a
+/// NexusCore `@Model`) cannot be probed here; an embed's parser-defaulted kind is
+/// corrected only when the target resolves to a NexusCore-resident type.
 @MainActor
 public struct NoteReconciler {
     public let context: ModelContext
@@ -186,11 +186,11 @@ public struct NoteReconciler {
 
     /// Recompute the derived edges (`containsTask` for todos, `embed` for embeds,
     /// `mentions` for bound wikilinks) so they exactly match the blob: create
-    /// missing, delete stale. Scoped to `fromID == note.id` and the three owned
+    /// missing, delete stale. Scoped to `fromID == note.id` and the owned edge
     /// kinds. Returns whether any link row changed.
     private func reconcileLinks(note: Note, blocks: [Block]) throws -> Bool {
-        let required = requiredEdges(note: note, blocks: blocks)
-        let owned: Set<LinkKind> = [.containsTask, .embed, .mentions]
+        let required = try requiredEdges(note: note, blocks: blocks)
+        let owned: Set<LinkKind> = [.containsTask, .embed, .mentions, .attachment]
         let noteID = note.id
         let existing =
             try context
@@ -229,7 +229,7 @@ public struct NoteReconciler {
     /// The exact set of edges the blob requires. A `Set` keyed by
     /// `(toID, toKind, kind)` so duplicate todos/embeds/wikilinks to one target
     /// collapse to a single link.
-    private func requiredEdges(note: Note, blocks: [Block]) -> Set<Edge> {
+    private func requiredEdges(note: Note, blocks: [Block]) throws -> Set<Edge> {
         var edges = Set<Edge>()
         for block in blocks {
             switch block.kind {
@@ -242,6 +242,10 @@ public struct NoteReconciler {
                 edges.insert(Edge(toID: taskRef, toKind: .task, kind: .containsTask))
             case .embed(let ref, let kind):
                 edges.insert(Edge(toID: ref, toKind: kind, kind: .embed))
+            case .image(let ref?, _):
+                if try attachmentExists(id: ref) {
+                    edges.insert(Edge(toID: ref, toKind: .attachment, kind: .attachment))
+                }
             case .paragraph(let runs),
                 .heading(_, let runs),
                 .bulleted(let runs),
@@ -275,6 +279,14 @@ public struct NoteReconciler {
         )
         descriptor.fetchLimit = 1
         return try context.fetch(descriptor).first
+    }
+
+    private func attachmentExists(id: UUID) throws -> Bool {
+        var descriptor = FetchDescriptor<AttachmentAsset>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first { $0.deletedAt == nil } != nil
     }
 
     private func existingContainsTaskLink(note: Note, taskRef: UUID) throws -> Link? {
