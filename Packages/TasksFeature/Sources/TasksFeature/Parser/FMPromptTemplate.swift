@@ -23,6 +23,7 @@ internal enum FMPromptTemplate {
               "deadlineAt": string | null,        // ISO8601 UTC for deadline/by/termin phrases
               "priority": integer | null,         // 0=none, 1=low, 2=medium, 3=high
               "tags": string[] | null,            // lowercased, no leading '#'
+              "project": string | null,           // project name if the user wrote an @token, no leading '@'
               "recurrence": string | null         // RRULE, e.g. "FREQ=WEEKLY;BYDAY=MO"; "every!"/"co!" add ";ANCHOR=COMPLETION"
             }
 

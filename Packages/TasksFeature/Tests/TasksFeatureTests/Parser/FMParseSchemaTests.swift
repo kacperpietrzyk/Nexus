@@ -46,6 +46,17 @@ struct FMParseSchemaTests {
         #expect(schema.recurrence == "FREQ=WEEKLY;BYDAY=MO")
     }
 
+    @Test("decodes optional project field; absent key is nil")
+    func decodesProjectField() throws {
+        let withProject = #"{"title":"t","project":"Nexus"}"#
+        let decoded = try JSONDecoder().decode(FMParseSchema.self, from: Data(withProject.utf8))
+        #expect(decoded.project == "Nexus")
+
+        let withoutProject = #"{"title":"t"}"#
+        let absent = try JSONDecoder().decode(FMParseSchema.self, from: Data(withoutProject.utf8))
+        #expect(absent.project == nil)
+    }
+
     @Test("prompt template includes input verbatim")
     func promptIncludesInput() {
         let prompt = FMPromptTemplate.make(input: "kup mleko", now: Date(), locale: Locale(identifier: "pl"))

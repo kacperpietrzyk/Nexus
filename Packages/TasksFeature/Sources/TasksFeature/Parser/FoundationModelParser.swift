@@ -65,6 +65,14 @@ public actor FoundationModelParser: NLParser {
             schema.tags?.map {
                 $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "#"))
             } ?? []
+        // Strip a leading `@` for parity with `Tokenizer.classify`, which calls
+        // `dropFirst()` on project tokens. LMs emit either form depending on
+        // prompt nuance; normalizing here keeps cross-path output stable.
+        let projectToken: String? = schema.project.flatMap { raw in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stripped = trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed
+            return stripped.isEmpty ? nil : stripped
+        }
         // Confidence is fixed at 0.8 for FM augmentation — the LM is opaque,
         // so we publish a single steady value. CompositeNLParser uses this
         // when reporting the final cascade decision to the UI.
@@ -76,6 +84,7 @@ public actor FoundationModelParser: NLParser {
             deadlineAt: deadlineAt,
             priority: priority,
             tags: tags,
+            projectToken: projectToken,
             recurrence: schema.recurrence,
             confidence: 0.8
         )

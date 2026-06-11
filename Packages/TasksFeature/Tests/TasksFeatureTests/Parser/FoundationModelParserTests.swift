@@ -100,6 +100,34 @@ struct FoundationModelParserTests {
         #expect(provider.generateCallCount == 1)
     }
 
+    @Test("maps project field into projectToken, stripping a leading @")
+    func mapsProjectToken() async {
+        let json = #"{"title":"ship build","project":"@Nexus"}"#
+        let provider = FakeAIProvider(
+            id: .appleIntelligence,
+            isAvailableOnThisPlatform: true,
+            responseText: json
+        )
+        let parser = FoundationModelParser(router: makeRouter(provider: provider))
+        let result = await parser.parse(
+            "ship build @Nexus", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == "Nexus")
+    }
+
+    @Test("empty or whitespace project maps to nil projectToken")
+    func emptyProjectIsNil() async {
+        let json = #"{"title":"ship build","project":"  "}"#
+        let provider = FakeAIProvider(
+            id: .appleIntelligence,
+            isAvailableOnThisPlatform: true,
+            responseText: json
+        )
+        let parser = FoundationModelParser(router: makeRouter(provider: provider))
+        let result = await parser.parse(
+            "ship build", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == nil)
+    }
+
     @Test("strips leading # from FM-emitted tags so output matches handcoded parser")
     func tagNormalizationMatchesHandcoded() async {
         let input = "buy bread #Shopping #work/projectA"

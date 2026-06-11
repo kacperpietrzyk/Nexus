@@ -13,5 +13,6 @@ internal struct FMParseSchema: Decodable, Sendable, Equatable {
     let deadlineAt: String?
     let priority: Int?
     let tags: [String]?
+    let project: String?
     let recurrence: String?
 }
