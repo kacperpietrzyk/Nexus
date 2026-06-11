@@ -94,8 +94,16 @@ public enum MarkdownExporter {
                 outgoingLinks: outgoing,
                 body: bodyText
             )
-            let path = folder.appendingPathComponent(
-                uniqueFilename(for: doc, used: &counters.usedFilenames)
+            let relativeDirectory = Self.relativeDirectory(for: item)
+            let targetFolder =
+                relativeDirectory.isEmpty
+                ? folder
+                : folder.appendingPathComponent(relativeDirectory, isDirectory: true)
+            if !relativeDirectory.isEmpty {
+                try FileManager.default.createDirectory(at: targetFolder, withIntermediateDirectories: true)
+            }
+            let path = targetFolder.appendingPathComponent(
+                uniqueFilename(for: doc, inDirectory: relativeDirectory, used: &counters.usedFilenames)
             )
             try doc.render().write(to: path, atomically: true, encoding: .utf8)
             counters.itemsExported += 1
@@ -108,18 +116,28 @@ public enum MarkdownExporter {
     /// a plain `<id>.md` write would atomically overwrite the first with the second, silently
     /// losing data from the anti-lock-in export. Disambiguate on collision so every item lands
     /// in its own file. The first item with a given id keeps the plain `<id>.md` name.
-    private static func uniqueFilename(for doc: MarkdownDocument, used: inout Set<String>) -> String {
+    /// Tranche 2 Plan E: notes export into `folderPath` subdirectories, so the collision set is
+    /// keyed on the RELATIVE PATH (`"<dir>/<file>"`) — the guarantee holds per directory, and
+    /// the same id in two different folders keeps the plain name in both.
+    private static func uniqueFilename(
+        for doc: MarkdownDocument,
+        inDirectory relativeDirectory: String,
+        used: inout Set<String>
+    ) -> String {
+        func key(_ name: String) -> String {
+            relativeDirectory.isEmpty ? name : "\(relativeDirectory)/\(name)"
+        }
         var candidate = doc.filename
-        if used.contains(candidate) {
+        if used.contains(key(candidate)) {
             let base = "\(doc.id.uuidString)-\(doc.kind.rawValue)"
             candidate = "\(base).md"
             var suffix = 2
-            while used.contains(candidate) {
+            while used.contains(key(candidate)) {
                 candidate = "\(base)-\(suffix).md"
                 suffix += 1
             }
         }
-        used.insert(candidate)
+        used.insert(key(candidate))
         return candidate
     }
 
@@ -214,6 +232,33 @@ public enum MarkdownExporter {
         key
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: "\n", with: " ")
+    }
+
+    /// Relative export directory for an item: a `Note`'s sanitized `folderPath`
+    /// components; empty (= export root) for every other type and for root notes.
+    /// Components are sanitized DEFENSIVELY even though write paths normalize
+    /// (`NoteFolderPath.normalize`) — a synced path from a newer build must
+    /// never break the export. Sanitization can only redirect, never drop:
+    /// worst case the note lands at the root.
+    static func relativeDirectory<L: Linkable>(for item: L) -> String {
+        guard let note = item as? Note, let folderPath = note.folderPath else { return "" }
+        return
+            folderPath
+            .split(separator: "/")
+            .map { sanitizedPathComponent(String($0)) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+    }
+
+    /// Filesystem-safe folder component: `:` → `-` (HFS/APFS separator legacy),
+    /// `.`/`..` → `_` (no directory traversal), trimmed.
+    static func sanitizedPathComponent(_ component: String) -> String {
+        let cleaned =
+            component
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespaces)
+        if cleaned == "." || cleaned == ".." { return "_" }
+        return cleaned
     }
 
     private struct ExportCounters {

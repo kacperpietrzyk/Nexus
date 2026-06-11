@@ -44,7 +44,10 @@ private func makeTempExportFolder() throws -> URL {
     defer { try? FileManager.default.removeItem(at: folder) }
     _ = try await MarkdownExporter.export(container: container, types: Note.self, to: folder)
 
-    let path = folder.appendingPathComponent("\(note.id.uuidString).md")
+    let path =
+        folder
+        .appendingPathComponent("projects/nexus", isDirectory: true)
+        .appendingPathComponent("\(note.id.uuidString).md")
     let text = try String(contentsOf: path, encoding: .utf8)
 
     #expect(text.contains("folder: projects/nexus"))
@@ -111,4 +114,108 @@ private func makeTempExportFolder() throws -> URL {
     )
     let parsed = try MarkdownFrontmatterCoder.decode(text)  // must not throw
     #expect(parsed.fields.contains { $0.0 == "prop.due- date x" && $0.1 == .string("soon") })
+}
+
+@MainActor
+@Test func markdownExporter_note_landsInFolderSubdirectory_nilFolderLandsAtRoot() async throws {
+    let container = try makeNoteContainer()
+    let context = ModelContext(container)
+    let foldered = Note(title: "Deep")
+    foldered.folderPath = "area/sub"
+    let rootNote = Note(title: "Root")
+    context.insert(foldered)
+    context.insert(rootNote)
+    try context.save()
+
+    let folder = try makeTempExportFolder()
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let result = try await MarkdownExporter.export(container: container, types: Note.self, to: folder)
+
+    #expect(result.itemsExported == 2)
+    let nested = folder.appendingPathComponent("area/sub/\(foldered.id.uuidString).md")
+    let flat = folder.appendingPathComponent("\(rootNote.id.uuidString).md")
+    #expect(FileManager.default.fileExists(atPath: nested.path))
+    #expect(FileManager.default.fileExists(atPath: flat.path))
+}
+
+@MainActor
+@Test func markdownExporter_filenameDedupIsKeyedOnRelativePath() async throws {
+    let container = try makeNoteContainer()
+    let context = ModelContext(container)
+    let sharedID = UUID()
+    // Same UUID, DIFFERENT folders → both keep the plain <id>.md name.
+    let inA = Note(id: sharedID, title: "In A")
+    inA.folderPath = "a"
+    let inB = Note(id: sharedID, title: "In B")
+    inB.folderPath = "b"
+    // Same UUID, SAME folder → second gets the disambiguated name.
+    let dupID = UUID()
+    let first = Note(id: dupID, title: "First")
+    first.folderPath = "c"
+    let second = Note(id: dupID, title: "Second")
+    second.folderPath = "c"
+    context.insert(inA)
+    context.insert(inB)
+    context.insert(first)
+    context.insert(second)
+    try context.save()
+
+    let folder = try makeTempExportFolder()
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let result = try await MarkdownExporter.export(container: container, types: Note.self, to: folder)
+
+    #expect(result.itemsExported == 4)
+    let fm = FileManager.default
+    #expect(fm.fileExists(atPath: folder.appendingPathComponent("a/\(sharedID.uuidString).md").path))
+    #expect(fm.fileExists(atPath: folder.appendingPathComponent("b/\(sharedID.uuidString).md").path))
+    #expect(fm.fileExists(atPath: folder.appendingPathComponent("c/\(dupID.uuidString).md").path))
+    #expect(fm.fileExists(atPath: folder.appendingPathComponent("c/\(dupID.uuidString)-note.md").path))
+}
+
+@MainActor
+@Test func markdownExporter_sanitizesHostileFolderComponentsWithoutDroppingTheNote() async throws {
+    let container = try makeNoteContainer()
+    let context = ModelContext(container)
+    let note = Note(title: "Hostile")
+    // Bypasses NoteFolderPath.normalize on purpose (e.g. a path synced from a
+    // future build): exporter must defend on its own and never drop the note.
+    note.folderPath = "a:b/../c"
+    context.insert(note)
+    try context.save()
+
+    let folder = try makeTempExportFolder()
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let result = try await MarkdownExporter.export(container: container, types: Note.self, to: folder)
+
+    #expect(result.itemsExported == 1)
+    let expected = folder.appendingPathComponent("a-b/_/c/\(note.id.uuidString).md")
+    #expect(FileManager.default.fileExists(atPath: expected.path))
+}
+
+@MainActor
+@Test func markdownExporter_exportIsByteDeterministicAcrossRuns() async throws {
+    let container = try makeNoteContainer()
+    let context = ModelContext(container)
+    let note = Note(title: "Stable")
+    note.folderPath = "projects"
+    note.properties = [
+        NoteProperty(key: "status", value: .string("active")),
+        NoteProperty(key: "pinned", value: .bool(false)),
+    ]
+    context.insert(note)
+    try context.save()
+
+    let folderA = try makeTempExportFolder()
+    let folderB = try makeTempExportFolder()
+    defer {
+        try? FileManager.default.removeItem(at: folderA)
+        try? FileManager.default.removeItem(at: folderB)
+    }
+    _ = try await MarkdownExporter.export(container: container, types: Note.self, to: folderA)
+    _ = try await MarkdownExporter.export(container: container, types: Note.self, to: folderB)
+
+    let relative = "projects/\(note.id.uuidString).md"
+    let bytesA = try Data(contentsOf: folderA.appendingPathComponent(relative))
+    let bytesB = try Data(contentsOf: folderB.appendingPathComponent(relative))
+    #expect(bytesA == bytesB)
 }
