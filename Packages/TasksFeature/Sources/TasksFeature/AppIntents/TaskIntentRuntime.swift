@@ -80,13 +80,14 @@ public final class TaskIntentRuntime {
         var descriptor: FetchDescriptor<TaskItem>
         if trimmed.isEmpty {
             descriptor = FetchDescriptor<TaskItem>(
-                predicate: #Predicate { task in task.deletedAt == nil }
+                predicate: #Predicate { task in task.deletedAt == nil && task.isTemplate == false }
             )
         } else {
             descriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate { task in
                     task.deletedAt == nil
                         && task.title.localizedStandardContains(trimmed)
+                        && task.isTemplate == false
                 }
             )
         }

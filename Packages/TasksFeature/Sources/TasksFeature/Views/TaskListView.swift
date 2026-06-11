@@ -479,6 +479,7 @@ extension TaskListView {
             let rawStatus = status.rawValue
             let predicate = #Predicate<TaskItem> { task in
                 task.deletedAt == nil && task.statusRaw == rawStatus && task.parentTaskID == nil
+                    && task.isTemplate == false
             }
             let descriptor = FetchDescriptor(
                 predicate: predicate,
@@ -493,6 +494,7 @@ extension TaskListView {
         let doneStatus = TaskStatus.done.rawValue
         let predicate = #Predicate<TaskItem> { task in
             task.deletedAt == nil && task.statusRaw != doneStatus && task.parentTaskID == nil
+                && task.isTemplate == false
         }
         let descriptor = FetchDescriptor(
             predicate: predicate,
@@ -553,6 +555,7 @@ extension TaskListView {
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { task in
                 task.deletedAt == nil && task.statusRaw == snoozedStatus && task.parentTaskID == nil
+                    && task.isTemplate == false
             },
             sortBy: [SortDescriptor(\TaskItem.snoozedUntil, order: .forward)]
         )

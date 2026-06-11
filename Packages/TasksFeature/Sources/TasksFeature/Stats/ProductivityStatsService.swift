@@ -99,7 +99,7 @@ public final class ProductivityStatsService {
         let doneStatus = TaskStatus.done.rawValue
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { task in
-                task.deletedAt == nil && task.statusRaw == doneStatus
+                task.deletedAt == nil && task.statusRaw == doneStatus && task.isTemplate == false
             }
         )
         return try context.fetch(descriptor).filter { $0.lastCompletedAt != nil }

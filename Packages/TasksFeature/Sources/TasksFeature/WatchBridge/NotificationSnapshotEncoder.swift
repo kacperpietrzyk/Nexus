@@ -24,6 +24,7 @@ public struct NotificationSnapshotEncoder {
             predicate: #Predicate { task in
                 task.deletedAt == nil
                     && (task.statusRaw == openRaw || task.statusRaw == snoozedRaw)
+                    && task.isTemplate == false
             }
         )
         let tasks = (try? context.fetch(descriptor)) ?? []

@@ -420,7 +420,7 @@ public final class LiquidTodayModel {
     ) throws -> [LiquidProjectProgress] {
         guard !activeProjects.isEmpty else { return [] }
         let tasks = try modelContext.fetch(
-            FetchDescriptor<TaskItem>(predicate: #Predicate { $0.deletedAt == nil && $0.projectID != nil })
+            FetchDescriptor<TaskItem>(predicate: #Predicate { $0.deletedAt == nil && $0.projectID != nil && $0.isTemplate == false })
         )
         let byProject = Dictionary(grouping: tasks, by: { $0.projectID })
         return
@@ -493,6 +493,7 @@ public final class LiquidTodayModel {
         var descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate {
                 $0.deletedAt == nil && $0.statusRaw == openStatus && $0.pinnedAsFocus == true
+                    && $0.isTemplate == false
             },
             sortBy: [SortDescriptor(\.dueAt, order: .forward)]
         )
