@@ -25,6 +25,11 @@ public final class CalendarViewModel {
     public private(set) var planNotice: String?
     public private(set) var isLoading = false
     public var lastError: String?
+    /// M1: accepted/manual blocks that now collide with calendar events.
+    /// Runtime-only (computed by `BlockConflictDetector` after each store
+    /// change; never persisted). The UI shows a conflicted treatment on these
+    /// blocks plus a non-blocking "Replan" banner.
+    public private(set) var conflictedBlockIDs: Set<UUID> = []
 
     private let context: ModelContext
     private let reader: any CalendarEventProviding
@@ -36,12 +41,20 @@ public final class CalendarViewModel {
     private let preferencesStore: UserDefaultsCalendarPreferencesStore
     private let calendar: Calendar
     private let now: () -> Date
+    private let autoReplanner: CalendarAutoReplanner
+    private let changes: (any CalendarChangeObserving)?
+    private let changeDebounce: Duration
+    private var isHandlingExternalChange = false
+    @ObservationIgnored nonisolated(unsafe) private var changeObserverToken: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var pendingChangeTask: _Concurrency.Task<Void, Never>?
 
     public init(
         context: ModelContext,
         reader: any CalendarEventProviding,
         writer: (any CalendarEventWriting)? = nil,
         listing: (any CalendarListing)? = nil,
+        changes: (any CalendarChangeObserving)? = nil,
+        changeDebounce: Duration = .milliseconds(800),
         preferencesStore: UserDefaultsCalendarPreferencesStore = UserDefaultsCalendarPreferencesStore(),
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init
@@ -61,6 +74,17 @@ public final class CalendarViewModel {
             self.reconciler = CalendarSyncReconciler(context: context, writer: writer, now: now)
         } else {
             self.reconciler = nil
+        }
+        self.changes = changes
+        self.changeDebounce = changeDebounce
+        self.autoReplanner = CalendarAutoReplanner(context: context, reconciler: reconciler)
+        startObservingStoreChanges()
+    }
+
+    deinit {
+        pendingChangeTask?.cancel()
+        if let token = changeObserverToken {
+            NotificationCenter.default.removeObserver(token)
         }
     }
 
@@ -157,7 +181,13 @@ public final class CalendarViewModel {
 
     /// Items laid out on the hour axis for a single `day`.
     public func timelineItems(forDay day: Date) -> [TimelineItem] {
-        DayTimelineLayout.items(forDay: day, events: events, blocks: blocks, calendar: calendar)
+        DayTimelineLayout.items(
+            forDay: day,
+            events: events,
+            blocks: blocks,
+            calendar: calendar,
+            conflictedBlockIDs: conflictedBlockIDs
+        )
     }
 
     // MARK: - Permissions
@@ -223,6 +253,120 @@ public final class CalendarViewModel {
             )
         else { return false }
         return instant >= end
+    }
+
+    // MARK: - Auto-replan on calendar change (M1)
+
+    /// Register on the store-change seam. Bursty `EKEventStoreChanged`
+    /// broadcasts (including ones our own mirror writes trigger) are debounced;
+    /// our own writes then no-op through the pipeline (no conflicts → no churn).
+    private func startObservingStoreChanges() {
+        guard let changes else { return }
+        changeObserverToken = changes.observeStoreChanges { [weak self] in
+            _Concurrency.Task { @MainActor [weak self] in
+                self?.scheduleExternalChangeHandling()
+            }
+        }
+    }
+
+    /// Trailing-edge debounce: each broadcast cancels the pending run.
+    private func scheduleExternalChangeHandling() {
+        pendingChangeTask?.cancel()
+        let debounce = changeDebounce
+        pendingChangeTask = _Concurrency.Task { @MainActor [weak self] in
+            if debounce > .zero {
+                try? await _Concurrency.Task.sleep(for: debounce)
+            }
+            guard !_Concurrency.Task.isCancelled else { return }
+            await self?.handleExternalChange()
+        }
+    }
+
+    /// The M1 pipeline: reconcile external edits → conflict scan → regenerate
+    /// broken auto proposals → publish the protected remainder. Public so tests
+    /// (and pull-to-refresh-style surfaces) can drive it without the observer.
+    public func handleExternalChange() async {
+        guard hasCalendarAccess, !isHandlingExternalChange else { return }
+        isHandlingExternalChange = true
+        defer { isHandlingExternalChange = false }
+
+        let instant = now()
+        let dayStart = calendar.startOfDay(for: instant)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let fetched = preferences.visibleEvents(
+            (try? await reader.eventsBetween(start: dayStart, end: dayEnd)) ?? []
+        )
+        do {
+            let outcome = try await autoReplanner.handleStoreChange(
+                events: fetched,
+                prefs: preferences,
+                now: instant,
+                calendar: calendar
+            )
+            conflictedBlockIDs = Set(outcome.report.protectedBlockIDs)
+            if outcome.replanned {
+                overload = outcome.overload
+            }
+        } catch {
+            lastError = Self.errorMessage(error)
+        }
+        await load()
+    }
+
+    /// The non-blocking "Replan" affordance (M1): tear down the conflicted
+    /// accepted/manual blocks (mirror event + block — reject-path semantics)
+    /// and re-propose their tasks into free slots as fresh `proposed` blocks.
+    /// The user re-accepts — suggestive, not aggressive (spec §1).
+    public func replanConflicted() async {
+        let ids = conflictedBlockIDs.sorted { $0.uuidString < $1.uuidString }
+        guard !ids.isEmpty else { return }
+
+        var taskIDs: [UUID] = []
+        for id in ids {
+            guard let block = try? blockRepository.find(id) else { continue }
+            taskIDs.append(block.taskID)
+            if let eventID = block.externalEventID, let writer {
+                try? await writer.deleteEvent(id: eventID)
+            }
+            try? blockRepository.softDelete(block)
+        }
+
+        let instant = now()
+        let dayStart = calendar.startOfDay(for: instant)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let fetched = preferences.visibleEvents(
+            (try? await reader.eventsBetween(start: dayStart, end: dayEnd)) ?? []
+        )
+        do {
+            let result = try planner.replan(
+                taskIDs: taskIDs,
+                events: fetched,
+                prefs: preferences,
+                now: instant,
+                calendar: calendar
+            )
+            planNotice =
+                result.overload.unplacedTaskIDs.isEmpty
+                ? nil
+                : "Some replanned tasks didn't fit today — they're back in the task pool."
+        } catch {
+            lastError = Self.errorMessage(error)
+        }
+        conflictedBlockIDs = []
+        reloadBlocks()
+    }
+
+    /// Dismiss the conflict banner without acting (the conflicts recompute on
+    /// the next store change).
+    public func dismissConflicts() {
+        conflictedBlockIDs = []
+    }
+
+    /// Banner copy for the conflicted-blocks affordance (UI + tests share it).
+    nonisolated public static func conflictNotice(count: Int) -> String {
+        count == 1
+            ? "1 scheduled block conflicts with a calendar event."
+            : "\(count) scheduled blocks conflict with calendar events."
     }
 
     // MARK: - Block accept / reject / manual (spec §7)
