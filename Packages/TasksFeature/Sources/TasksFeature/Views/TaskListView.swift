@@ -270,11 +270,18 @@ public struct TaskListView: View {
             .tint(DS.ColorToken.backgroundElevated)
         }
         .taskAssistContextMenu(for: item) { actions in
-            Button(item.status == .done ? "Reopen" : "Mark done") { toggleDone(item) }
-            Button("Subtask of…") { parentPickerTarget = item }
-            Button("Snooze 1h") { snooze(item, by: .oneHour) }
-            Button("Snooze until tomorrow") { snooze(item, by: .tomorrow) }
-            TaskAssistMenuSection(actions: actions)
+            if item.isTemplate {
+                Button("New Task from Template") { instantiateTemplate(item) }
+                // I-D1: no complete/snooze/subtask affordances on an inert blueprint;
+                // delete stays available via the leading swipe + list delete flows.
+            } else {
+                Button(item.status == .done ? "Reopen" : "Mark done") { toggleDone(item) }
+                Button("Save as Template") { saveAsTemplate(item) }
+                Button("Subtask of…") { parentPickerTarget = item }
+                Button("Snooze 1h") { snooze(item, by: .oneHour) }
+                Button("Snooze until tomorrow") { snooze(item, by: .tomorrow) }
+                TaskAssistMenuSection(actions: actions)
+            }
         }
     }
 
@@ -375,7 +382,7 @@ public struct TaskListView: View {
 
     @MainActor
     private func toggleDone(_ item: TaskItem) {
-        guard let repository else { return }
+        guard let repository, !item.isTemplate else { return }
         do {
             if item.status == .done {
                 try repository.reopen(item)
@@ -453,6 +460,28 @@ public struct TaskListView: View {
 }
 
 extension TaskListView {
+    @MainActor
+    private func saveAsTemplate(_ item: TaskItem) {
+        guard let repository else { return }
+        do {
+            _ = try TemplateInstantiator(tasks: repository).saveAsTemplate(item)
+            reload()
+        } catch {
+            self.error = String(describing: error)
+        }
+    }
+
+    @MainActor
+    private func instantiateTemplate(_ item: TaskItem) {
+        guard let repository else { return }
+        do {
+            _ = try TemplateInstantiator(tasks: repository).instantiate(item)
+            reload()
+        } catch {
+            self.error = String(describing: error)
+        }
+    }
+
     /// Loads the Today view's three buckets; split out of `reload()` for the
     /// function-body lint budget.
     @MainActor
@@ -470,121 +499,5 @@ extension TaskListView {
             from: try query.noDate(excludingProjectIDs: archivedProjectIDs)
                 .apply(in: modelContext)
         )
-    }
-
-    @MainActor
-    static func rootTasks(from tasks: [TaskItem]) -> [TaskItem] {
-        // `.dedupedByID()` defends the list against the historical synced-store
-        // duplication (one logical task materialized as two same-`id` rows under
-        // different entity versions). This is the funnel for nearly every Tasks
-        // filter, so deduping here keeps the visible list honest without any
-        // destructive write. No-op on a clean store.
-        SubtaskTreeDataSource.rootTasks(from: tasks).dedupedByID()
-    }
-
-    @MainActor
-    static func tasks(status: TaskStatus?, modelContext: ModelContext) throws -> [TaskItem] {
-        if let status {
-            let rawStatus = status.rawValue
-            let predicate = #Predicate<TaskItem> { task in
-                task.deletedAt == nil && task.statusRaw == rawStatus && task.parentTaskID == nil
-                    && task.isTemplate == false
-            }
-            let descriptor = FetchDescriptor(
-                predicate: predicate,
-                sortBy: [
-                    SortDescriptor(\TaskItem.dueAt, order: .forward),
-                    SortDescriptor(\TaskItem.createdAt, order: .reverse),
-                ]
-            )
-            return try modelContext.fetch(descriptor).dedupedByID()
-        }
-
-        let doneStatus = TaskStatus.done.rawValue
-        let predicate = #Predicate<TaskItem> { task in
-            task.deletedAt == nil && task.statusRaw != doneStatus && task.parentTaskID == nil
-                && task.isTemplate == false
-        }
-        let descriptor = FetchDescriptor(
-            predicate: predicate,
-            sortBy: [
-                SortDescriptor(\TaskItem.dueAt, order: .forward),
-                SortDescriptor(\TaskItem.createdAt, order: .reverse),
-            ]
-        )
-        return try modelContext.fetch(descriptor).dedupedByID()
-    }
-
-    @MainActor
-    static func projectTasks(
-        projectID: UUID,
-        sectionID: UUID?,
-        modelContext: ModelContext
-    ) throws -> [TaskItem] {
-        if let sectionID {
-            let descriptor = FetchDescriptor<TaskItem>(
-                predicate: #Predicate { task in
-                    task.projectID == projectID
-                        && task.sectionID == sectionID
-                        && task.deletedAt == nil
-                }
-            )
-            return rootTasks(from: try modelContext.fetch(descriptor)).sorted(by: Self.assignmentOrder)
-        }
-
-        let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { task in
-                task.projectID == projectID && task.deletedAt == nil
-            }
-        )
-        return rootTasks(from: try modelContext.fetch(descriptor)).sorted(by: Self.assignmentOrder)
-    }
-
-    static func assignmentOrder(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
-        switch (lhs.orderIndex, rhs.orderIndex) {
-        case (let left?, let right?) where left != right:
-            return left < right
-        case (nil, _?):
-            return false
-        case (_?, nil):
-            return true
-        default:
-            return lhs.createdAt < rhs.createdAt
-        }
-    }
-
-    @MainActor
-    static func inboxTasks(now: Date, modelContext: ModelContext) throws -> [TaskItem] {
-        let archivedProjectIDs =
-            (try? ProjectRepository(context: modelContext).archivedProjectIDs()) ?? []
-        let noDate = try TodayQuery()
-            .noDate(excludingProjectIDs: archivedProjectIDs)
-            .apply(in: modelContext)
-        let snoozedStatus = TaskStatus.snoozed.rawValue
-        let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { task in
-                task.deletedAt == nil && task.statusRaw == snoozedStatus && task.parentTaskID == nil
-                    && task.isTemplate == false
-            },
-            sortBy: [SortDescriptor(\TaskItem.snoozedUntil, order: .forward)]
-        )
-        let snoozed = try modelContext.fetch(descriptor)
-            .filter { ($0.snoozedUntil ?? .distantPast) > now }
-            .filter { task in
-                guard let projectID = task.projectID else { return true }
-                return !archivedProjectIDs.contains(projectID)
-            }
-        return (rootTasks(from: noDate) + snoozed).dedupedByID().sorted { lhs, rhs in
-            switch (lhs.snoozedUntil, rhs.snoozedUntil) {
-            case (let lhsDate?, let rhsDate?):
-                return lhsDate < rhsDate
-            case (_?, nil):
-                return true
-            case (nil, _?):
-                return false
-            case (nil, nil):
-                return lhs.createdAt > rhs.createdAt
-            }
-        }
     }
 }

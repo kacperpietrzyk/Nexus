@@ -35,6 +35,7 @@ extension TaskDetailInspector {
                     recurrenceCard
                     linksCard
                     promoteCard
+                    templateCard
                     notesCard
                     commentsCard
                     activityCard
@@ -77,6 +78,7 @@ extension TaskDetailInspector {
                     remindersCard
                     recurrenceCard
                     promoteCard
+                    templateCard
                 }
             }
             // Notes + Links share a bottom row (side by side) so the dialog stays
