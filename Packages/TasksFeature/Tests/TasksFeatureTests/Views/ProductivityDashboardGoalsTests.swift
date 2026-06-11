@@ -39,4 +39,11 @@ struct ProductivityDashboardGoalsTests {
     @Test func disabledDailyTargetYieldsNoCopy() {
         #expect(ProductivityDashboardView.goalStatusCopy(for: progress(dailyTarget: 0)) == nil)
     }
+
+    @Test func disabledDailyTargetSuppressesStreakProtectionCopy() {
+        // Goals off = fully silent: streak-at-risk must not cross-fire past a
+        // disabled daily target (e.g. a weekly-only card).
+        let copy = ProductivityDashboardView.goalStatusCopy(for: progress(dailyTarget: 0, streakAtRisk: 7))
+        #expect(copy == nil)
+    }
 }

@@ -81,8 +81,12 @@ public final class ProductivityStatsService {
             .filter { completion in week?.contains(completion) ?? false }
             .count
 
+        // Streak protection is part of the DAILY goal: a disabled daily target
+        // (0 = off) must stay fully silent, never cross-firing streak-at-risk
+        // state past it (e.g. onto a weekly-only Goals card).
         var streakAtRisk: Int?
-        if dailyCompleted == 0, let yesterday = calendar.date(byAdding: .day, value: -1, to: now) {
+        let dailyGoalEnabled = preferences.dailyCompletionTarget > 0
+        if dailyGoalEnabled, dailyCompleted == 0, let yesterday = calendar.date(byAdding: .day, value: -1, to: now) {
             let streakEndingYesterday = try currentStreakDays(now: yesterday)
             streakAtRisk = streakEndingYesterday > 0 ? streakEndingYesterday : nil
         }

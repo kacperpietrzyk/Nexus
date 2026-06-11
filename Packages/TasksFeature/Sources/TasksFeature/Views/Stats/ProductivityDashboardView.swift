@@ -242,12 +242,16 @@ public struct ProductivityDashboardView: View {
     }
 
     /// Status line under the goal rings. Priority: streak protection > goal
-    /// reached > remaining count. Internal (not private) so tests pin the rules.
+    /// reached > remaining count. A disabled daily target (0 = off) yields no
+    /// copy at all — streak protection belongs to the daily goal and must not
+    /// cross-fire onto a weekly-only card (defense in depth: the service
+    /// already withholds `streakAtRisk` when the daily target is disabled).
+    /// Internal (not private) so tests pin the rules.
     static func goalStatusCopy(for progress: ProductivityStatsService.GoalProgress) -> String? {
+        guard progress.dailyTarget > 0 else { return nil }
         if let streak = progress.streakAtRisk {
             return "Complete a task today to keep your \(streak)-day streak."
         }
-        guard progress.dailyTarget > 0 else { return nil }
         if progress.dailyCompleted >= progress.dailyTarget {
             return "Daily goal reached — nice work."
         }

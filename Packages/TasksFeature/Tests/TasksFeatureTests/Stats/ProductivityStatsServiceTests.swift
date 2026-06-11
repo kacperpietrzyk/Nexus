@@ -177,6 +177,28 @@ struct ProductivityStatsServiceTests {
     }
 
     @MainActor
+    @Test("Disabled daily goal never flags a streak at risk, even with real streak history")
+    func goalProgressDisabledDailyTargetSuppressesStreakAtRisk() throws {
+        let context = try makeContext()
+        let service = ProductivityStatsService(context: context, calendar: calendar)
+        let now = date(2026, 5, 10, 15)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        let dayBefore = calendar.date(byAdding: .day, value: -2, to: now)!
+
+        // Same history as goalProgressStreakAtRisk — only the target differs.
+        [completedTask("y", at: yesterday), completedTask("db", at: dayBefore)].forEach(context.insert)
+        try context.save()
+
+        let progress = try service.goalProgress(
+            preferences: GoalsPreferences(dailyCompletionTarget: 0, weeklyCompletionTarget: 10),
+            now: now
+        )
+
+        #expect(progress.dailyCompleted == 0)
+        #expect(progress.streakAtRisk == nil)  // daily goal off = streak protection off
+    }
+
+    @MainActor
     @Test("Goal progress with no history and zero targets is inert")
     func goalProgressZeroTargetsAndEmptyHistory() throws {
         let context = try makeContext()
