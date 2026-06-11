@@ -21,6 +21,13 @@ public final class NoteEditorModel {
     /// each add/remove persists through `updateFields(tags:)` so the reconciler
     /// and `plainText` cache stay consistent in one transaction.
     public private(set) var tags: [String]
+    /// The note's custom property bag (Tranche 2 Plan E). Ordered; keys unique
+    /// case-sensitively (`NotePropertyEditing` enforces). Persists through
+    /// `NoteRepository.updateProperties` — never writes the blob directly.
+    public private(set) var properties: [NoteProperty]
+    /// The note's folder placement; nil = root. Persists through
+    /// `NoteRepository.setFolderPath`.
+    public private(set) var folderPath: String?
 
     private let note: Note
     private let repository: NoteRepository?
@@ -30,6 +37,8 @@ public final class NoteEditorModel {
         self.repository = repository
         self.title = note.title
         self.tags = NoteListGrouping.normalizedTags(note.tags)
+        self.properties = note.properties
+        self.folderPath = note.folderPath
         self.blocks = (try? NoteContentCoder.decode(note.contentData)) ?? []
     }
 
@@ -58,6 +67,51 @@ public final class NoteEditorModel {
         guard updated != tags else { return }
         tags = updated
         try? repository?.updateFields(note, tags: tags)
+    }
+
+    // MARK: - Properties + folder (Tranche 2 Plan E)
+
+    /// Add a property with an empty text value. No-op for a blank or duplicate key.
+    public func addProperty(key: String) {
+        guard let updated = NotePropertyEditing.add(key: key, to: properties) else { return }
+        properties = updated
+        persistProperties()
+    }
+
+    /// Rename a property key in place. No-op when the target is blank or collides.
+    public func renameProperty(_ key: String, to newKey: String) {
+        guard let updated = NotePropertyEditing.rename(key: key, to: newKey, in: properties),
+            updated != properties
+        else { return }
+        properties = updated
+        persistProperties()
+    }
+
+    public func setPropertyValue(_ value: NotePropertyValue, forKey key: String) {
+        guard let updated = NotePropertyEditing.setValue(value, forKey: key, in: properties),
+            updated != properties
+        else { return }
+        properties = updated
+        persistProperties()
+    }
+
+    public func removeProperty(_ key: String) {
+        let updated = NotePropertyEditing.remove(key: key, from: properties)
+        guard updated != properties else { return }
+        properties = updated
+        persistProperties()
+    }
+
+    /// Move the note to a folder; the raw path is normalized (nil/blank = root).
+    public func setFolderPath(_ raw: String?) {
+        let normalized = NoteFolderPath.normalize(raw)
+        guard normalized != folderPath else { return }
+        folderPath = normalized
+        try? repository?.setFolderPath(note, raw)
+    }
+
+    private func persistProperties() {
+        try? repository?.updateProperties(note, properties: properties)
     }
 
     // MARK: - Title
