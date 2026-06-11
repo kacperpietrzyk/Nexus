@@ -40,4 +40,38 @@ struct NoteCommandsTests {
 
         #expect(fired.value)
     }
+
+    @Test func bootstrapRegistersGraphCommandWhenWired() async throws {
+        let registry = CommandRegistry()
+
+        await NotesComposition.bootstrap(
+            commandRegistry: registry,
+            openDailyNote: {},
+            openGraph: {}
+        )
+
+        let ids = await registry.allCommands().map(\.id).sorted()
+        #expect(ids == ["notes.open-daily-note", "notes.open-graph"])
+    }
+
+    @Test func graphCommandExecutesInjectedAction() async throws {
+        let registry = CommandRegistry()
+        let fired = Flag()
+        await NotesComposition.bootstrap(
+            commandRegistry: registry,
+            openDailyNote: {},
+            openGraph: { fired.value = true }
+        )
+
+        try await registry.execute(id: "notes.open-graph")
+
+        #expect(fired.value)
+    }
+
+    @Test func graphCommandCarriesKeywords() async throws {
+        let command = OpenGraphCommand(action: {})
+        #expect(command.id == "notes.open-graph")
+        #expect(command.keywords.contains("graph"))
+        #expect(command.shortcut.isEmpty)
+    }
 }

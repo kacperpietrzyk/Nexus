@@ -484,8 +484,19 @@ struct ContentView: View {
         navigate(to: .notes)
     }
 
+    /// O1 graph view, one action away: mark the pending open FIRST, then route
+    /// to Notes — same two-path delivery as `openTodaysDailyNote`.
+    @MainActor
+    private func openNotesGraph() {
+        GraphOpenRequest.shared.request()
+        navigate(to: .notes)
+    }
+
     private func bootstrapNavigation() async {
-        await NotesComposition.bootstrap(openDailyNote: { openTodaysDailyNote() })
+        await NotesComposition.bootstrap(
+            openDailyNote: { openTodaysDailyNote() },
+            openGraph: { openNotesGraph() }
+        )
         guard let taskRepository else { return }
         await TasksComposition.bootstrap(
             repository: taskRepository,

@@ -31,8 +31,12 @@ public enum NotesComposition {
     @MainActor
     public static func bootstrap(
         commandRegistry: CommandRegistry = .shared,
-        openDailyNote: @escaping @MainActor @Sendable () -> Void
+        openDailyNote: @escaping @MainActor @Sendable () -> Void,
+        openGraph: (@MainActor @Sendable () -> Void)? = nil
     ) async {
         await commandRegistry.register(OpenDailyNoteCommand(action: openDailyNote))
+        if let openGraph {
+            await commandRegistry.register(OpenGraphCommand(action: openGraph))
+        }
     }
 }

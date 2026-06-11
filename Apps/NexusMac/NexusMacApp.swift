@@ -249,6 +249,21 @@ struct NexusMacApp: App {
                         try? meetingsComposition.meetingRepository.find(id: id)
                     }
                 )
+                // O1 graph view: NotesFeature cannot import NexusMeetings
+                // (feature isolation), so the host resolves meeting titles for
+                // graph nodes — same seam as personMeetingResolver above.
+                .environment(
+                    \.notesGraphExternalTitles,
+                    NotesGraphExternalTitlesProvider { [meetingsComposition] in
+                        let meetings =
+                            (try? meetingsComposition.meetingRepository.allChronological()) ?? []
+                        let pairs =
+                            meetings
+                            .filter { $0.deletedAt == nil }
+                            .map { ($0.id, $0.title) }
+                        return [.meeting: Dictionary(pairs, uniquingKeysWith: { first, _ in first })]
+                    }
+                )
                 .environment(\.notificationScheduler, notificationScheduler)
                 .environment(\.agentActivityLog, agentActivityLog)
                 .environment(\.agentChatViewModel, agentComposition.chatViewModel)
