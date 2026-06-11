@@ -13,6 +13,13 @@ struct NoteRepositoryTests {
         return ModelContext(container)
     }
 
+    private func makeContextWithAttachments() throws -> ModelContext {
+        let schema = Schema([Note.self, TaskItem.self, Link.self, Project.self, Section.self, AttachmentAsset.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        return ModelContext(container)
+    }
+
     private func makeRepo(_ context: ModelContext) -> NoteRepository {
         NoteRepository(context: context)
     }
@@ -53,6 +60,35 @@ struct NoteRepositoryTests {
 
         #expect(note.plainText == "Target")
         #expect(try outgoing(context, from: note.id).contains { $0.linkKind == .mentions && $0.toID == target.id })
+    }
+
+    @Test func insertImageAttachmentPersistsBlockAndAsset() throws {
+        let context = try makeContextWithAttachments()
+        let note = Note(contentData: try NoteContentCoder.encode([]))
+        context.insert(note)
+        try context.save()
+        let repo = NoteRepository(context: context)
+        let imported = ImportedAttachmentFile(
+            id: UUID(),
+            originalFilename: "diagram.png",
+            mimeType: "image/png",
+            byteCount: 4,
+            sha256: "hash",
+            storagePath: "attachments/id/diagram.png",
+            fileURL: URL(fileURLWithPath: "/tmp/diagram.png")
+        )
+
+        let asset = try repo.insertImageAttachment(imported, into: note, after: nil)
+
+        #expect(asset.id == imported.id)
+        let blocks = try NoteContentCoder.decode(note.contentData)
+        guard case .image(let ref, let assetPath) = blocks.first?.kind else {
+            Issue.record("expected image block")
+            return
+        }
+        #expect(ref == imported.id)
+        #expect(assetPath == imported.storagePath)
+        #expect(try context.fetch(FetchDescriptor<AttachmentAsset>()).count == 1)
     }
 
     // MARK: - reconcileOnLoad gating (no churn on clean note)
