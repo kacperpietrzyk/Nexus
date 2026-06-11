@@ -23,6 +23,9 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
     /// A time-boxed sprint (`Cycle`, Tranche 2, Linear L1). `Linkable` for
     /// graph uniformity; not `Searchable` in v1 (mirrors `ScheduledBlock`).
     case cycle
+    /// App-managed file metadata. Not `Linkable`; notes derive graph edges to
+    /// this kind from image attachment blocks.
+    case attachment
 
     public var displayName: String {
         switch self {
@@ -38,6 +41,7 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
         case .label: return "Label"
         case .person: return "Person"
         case .cycle: return "Cycle"
+        case .attachment: return "Attachment"
         }
     }
 }
