@@ -181,6 +181,11 @@ public final class NoteEditorModel {
         apply(BlockListOps.insert(block, after: afterID, in: blocks))
     }
 
+    public func insertImageAttachment(_ asset: AttachmentAsset, after afterID: UUID?) {
+        let block = Block(kind: .image(ref: asset.id, asset: asset.storagePath))
+        apply(BlockListOps.insert(block, after: afterID, in: blocks))
+    }
+
     // MARK: - Checkbox → Task seam (§7)
 
     /// Toggle a todo block's completion through the repository so the underlying
