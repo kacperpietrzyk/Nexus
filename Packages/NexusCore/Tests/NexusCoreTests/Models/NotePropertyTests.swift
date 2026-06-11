@@ -32,6 +32,20 @@ struct NotePropertyTests {
         #expect(decoded == [NoteProperty(key: "status", value: .string("active"))])
     }
 
+    /// Pins the ENCODE direction byte-for-byte through the real write path
+    /// (`Note.properties` setter): `.sortedKeys` makes the blob deterministic
+    /// across runs/devices, and `.date` persists via the default
+    /// `.deferredToDate` strategy (Double, seconds since reference date).
+    @Test("encoded blob is deterministic and byte-pinned")
+    func encodedShapeIsPinned() {
+        let note = Note(title: "n")
+        note.properties = [NoteProperty(key: "status", value: .string("active"))]
+        #expect(note.propertiesJSON == #"[{"key":"status","value":{"string":{"_0":"active"}}}]"#)
+
+        note.properties = [NoteProperty(key: "when", value: .date(Date(timeIntervalSinceReferenceDate: 0)))]
+        #expect(note.propertiesJSON == #"[{"key":"when","value":{"date":{"_0":0}}}]"#)
+    }
+
     @Test("new Note fields default to nil / empty")
     func noteDefaultsAreNil() {
         let note = Note(title: "n")

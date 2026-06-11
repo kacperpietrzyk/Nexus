@@ -85,7 +85,13 @@ public final class Note: Searchable {
         }
         set {
             let deduplicated = Self.deduplicatedLastWins(newValue)
-            guard !deduplicated.isEmpty, let data = try? JSONEncoder().encode(deduplicated) else {
+            // `.sortedKeys` pins the blob byte-deterministic across runs and
+            // devices (it syncs via CloudKit; the encode shape is golden-tested).
+            // Dates ride the default `.deferredToDate` strategy (Double) —
+            // never change either without a data migration for existing blobs.
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            guard !deduplicated.isEmpty, let data = try? encoder.encode(deduplicated) else {
                 propertiesJSON = nil
                 return
             }
