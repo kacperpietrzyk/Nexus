@@ -45,6 +45,14 @@ public struct AgentContext: Sendable {
         LinkRepository(context: modelContext.context)
     }
 
+    /// On-demand `CycleRepository` (Tranche 2, Plan A) backed by the same
+    /// `ModelContext` as `taskRepository`. Used today only by
+    /// `AgentEndpointValidator` (edge tools accept any `ItemKind`, so a cycle
+    /// endpoint must be existence-checked); cycle agent tools land in Plan C.
+    @MainActor public var cycleRepository: CycleRepository {
+        CycleRepository(context: modelContext.context, now: now)
+    }
+
     /// On-demand `PersonRepository` (People/Contacts module, spec §7) backed by the
     /// same `ModelContext` as `taskRepository`. CRUD + dedup/upsert + atomic merge +
     /// graph aggregation; the only `task ↔ person` edge it emits is `.mentions`
