@@ -27,6 +27,9 @@ public struct TaskDTO: Codable, Sendable, Equatable {
     public let reminders: [ReminderDTO]?
     public let createdAt: String
     public let updatedAt: String
+    /// Cycle assignment (Tranche 2 Plan C). Additive, appended last so existing
+    /// positional callers keep compiling.
+    public let cycleID: String?
 
     private enum CodingKeys: String, CodingKey {
         case id, title, notes, priority, tags, state, reminders
@@ -42,6 +45,7 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         case recurrenceRule = "recurrence_rule"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case cycleID = "cycle_id"
     }
 
     public init(
@@ -63,7 +67,8 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         recurrenceRule: String?,
         reminders: [ReminderDTO]?,
         createdAt: String,
-        updatedAt: String
+        updatedAt: String,
+        cycleID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -84,6 +89,7 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         self.reminders = reminders
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.cycleID = cycleID
     }
 
     @MainActor
@@ -132,7 +138,8 @@ public struct TaskDTO: Codable, Sendable, Equatable {
             recurrenceRule: task.recurrenceRule,
             reminders: task.reminders.isEmpty ? nil : task.reminders.map { ReminderDTO.from($0, formatter: formatter) },
             createdAt: formatter.string(from: task.createdAt),
-            updatedAt: formatter.string(from: task.updatedAt)
+            updatedAt: formatter.string(from: task.updatedAt),
+            cycleID: task.cycleID?.uuidString
         )
     }
 

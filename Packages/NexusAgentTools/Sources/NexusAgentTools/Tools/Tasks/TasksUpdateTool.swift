@@ -76,6 +76,10 @@ public struct TasksUpdateTool: AgentTool {
                         ],
                         description: "Array of reminder objects, or null to clear."
                     ),
+                    "cycle_id": .anyOf(
+                        [.string(description: "Cycle UUID."), .null(description: "Clear the cycle assignment.")],
+                        description: "Cycle UUID; null to clear. Applied via the cycle-assignment write path."
+                    ),
                 ],
                 required: []
             ),
@@ -129,6 +133,22 @@ public struct TasksUpdateTool: AgentTool {
                 )
             } catch {
                 throw AgentError.validation("project/section assignment failed: \(error)")
+            }
+        }
+
+        // cycle_id routes through assignCycle (NOT the mutations closure) so the
+        // cycleChanged activity event records exactly once with validation.
+        if let cycleValue = patch["cycle_id"] {
+            let cycleID: UUID?
+            if cycleValue == .null {
+                cycleID = nil
+            } else {
+                cycleID = try TasksToolArguments.requiredUUID(cycleValue, field: "cycle_id")
+            }
+            do {
+                try context.taskRepository.repository.assignCycle(task, to: cycleID)
+            } catch let error as TaskItemRepositoryError {
+                throw AgentError.validation("cycle assignment failed: \(error)")
             }
         }
 

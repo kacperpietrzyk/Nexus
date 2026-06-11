@@ -448,3 +448,50 @@ struct TasksUpdateToolTests {
         #expect(fieldSchema["description"] != nil)
     }
 }
+
+/// Cycle patch coverage (Tranche 2 Plan C), a separate suite to keep the main
+/// `TasksUpdateToolTests` struct inside the type-body lint budget.
+@Suite("TasksUpdateTool cycle patch")
+struct TasksUpdateToolCycleTests {
+    @Test("patch cycle_id assigns through assignCycle, null clears, unknown cycle rejected")
+    @MainActor
+    func cyclePatch() async throws {
+        let stamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let task = TaskItem(title: "Cycle me")
+        let (context, container, _) = try await InMemoryAgentContext.make(tasks: [task])
+        _ = container
+        let cycles = CycleRepository(context: context.modelContext.context, now: { stamp })
+        let cycle = try cycles.create(
+            name: "Sprint", startAt: stamp, endAt: stamp.addingTimeInterval(86_400)
+        )
+
+        let updated = try await TasksUpdateTool().call(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object(["cycle_id": .string(cycle.id.uuidString)]),
+            ]),
+            context: context
+        )
+        #expect(task.cycleID == cycle.id)
+        #expect(updated["cycle_id"]?.stringValue == cycle.id.uuidString)
+
+        _ = try await TasksUpdateTool().call(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object(["cycle_id": .null]),
+            ]),
+            context: context
+        )
+        #expect(task.cycleID == nil)
+
+        await #expect(throws: AgentError.self) {
+            _ = try await TasksUpdateTool().call(
+                args: .object([
+                    "task_id": .string(task.id.uuidString),
+                    "patch": .object(["cycle_id": .string(UUID().uuidString)]),
+                ]),
+                context: context
+            )
+        }
+    }
+}
