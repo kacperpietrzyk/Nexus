@@ -154,6 +154,27 @@ import Testing
 }
 
 @MainActor
+@Test func linkRepository_allLinks_returnsEveryEdgeOldestFirst() throws {
+    let context = try makeContext()
+    let repo = LinkRepository(context: context)
+
+    let first = try repo.create(from: (.note, UUID()), to: (.task, UUID()), linkKind: .mentions)
+    let second = try repo.create(from: (.task, UUID()), to: (.project, UUID()), linkKind: .child)
+    let third = try repo.create(from: (.meeting, UUID()), to: (.person, UUID()), linkKind: .attendee)
+
+    let all = try repo.allLinks()
+    #expect(all.count == 3)
+    #expect(all.map(\.id) == [first.id, second.id, third.id])
+}
+
+@MainActor
+@Test func linkRepository_allLinks_emptyTableReturnsEmpty() throws {
+    let context = try makeContext()
+    let repo = LinkRepository(context: context)
+    #expect(try repo.allLinks().isEmpty)
+}
+
+@MainActor
 private func makeContext() throws -> ModelContext {
     let schema = Schema([Link.self, DebugItem.self])
     let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
