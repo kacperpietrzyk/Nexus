@@ -179,5 +179,39 @@ struct DayPlannerTests {
         )
         #expect(result.proposals.isEmpty)
         #expect(result.overload.unplacedTaskIDs.isEmpty)
+        #expect(result.skippedTaskIDs.isEmpty)
+    }
+
+    @MainActor
+    @Test("replan reports tasks that are no longer open instead of dropping them silently")
+    func replanReportsNoLongerOpenTasks() throws {
+        // A task can be completed (or soft-deleted) between the conflict scan
+        // and the user's Replan tap. Re-proposing it would be wrong — but the
+        // skip must be visible to the caller, not silent.
+        let context = try makeContext()
+        let open = TaskItem(title: "still open")
+        open.estimatedDurationSeconds = 1800
+        open.durationSourceRaw = DurationSource.explicit.rawValue
+        let done = TaskItem(title: "completed meanwhile")
+        done.statusRaw = TaskStatus.done.rawValue
+        let deleted = TaskItem(title: "deleted meanwhile")
+        deleted.deletedAt = now
+        context.insert(open)
+        context.insert(done)
+        context.insert(deleted)
+        try context.save()
+
+        let planner = DayPlanner(context: context)
+        let result = try planner.replan(
+            taskIDs: [open.id, done.id, deleted.id],
+            events: [],
+            prefs: .default,
+            now: now,
+            calendar: calendar
+        )
+
+        #expect(result.proposals.map(\.taskID) == [open.id])
+        #expect(Set(result.skippedTaskIDs) == [done.id, deleted.id])
+        #expect(result.overload.unplacedTaskIDs.isEmpty, "skipped ≠ unplaced — done tasks are not schedulable")
     }
 }

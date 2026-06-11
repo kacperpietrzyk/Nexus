@@ -40,10 +40,18 @@ public struct DayPlanner {
     public struct Result {
         public let proposals: [ScheduledBlock]
         public let overload: OverloadReport
+        /// Requested task IDs that were NOT re-proposed because the task is no
+        /// longer open (completed or soft-deleted between the conflict scan and
+        /// the replan call). Distinct from `overload.unplacedTaskIDs`: skipped
+        /// tasks are not schedulable at all, so re-proposing them would be
+        /// wrong — but the caller must be able to see the drop. Always empty
+        /// for `planDay` (its candidates are fetched, not requested).
+        public let skippedTaskIDs: [UUID]
 
-        public init(proposals: [ScheduledBlock], overload: OverloadReport) {
+        public init(proposals: [ScheduledBlock], overload: OverloadReport, skippedTaskIDs: [UUID] = []) {
             self.proposals = proposals
             self.overload = overload
+            self.skippedTaskIDs = skippedTaskIDs
         }
     }
 
@@ -124,6 +132,11 @@ public struct DayPlanner {
 
         let allTasks = try fetchOpenTasks()
         let candidates = allTasks.filter { ids.contains($0.id) && $0.status == .open }
+        // Tasks completed or soft-deleted between the conflict scan and this
+        // call produce no candidate. Skipping them is correct (a done task must
+        // not be re-proposed) but the drop must be reported, not silent.
+        let candidateIDs = Set(candidates.map(\.id))
+        let skippedTaskIDs = taskIDs.filter { !candidateIDs.contains($0) }
         let history = allTasks.filter {
             $0.status == .done && $0.durationSource == .explicit && $0.estimatedDurationSeconds != nil
         }
@@ -148,7 +161,7 @@ public struct DayPlanner {
         for proposal in plan.proposals {
             persisted.append(try blocks.persistProposal(proposal))
         }
-        return Result(proposals: persisted, overload: plan.overload)
+        return Result(proposals: persisted, overload: plan.overload, skippedTaskIDs: skippedTaskIDs)
     }
 
     // MARK: - Fetch helpers

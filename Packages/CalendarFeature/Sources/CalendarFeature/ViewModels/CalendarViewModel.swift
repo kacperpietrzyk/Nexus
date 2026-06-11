@@ -511,12 +511,24 @@ extension CalendarViewModel {
     /// accepted/manual blocks (mirror event + block — reject-path semantics)
     /// and re-propose their tasks into free slots as fresh `proposed` blocks.
     /// The user re-accepts — suggestive, not aggressive (spec §1).
+    ///
+    /// Stale IDs are skipped BY DESIGN (pinned by
+    /// `replanConflictedSkipsAlreadyRejectedBlock`): an ID in
+    /// `conflictedBlockIDs` goes stale when the user manually rejects that
+    /// block while the banner is showing. A manual reject is an explicit
+    /// "don't schedule this", so the task is intentionally NOT re-proposed
+    /// here and no notice is shown (the user just acted on that block).
+    /// Similarly, `result.skippedTaskIDs` (tasks completed/deleted between the
+    /// conflict scan and this tap) are consciously not surfaced — completing a
+    /// task is the user's own action; its block teardown is correct cleanup.
     public func replanConflicted() async {
         let ids = conflictedBlockIDs.sorted { $0.uuidString < $1.uuidString }
         guard !ids.isEmpty else { return }
 
         var taskIDs: [UUID] = []
         for id in ids {
+            // `find` predicates on `deletedAt == nil` — a rejected (soft-deleted)
+            // block falls out here; see the doc comment for why that's correct.
             guard let block = try? blockRepository.find(id) else { continue }
             taskIDs.append(block.taskID)
             if let eventID = block.externalEventID, let writer {

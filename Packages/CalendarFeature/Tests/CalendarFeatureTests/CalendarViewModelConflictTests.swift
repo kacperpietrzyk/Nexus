@@ -154,6 +154,58 @@ struct CalendarViewModelConflictTests {
         #expect(proposals.allSatisfy { $0.end <= at(13, 30) || $0.start >= at(14, 30) })
     }
 
+    @Test("replanConflicted skips a block the user already rejected and still replans the rest")
+    func replanConflictedSkipsAlreadyRejectedBlock() async throws {
+        // Pin (reviewer issue 1): a conflicted block can be manually rejected
+        // while the banner is showing. Its UUID in `conflictedBlockIDs` is then
+        // stale. Replan must NOT crash, must NOT re-propose the rejected task
+        // (manual reject = explicit "don't schedule this"), and must still
+        // re-propose the other conflicted task.
+        let context = try makeContext()
+        let keptTask = try insertOpenTask(context, title: "kept")
+        let rejectedTask = try insertOpenTask(context, title: "rejected")
+        let reader = MockCalendarEventProvider()
+        let writer = MockCalendarWriter()
+        let calendarID = try await writer.ensureNexusCalendar()
+        let keptMirror = try await writer.createEvent(
+            EventDraft(calendarID: calendarID, title: "kept", start: at(13), end: at(14))
+        )
+        let rejectedMirror = try await writer.createEvent(
+            EventDraft(calendarID: calendarID, title: "rejected", start: at(15), end: at(16))
+        )
+        let repo = ScheduledBlockRepository(context: context)
+        let kept = try repo.create(
+            taskID: keptTask.id, start: at(13), end: at(14), title: "kept",
+            status: .accepted, externalEventID: keptMirror
+        )
+        let rejected = try repo.create(
+            taskID: rejectedTask.id, start: at(15), end: at(16), title: "rejected",
+            status: .accepted, externalEventID: rejectedMirror
+        )
+        reader.setEvents([
+            CalendarEvent(id: keptMirror, title: "kept", start: at(13), end: at(14)),
+            CalendarEvent(id: rejectedMirror, title: "rejected", start: at(15), end: at(16)),
+            CalendarEvent(id: "ext-2", title: "incoming", start: at(13, 30), end: at(15, 30)),
+        ])
+        let viewModel = makeViewModel(context: context, reader: reader, writer: writer)
+        await viewModel.load()
+        await viewModel.handleExternalChange()
+        #expect(viewModel.conflictedBlockIDs == [kept.id, rejected.id])
+
+        // User rejects one conflicted block manually while the banner shows.
+        try repo.softDelete(rejected)
+
+        await viewModel.replanConflicted()
+
+        #expect(viewModel.conflictedBlockIDs.isEmpty)
+        let proposals = viewModel.blocks.filter { $0.status == .proposed }
+        #expect(proposals.contains { $0.taskID == keptTask.id })
+        #expect(
+            !proposals.contains { $0.taskID == rejectedTask.id },
+            "a manually rejected block's task must not be re-proposed by Replan"
+        )
+    }
+
     @Test("a store-change notification drives the pipeline end-to-end")
     func observerWiring() async throws {
         let context = try makeContext()
