@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import NexusCore
 
@@ -120,6 +121,112 @@ public enum RoadmapModel {
                 if $0.startAt != $1.startAt { return $0.startAt < $1.startAt }
                 return $0.cycleID.uuidString < $1.cycleID.uuidString
             }
+    }
+
+    // MARK: - Zoom
+
+    public enum Zoom: String, CaseIterable, Identifiable, Sendable {
+        case week
+        case month
+        case quarter
+
+        public var id: String { rawValue }
+
+        public var label: String {
+            switch self {
+            case .week: return "Week"
+            case .month: return "Month"
+            case .quarter: return "Quarter"
+            }
+        }
+
+        public var pointsPerDay: CGFloat {
+            switch self {
+            case .week: return 48
+            case .month: return 16
+            case .quarter: return 6
+            }
+        }
+    }
+
+    // MARK: - Window
+
+    static let windowLeadingPadDays = 7
+    static let windowTrailingPadDays = 14
+
+    public static func window(
+        bars: [ProjectBar],
+        cycles: [CycleBar],
+        now: Date,
+        calendar: Calendar
+    ) -> DateInterval {
+        var dates = [now]
+        dates.append(contentsOf: bars.map(\.start))
+        dates.append(contentsOf: bars.compactMap(\.end))
+        dates.append(contentsOf: bars.flatMap { $0.milestones.map(\.date) })
+        dates.append(contentsOf: cycles.flatMap { [$0.startAt, $0.endAt] })
+
+        let earliest = calendar.startOfDay(for: dates.min() ?? now)
+        let latest = calendar.startOfDay(for: dates.max() ?? now)
+        let start = calendar.date(byAdding: .day, value: -windowLeadingPadDays, to: earliest) ?? earliest
+        let end = calendar.date(byAdding: .day, value: windowTrailingPadDays, to: latest) ?? latest
+        return DateInterval(start: start, end: end)
+    }
+
+    // MARK: - Date to X
+
+    static func days(from start: Date, to end: Date, calendar: Calendar) -> Int {
+        calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: start),
+            to: calendar.startOfDay(for: end)
+        ).day ?? 0
+    }
+
+    public static func xOffset(for date: Date, in window: DateInterval, zoom: Zoom, calendar: Calendar) -> CGFloat {
+        CGFloat(days(from: window.start, to: date, calendar: calendar)) * zoom.pointsPerDay
+    }
+
+    public static func barWidth(from start: Date, to end: Date, zoom: Zoom, calendar: Calendar) -> CGFloat {
+        max(zoom.pointsPerDay, CGFloat(days(from: start, to: end, calendar: calendar)) * zoom.pointsPerDay)
+    }
+
+    public static func contentWidth(window: DateInterval, zoom: Zoom, calendar: Calendar) -> CGFloat {
+        CGFloat(days(from: window.start, to: window.end, calendar: calendar)) * zoom.pointsPerDay
+    }
+
+    // MARK: - Ticks
+
+    public static func ticks(in window: DateInterval, zoom: Zoom, calendar: Calendar) -> [Date] {
+        let component: Calendar.Component = zoom == .week ? .weekOfYear : .month
+        guard let firstPeriod = calendar.dateInterval(of: component, for: window.start) else { return [] }
+
+        var cursor = firstPeriod.start
+        if cursor < window.start {
+            guard let next = calendar.date(byAdding: component, value: 1, to: cursor) else { return [] }
+            cursor = next
+        }
+
+        var result: [Date] = []
+        while cursor <= window.end {
+            let isQuarterStart = (calendar.component(.month, from: cursor) - 1) % 3 == 0
+            if zoom != .quarter || isQuarterStart {
+                result.append(cursor)
+            }
+            guard let next = calendar.date(byAdding: component, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return result
+    }
+
+    // MARK: - Labels
+
+    public static func healthLabel(_ health: ProjectExecutionModel.ProjectHealth) -> String {
+        switch health {
+        case .onTrack: return "On Track"
+        case .atRisk: return "At Risk"
+        case .offTrack: return "Off Track"
+        }
     }
 
     private static func live(_ tasks: [TaskItem], projectID: UUID) -> [TaskItem] {
