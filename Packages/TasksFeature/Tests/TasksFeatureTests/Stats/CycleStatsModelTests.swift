@@ -36,6 +36,23 @@ struct CycleStatsModelTests {
     }
 
     @MainActor
+    @Test("canceled/duplicate closures count as open work, never as done (spec I4)")
+    func terminalNonCompletionExcludedFromDone() {
+        let done = TaskItem(title: "Done", status: .done)
+        let canceled = TaskItem(title: "Canceled", status: .done, workflowState: .canceled)
+        let duplicate = TaskItem(title: "Duplicate", status: .done, workflowState: .duplicate)
+        for task in [done, canceled, duplicate] {
+            task.createdAt = Self.start.addingTimeInterval(-Self.hour)
+        }
+
+        let stats = CycleStatsModel.stats(tasks: [done, canceled, duplicate], cycleStartAt: Self.start)
+
+        #expect(stats.total == 3)
+        #expect(stats.done == 1)
+        #expect(stats.open == 2)
+    }
+
+    @MainActor
     @Test("completionFraction is 0 for an empty cycle (no division by zero)")
     func emptyFraction() {
         let stats = CycleStatsModel.stats(tasks: [], cycleStartAt: Self.start)

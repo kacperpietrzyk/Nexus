@@ -25,15 +25,17 @@ public enum CycleStatsModel {
         }
     }
 
-    /// Counts live, non-template tasks ("done" is `status == .done`, the same
-    /// notion the Kanban board and `LiquidTodayModel` use). Soft-deleted rows
-    /// are defensively ignored even though `tasks(in:)` already excludes them.
+    /// Counts live, non-template tasks. "Done" is `status == .done` MINUS
+    /// canceled/duplicate closures (`WorkflowState.isTerminalNonCompletion`,
+    /// spec I4) — the `ProjectExecutionModel.doneCount` notion, so cycle and
+    /// project completion stats agree. Soft-deleted rows are defensively
+    /// ignored even though `tasks(in:)` already excludes them.
     @MainActor
     public static func stats(tasks: [TaskItem], cycleStartAt: Date) -> Stats {
         let live = tasks.filter { $0.deletedAt == nil && !$0.isTemplate }
         return Stats(
             total: live.count,
-            done: live.filter { $0.status == .done }.count,
+            done: live.filter { $0.status == .done && $0.workflowState?.isTerminalNonCompletion != true }.count,
             addedAfterStart: live.filter { $0.createdAt > cycleStartAt }.count
         )
     }
