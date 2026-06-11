@@ -18,6 +18,11 @@ extension TaskItemRepository {
         for deletedTaskID in deletedTaskIDs {
             try commentRepository.softDeleteAll(for: deletedTaskID, kind: .task)
         }
+        // Soft-delete is a user-visible lifecycle event (spec §2.1) — one entry
+        // per affected task, mirroring the comment fan-out above (spec §4.1).
+        for deletedTaskID in deletedTaskIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
+            activity.record(.deleted, itemID: deletedTaskID, itemKind: .task)
+        }
         try context.save()
         cancelNotificationsAndPushSnapshot(taskIDs: deletedTaskIDs)
     }

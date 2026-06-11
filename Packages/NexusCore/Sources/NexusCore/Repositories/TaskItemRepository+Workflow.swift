@@ -34,6 +34,19 @@ extension TaskItemRepository {
     /// - open-group (`backlog`/`todo`/`inProgress`/`inReview`) forces
     ///   `.snoozed` if a snooze is active (I2) else `.open`.
     public func setWorkflowState(_ state: WorkflowState, on task: TaskItem) throws {
+        // Record the transition ONCE, with the pre-mutation raw (spec §4.1).
+        // Skip when unchanged: besides being noise, an unchanged `.done` would
+        // hit `markDone`'s early return (no save) and strand an inserted entry
+        // in the context — violating ride-the-host-save (I-B1). Known accepted
+        // edge (pre-existing quirk, same blast radius as the workflow stamp
+        // itself): `nil → .done` on a GTD task ALREADY completed via `markDone`
+        // records `workflowChanged` but strands it until the next save.
+        if task.workflowStateRaw != state.rawValue {
+            activity.recordChange(
+                .workflowChanged, itemID: task.id, itemKind: .task,
+                old: task.workflowStateRaw, new: state.rawValue
+            )
+        }
         switch state {
         case .done:
             // Stamp the workflow first so `completeTask`'s "already non-nil"

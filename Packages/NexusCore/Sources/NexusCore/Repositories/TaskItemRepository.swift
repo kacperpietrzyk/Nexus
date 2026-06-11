@@ -96,6 +96,7 @@ public final class TaskItemRepository {
 
     public func update(_ task: TaskItem, mutations: (TaskItem) -> Void) throws {
         let oldRule = task.recurrenceRule
+        let snapshot = ActivityFieldSnapshot(of: task)
         mutations(task)
         let newRule = task.recurrenceRule
         task.tags = Self.normalize(tags: task.tags)
@@ -109,6 +110,7 @@ public final class TaskItemRepository {
             insertedSpawn = result.inserted
         }
 
+        recordFieldChanges(on: task, since: snapshot)
         try context.save()
         let notifier = notifications
         let parent = task
@@ -145,9 +147,11 @@ public final class TaskItemRepository {
 
     public func assign(_ task: TaskItem, toProject projectID: UUID?, section sectionID: UUID? = nil) throws {
         try validateProjectSectionAssignment(toProject: projectID, section: sectionID)
+        let oldProjectID = task.projectID
         task.projectID = projectID
         task.sectionID = sectionID
         task.updatedAt = now()
+        recordProjectMove(on: task, from: oldProjectID)
         try context.save()
         let pusher = snapshotPusher
         Task { @MainActor in await pusher() }

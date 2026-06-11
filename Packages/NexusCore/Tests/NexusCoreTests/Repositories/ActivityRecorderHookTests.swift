@@ -151,6 +151,157 @@ struct ActivityRecorderHookTests {
         #expect(try reader.entries(for: task.id, kind: .task, limit: 10).isEmpty)
     }
 
+    // MARK: setWorkflowState → workflowChanged (+ completed via markDone for .done)
+
+    @Test("setWorkflowState records workflowChanged with pre-mutation old raw")
+    func setWorkflowStateRecordsChange() throws {
+        let (repo, context, reader) = try makeFixture()
+        let task = TaskItem(title: "machine", workflowState: .todo)
+        try seed(task, in: context)
+
+        try repo.setWorkflowState(.inProgress, on: task)
+
+        let events = try reader.entries(for: task.id, kind: .task, limit: 10)
+        #expect(events.map(\.eventKindRaw) == [ActivityEventKind.workflowChanged.rawValue])
+        let payload = ActivityChangePayload.decoded(from: events.first?.payloadJSON)
+        #expect(payload == ActivityChangePayload(old: "todo", new: "inProgress"))
+    }
+
+    @Test("setWorkflowState to the same state records nothing")
+    func setWorkflowStateUnchangedRecordsNothing() throws {
+        let (repo, context, reader) = try makeFixture()
+        let task = TaskItem(title: "machine", workflowState: .todo)
+        try seed(task, in: context)
+
+        try repo.setWorkflowState(.todo, on: task)
+
+        #expect(try reader.entries(for: task.id, kind: .task, limit: 10).isEmpty)
+    }
+
+    @Test("setWorkflowState(.done) records BOTH workflowChanged and completed (both true)")
+    func setWorkflowStateDoneRecordsBoth() throws {
+        let (repo, context, reader) = try makeFixture()
+        let task = TaskItem(title: "ship it", workflowState: .inReview)
+        try seed(task, in: context)
+
+        try repo.setWorkflowState(.done, on: task)
+
+        let kinds = Set(try reader.entries(for: task.id, kind: .task, limit: 10).map(\.eventKindRaw))
+        #expect(kinds == [ActivityEventKind.workflowChanged.rawValue, ActivityEventKind.completed.rawValue])
+    }
+
+    @Test("canceled closure records ONLY workflowChanged — never completed (I4)")
+    func terminalClosureIsNotCompleted() throws {
+        let (repo, context, reader) = try makeFixture()
+        let task = TaskItem(title: "nope", workflowState: .todo)
+        try seed(task, in: context)
+
+        try repo.setWorkflowState(.canceled, on: task)
+
+        let events = try reader.entries(for: task.id, kind: .task, limit: 10)
+        #expect(events.map(\.eventKindRaw) == [ActivityEventKind.workflowChanged.rawValue])
+        let payload = ActivityChangePayload.decoded(from: events.first?.payloadJSON)
+        #expect(payload == ActivityChangePayload(old: "todo", new: "canceled"))
+    }
+
+    // MARK: assign → projectMoved
+
+    @Test("assign records projectMoved with old/new UUIDs; re-assign same project records nothing")
+    func assignRecordsProjectMoved() throws {
+        let (repo, context, reader) = try makeFixture()
+        let project = Project(name: "Website")
+        context.insert(project)
+        let task = TaskItem(title: "move me")
+        try seed(task, in: context)
+
+        try repo.assign(task, toProject: project.id)
+        try repo.assign(task, toProject: project.id)  // unchanged — skip
+
+        let events = try reader.entries(for: task.id, kind: .task, limit: 10)
+        #expect(events.map(\.eventKindRaw) == [ActivityEventKind.projectMoved.rawValue])
+        let payload = ActivityChangePayload.decoded(from: events.first?.payloadJSON)
+        #expect(payload == ActivityChangePayload(old: nil, new: project.id.uuidString))
+    }
+
+    // MARK: update(mutations:) diff-snapshot
+
+    @Test("update records one entry per changed axis (priority + due) with old/new payloads")
+    func updateRecordsChangedAxes() throws {
+        let (repo, context, reader) = try makeFixture()
+        let task = TaskItem(title: "diff me")
+        try seed(task, in: context)
+        let newDue = Date(timeIntervalSince1970: 1_700_100_000)
+
+        try repo.update(task) {
+            $0.priorityRaw = TaskPriority.high.rawValue
+            $0.dueAt = newDue
+        }
+
+        let events = try reader.entries(for: task.id, kind: .task, limit: 10)
+        let byKind = Dictionary(grouping: events, by: \.eventKindRaw)
+        #expect(
+            Set(byKind.keys) == [
+                ActivityEventKind.priorityChanged.rawValue, ActivityEventKind.dueChanged.rawValue,
+            ]
+        )
+        let priority = ActivityChangePayload.decoded(
+            from: byKind[ActivityEventKind.priorityChanged.rawValue]?.first?.payloadJSON
+        )
+        #expect(priority == ActivityChangePayload(old: "0", new: "3"))
+        let due = ActivityChangePayload.decoded(
+            from: byKind[ActivityEventKind.dueChanged.rawValue]?.first?.payloadJSON
+        )
+        #expect(due == ActivityChangePayload(old: nil, new: ActivityChangePayload.dateString(newDue)))
+    }
+
+    @Test("update with no watched-field change records nothing")
+    func updateNoChangeRecordsNothing() throws {
+        let (repo, context, reader) = try makeFixture()
+        let task = TaskItem(title: "untouched fields")
+        try seed(task, in: context)
+
+        try repo.update(task) { $0.title = "renamed" }
+
+        #expect(try reader.entries(for: task.id, kind: .task, limit: 10).isEmpty)
+    }
+
+    @Test("update changing cycleID records cycleChanged")
+    func updateRecordsCycleChanged() throws {
+        let (repo, context, reader) = try makeFixture()
+        let task = TaskItem(title: "sprint me")
+        try seed(task, in: context)
+        let cycleID = UUID()
+
+        try repo.update(task) { $0.cycleID = cycleID }
+
+        let events = try reader.entries(for: task.id, kind: .task, limit: 10)
+        #expect(events.map(\.eventKindRaw) == [ActivityEventKind.cycleChanged.rawValue])
+        let payload = ActivityChangePayload.decoded(from: events.first?.payloadJSON)
+        #expect(payload == ActivityChangePayload(old: nil, new: cycleID.uuidString))
+    }
+
+    // MARK: softDelete → deleted (per affected task)
+
+    @Test("softDelete cascade records deleted for the parent AND each cascaded child")
+    func softDeleteCascadeRecordsPerTask() throws {
+        let (repo, context, reader) = try makeFixture()
+        let parent = TaskItem(title: "parent")
+        try seed(parent, in: context)
+        let child = TaskItem(title: "child", parentTaskID: parent.id)
+        try seed(child, in: context)
+
+        try repo.softDelete(parent, cascade: true)
+
+        #expect(
+            try reader.entries(for: parent.id, kind: .task, limit: 10).map(\.eventKindRaw)
+                == [ActivityEventKind.deleted.rawValue]
+        )
+        #expect(
+            try reader.entries(for: child.id, kind: .task, limit: 10).map(\.eventKindRaw)
+                == [ActivityEventKind.deleted.rawValue]
+        )
+    }
+
     // MARK: out-of-scope pins (spec §4.1: snooze/unsnooze/reorder are NOT logged)
 
     @Test("snooze and reorder record nothing (explicitly out of scope v1)")
