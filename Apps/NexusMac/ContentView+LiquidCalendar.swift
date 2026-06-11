@@ -34,7 +34,8 @@ extension ContentView {
                         context: modelContext,
                         reader: provider,
                         writer: provider,
-                        listing: provider
+                        listing: provider,
+                        changes: provider
                     )
                     // The liquid Calendar page IS the Week planner (Task 6);
                     // Day/Month remain reachable via the segmented control.

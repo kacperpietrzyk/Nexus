@@ -610,7 +610,8 @@ extension ContentView {
                         context: modelContext,
                         reader: provider,
                         writer: provider,
-                        listing: provider
+                        listing: provider,
+                        changes: provider
                     )
                     #endif
                 }
