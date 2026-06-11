@@ -13,7 +13,7 @@ public struct NotesCreateTool: AgentTool {
     public let description =
         "Creates a note from a markdown (default) or html body. Title, role, and tags are optional. "
         + "Returns the created note. Checkboxes, wikilinks, and embeds in the body are reconciled into "
-        + "the graph exactly as in the UI editor."
+        + "the graph exactly as in the UI editor. Optional folder and custom properties are applied on create."
     public let inputSchema: JSONSchema = .object(
         properties: [
             "title": .string(description: "Note title."),
@@ -22,7 +22,8 @@ public struct NotesCreateTool: AgentTool {
                 description: "Note role: free (default) | projectPage | dailyNote."
             ),
             "tags": .array(items: .string(description: "Tag"), description: "Optional flat tags."),
-        ].merging(NotesToolSupport.bodyProperties) { current, _ in current },
+        ].merging(NotesToolSupport.bodyProperties) { current, _ in current }
+            .merging(NotesToolSupport.organizationProperties) { current, _ in current },
         required: []
     )
 
@@ -48,6 +49,12 @@ public struct NotesCreateTool: AgentTool {
         let repo = context.noteRepository
         let note = try repo.create(title: title, blocks: blocks, role: role, tags: tags)
         try restoreFrontmatterLinks(parsedBody?.frontmatter?.links ?? [], from: note, context: context)
+        if let properties = try NotesToolSupport.noteProperties(args["properties"]) {
+            try repo.updateProperties(note, properties: properties)
+        }
+        if let folder = try NotesToolSupport.folderArgument(args["folder"]), let folder {
+            try repo.setFolderPath(note, folder)
+        }
         await context.searchIndex.upsert(IndexedDocument(note))
         return try TasksToolJSON.encode(try NoteDTO(from: note, format: .markdown))
     }
@@ -78,13 +85,15 @@ public struct NotesUpdateTool: AgentTool {
     public let name = "note.update"
     public let description =
         "Updates a note's body (markdown/html), title, and/or tags by id. Omitted fields are left "
-        + "unchanged. Returns the updated note."
+        + "unchanged. Returns the updated note. folder: null moves the note to the root; "
+        + "properties replaces the whole bag."
     public let inputSchema: JSONSchema = .object(
         properties: [
             "id": .string(description: "Note UUID to update."),
             "title": .string(description: "New title."),
             "tags": .array(items: .string(description: "Tag"), description: "Replacement tags."),
-        ].merging(NotesToolSupport.bodyProperties) { current, _ in current },
+        ].merging(NotesToolSupport.bodyProperties) { current, _ in current }
+            .merging(NotesToolSupport.organizationProperties) { current, _ in current },
         required: ["id"]
     )
 
@@ -106,6 +115,16 @@ public struct NotesUpdateTool: AgentTool {
 
         if let blocks = try NotesToolSupport.blocks(fromBodyIn: args) {
             try repo.updateContent(note, blocks: blocks)
+        }
+
+        // Tri-state asymmetry vs create: update unwraps ONE level — `.some(nil)`
+        // passes nil through to clear; create requires a non-nil path since a
+        // fresh note is already at root.
+        if let properties = try NotesToolSupport.noteProperties(args["properties"]) {
+            try repo.updateProperties(note, properties: properties)
+        }
+        if let folder = try NotesToolSupport.folderArgument(args["folder"]) {
+            try repo.setFolderPath(note, folder)
         }
 
         await context.searchIndex.upsert(IndexedDocument(note))

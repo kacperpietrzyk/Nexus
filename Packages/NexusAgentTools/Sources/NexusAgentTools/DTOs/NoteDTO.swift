@@ -12,6 +12,11 @@ public struct NoteDTO: Codable, Sendable, Equatable {
     public let title: String
     public let role: String
     public let tags: [String]
+    /// Normalized folder path; nil = root (Tranche 2 Plan E).
+    public let folder: String?
+    /// Ordered custom property bag. Values are JSON-typed; dates serialize as
+    /// ISO8601 strings (`.withInternetDateTime`).
+    public let properties: [NotePropertyDTO]
     /// Rendered content in the requested `format` (markdown / html / plain).
     public let body: String
     /// Echoes the serialization format used for `body`.
@@ -20,7 +25,7 @@ public struct NoteDTO: Codable, Sendable, Equatable {
     public let updatedAt: String
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, role, tags, body, format
+        case id, title, role, tags, folder, properties, body, format
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -30,6 +35,8 @@ public struct NoteDTO: Codable, Sendable, Equatable {
         title: String,
         role: String,
         tags: [String],
+        folder: String? = nil,
+        properties: [NotePropertyDTO] = [],
         body: String,
         format: String,
         createdAt: String,
@@ -39,6 +46,8 @@ public struct NoteDTO: Codable, Sendable, Equatable {
         self.title = title
         self.role = role
         self.tags = tags
+        self.folder = folder
+        self.properties = properties
         self.body = body
         self.format = format
         self.createdAt = createdAt
@@ -54,11 +63,45 @@ public struct NoteDTO: Codable, Sendable, Equatable {
         self.title = note.title
         self.role = note.role.rawValue
         self.tags = note.tags
+        self.folder = note.folderPath
+        self.properties = note.properties.map(NotePropertyDTO.init(from:))
         self.body = try NoteContentFormatRenderer.render(note, as: format)
         self.format = format.rawValue
         self.createdAt = formatter.string(from: note.createdAt)
         self.updatedAt = formatter.string(from: note.updatedAt)
     }
+}
+
+/// One custom note property over MCP: key + JSON-typed value.
+public struct NotePropertyDTO: Codable, Sendable, Equatable {
+    public let key: String
+    public let value: JSONValue
+
+    public init(key: String, value: JSONValue) {
+        self.key = key
+        self.value = value
+    }
+
+    public init(from property: NoteProperty) {
+        self.key = property.key
+        switch property.value {
+        case .string(let text): self.value = .string(text)
+        case .number(let number):
+            // Integral doubles collapse to .int so the wire shape is stable
+            // across a JSON round-trip (2.0 encodes as `2`, which decodes as
+            // .int) — the same Int(exactly:) collapse the exporter uses.
+            self.value = Int(exactly: number).map { .int($0) } ?? .double(number)
+        case .bool(let flag): self.value = .bool(flag)
+        case .date(let date): self.value = .string(Self.isoFormatter.string(from: date))
+        case .list(let items): self.value = .array(items.map { .string($0) })
+        }
+    }
+
+    nonisolated(unsafe) private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 }
 
 /// Serialization format for a note's content over MCP. The canonical storage is

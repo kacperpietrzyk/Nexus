@@ -192,6 +192,93 @@ enum NotesToolSupport {
         return id
     }
 
+    /// Parse the optional `properties` arg: an ordered array of `{key, value}`
+    /// where value is a JSON string / number / boolean / array-of-strings.
+    /// `.date` is NOT settable over MCP v1 (no reliable wire shape under the
+    /// frozen exporter coder) — dates round-trip OUT as ISO8601 strings.
+    /// Returns nil when omitted (omit ≠ clear); an empty array clears the bag.
+    static func noteProperties(_ value: JSONValue?) throws -> [NoteProperty]? {
+        guard let value else { return nil }
+        guard let items = value.arrayValue else {
+            throw AgentError.validation("properties must be an array of {key, value} objects")
+        }
+        return try items.enumerated().map { index, element in
+            guard let key = element["key"]?.stringValue,
+                !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else {
+                throw AgentError.validation("properties[\(index)].key must be a non-empty string")
+            }
+            guard let raw = element["value"] else {
+                throw AgentError.validation("properties[\(index)].value is required")
+            }
+            return NoteProperty(
+                key: key.trimmingCharacters(in: .whitespacesAndNewlines),
+                value: try notePropertyValue(raw, at: index)
+            )
+        }
+    }
+
+    private static func notePropertyValue(_ raw: JSONValue, at index: Int) throws -> NotePropertyValue {
+        switch raw {
+        case .string(let text):
+            return .string(text)
+        case .int(let number):
+            return .number(Double(number))
+        case .double(let number):
+            return .number(number)
+        case .bool(let flag):
+            return .bool(flag)
+        case .array(let items):
+            return .list(
+                try items.map { item in
+                    guard let text = item.stringValue else {
+                        throw AgentError.validation("properties[\(index)].value list items must be strings")
+                    }
+                    return text
+                }
+            )
+        case .null, .object:
+            throw AgentError.validation(
+                "properties[\(index)].value must be a string, number, boolean, or array of strings"
+            )
+        }
+    }
+
+    /// Tri-state `folder` arg (omit ≠ clear): outer nil = key omitted (leave
+    /// unchanged); `.some(nil)` = explicit JSON null (clear to root);
+    /// `.some(path)` = set (normalized by the repository).
+    static func folderArgument(_ value: JSONValue?) throws -> String?? {
+        guard let value else { return nil }
+        if case .null = value { return .some(nil) }
+        guard let text = value.stringValue else {
+            throw AgentError.validation("folder must be a string or null")
+        }
+        return .some(text)
+    }
+
+    /// Reusable JSON Schema fragments for the organization args (Tranche 2 Plan E).
+    static var organizationProperties: [String: JSONSchema] {
+        [
+            "folder": .string(
+                description: "Slash-separated folder path, e.g. 'projects/nexus'. "
+                    + "Normalized (leading/trailing slashes stripped). On note.update, JSON null moves the note to the root."
+            ),
+            "properties": .array(
+                items: .object(
+                    properties: [
+                        "key": .string(description: "Property name (unique per note, case-sensitive)."),
+                        "value": .anyValue(
+                            description: "string | number | boolean | array of strings. "
+                                + "Dates are returned as ISO8601 strings."
+                        ),
+                    ],
+                    required: ["key", "value"]
+                ),
+                description: "REPLACEMENT ordered custom property bag (the whole bag is replaced; empty array clears it)."
+            ),
+        ]
+    }
+
     /// Reusable JSON Schema fragment for the body + body_format pair.
     static var bodyProperties: [String: JSONSchema] {
         [
