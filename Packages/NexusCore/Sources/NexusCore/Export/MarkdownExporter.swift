@@ -78,7 +78,9 @@ public enum MarkdownExporter {
                 extras = renderable.exportFrontmatterExtras()
                 bodyText = renderable.exportMarkdownBody(in: context)
             } else {
-                extras = []
+                // Tranche 2 Plan E: a Note carries organization frontmatter
+                // (folder + custom properties); every other built-in type has none.
+                extras = (item as? Note).map(Self.noteFrontmatterExtras) ?? []
                 bodyText = body(for: item, in: context, noteBodyCache: &noteBodyCache)
             }
             let doc = MarkdownDocument(
@@ -163,6 +165,55 @@ public enum MarkdownExporter {
     private static func markdownBody(of note: Note) -> String {
         guard let blocks = try? NoteContentCoder.decode(note.contentData) else { return "" }
         return BlockMarkdownSerializer.markdown(for: blocks)
+    }
+
+    // MARK: - Note organization frontmatter (Tranche 2 Plan E)
+
+    /// `folder:` (when set) then one flat `prop.<key>:` per custom property.
+    /// Decision (plan E, spec §6.1): flat prefixed TOP-LEVEL keys — the only
+    /// shape the FROZEN coder round-trips for all five `NotePropertyValue`
+    /// cases (`inlineValue` cannot nest a list inside a `properties:` list item,
+    /// and a top-level dict does not decode). The uniform prefix is
+    /// collision-proof against every reserved key. Caller order is preserved
+    /// (determinism guarantee #1 of the coder).
+    static func noteFrontmatterExtras(_ note: Note) -> [(String, FrontmatterValue)] {
+        var extras: [(String, FrontmatterValue)] = []
+        if let folderPath = note.folderPath {
+            extras.append(("folder", .string(folderPath)))
+        }
+        for property in note.properties {
+            extras.append(("prop.\(sanitizedPropertyKey(property.key))", frontmatterValue(for: property.value)))
+        }
+        return extras
+    }
+
+    /// Map a `NotePropertyValue` into the frozen `FrontmatterValue` (spec §2.4):
+    /// number/bool collapse to `.string` (the coder has no such cases — do NOT
+    /// extend it this tranche).
+    static func frontmatterValue(for value: NotePropertyValue) -> FrontmatterValue {
+        switch value {
+        case .string(let text): return .string(text)
+        case .date(let date): return .date(date)
+        case .list(let items): return .list(items.map { .string($0) })
+        case .number(let number): return .string(numberString(number))
+        case .bool(let flag): return .string(flag ? "true" : "false")
+        }
+    }
+
+    /// Deterministic number formatting: integral doubles collapse ("2", not
+    /// "2.0"); everything else uses Swift's shortest round-trip description.
+    static func numberString(_ value: Double) -> String {
+        if let integer = Int(exactly: value) { return String(integer) }
+        return String(value)
+    }
+
+    /// Frontmatter keys are emitted unquoted on a `key: value` line; a `:` or
+    /// newline inside a user key would break the line-oriented decoder. Replace
+    /// them so every export round-trips. Never drops a property.
+    static func sanitizedPropertyKey(_ key: String) -> String {
+        key
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: "\n", with: " ")
     }
 
     private struct ExportCounters {
