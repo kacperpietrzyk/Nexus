@@ -94,10 +94,18 @@ struct WeekEventBlock: View {
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                    .font(Self.titleFont)
-                    .foregroundStyle(DS.ColorToken.textPrimary)
-                    .lineLimit(height >= Self.timeLineMinHeight ? 1 : 2)
+                HStack(spacing: 4) {
+                    if item.kind == .seriesPreview {
+                        Image(systemName: "repeat")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(DS.ColorToken.textSecondary)
+                            .accessibilityHidden(true)
+                    }
+                    Text(item.title)
+                        .font(Self.titleFont)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
+                        .lineLimit(height >= Self.timeLineMinHeight ? 1 : 2)
+                }
                 if height >= Self.timeLineMinHeight {
                     Text(timeText)
                         .font(Self.timeFont)
@@ -115,7 +123,12 @@ struct WeekEventBlock: View {
             .contentShape(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(item.title), \(timeText)\(item.isConflicted ? ", conflicts with a calendar event" : "")")
+        // M2 ghost: a projected future occurrence reads as tentative, dimmer than a real proposal.
+        .opacity(item.kind == .seriesPreview ? 0.6 : 1)
+        .accessibilityLabel(
+            (item.kind == .seriesPreview ? "Upcoming recurring: " : "")
+                + "\(item.title), \(timeText)\(item.isConflicted ? ", conflicts with a calendar event" : "")"
+        )
         #if os(macOS)
         .onHover { value in
             withAnimation(DS.Motion.hover) { hovering = value }

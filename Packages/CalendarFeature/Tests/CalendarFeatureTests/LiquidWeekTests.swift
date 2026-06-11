@@ -243,4 +243,16 @@ struct LiquidWeekTests {
         )
         #expect(gap == nil)
     }
+
+    @Test("series previews classify as focus blocks on the week grid")
+    func seriesPreviewClassifiesAsFocus() {
+        let item = TimelineItem(
+            id: "series-x",
+            title: "standup",
+            start: date(day: 1, hours: 9),
+            end: date(day: 1, hours: 10),
+            kind: .seriesPreview
+        )
+        #expect(WeekEventClassifier.kind(for: item) == .focus)
+    }
 }

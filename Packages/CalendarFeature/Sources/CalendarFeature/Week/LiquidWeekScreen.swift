@@ -329,7 +329,8 @@ public struct LiquidWeekScreen: View {
             events: events,
             blocks: viewModel.blocks,
             calendar: calendar,
-            conflictedBlockIDs: viewModel.conflictedBlockIDs
+            conflictedBlockIDs: viewModel.conflictedBlockIDs,
+            seriesPreviews: viewModel.seriesPreviews
         )
     }
 
