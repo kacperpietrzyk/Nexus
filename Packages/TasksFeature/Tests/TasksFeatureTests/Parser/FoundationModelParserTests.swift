@@ -114,6 +114,20 @@ struct FoundationModelParserTests {
         #expect(result.projectToken == "Nexus")
     }
 
+    @Test("diacritic project token passes through the @-strip unchanged")
+    func diacriticProjectToken() async {
+        let json = #"{"title":"spin up looms","project":"@Prząśnik"}"#
+        let provider = FakeAIProvider(
+            id: .appleIntelligence,
+            isAvailableOnThisPlatform: true,
+            responseText: json
+        )
+        let parser = FoundationModelParser(router: makeRouter(provider: provider))
+        let result = await parser.parse(
+            "spin up looms @Prząśnik", locale: Locale(identifier: "pl"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == "Prząśnik")
+    }
+
     @Test("empty or whitespace project maps to nil projectToken")
     func emptyProjectIsNil() async {
         let json = #"{"title":"ship build","project":"  "}"#

@@ -75,6 +75,30 @@ struct HandcodedParserProjectTests {
         #expect(result.title == "@nexus")
     }
 
+    @Test("diacritic project tokens are captured (Unicode letters)")
+    func diacriticToken() async {
+        let result = await parser.parse(
+            "spin up looms @Prząśnik", locale: en, now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == "Prząśnik")
+        #expect(result.title == "spin up looms")
+    }
+
+    @Test("diacritic token with slash and digits is captured")
+    func diacriticSlashDigitsToken() async {
+        let result = await parser.parse(
+            "book venue @Łódź/2026", locale: en, now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == "Łódź/2026")
+        #expect(result.title == "book venue")
+    }
+
+    @Test("email with a diacritic domain is still not a project token")
+    func diacriticEmailStaysResidual() async {
+        let result = await parser.parse(
+            "email kacper@przykład.pl", locale: en, now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == nil)
+        #expect(result.title == "email kacper@przykład.pl")
+    }
+
     @Test("project token works under Polish locale (sigil is locale-independent)")
     func polishLocale() async {
         let result = await parser.parse(

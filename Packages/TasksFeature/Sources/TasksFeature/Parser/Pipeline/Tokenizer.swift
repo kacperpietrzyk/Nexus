@@ -113,8 +113,12 @@ internal struct Tokenizer: Sendable {
             let body = String(word.dropFirst()).lowercased()
             return .tag(body, confidence: 0.95)
         }
-        if word.hasPrefix("@"), word.count > 1, word.range(of: #"^@[A-Za-z0-9_/-]+$"#, options: .regularExpression) != nil {
-            // Project sigil. Typed case is preserved (unlike tags) — resolution
+        if word.hasPrefix("@"), word.count > 1, word.range(of: #"^@[\p{L}\p{N}_/-]+$"#, options: .regularExpression) != nil {
+            // Project sigil. Charset is Unicode letters/digits (plus _ / -) so
+            // diacritic project names ("@Prząśnik") tokenize — deliberately
+            // broader than the ASCII tag charset (approved grammar change).
+            // Emails stay safe via the strict @-prefix check on whitespace-split
+            // words. Typed case is preserved (unlike tags) — resolution
             // downstream is case-insensitive and the chip echoes what was typed.
             return .project(String(word.dropFirst()), confidence: 0.95)
         }
