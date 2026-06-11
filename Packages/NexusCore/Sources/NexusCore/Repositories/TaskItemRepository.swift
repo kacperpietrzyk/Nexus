@@ -14,6 +14,7 @@ public enum TaskItemRepositoryError: Error, Equatable {
     case parentNotFound(parentID: UUID)
     case parentIsSelf(taskID: UUID)
     case parentCycle(taskID: UUID, parentID: UUID)
+    case cycleNotFound(cycleID: UUID)
 }
 
 struct TaskCompletionSideEffects {
