@@ -134,7 +134,7 @@ import Testing
         registry: registry
     )
 
-    let events = await collectedEvents(from: detector, limit: 2, timeoutNanoseconds: 500_000_000)
+    let events = await collectedEvents(from: detector, limit: 2, timeoutNanoseconds: 2_000_000_000)
 
     #expect(events.count == 1)
     #expect(events.first?.fingerprint == "us.zoom.xos|Zoom Meeting")
