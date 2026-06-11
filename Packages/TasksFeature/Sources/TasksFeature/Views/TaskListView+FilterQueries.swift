@@ -88,6 +88,8 @@ extension TaskListView {
         modelContext: ModelContext
     ) throws -> [TaskItem] {
         if let sectionID {
+            // isTemplate post-filters in memory — a fourth #Predicate conjunct
+            // blows the type-checker budget (the backlogTasks precedent).
             let descriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate { task in
                     task.projectID == projectID
@@ -95,12 +97,13 @@ extension TaskListView {
                         && task.deletedAt == nil
                 }
             )
-            return rootTasks(from: try modelContext.fetch(descriptor)).sorted(by: Self.assignmentOrder)
+            return rootTasks(from: try modelContext.fetch(descriptor).filter { !$0.isTemplate })
+                .sorted(by: Self.assignmentOrder)
         }
 
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { task in
-                task.projectID == projectID && task.deletedAt == nil
+                task.projectID == projectID && task.deletedAt == nil && task.isTemplate == false
             }
         )
         return rootTasks(from: try modelContext.fetch(descriptor)).sorted(by: Self.assignmentOrder)

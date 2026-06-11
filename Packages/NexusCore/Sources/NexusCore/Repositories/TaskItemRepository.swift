@@ -1,13 +1,6 @@
 import Foundation
 import SwiftData
 
-public enum ProjectSectionAssignmentError: Error, Equatable {
-    case sectionRequiresProject(sectionID: UUID)
-    case sectionNotFound(sectionID: UUID)
-    case sectionProjectMismatch(sectionID: UUID, expectedProjectID: UUID, actualProjectID: UUID)
-    case cannotReassignSectionToItself(sectionID: UUID)
-}
-
 public enum TaskItemRepositoryError: Error, Equatable {
     case parentHasOpenSubtasks(parentID: UUID, openCount: Int)
     case projectNotFound(projectID: UUID)
@@ -15,41 +8,6 @@ public enum TaskItemRepositoryError: Error, Equatable {
     case parentIsSelf(taskID: UUID)
     case parentCycle(taskID: UUID, parentID: UUID)
     case cycleNotFound(cycleID: UUID)
-}
-
-struct TaskCompletionSideEffects {
-    var cancelledTaskIDs = Set<UUID>()
-    var scheduledTasks: [TaskItem] = []
-
-    var isEmpty: Bool {
-        cancelledTaskIDs.isEmpty && scheduledTasks.isEmpty
-    }
-}
-
-@MainActor
-enum ProjectSectionAssignmentValidator {
-    static func validate(sectionID: UUID?, belongsTo projectID: UUID?, in context: ModelContext) throws {
-        guard let sectionID else { return }
-        guard let projectID else {
-            throw ProjectSectionAssignmentError.sectionRequiresProject(sectionID: sectionID)
-        }
-
-        let descriptor = FetchDescriptor<Section>(
-            predicate: #Predicate { section in
-                section.id == sectionID && section.deletedAt == nil
-            }
-        )
-        guard let section = try context.fetch(descriptor).first else {
-            throw ProjectSectionAssignmentError.sectionNotFound(sectionID: sectionID)
-        }
-        guard section.projectID == projectID else {
-            throw ProjectSectionAssignmentError.sectionProjectMismatch(
-                sectionID: sectionID,
-                expectedProjectID: projectID,
-                actualProjectID: section.projectID
-            )
-        }
-    }
 }
 
 /// CRUD + lifecycle operations on `TaskItem`. Bound to a single `ModelContext`;
@@ -109,7 +67,10 @@ public final class TaskItemRepository {
 
         var removedSpawnID: UUID?
         var insertedSpawn: TaskItem?
-        if oldRule != newRule {
+        // I-D1: recurrence never spawns from a template. The status guard
+        // inside `regenerateNextSpawn` is not enough — a template can carry a
+        // done statusRaw synced from a pre-guard build.
+        if oldRule != newRule && !task.isTemplate {
             let result = try regenerateNextSpawn(after: task)
             removedSpawnID = result.removed
             insertedSpawn = result.inserted
@@ -182,21 +143,25 @@ public final class TaskItemRepository {
         try ProjectSectionAssignmentValidator.validate(sectionID: sectionID, belongsTo: projectID, in: context)
     }
 
+    /// Live, non-template board tasks (I-D1). The section branch post-filters
+    /// `isTemplate` in memory — a fourth `#Predicate` conjunct blows the
+    /// type-checker budget (the `CyclePlanningView.backlogTasks` precedent).
     public func tasks(in projectID: UUID, section sectionID: UUID? = nil) throws -> [TaskItem] {
-        let descriptor: FetchDescriptor<TaskItem>
         if let sectionID {
-            descriptor = FetchDescriptor<TaskItem>(
+            let descriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate { task in
                     task.projectID == projectID && task.sectionID == sectionID && task.deletedAt == nil
                 }
             )
-        } else {
-            descriptor = FetchDescriptor<TaskItem>(
-                predicate: #Predicate { task in
-                    task.projectID == projectID && task.deletedAt == nil
-                }
-            )
+            return try context.fetch(descriptor)
+                .filter { !$0.isTemplate }
+                .sorted(by: Self.assignmentOrder)
         }
+        let descriptor = FetchDescriptor<TaskItem>(
+            predicate: #Predicate { task in
+                task.projectID == projectID && task.deletedAt == nil && task.isTemplate == false
+            }
+        )
         return try context.fetch(descriptor).sorted(by: Self.assignmentOrder)
     }
 

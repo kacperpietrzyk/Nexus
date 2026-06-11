@@ -356,10 +356,12 @@ struct TaskFilterTests {
         let deleted = TaskItem(title: "Deleted", projectID: project.id, sectionID: section.id)
         deleted.deletedAt = Date(timeIntervalSinceReferenceDate: 30)
         let other = TaskItem(title: "Other", projectID: UUID())
+        // Templates carry projectID verbatim but are inert (I-D1): never on the board.
+        let template = TaskItem(title: "Template", projectID: project.id, sectionID: section.id, isTemplate: true)
 
         context.insert(project)
         context.insert(section)
-        [rootTask, sectionTask, childTask, deleted, other].forEach(context.insert)
+        [rootTask, sectionTask, childTask, deleted, other, template].forEach(context.insert)
         try context.save()
 
         let projectTasks = try TaskListView.projectTasks(

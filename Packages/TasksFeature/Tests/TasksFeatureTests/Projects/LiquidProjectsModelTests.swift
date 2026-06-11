@@ -33,9 +33,12 @@ struct LiquidProjectsModelTests {
         let taskA = TaskItem(title: "A", projectID: project.id)
         let taskB = TaskItem(title: "B", projectID: project.id)
         let outsider = TaskItem(title: "outside")
+        // Templates carry projectID verbatim but are inert (I-D1): never on the board.
+        let template = TaskItem(title: "tpl", projectID: project.id, isTemplate: true)
         context.insert(taskA)
         context.insert(taskB)
         context.insert(outsider)
+        context.insert(template)
 
         // Two live subtasks of A, one soft-deleted subtask of A (excluded),
         // one subtask of the non-project task (excluded), one parentless task.
@@ -62,6 +65,7 @@ struct LiquidProjectsModelTests {
 
         #expect(model.loadError == nil)
         #expect(model.selectedProject?.id == project.id)
+        #expect(model.tasks.map(\.title).sorted() == ["A", "B"])
         #expect(model.subtaskCountsByTask == [taskA.id: 2])
         #expect(model.commentCountsByTask == [taskB.id: 1])
     }

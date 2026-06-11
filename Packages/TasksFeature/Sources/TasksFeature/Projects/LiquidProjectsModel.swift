@@ -123,7 +123,7 @@ public final class LiquidProjectsModel {
         selectedProject = project
         tasks = try modelContext.fetch(
             FetchDescriptor<TaskItem>(
-                predicate: #Predicate { $0.projectID == pid && $0.deletedAt == nil },
+                predicate: #Predicate { $0.projectID == pid && $0.deletedAt == nil && $0.isTemplate == false },
                 sortBy: [SortDescriptor(\.orderIndex)]
             )
         )

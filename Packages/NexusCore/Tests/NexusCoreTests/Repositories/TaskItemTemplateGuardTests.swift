@@ -75,6 +75,33 @@ struct TaskItemTemplateGuardTests {
     }
 
     @MainActor
+    @Test("editing the recurrence rule of a done-status template never spawns (I-D1)")
+    func ruleEditOnDoneStatusTemplateNeverSpawns() throws {
+        let context = try makeContext()
+        let repo = makeRepo(context: context)
+        let template = TaskItem(
+            title: "tpl",
+            dueAt: Date(timeIntervalSince1970: 1_799_000_000),
+            recurrenceRule: "FREQ=DAILY",
+            isTemplate: true
+        )
+        try repo.insert(template)
+        // A template can carry a done statusRaw via sync from a pre-guard
+        // build — `completeTask` blocks the forward path, not the stored raw.
+        template.statusRaw = TaskStatus.done.rawValue
+        template.lastCompletedAt = Date(timeIntervalSince1970: 1_799_500_000)
+        try context.save()
+
+        try repo.update(template) { task in
+            task.recurrenceRule = "FREQ=WEEKLY"
+        }
+
+        let rows = try context.fetch(FetchDescriptor<TaskItem>())
+        #expect(rows.count == 1)  // no spawned next occurrence
+        #expect(rows.first?.isTemplate == true)
+    }
+
+    @MainActor
     @Test("cascadeComplete on a template tree is a no-op")
     func cascadeCompleteIsNoOpOnTemplateTree() throws {
         let context = try makeContext()
