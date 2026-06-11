@@ -112,6 +112,22 @@ struct TaskItemCycleAssignmentTests {
     }
 
     @MainActor
+    @Test("assignCycle on a template is a no-op: no pointer, no event (I-D1)")
+    func templateAssignmentIsNoOp() throws {
+        let (context, repo, cycles) = try makeStack()
+        let cycle = try cycles.create(
+            name: "Sprint", startAt: Self.stamp, endAt: Self.stamp.addingTimeInterval(Self.day)
+        )
+        let template = TaskItem(title: "Blueprint", isTemplate: true)
+        try repo.insert(template)
+
+        try repo.assignCycle(template, to: cycle.id)
+
+        #expect(template.cycleID == nil)
+        #expect(try cycleChangedEntries(for: template.id, in: context).isEmpty)
+    }
+
+    @MainActor
     @Test("a recurring task's spawned next occurrence does NOT carry cycleID (spec §4.2 no-carry pin)")
     func spawnDoesNotCarryCycle() throws {
         let (context, repo, cycles) = try makeStack()

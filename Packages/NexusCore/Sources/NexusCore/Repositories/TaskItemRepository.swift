@@ -420,6 +420,9 @@ public final class TaskItemRepository {
         )
         nextInstance.noteRef = try duplicatedNoteRef(of: task.noteRef)
         context.insert(nextInstance)
+        // The regenerated spawn is a real new row — record `created` exactly
+        // like `completeTask`'s spawn path (spec §4.1).
+        activity.record(.created, itemID: nextInstance.id, itemKind: .task)
         return (removedID, nextInstance)
     }
 

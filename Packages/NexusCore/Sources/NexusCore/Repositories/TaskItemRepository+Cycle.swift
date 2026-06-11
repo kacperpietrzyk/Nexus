@@ -12,6 +12,9 @@ extension TaskItemRepository {
     /// save, no event) when the assignment is unchanged. The event is inserted
     /// BEFORE the save so it commits atomically with the mutation (I-B1).
     public func assignCycle(_ task: TaskItem, to cycleID: UUID?) throws {
+        // I-D1: templates are inert and emit no activity events — same silent
+        // no-op convention as `completeTask`/`setWorkflowState`/`snooze`.
+        guard !task.isTemplate else { return }
         guard task.cycleID != cycleID else { return }
         if let cycleID {
             let descriptor = FetchDescriptor<Cycle>(

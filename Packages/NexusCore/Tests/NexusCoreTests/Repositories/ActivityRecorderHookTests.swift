@@ -125,6 +125,39 @@ struct ActivityRecorderHookTests {
         )
     }
 
+    @Test("editing the rule of a done recurring task records created for the regenerated spawn")
+    func ruleEditRecordsRegeneratedSpawnCreated() throws {
+        let (repo, context, reader) = try makeFixture()
+        let task = TaskItem(
+            title: "recurring",
+            dueAt: Date(timeIntervalSince1970: 1_699_999_000),
+            recurrenceRule: "FREQ=DAILY"
+        )
+        try seed(task, in: context)
+        try repo.markDone(task)
+
+        // The rule edit on the done task removes the old spawn and inserts a
+        // regenerated one — a real new row, so it must record `created`
+        // exactly like completeTask's spawn (spec §4.1).
+        try repo.update(task) { item in
+            item.recurrenceRule = "FREQ=WEEKLY"
+        }
+
+        let parentID = task.id
+        let openRaw = TaskStatus.open.rawValue
+        let spawns = try context.fetch(
+            FetchDescriptor<TaskItem>(
+                predicate: #Predicate { $0.recurrenceParentId == parentID && $0.statusRaw == openRaw }
+            )
+        )
+        let spawn = try #require(spawns.first)
+        #expect(spawn.recurrenceRule == "FREQ=WEEKLY")
+        #expect(
+            try reader.entries(for: spawn.id, kind: .task, limit: 10).map(\.eventKindRaw)
+                == [ActivityEventKind.created.rawValue]
+        )
+    }
+
     // MARK: reopen → reopened
 
     @Test("reopen records reopened after the early-return guard")
