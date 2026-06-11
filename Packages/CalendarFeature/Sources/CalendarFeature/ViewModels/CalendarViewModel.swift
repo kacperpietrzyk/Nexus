@@ -30,6 +30,9 @@ public final class CalendarViewModel {
     /// change; never persisted). The UI shows a conflicted treatment on these
     /// blocks plus a non-blocking "Replan" banner.
     public private(set) var conflictedBlockIDs: Set<UUID> = []
+    /// M2: runtime-computed ghost previews of FUTURE occurrences of recurring
+    /// tasks (week scope only). NEVER persisted; recomputed in `reloadBlocks()`.
+    public private(set) var seriesPreviews: [SeriesOccurrencePreview] = []
 
     private let context: ModelContext
     private let reader: any CalendarEventProviding
@@ -38,6 +41,7 @@ public final class CalendarViewModel {
     private let blockRepository: ScheduledBlockRepository
     private let reconciler: CalendarSyncReconciler?
     private let planner: DayPlanner
+    private let seriesProjector = RecurringSeriesProjector()
     private let preferencesStore: UserDefaultsCalendarPreferencesStore
     private let calendar: Calendar
     private let now: () -> Date
@@ -165,6 +169,25 @@ public final class CalendarViewModel {
     public func reloadBlocks() {
         let win = window
         blocks = (try? blockRepository.blocks(from: win.start, to: win.end)) ?? []
+        reloadSeriesPreviews()
+    }
+
+    /// Recompute the M2 ghost previews (week scope only — Day belongs to the
+    /// real planner, Month renders dots). Runtime-only, NEVER persisted — see
+    /// `RecurringSeriesProjector` for the rationale and exclusions. `events`
+    /// were already visibility-filtered by `load()`.
+    private func reloadSeriesPreviews() {
+        guard scope == .week else {
+            seriesPreviews = []
+            return
+        }
+        let win = window
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.deletedAt == nil })
+        let tasks = (try? context.fetch(descriptor)) ?? []
+        seriesPreviews = seriesProjector.preview(
+            tasks: tasks, events: events, obstacles: blocks, prefs: preferences,
+            window: DateInterval(start: win.start, end: win.end), now: now(), calendar: calendar
+        )
     }
 
     /// Unscheduled-task feed for the liquid Week strip + Scheduling Inspector.
