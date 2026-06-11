@@ -100,7 +100,10 @@ private func makeTempExportFolder() throws -> URL {
     let container = try makeNoteContainer()
     let context = ModelContext(container)
     let note = Note(title: "Tricky")
-    note.properties = [NoteProperty(key: "due: date\nx", value: .string("soon"))]
+    note.properties = [
+        NoteProperty(key: "due: date\nx", value: .string("soon")),
+        NoteProperty(key: "cr\rkey", value: .string("v")),
+    ]
     context.insert(note)
     try context.save()
 
@@ -114,6 +117,9 @@ private func makeTempExportFolder() throws -> URL {
     )
     let parsed = try MarkdownFrontmatterCoder.decode(text)  // must not throw
     #expect(parsed.fields.contains { $0.0 == "prop.due- date x" && $0.1 == .string("soon") })
+    // \r must sanitize too: the decoder trims .whitespaces (which includes \r)
+    // from key lines, so an unsanitized \r silently changes the key identity.
+    #expect(parsed.fields.contains { $0.0 == "prop.cr key" && $0.1 == .string("v") })
 }
 
 @MainActor

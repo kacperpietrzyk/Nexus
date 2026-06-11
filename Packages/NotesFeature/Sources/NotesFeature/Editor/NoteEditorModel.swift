@@ -107,7 +107,9 @@ public final class NoteEditorModel {
         let normalized = NoteFolderPath.normalize(raw)
         guard normalized != folderPath else { return }
         folderPath = normalized
-        try? repository?.setFolderPath(note, raw)
+        // Pass the already-normalized value so local state and the persisted
+        // write share one value (the repo normalizes again, harmlessly).
+        try? repository?.setFolderPath(note, normalized)
     }
 
     private func persistProperties() {

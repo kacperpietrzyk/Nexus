@@ -232,6 +232,7 @@ public enum MarkdownExporter {
         key
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
     }
 
     /// Relative export directory for an item: a `Note`'s sanitized `folderPath`
