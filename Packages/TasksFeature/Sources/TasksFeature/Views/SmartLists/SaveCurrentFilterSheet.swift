@@ -193,7 +193,7 @@ struct SaveCurrentFilterDescriptor: Equatable, Sendable {
                 defaultIcon: "rectangle.split.3x1",
                 summary: "Matches open tasks assigned to the selected section."
             )
-        case .all, .today, .upcoming, .inbox, .completed, .savedFilter, .cycle:
+        case .all, .today, .upcoming, .inbox, .completed, .savedFilter, .cycle, .templates:
             return nil
         }
     }
@@ -216,6 +216,8 @@ enum SaveCurrentFilterUnsupportedReason {
             return "Done cannot be saved yet because Smart Lists currently match open tasks only."
         case .cycle:
             return "Cycle filters cannot be saved yet because Smart Lists cannot encode cycle membership."
+        case .templates:
+            return "Templates cannot be saved as a Smart List — they are excluded from task filters by design."
         case .byTag, .project, .projectSection:
             return ""
         }

@@ -8,6 +8,7 @@ public enum TaskFilter: Hashable, Sendable {
     case upcoming
     case inbox
     case completed
+    case templates
     case byTag(String)
     case project(UUID)
     case projectSection(UUID, UUID)
@@ -37,6 +38,8 @@ extension TaskFilter {
             return "Inbox"
         case .completed:
             return "Done"
+        case .templates:
+            return "Templates"
         case .byTag(let tag):
             return "#\(tag)"
         case .project(let projectID):

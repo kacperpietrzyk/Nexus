@@ -89,7 +89,7 @@ public struct TaskListView: View {
                 section("Overdue", items: overdue)
                 todaySection
                 section("No date", items: noDate)
-            case .all, .upcoming, .completed, .byTag:
+            case .all, .upcoming, .completed, .templates, .byTag:
                 // MP-2 motion pass: staggered row enter via .nexusAppear(i)
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     row(for: item, appearIndex: i)
@@ -287,19 +287,7 @@ public struct TaskListView: View {
             case .all:
                 flatList = try Self.tasks(status: nil, modelContext: modelContext)
             case .today:
-                let query = TodayQuery()
-                overdue = Self.rootTasks(
-                    from: try query.overdue(now: now, excludingProjectIDs: archivedProjectIDs)
-                        .apply(in: modelContext)
-                )
-                today = Self.rootTasks(
-                    from: try query.today(now: now, excludingProjectIDs: archivedProjectIDs)
-                        .apply(in: modelContext)
-                )
-                noDate = Self.rootTasks(
-                    from: try query.noDate(excludingProjectIDs: archivedProjectIDs)
-                        .apply(in: modelContext)
-                )
+                try reloadTodayBuckets(archivedProjectIDs: archivedProjectIDs)
             case .upcoming:
                 flatList = Self.rootTasks(
                     from: try UpcomingQuery()
@@ -310,6 +298,8 @@ public struct TaskListView: View {
                 flatList = try Self.inboxTasks(now: now, modelContext: modelContext)
             case .completed:
                 flatList = try Self.tasks(status: .done, modelContext: modelContext)
+            case .templates:
+                flatList = try Self.templateTasks(modelContext: modelContext)
             case .byTag(let tag):
                 flatList = Self.rootTasks(
                     from: try ByTagQuery().tasks(withTag: tag).apply(in: modelContext)
@@ -463,6 +453,25 @@ public struct TaskListView: View {
 }
 
 extension TaskListView {
+    /// Loads the Today view's three buckets; split out of `reload()` for the
+    /// function-body lint budget.
+    @MainActor
+    private func reloadTodayBuckets(archivedProjectIDs: Set<UUID>) throws {
+        let query = TodayQuery()
+        overdue = Self.rootTasks(
+            from: try query.overdue(now: now, excludingProjectIDs: archivedProjectIDs)
+                .apply(in: modelContext)
+        )
+        today = Self.rootTasks(
+            from: try query.today(now: now, excludingProjectIDs: archivedProjectIDs)
+                .apply(in: modelContext)
+        )
+        noDate = Self.rootTasks(
+            from: try query.noDate(excludingProjectIDs: archivedProjectIDs)
+                .apply(in: modelContext)
+        )
+    }
+
     @MainActor
     static func rootTasks(from tasks: [TaskItem]) -> [TaskItem] {
         // `.dedupedByID()` defends the list against the historical synced-store

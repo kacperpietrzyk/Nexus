@@ -30,4 +30,11 @@ extension TaskListView {
     static func cycleTasks(cycleID: UUID, modelContext: ModelContext) throws -> [TaskItem] {
         rootTasks(from: try CycleRepository(context: modelContext).tasks(in: cycleID))
     }
+
+    /// Templates management list (Tranche 2 Plan D): root templates via the
+    /// `TaskTemplateQuery` funnel shared with the capture picker.
+    @MainActor
+    static func templateTasks(modelContext: ModelContext) throws -> [TaskItem] {
+        try TaskTemplateQuery.rootTemplates(in: modelContext)
+    }
 }

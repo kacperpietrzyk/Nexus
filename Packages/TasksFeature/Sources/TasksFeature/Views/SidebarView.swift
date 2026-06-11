@@ -86,6 +86,17 @@ public struct SidebarView: View {
                         })
 
                     SidebarRow(
+                        title: "Templates",
+                        systemImage: "doc.on.doc",
+                        count: nil,
+                        isSelected: selection == .tasks && taskFilter == .templates,
+                        action: {
+                            taskFilter = .templates
+                            selection = .tasks
+                        }
+                    )
+
+                    SidebarRow(
                         title: "Statystyki",
                         systemImage: "chart.bar",
                         count: nil,
