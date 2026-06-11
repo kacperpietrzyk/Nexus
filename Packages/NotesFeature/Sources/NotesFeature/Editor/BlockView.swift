@@ -3,6 +3,12 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
+
 /// Renders + edits a single `Block`. Every block kind has its own render path
 /// (spec §5: native, no WebView except `html(raw)`). Text-bearing blocks are
 /// edited as staged plain text (spec §5 staging — inline-span mark editing is a
@@ -266,17 +272,41 @@ private struct ImageBlockView: View {
     let asset: String?
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "photo")
-                .foregroundStyle(NexusColor.Text.tertiary)
-            Text(asset ?? ref?.uuidString ?? "Image")
-                .nexusType(.bodySmall)
-                .foregroundStyle(NexusColor.Text.muted)
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 8) {
+            if let image = localImage {
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 260)
+                    .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r1))
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "photo")
+                        .foregroundStyle(NexusColor.Text.tertiary)
+                    Text(asset ?? ref?.uuidString ?? "Image")
+                        .nexusType(.bodySmall)
+                        .foregroundStyle(NexusColor.Text.muted)
+                        .lineLimit(1)
+                }
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r1))
+    }
+
+    private var localImage: Image? {
+        guard let asset, let root = try? NoteAttachmentRoot.url(create: false) else { return nil }
+        let url = root.appendingPathComponent(asset, isDirectory: false)
+        #if os(macOS)
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        return Image(nsImage: image)
+        #elseif os(iOS)
+        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+        return Image(uiImage: image)
+        #else
+        return nil
+        #endif
     }
 }
 
