@@ -9,7 +9,9 @@ import NexusCore
 /// typo'd id and still report success — polluting the graph and any aggregate
 /// that walks it (A2). Each edge tool runs both of its endpoints through
 /// `validateLive` before writing, mirroring `comments.add`'s `validateCommentTarget`.
-enum AgentEndpointValidator {
+/// Public so composition-level link tools (`agent.link_items` in NexusAgent)
+/// enforce the same guard.
+public enum AgentEndpointValidator {
     /// Throws `AgentError.notFound` when `(kind, id)` does not resolve to a live
     /// (non-soft-deleted) item.
     ///
@@ -20,7 +22,7 @@ enum AgentEndpointValidator {
     /// entity lives in `NexusMeetings`, which `NexusAgentTools` (NexusCore-only)
     /// does not import (R8-adjacent).
     @MainActor
-    static func validateLive(_ kind: ItemKind, _ id: UUID, context: AgentContext) throws {
+    public static func validateLive(_ kind: ItemKind, _ id: UUID, context: AgentContext) throws {
         switch kind {
         case .task:
             _ = try TasksMutationToolSupport.liveTask(id: id, context: context)

@@ -18,6 +18,11 @@ public struct AgentLinkItemsTool: MutatingAgentTool {
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let input = try AgentLinkItemsArguments.input(from: args)
+        // Both endpoints must resolve to live items before an edge is minted —
+        // a hallucinated/soft-deleted id would otherwise create a dangling
+        // edge and still report success (A2; same guard as note.link et al.).
+        try AgentEndpointValidator.validateLive(input.fromKind, input.fromID, context: context)
+        try AgentEndpointValidator.validateLive(input.toKind, input.toID, context: context)
         let repository = LinkRepository(context: modelContext.context)
         let link = try repository.findOrCreate(
             from: (input.fromKind, input.fromID),
