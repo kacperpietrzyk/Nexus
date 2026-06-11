@@ -42,6 +42,8 @@ import SwiftData
 ///   nil/defaulted, every new table starts empty). The new `ItemKind.cycle` /
 ///   `NoteRole.template` raw enum cases ride existing `String`-backed columns
 ///   and need no schema change.
+/// - V13 -> V14 lightweight (additive schema: `AttachmentAsset` metadata entity
+///   for durable note image attachments). Pure additive — no data move, no backfill.
 ///
 /// WHY the body -> Note move is NOT a `.custom` migration stage (a deliberate
 /// deviation from the spec's "custom stage" wording, forced by this codebase's
@@ -77,6 +79,7 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             NexusSchemaV11.self,
             NexusSchemaV12.self,
             NexusSchemaV13.self,
+            NexusSchemaV14.self,
         ]
     }
 
@@ -129,6 +132,10 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             MigrationStage.lightweight(
                 fromVersion: NexusSchemaV12.self,
                 toVersion: NexusSchemaV13.self
+            ),
+            MigrationStage.lightweight(
+                fromVersion: NexusSchemaV13.self,
+                toVersion: NexusSchemaV14.self
             ),
         ]
     }
