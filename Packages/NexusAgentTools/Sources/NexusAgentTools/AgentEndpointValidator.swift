@@ -38,7 +38,7 @@ enum AgentEndpointValidator {
             guard let label = try context.labelRepository.find(id: id), label.deletedAt == nil else {
                 throw AgentError.notFound("Label not found: \(id.uuidString)")
             }
-        case .meeting, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock:
+        case .meeting, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock, .cycle:
             // No NexusCore repository reachable here to existence-check; pass through.
             return
         }

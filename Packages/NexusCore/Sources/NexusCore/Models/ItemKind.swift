@@ -20,6 +20,9 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
     /// meetings (`LinkKind.attendee`) + mentioned tasks/notes (`LinkKind.mentions`)
     /// via the graph. Never a task assignee (invariant I1).
     case person
+    /// A time-boxed sprint (`Cycle`, Tranche 2, Linear L1). `Linkable` for
+    /// graph uniformity; not `Searchable` in v1 (mirrors `ScheduledBlock`).
+    case cycle
 
     public var displayName: String {
         switch self {
@@ -34,6 +37,7 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
         case .scheduledBlock: return "Scheduled Block"
         case .label: return "Label"
         case .person: return "Person"
+        case .cycle: return "Cycle"
         }
     }
 }
