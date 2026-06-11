@@ -15,8 +15,12 @@ import SwiftUI
 ///
 /// Mounts inside the existing app navigation, so it inherits the scene's
 /// `.modelContainer` — no separate container registration is needed.
-public struct NotesListView: View {
+public struct NotesListView: View {  // swiftlint:disable:this type_body_length
     @Environment(\.noteRepository) private var noteRepository
+    #if os(macOS)
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.notesGraphExternalTitles) private var graphExternalTitles
+    #endif
 
     // All live notes, newest-edited first. `deletedAt == nil` excludes tombstones.
     @Query(
@@ -35,6 +39,9 @@ public struct NotesListView: View {
     @State private var path: [UUID] = []
     @State private var newNoteError: String?
     @State private var groupMode: NoteListGrouping.Mode = .role
+    #if os(macOS)
+    @State private var graphModel: NoteGraphModel?
+    #endif
 
     // Folder ops (Tranche 2 Plan E). Optional-backed alert pattern, same as
     // `newNoteError`.
@@ -106,12 +113,24 @@ public struct NotesListView: View {
                 } message: {
                     Text("Notes in this folder and its subfolders move with it.")
                 }
-                .task { consumePendingDailyNoteRequest() }
+                .task {
+                    consumePendingDailyNoteRequest()
+                    #if os(macOS)
+                    consumePendingGraphRequest()
+                    #endif
+                }
                 .onReceive(
                     NotificationCenter.default.publisher(for: .notesOpenDailyNote)
                 ) { _ in
                     consumePendingDailyNoteRequest()
                 }
+                #if os(macOS)
+            .onReceive(
+                NotificationCenter.default.publisher(for: .notesOpenGraph)
+            ) { _ in
+                consumePendingGraphRequest()
+            }
+                #endif
         }
     }
 
@@ -175,21 +194,32 @@ public struct NotesListView: View {
 
     private var liquidContent: some View {
         VStack(spacing: 0) {
-            listHeader
-
-            if notes.isEmpty {
-                LiquidEmptyState(
-                    systemImage: "note.text",
-                    message: "Capture a thought, draft a page, or link ideas together."
-                ) {
-                    LiquidPrimaryButton("New Note", systemImage: "square.and.pencil") {
-                        createNote()
-                    }
-                    .disabled(noteRepository == nil)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if let graphModel {
+                NoteGraphView(
+                    model: graphModel,
+                    onOpenNote: { id in
+                        self.graphModel = nil
+                        path.append(id)
+                    },
+                    onClose: { self.graphModel = nil }
+                )
             } else {
-                liquidList
+                listHeader
+
+                if notes.isEmpty {
+                    LiquidEmptyState(
+                        systemImage: "note.text",
+                        message: "Capture a thought, draft a page, or link ideas together."
+                    ) {
+                        LiquidPrimaryButton("New Note", systemImage: "square.and.pencil") {
+                            createNote()
+                        }
+                        .disabled(noteRepository == nil)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    liquidList
+                }
             }
         }
     }
@@ -208,6 +238,14 @@ public struct NotesListView: View {
             )
 
             Spacer(minLength: DS.Space.m)
+
+            LiquidIconButton(
+                systemImage: "point.3.connected.trianglepath.dotted",
+                accessibilityLabel: "Open graph view"
+            ) {
+                openGraph(scope: .global)
+            }
+            .help("Graph view")
 
             LiquidIconButton(
                 systemImage: "calendar",
@@ -472,6 +510,22 @@ public struct NotesListView: View {
             newNoteError = error.localizedDescription
         }
     }
+
+    #if os(macOS)
+    @MainActor private func openGraph(scope: GraphScope) {
+        graphModel = NoteGraphModel.live(
+            context: modelContext,
+            externalTitles: { [graphExternalTitles] in graphExternalTitles?() ?? [:] },
+            scope: scope
+        )
+    }
+
+    @MainActor private func consumePendingGraphRequest() {
+        guard GraphOpenRequest.shared.consume() else { return }
+        path.removeAll()
+        openGraph(scope: .global)
+    }
+    #endif
 
     private func consumePendingDailyNoteRequest() {
         guard DailyNoteOpenRequest.shared.consume() else { return }
