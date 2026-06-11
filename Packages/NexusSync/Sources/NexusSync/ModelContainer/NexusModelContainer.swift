@@ -12,10 +12,10 @@ public protocol NexusEnvironmentProviding: Sendable {
 extension NexusEnvironment: NexusEnvironmentProviding {}
 
 /// Single source of truth for the SwiftData container the apps install via `.modelContainer(...)`.
-/// Currently bound to `NexusSchemaV13` (V12 + the Tranche-2 parity batch: `Cycle` +
-/// `ActivityEntry` entities and additive `TaskItem.cycleID` / `TaskItem.isTemplate` /
-/// `Note.propertiesJSON` / `Note.folderPath` columns; V12 itself added the `Person`
-/// contact-record entity).
+/// Currently bound to `NexusSchemaV14` (V13 + durable `AttachmentAsset` metadata;
+/// V13 added the Tranche-2 parity batch: `Cycle` + `ActivityEntry` entities and
+/// additive `TaskItem.cycleID` / `TaskItem.isTemplate` / `Note.propertiesJSON` /
+/// `Note.folderPath` columns; V12 itself added the `Person` contact-record entity).
 /// CloudKit mirroring is gated by `NexusEnvironment.cloudKitEnabled` — when off, local-only.
 public enum NexusModelContainer {
     public static let appGroupIdentifier = "group.com.kacperpietrzyk.Nexus"
@@ -40,7 +40,7 @@ public enum NexusModelContainer {
     ///
     /// `extraModels` lets composition packages add their own SwiftData entities
     /// without making NexusSync import them. Duplicate entries are accepted and
-    /// deduplicated by `NexusSchemaV13`.
+    /// deduplicated by `NexusSchemaV14`.
     public static func makeInMemory(
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
@@ -71,7 +71,7 @@ public enum NexusModelContainer {
     ///     runtime; without activation, `containerURL(forSecurityApplicationGroupIdentifier:)`
     ///     returns nil and we fall back to the default Application Support path.
     ///   - extraModels: composition-time models from packages that cannot be imported by
-    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV13`.
+    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV14`.
     ///   - localOnlyExtraModels: composition-time models that must be present in the
     ///     container but excluded from CloudKit-backed configurations.
     public static func make(
@@ -130,10 +130,10 @@ public enum NexusModelContainer {
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
     ) -> ModelPartitions {
-        let allModels = NexusSchemaV13.assembledModels(extraModels: extraModels + localOnlyExtraModels)
+        let allModels = NexusSchemaV14.assembledModels(extraModels: extraModels + localOnlyExtraModels)
         let localOnlyBaselineIDs = Set(localOnlyBaseline.map(ObjectIdentifier.init))
         let baselineSyncedIdentifiers = Set(
-            NexusSchemaV13.models
+            NexusSchemaV14.models
                 .filter { !localOnlyBaselineIDs.contains(ObjectIdentifier($0)) }
                 .map(ObjectIdentifier.init)
         )
@@ -150,7 +150,7 @@ public enum NexusModelContainer {
             containerModels: allModels,
             syncedModels: syncedModels,
             localOnlyModels: localOnlyModels,
-            hasEffectiveExtraModels: allModels.count > NexusSchemaV13.models.count
+            hasEffectiveExtraModels: allModels.count > NexusSchemaV14.models.count
         )
     }
 
@@ -165,8 +165,8 @@ public enum NexusModelContainer {
             extraModels: extraModels,
             localOnlyExtraModels: localOnlyExtraModels
         )
-        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV13.versionIdentifier)
-        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV13.versionIdentifier)
+        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV14.versionIdentifier)
+        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV14.versionIdentifier)
         let configurations: [ModelConfiguration]
 
         if isStoredInMemoryOnly {
@@ -205,7 +205,7 @@ public enum NexusModelContainer {
         }
 
         return ModelConfigurationPlan(
-            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV13.versionIdentifier),
+            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV14.versionIdentifier),
             configurations: configurations,
             partitions: partitions
         )

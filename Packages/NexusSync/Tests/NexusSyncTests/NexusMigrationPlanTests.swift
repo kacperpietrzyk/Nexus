@@ -8,7 +8,7 @@ import Testing
 @Suite("NexusMigrationPlan")
 struct NexusMigrationPlanTests {
 
-    @Test("plan declares V1 through V13 schemas in order")
+    @Test("plan declares V1 through V14 schemas in order")
     func schemaOrder() {
         let names = NexusMigrationPlan.schemas.map { String(describing: $0) }
         #expect(
@@ -26,15 +26,21 @@ struct NexusMigrationPlanTests {
                 "NexusSchemaV11",
                 "NexusSchemaV12",
                 "NexusSchemaV13",
+                "NexusSchemaV14",
             ])
     }
 
-    @Test("plan has twelve lightweight stages")
+    @Test("plan has thirteen lightweight stages")
     func stages() {
-        #expect(NexusMigrationPlan.stages.count == 12)
+        #expect(NexusMigrationPlan.stages.count == 13)
         // MigrationStage doesn't expose `.kind` publicly, but we can encode-check via debug repr.
         let descriptions = NexusMigrationPlan.stages.map { String(describing: $0) }
         #expect(descriptions.allSatisfy { $0.contains("lightweight") })
+    }
+
+    @Test func migrationPlanEndsAtV14() {
+        #expect(NexusMigrationPlan.schemas.last?.versionIdentifier == Schema.Version(14, 0, 0))
+        #expect(NexusMigrationPlan.stages.count == NexusMigrationPlan.schemas.count - 1)
     }
 
     /// Invariant guard, not a behavioural test. The production container is a
