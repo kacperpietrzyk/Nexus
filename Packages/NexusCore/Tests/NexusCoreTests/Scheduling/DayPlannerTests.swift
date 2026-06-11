@@ -82,4 +82,36 @@ struct DayPlannerTests {
         )
         #expect(liveAccepted.contains { $0.externalEventID == "evt-1" })
     }
+
+    @MainActor
+    @Test("planDay preserves manual-origin proposed blocks and schedules around them")
+    func planDayKeepsManualProposals() throws {
+        let context = try makeContext()
+        let cal = calendar
+        let task = TaskItem(title: "task", dueAt: now.addingTimeInterval(3600))
+        task.estimatedDurationSeconds = 1800
+        task.durationSourceRaw = DurationSource.explicit.rawValue
+        context.insert(task)
+        try context.save()
+
+        // A hand-placed, not-yet-accepted block (origin preserved across
+        // re-plans per ScheduledBlockOrigin.manual's contract).
+        let repo = ScheduledBlockRepository(context: context)
+        let manual = try repo.create(
+            taskID: UUID(),
+            start: now,
+            end: now.addingTimeInterval(3600),
+            title: "hand-placed",
+            status: .proposed,
+            origin: .manual
+        )
+
+        let planner = DayPlanner(context: context)
+        let result = try planner.planDay(events: [], prefs: .default, now: now, calendar: cal)
+
+        #expect(manual.deletedAt == nil)
+        #expect(result.proposals.count == 1)
+        // The new auto proposal is placed AFTER the manual block (it is an obstacle).
+        #expect(result.proposals.first?.start == now.addingTimeInterval(3600))
+    }
 }

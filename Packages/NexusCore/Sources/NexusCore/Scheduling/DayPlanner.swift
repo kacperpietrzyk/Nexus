@@ -74,7 +74,7 @@ public struct DayPlanner {
         let history = openTasks.filter {
             $0.status == .done && $0.durationSource == .explicit && $0.estimatedDurationSeconds != nil
         }
-        let accepted = try acceptedBlocks(now: now, calendar: calendar, horizonDays: horizonDays)
+        let accepted = try obstacleBlocks(now: now, calendar: calendar, horizonDays: horizonDays)
 
         let plan = scheduler.plan(
             candidates: candidates,
@@ -104,15 +104,19 @@ public struct DayPlanner {
         return try context.fetch(descriptor)
     }
 
-    private func acceptedBlocks(now: Date, calendar: Calendar, horizonDays: Int) throws -> [ScheduledBlock] {
+    /// Hard obstacles for the slot-fill: accepted blocks PLUS manual-origin
+    /// proposals — both are user commitments the scheduler plans around and
+    /// never moves (anti-thrash, spec §1/§14).
+    private func obstacleBlocks(now: Date, calendar: Calendar, horizonDays: Int) throws -> [ScheduledBlock] {
         let start = calendar.startOfDay(for: now)
         let days = max(1, horizonDays)
         let end = calendar.date(byAdding: .day, value: days, to: start) ?? start
         let acceptedRaw = ScheduledBlockStatus.accepted.rawValue
+        let manualRaw = ScheduledBlockOrigin.manual.rawValue
         let descriptor = FetchDescriptor<ScheduledBlock>(
             predicate: #Predicate { block in
                 block.deletedAt == nil
-                    && block.statusRaw == acceptedRaw
+                    && (block.statusRaw == acceptedRaw || block.originRaw == manualRaw)
                     && block.start < end
                     && block.end > start
             },
@@ -121,12 +125,17 @@ public struct DayPlanner {
         return try context.fetch(descriptor)
     }
 
-    /// Soft-delete live `proposed` blocks so a re-plan regenerates a clean set.
-    /// Accepted blocks (which mirror real events) are never touched.
+    /// Soft-delete live **auto-origin** `proposed` blocks so a re-plan
+    /// regenerates a clean set. Accepted blocks (which mirror real events) and
+    /// manual-origin proposals (hand-placed by the user, origin preserved
+    /// across re-plans per `ScheduledBlockOrigin.manual`) are never touched.
     private func clearStaleProposals() throws {
         let proposedRaw = ScheduledBlockStatus.proposed.rawValue
+        let autoRaw = ScheduledBlockOrigin.auto.rawValue
         let descriptor = FetchDescriptor<ScheduledBlock>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.statusRaw == proposedRaw }
+            predicate: #Predicate {
+                $0.deletedAt == nil && $0.statusRaw == proposedRaw && $0.originRaw == autoRaw
+            }
         )
         for block in try context.fetch(descriptor) {
             try blocks.softDelete(block)
