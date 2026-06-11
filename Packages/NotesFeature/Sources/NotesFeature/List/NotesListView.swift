@@ -417,6 +417,10 @@ private struct LiquidNoteRow: View {
             Image(systemName: "calendar")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(DS.ColorToken.textTertiary)
+        case .template:
+            Image(systemName: "doc.on.doc")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textTertiary)
         }
     }
 }
@@ -506,6 +510,10 @@ struct NoteListRow: View {
                 .font(.caption)
         case .dailyNote:
             Image(systemName: "calendar")
+                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(.caption)
+        case .template:
+            Image(systemName: "doc.on.doc")
                 .foregroundStyle(NexusColor.Text.tertiary)
                 .font(.caption)
         }

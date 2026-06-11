@@ -12,4 +12,7 @@ public enum NoteRole: String, Codable, Sendable, CaseIterable {
     case projectPage
     /// A per-day note, typically populated by the Agent brief.
     case dailyNote
+    /// A reusable note template (Tranche 2, Obsidian O3). Instantiation copies
+    /// content into a fresh `.free` note (Plan D).
+    case template
 }

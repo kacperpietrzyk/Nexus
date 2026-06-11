@@ -189,6 +189,7 @@ struct NoteEditorView: View {
         case .free: return "Note"
         case .projectPage: return "Project Page"
         case .dailyNote: return "Daily Note"
+        case .template: return "Template"
         }
     }
 

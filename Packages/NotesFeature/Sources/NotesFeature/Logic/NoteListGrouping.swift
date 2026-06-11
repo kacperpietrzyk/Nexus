@@ -68,6 +68,7 @@ public enum NoteListGrouping {
         case .free: return "Notes"
         case .projectPage: return "Project Pages"
         case .dailyNote: return "Daily Notes"
+        case .template: return "Templates"
         }
     }
 
