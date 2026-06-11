@@ -44,7 +44,7 @@ public enum AgentEndpointValidator {
             guard let cycle = try context.cycleRepository.find(id: id), cycle.deletedAt == nil else {
                 throw AgentError.notFound("Cycle not found: \(id.uuidString)")
             }
-        case .meeting, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock:
+        case .meeting, .section, .savedFilter, .debug, .agentMemory, .scheduledBlock, .attachment:
             // No NexusCore repository reachable here to existence-check; pass through.
             return
         }

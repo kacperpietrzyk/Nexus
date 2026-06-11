@@ -24,6 +24,7 @@ enum GraphStyle {
         case .debug: return "ladybug"
         case .agentMemory: return "brain.head.profile"
         case .scheduledBlock: return "calendar.badge.clock"
+        case .attachment: return "paperclip"
         }
     }
 
