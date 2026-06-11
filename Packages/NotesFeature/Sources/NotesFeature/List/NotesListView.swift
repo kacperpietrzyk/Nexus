@@ -97,6 +97,20 @@ public struct NotesListView: View {
                     }
                     .disabled(noteRepository == nil)
                 }
+                if !templateNotes.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            ForEach(templateNotes) { template in
+                                Button(template.title.isEmpty ? "Untitled template" : template.title) {
+                                    createNoteFromTemplate(template)
+                                }
+                            }
+                        } label: {
+                            Label("New Note from Template", systemImage: "doc.on.doc")
+                        }
+                        .disabled(noteRepository == nil)
+                    }
+                }
                 ToolbarItem(placement: .automatic) {
                     Picker("Group by", selection: $groupMode) {
                         Label("Type", systemImage: "square.stack.3d.up")
@@ -158,6 +172,21 @@ public struct NotesListView: View {
             .disabled(noteRepository == nil)
             .help("Open today's note (⌘⇧D)")
 
+            if !templateNotes.isEmpty {
+                Menu {
+                    ForEach(templateNotes) { template in
+                        Button(template.title.isEmpty ? "Untitled template" : template.title) {
+                            createNoteFromTemplate(template)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .disabled(noteRepository == nil)
+                .help("New note from template")
+                .accessibilityLabel("New note from template")
+            }
+
             LiquidPrimaryButton("New Note", systemImage: "square.and.pencil") {
                 createNote()
             }
@@ -180,6 +209,7 @@ public struct NotesListView: View {
                             onOpen: { path.append(note.id) },
                             onDelete: { deleteNote(note) }
                         )
+                        .contextMenu { noteTemplateContextMenu(note) }
                     }
                 }
             }
@@ -232,6 +262,7 @@ public struct NotesListView: View {
                                     Label("Delete", systemImage: "trash")
                                 }
                             }
+                            .contextMenu { noteTemplateContextMenu(note) }
                         }
                     } header: {
                         sectionHeader(group)
@@ -255,6 +286,39 @@ public struct NotesListView: View {
     #endif
 
     // MARK: - Actions
+
+    private var templateNotes: [Note] {
+        notes.filter { $0.role == .template }
+    }
+
+    private func createNoteFromTemplate(_ template: Note) {
+        guard let noteRepository else { return }
+        do {
+            let note = try noteRepository.instantiateTemplate(template)
+            path.append(note.id)
+        } catch {
+            newNoteError = error.localizedDescription
+        }
+    }
+
+    private func saveNoteAsTemplate(_ note: Note) {
+        guard let noteRepository else { return }
+        do {
+            try noteRepository.updateFields(note, role: .template)
+        } catch {
+            newNoteError = error.localizedDescription
+        }
+    }
+
+    @ViewBuilder
+    private func noteTemplateContextMenu(_ note: Note) -> some View {
+        if note.role == .template {
+            Button("New Note from Template") { createNoteFromTemplate(note) }
+        } else if note.role == .free {
+            Button("Save as Template") { saveNoteAsTemplate(note) }
+        }
+        // projectPage / dailyNote: role is structural — no template conversion.
+    }
 
     private func createNote() {
         guard let noteRepository else { return }

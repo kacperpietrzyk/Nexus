@@ -47,7 +47,9 @@ public enum NoteListGrouping {
     public static func groups(for notes: [Note], mode: Mode) -> [Group] {
         switch mode {
         case .role: return roleGroups(notes)
-        case .tag: return tagGroups(notes)
+        // Templates are excluded from the tag view entirely (Tranche 2 Plan D):
+        // they surface only via their dedicated role section.
+        case .tag: return tagGroups(notes.filter { $0.role != .template })
         }
     }
 
@@ -55,7 +57,7 @@ public enum NoteListGrouping {
 
     private static func roleGroups(_ notes: [Note]) -> [Group] {
         // Fixed, stable role order so sections never reshuffle as notes change.
-        let order: [NoteRole] = [.free, .projectPage, .dailyNote]
+        let order: [NoteRole] = [.free, .projectPage, .dailyNote, .template]
         return order.compactMap { role in
             let bucket = notes.filter { $0.role == role }
             guard !bucket.isEmpty else { return nil }
