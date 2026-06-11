@@ -14,7 +14,8 @@ public enum MarkdownExporter {
     public static func export<each L: Linkable>(
         container: ModelContainer,
         types: repeat (each L).Type,
-        to folder: URL
+        to folder: URL,
+        attachmentRoot: URL? = nil
     ) async throws -> MarkdownExportResult {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return try await MainActor.run {
@@ -30,6 +31,7 @@ public enum MarkdownExporter {
                     in: context,
                     linksByFromID: linksByFromID,
                     folder: folder,
+                    attachmentRoot: attachmentRoot,
                     counters: &counters
                 )
 
@@ -47,6 +49,7 @@ public enum MarkdownExporter {
         in context: ModelContext,
         linksByFromID: [UUID: [Link]],
         folder: URL,
+        attachmentRoot: URL?,
         counters: inout ExportCounters
     ) throws {
         // Cache of Note id → serialized Markdown body so each note is decoded at
@@ -81,7 +84,13 @@ public enum MarkdownExporter {
                 // Tranche 2 Plan E: a Note carries organization frontmatter
                 // (folder + custom properties); every other built-in type has none.
                 extras = (item as? Note).map(Self.noteFrontmatterExtras) ?? []
-                bodyText = body(for: item, in: context, noteBodyCache: &noteBodyCache)
+                bodyText = body(
+                    for: item,
+                    in: context,
+                    exportFolder: folder,
+                    attachmentRoot: attachmentRoot,
+                    noteBodyCache: &noteBodyCache
+                )
             }
             let doc = MarkdownDocument(
                 id: item.id,
@@ -154,35 +163,108 @@ public enum MarkdownExporter {
     private static func body<L: Linkable>(
         for item: L,
         in context: ModelContext,
+        exportFolder: URL,
+        attachmentRoot: URL?,
         noteBodyCache: inout [UUID: String]
     ) -> String {
         let noteRef: UUID?
         switch item {
         case let task as TaskItem: noteRef = task.noteRef
         case let project as Project: noteRef = project.canonicalNoteRef
-        case let note as Note: return markdownBody(of: note)
+        case let note as Note:
+            return markdownBody(of: note, in: context, exportFolder: exportFolder, attachmentRoot: attachmentRoot)
         default: noteRef = nil
         }
         guard let noteRef else { return "" }
         if let cached = noteBodyCache[noteRef] { return cached }
-        let body = resolveNoteBody(id: noteRef, in: context)
+        let body = resolveNoteBody(
+            id: noteRef,
+            in: context,
+            exportFolder: exportFolder,
+            attachmentRoot: attachmentRoot
+        )
         noteBodyCache[noteRef] = body
         return body
     }
 
     @MainActor
-    private static func resolveNoteBody(id: UUID, in context: ModelContext) -> String {
+    private static func resolveNoteBody(
+        id: UUID,
+        in context: ModelContext,
+        exportFolder: URL,
+        attachmentRoot: URL?
+    ) -> String {
         var descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })
         descriptor.fetchLimit = 1
         guard let note = try? context.fetch(descriptor).first, note.deletedAt == nil else {
             return ""
         }
-        return markdownBody(of: note)
+        return markdownBody(of: note, in: context, exportFolder: exportFolder, attachmentRoot: attachmentRoot)
     }
 
-    private static func markdownBody(of note: Note) -> String {
-        guard let blocks = try? NoteContentCoder.decode(note.contentData) else { return "" }
+    @MainActor
+    private static func markdownBody(
+        of note: Note,
+        in context: ModelContext,
+        exportFolder: URL,
+        attachmentRoot: URL?
+    ) -> String {
+        guard var blocks = try? NoteContentCoder.decode(note.contentData) else { return "" }
+        for index in blocks.indices {
+            guard case .image(let ref?, let fallbackAsset) = blocks[index].kind else { continue }
+            guard
+                let exportPath = try? exportAttachment(
+                    id: ref,
+                    fallbackAsset: fallbackAsset,
+                    noteID: note.id,
+                    context: context,
+                    exportFolder: exportFolder,
+                    attachmentRoot: attachmentRoot
+                )
+            else { continue }
+            blocks[index].kind = .image(ref: ref, asset: exportPath)
+        }
         return BlockMarkdownSerializer.markdown(for: blocks)
+    }
+
+    @MainActor
+    private static func exportAttachment(
+        id: UUID,
+        fallbackAsset: String?,
+        noteID: UUID,
+        context: ModelContext,
+        exportFolder: URL,
+        attachmentRoot: URL?
+    ) throws -> String {
+        var descriptor = FetchDescriptor<AttachmentAsset>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        guard let asset = try context.fetch(descriptor).first, asset.deletedAt == nil else {
+            return fallbackAsset ?? ""
+        }
+
+        let filename = sanitizedPathComponent(
+            asset.originalFilename.isEmpty ? asset.id.uuidString : asset.originalFilename
+        )
+        let relativePath = "_assets/\(noteID.uuidString)/\(filename)"
+        guard let attachmentRoot else {
+            return fallbackAsset ?? asset.storagePath
+        }
+
+        let source = attachmentRoot.appendingPathComponent(asset.storagePath, isDirectory: false)
+        guard FileManager.default.fileExists(atPath: source.path) else {
+            return fallbackAsset ?? asset.storagePath
+        }
+
+        let destination = exportFolder.appendingPathComponent(relativePath, isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.copyItem(at: source, to: destination)
+        return relativePath
     }
 
     // MARK: - Note organization frontmatter (Tranche 2 Plan E)
