@@ -1,14 +1,19 @@
 import Foundation
 import SwiftData
 
-/// CRUD + soft-delete lifecycle for `Cycle` (Tranche 2, Plan A foundation;
-/// `ProjectRepository` shape). Bound to a single `ModelContext`; never share
-/// across actors.
+public enum CycleRepositoryError: Error, Equatable {
+    case invalidInterval(startAt: Date, endAt: Date)
+}
+
+/// CRUD + soft-delete lifecycle for `Cycle` (Tranche 2, Plan A foundation +
+/// Plan C selection/query surface; `ProjectRepository` shape). Bound to a
+/// single `ModelContext`; never share across actors.
 ///
 /// Soft-delete is PLAIN (no cascade): assigned tasks KEEP their `cycleID` — a
 /// dangling id resolves to "no cycle" at read time, exactly the `projectID`
-/// dangling semantics (invariant I-C1). `current(now:)`/`next(now:)` and
-/// `TaskItemRepository.assignCycle` are Plan C.
+/// dangling semantics (invariant I-C1). The status machine is manual +
+/// assisted only (`upcoming → active → completed`) — nothing here runs on a
+/// schedule and nothing moves tasks automatically.
 @MainActor
 public final class CycleRepository {
     public let context: ModelContext
@@ -21,6 +26,9 @@ public final class CycleRepository {
 
     @discardableResult
     public func create(name: String, startAt: Date, endAt: Date) throws -> Cycle {
+        guard endAt > startAt else {
+            throw CycleRepositoryError.invalidInterval(startAt: startAt, endAt: endAt)
+        }
         let stamp = now()
         let cycle = Cycle(name: name, startAt: startAt, endAt: endAt)
         cycle.createdAt = stamp
@@ -37,6 +45,19 @@ public final class CycleRepository {
     }
 
     public func setDates(_ cycle: Cycle, startAt: Date, endAt: Date) throws {
+        cycle.startAt = startAt
+        cycle.endAt = endAt
+        cycle.updatedAt = now()
+        try context.save()
+    }
+
+    /// Combined editor write (Plan C): rewrites name + interval in one save,
+    /// rejecting an end date not after the start date.
+    public func update(_ cycle: Cycle, name: String, startAt: Date, endAt: Date) throws {
+        guard endAt > startAt else {
+            throw CycleRepositoryError.invalidInterval(startAt: startAt, endAt: endAt)
+        }
+        cycle.name = name
         cycle.startAt = startAt
         cycle.endAt = endAt
         cycle.updatedAt = now()
@@ -76,5 +97,51 @@ public final class CycleRepository {
             predicate: #Predicate { cycle in cycle.id == id }
         )
         return try context.fetch(descriptor).first
+    }
+
+    /// The `.active` cycle whose `startAt...endAt` contains `now`; ties resolve
+    /// to the earliest `startAt`, then UUID string, deterministically. An
+    /// `upcoming` cycle containing now is NOT current — the machine is manual.
+    public func current(now reference: Date) throws -> Cycle? {
+        let activeRaw = CycleStatus.active.rawValue
+        let descriptor = FetchDescriptor<Cycle>(
+            predicate: #Predicate { cycle in
+                cycle.deletedAt == nil && cycle.statusRaw == activeRaw
+            }
+        )
+        return try context.fetch(descriptor)
+            .filter { $0.startAt <= reference && reference <= $0.endAt }
+            .min { lhs, rhs in
+                if lhs.startAt != rhs.startAt { return lhs.startAt < rhs.startAt }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+    }
+
+    /// The earliest not-completed cycle starting strictly after `now` — the
+    /// "next cycle" target of the end-of-cycle move prompt.
+    public func next(now reference: Date) throws -> Cycle? {
+        let completedRaw = CycleStatus.completed.rawValue
+        let descriptor = FetchDescriptor<Cycle>(
+            predicate: #Predicate { cycle in
+                cycle.deletedAt == nil && cycle.statusRaw != completedRaw && cycle.startAt > reference
+            }
+        )
+        return try context.fetch(descriptor)
+            .min { lhs, rhs in
+                if lhs.startAt != rhs.startAt { return lhs.startAt < rhs.startAt }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+    }
+
+    /// Live, non-template tasks assigned to the cycle (spec §4.2 query:
+    /// `cycleID == id && deletedAt == nil && isTemplate == false`), sorted by
+    /// the shared manual-order comparator.
+    public func tasks(in cycleID: UUID) throws -> [TaskItem] {
+        let descriptor = FetchDescriptor<TaskItem>(
+            predicate: #Predicate { task in
+                task.cycleID == cycleID && task.deletedAt == nil && task.isTemplate == false
+            }
+        )
+        return try context.fetch(descriptor).sorted(by: TaskItemRepository.assignmentOrder)
     }
 }

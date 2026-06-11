@@ -109,4 +109,138 @@ struct CycleRepositoryTests {
         #expect(try repo.find(id: cycle.id)?.id == cycle.id)
         #expect(try repo.find(id: UUID()) == nil)
     }
+
+    // MARK: - Plan C additions
+
+    private static let day: TimeInterval = 86_400
+
+    @MainActor
+    @Test("create and update reject an end date not after the start date")
+    func invalidIntervalRejected() throws {
+        let context = try makeContext()
+        let repo = CycleRepository(context: context, now: { self.start })
+
+        #expect(throws: CycleRepositoryError.invalidInterval(startAt: start, endAt: start)) {
+            try repo.create(name: "Bad", startAt: start, endAt: start)
+        }
+
+        let cycle = try repo.create(
+            name: "Good", startAt: start, endAt: start.addingTimeInterval(Self.day)
+        )
+        #expect(throws: CycleRepositoryError.self) {
+            try repo.update(
+                cycle, name: "Good", startAt: start, endAt: start.addingTimeInterval(-Self.day)
+            )
+        }
+    }
+
+    @MainActor
+    @Test("update rewrites name and interval and bumps updatedAt")
+    func updateRewrites() throws {
+        let context = try makeContext()
+        var current = start
+        let repo = CycleRepository(context: context, now: { current })
+        let cycle = try repo.create(
+            name: "Sprint 12", startAt: start, endAt: start.addingTimeInterval(7 * Self.day)
+        )
+
+        current = start.addingTimeInterval(Self.day)
+        try repo.update(
+            cycle,
+            name: "Sprint 12 (extended)",
+            startAt: start,
+            endAt: start.addingTimeInterval(14 * Self.day)
+        )
+
+        #expect(cycle.name == "Sprint 12 (extended)")
+        #expect(cycle.endAt == start.addingTimeInterval(14 * Self.day))
+        #expect(cycle.updatedAt == current)
+    }
+
+    @MainActor
+    @Test("current returns the active cycle containing now; ties resolve to earliest startAt")
+    func currentSelection() throws {
+        let context = try makeContext()
+        let repo = CycleRepository(context: context, now: { self.start })
+        let reference = start
+
+        let older = try repo.create(
+            name: "Old",
+            startAt: reference.addingTimeInterval(-2 * Self.day),
+            endAt: reference.addingTimeInterval(Self.day)
+        )
+        try repo.setStatus(.active, on: older)
+        let newer = try repo.create(
+            name: "New",
+            startAt: reference.addingTimeInterval(-Self.day),
+            endAt: reference.addingTimeInterval(Self.day)
+        )
+        try repo.setStatus(.active, on: newer)
+        // Upcoming cycle containing now is NOT current — the machine is manual.
+        _ = try repo.create(
+            name: "Not started",
+            startAt: reference.addingTimeInterval(-Self.day),
+            endAt: reference.addingTimeInterval(Self.day)
+        )
+
+        #expect(try repo.current(now: reference)?.id == older.id)
+    }
+
+    @MainActor
+    @Test("next returns the earliest not-completed cycle starting after now")
+    func nextSelection() throws {
+        let context = try makeContext()
+        let repo = CycleRepository(context: context, now: { self.start })
+        let reference = start
+
+        let near = try repo.create(
+            name: "Near",
+            startAt: reference.addingTimeInterval(Self.day),
+            endAt: reference.addingTimeInterval(2 * Self.day)
+        )
+        _ = try repo.create(
+            name: "Far",
+            startAt: reference.addingTimeInterval(3 * Self.day),
+            endAt: reference.addingTimeInterval(4 * Self.day)
+        )
+        let completedFuture = try repo.create(
+            name: "Done already",
+            startAt: reference.addingTimeInterval(Self.day / 2),
+            endAt: reference.addingTimeInterval(Self.day)
+        )
+        try repo.setStatus(.completed, on: completedFuture)
+
+        #expect(try repo.next(now: reference)?.id == near.id)
+        #expect(try repo.next(now: reference.addingTimeInterval(5 * Self.day)) == nil)
+    }
+
+    @MainActor
+    @Test("tasks(in:) returns live non-template tasks of the cycle only")
+    func tasksInCycle() throws {
+        let context = try makeContext()
+        let repo = CycleRepository(context: context, now: { self.start })
+        let cycle = try repo.create(
+            name: "Sprint", startAt: start, endAt: start.addingTimeInterval(Self.day)
+        )
+        let other = try repo.create(
+            name: "Other", startAt: start, endAt: start.addingTimeInterval(Self.day)
+        )
+
+        let assigned = TaskItem(title: "In cycle")
+        assigned.cycleID = cycle.id
+        let elsewhere = TaskItem(title: "Other cycle")
+        elsewhere.cycleID = other.id
+        let deleted = TaskItem(title: "Deleted")
+        deleted.cycleID = cycle.id
+        deleted.deletedAt = start
+        let template = TaskItem(title: "Template")
+        template.cycleID = cycle.id
+        template.isTemplate = true
+        for task in [assigned, elsewhere, deleted, template] {
+            context.insert(task)
+        }
+        try context.save()
+
+        #expect(try repo.tasks(in: cycle.id).map(\.id) == [assigned.id])
+    }
 }
