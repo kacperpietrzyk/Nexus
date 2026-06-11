@@ -32,6 +32,19 @@ public final class Note: Searchable {
     public var updatedAt: Date = Date.now
     public var deletedAt: Date?
 
+    /// Custom property bag (Tranche 2, Obsidian O6). JSON-encoded ordered
+    /// `[NoteProperty]` (array, NOT a dict — preserves user order so
+    /// frontmatter emission stays deterministic). nil = no properties. Read
+    /// and written through the `properties` accessor; views never touch the
+    /// blob (Plan E routes edits through `NoteRepository`).
+    public var propertiesJSON: String?
+
+    /// Folder placement (Tranche 2, Obsidian O2). Slash-separated path
+    /// ("area/subarea"), normalized via `NoteFolderPath.normalize` (no
+    /// leading/trailing slash, no empty components); nil = root. There is NO
+    /// folder entity — the tree is derived from live notes' paths.
+    public var folderPath: String?
+
     public init(
         id: UUID = UUID(),
         title: String = "",
@@ -56,4 +69,38 @@ public final class Note: Searchable {
     /// `Searchable`: search indexes the denormalized `plainText` cache, never the
     /// raw block blob.
     public var searchableText: String { plainText }
+
+    /// Decoded view over `propertiesJSON` (the `TaskItem.reminders` idiom).
+    /// Setting an empty array clears the stored blob; nil blob ⇔ []. Keys are
+    /// de-duplicated last-wins, case-sensitively, on both read and write
+    /// (defensive — the editor enforces uniqueness). SwiftData persists only
+    /// `propertiesJSON`; this computed property is not part of the schema.
+    public var properties: [NoteProperty] {
+        get {
+            guard let propertiesJSON,
+                let data = propertiesJSON.data(using: .utf8),
+                let decoded = try? JSONDecoder().decode([NoteProperty].self, from: data)
+            else { return [] }
+            return Self.deduplicatedLastWins(decoded)
+        }
+        set {
+            let deduplicated = Self.deduplicatedLastWins(newValue)
+            guard !deduplicated.isEmpty, let data = try? JSONEncoder().encode(deduplicated) else {
+                propertiesJSON = nil
+                return
+            }
+            propertiesJSON = String(data: data, encoding: .utf8)
+        }
+    }
+
+    /// Keeps each key's LAST occurrence, in the surviving elements' original
+    /// relative order (deterministic — frontmatter emission depends on it).
+    private static func deduplicatedLastWins(_ properties: [NoteProperty]) -> [NoteProperty] {
+        var seen = Set<String>()
+        var keptReversed: [NoteProperty] = []
+        for property in properties.reversed() where seen.insert(property.key).inserted {
+            keptReversed.append(property)
+        }
+        return keptReversed.reversed()
+    }
 }
