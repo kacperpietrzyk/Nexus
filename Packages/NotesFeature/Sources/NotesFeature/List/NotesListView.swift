@@ -36,6 +36,13 @@ public struct NotesListView: View {
     @State private var newNoteError: String?
     @State private var groupMode: NoteListGrouping.Mode = .role
 
+    // Folder ops (Tranche 2 Plan E). Optional-backed alert pattern, same as
+    // `newNoteError`.
+    @State private var folderRenameTarget: String?
+    @State private var folderRenameText = ""
+    @State private var moveToNewFolderNote: Note?
+    @State private var newFolderText = ""
+
     public init() {}
 
     private var backlinkCounts: [UUID: Int] {
@@ -62,6 +69,42 @@ public struct NotesListView: View {
                     Button("OK", role: .cancel) { newNoteError = nil }
                 } message: {
                     Text(newNoteError ?? "")
+                }
+                .alert(
+                    "New Folder",
+                    isPresented: Binding(
+                        get: { moveToNewFolderNote != nil },
+                        set: { if !$0 { moveToNewFolderNote = nil } }
+                    )
+                ) {
+                    TextField("Folder path", text: $newFolderText)
+                    Button("Cancel", role: .cancel) { moveToNewFolderNote = nil }
+                    Button("Move") {
+                        if let note = moveToNewFolderNote {
+                            moveNote(note, toFolder: newFolderText)
+                        }
+                        moveToNewFolderNote = nil
+                    }
+                } message: {
+                    Text("Slash-separated path, e.g. projects/nexus.")
+                }
+                .alert(
+                    "Rename Folder",
+                    isPresented: Binding(
+                        get: { folderRenameTarget != nil },
+                        set: { if !$0 { folderRenameTarget = nil } }
+                    )
+                ) {
+                    TextField("Folder path", text: $folderRenameText)
+                    Button("Cancel", role: .cancel) { folderRenameTarget = nil }
+                    Button("Rename") {
+                        if let target = folderRenameTarget {
+                            _ = try? noteRepository?.renameFolder(from: target, to: folderRenameText)
+                        }
+                        folderRenameTarget = nil
+                    }
+                } message: {
+                    Text("Notes in this folder and its subfolders move with it.")
                 }
                 .task { consumePendingDailyNoteRequest() }
                 .onReceive(
@@ -117,6 +160,8 @@ public struct NotesListView: View {
                             .tag(NoteListGrouping.Mode.role)
                         Label("Tag", systemImage: "number")
                             .tag(NoteListGrouping.Mode.tag)
+                        Label("Folder", systemImage: "folder")
+                            .tag(NoteListGrouping.Mode.folder)
                     }
                     .pickerStyle(.menu)
                 }
@@ -157,6 +202,7 @@ public struct NotesListView: View {
                 options: [
                     LiquidSegmentOption(NoteListGrouping.Mode.role, label: "Type"),
                     LiquidSegmentOption(NoteListGrouping.Mode.tag, label: "Tag"),
+                    LiquidSegmentOption(NoteListGrouping.Mode.folder, label: "Folder"),
                 ],
                 selection: $groupMode
             )
@@ -207,9 +253,14 @@ public struct NotesListView: View {
                             note: note,
                             backlinkCount: backlinkCounts[note.id] ?? 0,
                             onOpen: { path.append(note.id) },
-                            onDelete: { deleteNote(note) }
+                            onDelete: { deleteNote(note) },
+                            extraContextMenu: AnyView(
+                                Group {
+                                    noteTemplateContextMenu(note)
+                                    moveToFolderMenu(for: note)
+                                }
+                            )
                         )
-                        .contextMenu { noteTemplateContextMenu(note) }
                     }
                 }
             }
@@ -228,6 +279,21 @@ public struct NotesListView: View {
                 .font(DS.FontToken.caption)
                 .monospacedDigit()
                 .foregroundStyle(DS.ColorToken.textMuted)
+            if groupMode == .folder, group.id != NoteListGrouping.noFolderGroupID {
+                Menu {
+                    Button("Rename Folder…") { promptRenameFolder(group.id) }
+                    Button("Remove Folder (Keep Notes)", role: .destructive) {
+                        removeFolder(group.id)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(DS.ColorToken.textTertiary)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .accessibilityLabel("Folder actions for \(group.title)")
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, DS.Space.s)
@@ -262,7 +328,10 @@ public struct NotesListView: View {
                                     Label("Delete", systemImage: "trash")
                                 }
                             }
-                            .contextMenu { noteTemplateContextMenu(note) }
+                            .contextMenu {
+                                noteTemplateContextMenu(note)
+                                moveToFolderMenu(for: note)
+                            }
                         }
                     } header: {
                         sectionHeader(group)
@@ -279,6 +348,19 @@ public struct NotesListView: View {
                 .nexusType(.eyebrow)
                 .foregroundStyle(NexusColor.Text.tertiary)
             NexusCount(value: group.notes.count, font: NexusType.metaMono)
+            if groupMode == .folder, group.id != NoteListGrouping.noFolderGroupID {
+                Menu {
+                    Button("Rename Folder…") { promptRenameFolder(group.id) }
+                    Button("Remove Folder (Keep Notes)", role: .destructive) {
+                        removeFolder(group.id)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.caption)
+                        .foregroundStyle(NexusColor.Text.tertiary)
+                }
+                .accessibilityLabel("Folder actions for \(group.title)")
+            }
             Spacer(minLength: 0)
         }
     }
@@ -334,6 +416,50 @@ public struct NotesListView: View {
         try? noteRepository?.delete(note)
     }
 
+    // MARK: - Folder ops (Tranche 2 Plan E)
+
+    /// Every existing folder path (including implied ancestors), from the
+    /// derived tree — the move-menu target list.
+    private var folderMovePaths: [String] {
+        NoteFolderTree.build(paths: notes.map(\.folderPath)).allPaths
+    }
+
+    private func moveNote(_ note: Note, toFolder path: String?) {
+        try? noteRepository?.setFolderPath(note, path)
+    }
+
+    private func promptNewFolder(for note: Note) {
+        newFolderText = note.folderPath ?? ""
+        moveToNewFolderNote = note
+    }
+
+    private func promptRenameFolder(_ path: String) {
+        folderRenameText = path
+        folderRenameTarget = path
+    }
+
+    private func removeFolder(_ path: String) {
+        _ = try? noteRepository?.removeFolder(path)
+    }
+
+    /// "Move to Folder" submenu for a row context menu: root, every existing
+    /// folder (tree order), and a "New Folder…" prompt. Available in ALL
+    /// grouping modes — folder placement is note metadata, not a mode feature.
+    @ViewBuilder
+    private func moveToFolderMenu(for note: Note) -> some View {
+        Menu("Move to Folder") {
+            Button("No Folder") { moveNote(note, toFolder: nil) }
+            if !folderMovePaths.isEmpty {
+                Divider()
+                ForEach(folderMovePaths, id: \.self) { path in
+                    Button(path) { moveNote(note, toFolder: path) }
+                }
+            }
+            Divider()
+            Button("New Folder…") { promptNewFolder(for: note) }
+        }
+    }
+
     /// O4 "Today's note": idempotent open-or-create via `DailyNoteService`
     /// (shared identity with the agent's brief note), then push the editor.
     private func openTodaysDailyNote() {
@@ -352,236 +478,3 @@ public struct NotesListView: View {
         openTodaysDailyNote()
     }
 }
-
-#if os(macOS)
-
-/// A Liquid list row for one note: role glyph + title + trailing backlinks/date
-/// metadata, a one-line preview from the denormalized `plainText` cache (never
-/// the block blob — spec §4.1), and a strip of tag pills. Hover answers with a
-/// fill wash only (dense list — no scale per the implementation guide).
-private struct LiquidNoteRow: View {
-    let note: Note
-    let backlinkCount: Int
-    let onOpen: () -> Void
-    let onDelete: () -> Void
-
-    @State private var hovering = false
-
-    /// Row hover wash — same value family as `LiquidTaskRow` (white 4%).
-    private static let hoverFill = Color.white.opacity(0.04)
-
-    private var tags: [String] {
-        NoteListGrouping.normalizedTags(note.tags)
-    }
-
-    var body: some View {
-        Button(action: onOpen) {
-            HStack(alignment: .top, spacing: DS.Space.s) {
-                roleGlyph
-                    .frame(width: 16, alignment: .center)
-                    .padding(.top, 1)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: DS.Space.s) {
-                        Text(displayTitle)
-                            .font(DS.FontToken.bodyStrong)
-                            .foregroundStyle(DS.ColorToken.textPrimary)
-                            .lineLimit(1)
-
-                        Spacer(minLength: DS.Space.s)
-
-                        if backlinkCount > 0 {
-                            backlinkBadge
-                        }
-
-                        Text(note.updatedAt, format: .relative(presentation: .named))
-                            .font(DS.FontToken.metadata)
-                            .foregroundStyle(DS.ColorToken.textTertiary)
-                            .lineLimit(1)
-                    }
-
-                    if !preview.isEmpty {
-                        Text(preview)
-                            .font(DS.FontToken.metadata)
-                            .foregroundStyle(DS.ColorToken.textSecondary)
-                            .lineLimit(1)
-                    }
-
-                    if !tags.isEmpty {
-                        HStack(spacing: DS.Space.xs) {
-                            ForEach(tags.prefix(4), id: \.self) { tag in
-                                LiquidPill(tag, color: DS.ColorToken.accentCyan)
-                            }
-                            if tags.count > 4 {
-                                Text("+\(tags.count - 4)")
-                                    .font(DS.FontToken.caption)
-                                    .foregroundStyle(DS.ColorToken.textMuted)
-                            }
-                        }
-                        .padding(.top, 1)
-                    }
-                }
-            }
-            .padding(.horizontal, DS.Space.m)
-            .padding(.vertical, DS.Space.s)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                    .fill(hovering ? Self.hoverFill : .clear)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { value in
-            withAnimation(DS.Motion.hover) { hovering = value }
-        }
-        .contextMenu {
-            Button(role: .destructive, action: onDelete) {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-        .accessibilityLabel(Text(displayTitle))
-    }
-
-    private var backlinkBadge: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "arrow.turn.up.left")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textTertiary)
-            Text("\(backlinkCount)")
-                .font(DS.FontToken.caption)
-                .monospacedDigit()
-                .foregroundStyle(DS.ColorToken.textTertiary)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(backlinkCount) backlinks"))
-    }
-
-    private var displayTitle: String {
-        note.title.isEmpty ? "Untitled" : note.title
-    }
-
-    private var preview: String {
-        note.plainText
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    @ViewBuilder private var roleGlyph: some View {
-        switch note.role {
-        case .free:
-            Image(systemName: "note.text")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textMuted)
-        case .projectPage:
-            Image(systemName: "folder")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textTertiary)
-        case .dailyNote:
-            Image(systemName: "calendar")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textTertiary)
-        case .template:
-            Image(systemName: "doc.on.doc")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textTertiary)
-        }
-    }
-}
-
-#endif
-
-#if !os(macOS)
-
-/// A single row in the notes list: a role glyph + title, a one-line preview drawn
-/// from the denormalized `plainText` cache (never the block blob — spec §4.1), and
-/// a metadata strip of tag chips + an optional backlink count. iOS only — macOS
-/// renders `LiquidNoteRow`.
-struct NoteListRow: View {
-    let note: Note
-    let backlinkCount: Int
-
-    private var tags: [String] {
-        NoteListGrouping.normalizedTags(note.tags)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                roleGlyph
-                Text(displayTitle)
-                    .nexusType(.body)
-                    .fontWeight(.medium)
-                    .foregroundStyle(NexusColor.Text.primary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                if backlinkCount > 0 {
-                    backlinkBadge
-                }
-            }
-            if !preview.isEmpty {
-                Text(preview)
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(NexusColor.Text.muted)
-                    .lineLimit(1)
-            }
-            if !tags.isEmpty {
-                tagStrip
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    private var backlinkBadge: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "arrow.turn.up.left")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(NexusColor.Text.tertiary)
-            NexusCount(value: backlinkCount, font: NexusType.metaMono)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(backlinkCount) backlinks"))
-    }
-
-    private var tagStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(tags, id: \.self) { tag in
-                    NexusChip(tag, systemImage: "number")
-                }
-            }
-        }
-        .scrollDisabled(tags.count <= 3)
-    }
-
-    private var displayTitle: String {
-        note.title.isEmpty ? "Untitled" : note.title
-    }
-
-    private var preview: String {
-        note.plainText
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    @ViewBuilder private var roleGlyph: some View {
-        switch note.role {
-        case .free:
-            EmptyView()
-        case .projectPage:
-            Image(systemName: "folder")
-                .foregroundStyle(NexusColor.Text.tertiary)
-                .font(.caption)
-        case .dailyNote:
-            Image(systemName: "calendar")
-                .foregroundStyle(NexusColor.Text.tertiary)
-                .font(.caption)
-        case .template:
-            Image(systemName: "doc.on.doc")
-                .foregroundStyle(NexusColor.Text.tertiary)
-                .font(.caption)
-        }
-    }
-}
-
-#endif
