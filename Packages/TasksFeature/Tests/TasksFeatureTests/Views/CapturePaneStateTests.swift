@@ -119,6 +119,53 @@ struct CapturePaneStateTests {
         #expect(counter.withLock { $0 } == 0, "redundant input write must not fire observation")
     }
 
+    @Test("commit resolves @project token to projectID via the injected resolver")
+    @MainActor
+    func commitResolvesProjectToken() async throws {
+        let nexusID = UUID()
+        var insertedProjectID: UUID?
+        let state = CapturePaneState(
+            parser: FixedParser(
+                result: ParseResult(title: "ship build", projectToken: "Nexus", confidence: 1.0)),
+            locale: Locale(identifier: "en"),
+            nowProvider: { [now] in now },
+            debounce: .zero,
+            projectResolver: { token in token == "Nexus" ? nexusID : nil }
+        )
+        await state.handleInputChange("ship build @Nexus")
+        try await state.commit { item in insertedProjectID = item.projectID }
+        #expect(insertedProjectID == nexusID)
+    }
+
+    @Test("unresolved token and missing resolver both commit with nil projectID")
+    @MainActor
+    func commitWithoutResolutionLeavesProjectNil() async throws {
+        var missProjectID: UUID? = UUID()  // sentinel, must be overwritten with nil
+        let missState = CapturePaneState(
+            parser: FixedParser(
+                result: ParseResult(title: "ship build", projectToken: "Unknown", confidence: 1.0)),
+            locale: Locale(identifier: "en"),
+            nowProvider: { [now] in now },
+            debounce: .zero,
+            projectResolver: { _ in nil }
+        )
+        await missState.handleInputChange("ship build @Unknown")
+        try await missState.commit { item in missProjectID = item.projectID }
+        #expect(missProjectID == nil)
+
+        var noResolverProjectID: UUID? = UUID()
+        let noResolverState = CapturePaneState(
+            parser: FixedParser(
+                result: ParseResult(title: "ship build", projectToken: "Nexus", confidence: 1.0)),
+            locale: Locale(identifier: "en"),
+            nowProvider: { [now] in now },
+            debounce: .zero
+        )
+        await noResolverState.handleInputChange("ship build @Nexus")
+        try await noResolverState.commit { item in noResolverProjectID = item.projectID }
+        #expect(noResolverProjectID == nil)
+    }
+
     @MainActor
     final class RecordingRepository {
         var insertedTitle: String?
