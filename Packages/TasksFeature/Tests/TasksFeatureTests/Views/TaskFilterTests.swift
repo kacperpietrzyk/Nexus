@@ -20,9 +20,22 @@ struct TaskFilterTests {
             .project(id),
             .projectSection(id, UUID()),
             .savedFilter(id),
+            .cycle(id),
         ] {
             _ = TaskListView(filter: filter)
         }
+    }
+
+    @Test("Cycle filter resolves its title from the cycle lookup with a generic fallback")
+    func cycleTitleResolution() {
+        let cycleID = UUID()
+        #expect(TaskFilter.cycle(cycleID).displayTitle == "Cycle")
+        let resolved = TaskFilter.cycle(cycleID).resolvedDisplayTitle(
+            cycleName: { id in id == cycleID ? "Sprint 12" : nil }
+        )
+        #expect(resolved == "Sprint 12")
+        // Archive reset never touches cycle selections.
+        #expect(TaskFilter.cycle(cycleID).replacingArchivedProject(UUID()) == .cycle(cycleID))
     }
 
     @Test("Archive reset handles project and section selections")

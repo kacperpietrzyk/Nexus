@@ -132,6 +132,7 @@ public struct TodayDashboard: View {
     @Query(sort: \Project.name) private var taskFilterProjects: [Project]
     @Query(sort: \ProjectSection.orderIndex) private var taskFilterSections: [ProjectSection]
     @Query(sort: \SavedFilter.orderIndex) private var taskFilterSavedFilters: [SavedFilter]
+    @Query(sort: \Cycle.startAt) private var taskFilterCycles: [Cycle]
 
     let selection: Binding<TodayNavSelection>?
     // Internal (not `private`): read from the `+Standalone` extension file.
@@ -484,6 +485,9 @@ public struct TodayDashboard: View {
             },
             savedFilterName: { filterID in
                 savedFilterName(filterID)
+            },
+            cycleName: { cycleID in
+                cycleName(cycleID)
             }
         )
     }
@@ -499,6 +503,12 @@ public struct TodayDashboard: View {
 
     private func savedFilterName(_ id: UUID) -> String? {
         taskFilterSavedFilters.first {
+            $0.id == id && $0.deletedAt == nil
+        }?.name
+    }
+
+    private func cycleName(_ id: UUID) -> String? {
+        taskFilterCycles.first {
             $0.id == id && $0.deletedAt == nil
         }?.name
     }

@@ -12,6 +12,7 @@ public enum TaskFilter: Hashable, Sendable {
     case project(UUID)
     case projectSection(UUID, UUID)
     case savedFilter(UUID)
+    case cycle(UUID)
 }
 
 extension TaskFilter {
@@ -22,7 +23,8 @@ extension TaskFilter {
     public func resolvedDisplayTitle(
         projectName: (UUID) -> String? = { _ in nil },
         sectionName: (UUID, UUID) -> String? = { _, _ in nil },
-        savedFilterName: (UUID) -> String? = { _ in nil }
+        savedFilterName: (UUID) -> String? = { _ in nil },
+        cycleName: (UUID) -> String? = { _ in nil }
     ) -> String {
         switch self {
         case .all:
@@ -43,6 +45,8 @@ extension TaskFilter {
             return sectionName(projectID, sectionID) ?? projectName(projectID) ?? "Section"
         case .savedFilter(let filterID):
             return savedFilterName(filterID) ?? "Saved Filter"
+        case .cycle(let cycleID):
+            return cycleName(cycleID) ?? "Cycle"
         }
     }
 

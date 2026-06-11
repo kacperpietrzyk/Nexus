@@ -98,7 +98,7 @@ public struct TaskListView: View {
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     row(for: item, appearIndex: i)
                 }
-            case .project, .projectSection:
+            case .project, .projectSection, .cycle:
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     row(for: item, appearIndex: i)
                 }
@@ -328,6 +328,8 @@ public struct TaskListView: View {
                     now: now,
                     modelContext: modelContext
                 )
+            case .cycle(let cycleID):
+                flatList = try Self.cycleTasks(cycleID: cycleID, modelContext: modelContext)
             }
             applyRefinement()
             subtaskProgressByTaskID = try SubtaskTreeDataSource.progress(
@@ -571,26 +573,6 @@ extension TaskListView {
             case (nil, nil):
                 return lhs.createdAt > rhs.createdAt
             }
-        }
-    }
-}
-
-extension TaskListView {
-    @MainActor
-    static func savedFilterTasks(
-        filterID: UUID,
-        now: Date,
-        modelContext: ModelContext
-    ) throws -> [TaskItem] {
-        let repository = SavedFilterRepository(context: modelContext, now: { now })
-        guard let filter = try repository.find(filterID) else {
-            throw SavedFilterTaskListError.missing
-        }
-
-        do {
-            return rootTasks(from: try repository.apply(filter, now: now))
-        } catch is DecodingError {
-            throw SavedFilterTaskListError.corrupt
         }
     }
 }
