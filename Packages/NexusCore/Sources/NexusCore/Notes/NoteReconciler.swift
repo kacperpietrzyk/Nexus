@@ -286,7 +286,7 @@ public struct NoteReconciler {
             predicate: #Predicate { $0.id == id }
         )
         descriptor.fetchLimit = 1
-        return try context.fetch(descriptor).first { $0.deletedAt == nil } != nil
+        return try context.fetch(descriptor).contains { $0.deletedAt == nil }
     }
 
     private func existingContainsTaskLink(note: Note, taskRef: UUID) throws -> Link? {

@@ -107,7 +107,8 @@ public struct AttachmentImportService {
 
     static func sanitizedFilename(_ filename: String, fallbackExtension: String) -> String {
         let base = filename.isEmpty ? "attachment" : filename
-        let cleaned = base
+        let cleaned =
+            base
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: "\\", with: "-")

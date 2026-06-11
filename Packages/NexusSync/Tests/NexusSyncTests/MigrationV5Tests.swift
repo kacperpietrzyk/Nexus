@@ -67,7 +67,7 @@ struct MigrationV5Tests {
         let names = NexusMigrationPlan.schemas.map { String(describing: $0) }
 
         #expect(names.contains("NexusSchemaV5"))
-        #expect(NexusMigrationPlan.stages.count == 12)
+        #expect(NexusMigrationPlan.stages.count == NexusMigrationPlan.schemas.count - 1)
     }
 }
 

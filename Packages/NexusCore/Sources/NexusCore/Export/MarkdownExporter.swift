@@ -28,10 +28,12 @@ public enum MarkdownExporter {
             repeat
                 try Self.exportSingleType(
                     (each L).self,
-                    in: context,
-                    linksByFromID: linksByFromID,
-                    folder: folder,
-                    attachmentRoot: attachmentRoot,
+                    environment: ExportEnvironment(
+                        context: context,
+                        linksByFromID: linksByFromID,
+                        folder: folder,
+                        attachmentRoot: attachmentRoot
+                    ),
                     counters: &counters
                 )
 
@@ -46,10 +48,7 @@ public enum MarkdownExporter {
     @MainActor
     private static func exportSingleType<L: Linkable>(
         _ type: L.Type,
-        in context: ModelContext,
-        linksByFromID: [UUID: [Link]],
-        folder: URL,
-        attachmentRoot: URL?,
+        environment: ExportEnvironment,
         counters: inout ExportCounters
     ) throws {
         // Cache of Note id → serialized Markdown body so each note is decoded at
@@ -62,10 +61,10 @@ public enum MarkdownExporter {
         // in `DataUtilities` with "Couldn't find \Model.<computed …>". Fetching all and
         // filtering in memory avoids keypath translation entirely; tombstone volume is bounded
         // by `TombstonePurger`, so the cost is negligible at single-user scale.
-        let items = try context.fetch(FetchDescriptor<L>())
+        let items = try environment.context.fetch(FetchDescriptor<L>())
             .filter { $0.deletedAt == nil }
         for item in items {
-            let outgoing = (linksByFromID[item.id] ?? []).map { link in
+            let outgoing = (environment.linksByFromID[item.id] ?? []).map { link in
                 MarkdownDocument.LinkRef(
                     toKind: link.toKind,
                     toID: link.toID,
@@ -79,16 +78,14 @@ public enum MarkdownExporter {
             let bodyText: String
             if let renderable = item as? any MarkdownExportRenderable {
                 extras = renderable.exportFrontmatterExtras()
-                bodyText = renderable.exportMarkdownBody(in: context)
+                bodyText = renderable.exportMarkdownBody(in: environment.context)
             } else {
                 // Tranche 2 Plan E: a Note carries organization frontmatter
                 // (folder + custom properties); every other built-in type has none.
                 extras = (item as? Note).map(Self.noteFrontmatterExtras) ?? []
                 bodyText = body(
                     for: item,
-                    in: context,
-                    exportFolder: folder,
-                    attachmentRoot: attachmentRoot,
+                    in: environment,
                     noteBodyCache: &noteBodyCache
                 )
             }
@@ -106,8 +103,8 @@ public enum MarkdownExporter {
             let relativeDirectory = Self.relativeDirectory(for: item)
             let targetFolder =
                 relativeDirectory.isEmpty
-                ? folder
-                : folder.appendingPathComponent(relativeDirectory, isDirectory: true)
+                ? environment.folder
+                : environment.folder.appendingPathComponent(relativeDirectory, isDirectory: true)
             if !relativeDirectory.isEmpty {
                 try FileManager.default.createDirectory(at: targetFolder, withIntermediateDirectories: true)
             }
@@ -162,9 +159,7 @@ public enum MarkdownExporter {
     @MainActor
     private static func body<L: Linkable>(
         for item: L,
-        in context: ModelContext,
-        exportFolder: URL,
-        attachmentRoot: URL?,
+        in environment: ExportEnvironment,
         noteBodyCache: inout [UUID: String]
     ) -> String {
         let noteRef: UUID?
@@ -172,16 +167,14 @@ public enum MarkdownExporter {
         case let task as TaskItem: noteRef = task.noteRef
         case let project as Project: noteRef = project.canonicalNoteRef
         case let note as Note:
-            return markdownBody(of: note, in: context, exportFolder: exportFolder, attachmentRoot: attachmentRoot)
+            return markdownBody(of: note, in: environment)
         default: noteRef = nil
         }
         guard let noteRef else { return "" }
         if let cached = noteBodyCache[noteRef] { return cached }
         let body = resolveNoteBody(
             id: noteRef,
-            in: context,
-            exportFolder: exportFolder,
-            attachmentRoot: attachmentRoot
+            in: environment
         )
         noteBodyCache[noteRef] = body
         return body
@@ -190,36 +183,32 @@ public enum MarkdownExporter {
     @MainActor
     private static func resolveNoteBody(
         id: UUID,
-        in context: ModelContext,
-        exportFolder: URL,
-        attachmentRoot: URL?
+        in environment: ExportEnvironment
     ) -> String {
         var descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })
         descriptor.fetchLimit = 1
-        guard let note = try? context.fetch(descriptor).first, note.deletedAt == nil else {
+        guard let note = try? environment.context.fetch(descriptor).first, note.deletedAt == nil else {
             return ""
         }
-        return markdownBody(of: note, in: context, exportFolder: exportFolder, attachmentRoot: attachmentRoot)
+        return markdownBody(of: note, in: environment)
     }
 
     @MainActor
     private static func markdownBody(
         of note: Note,
-        in context: ModelContext,
-        exportFolder: URL,
-        attachmentRoot: URL?
+        in environment: ExportEnvironment
     ) -> String {
         guard var blocks = try? NoteContentCoder.decode(note.contentData) else { return "" }
         for index in blocks.indices {
             guard case .image(let ref?, let fallbackAsset) = blocks[index].kind else { continue }
             guard
                 let exportPath = try? exportAttachment(
-                    id: ref,
-                    fallbackAsset: fallbackAsset,
-                    noteID: note.id,
-                    context: context,
-                    exportFolder: exportFolder,
-                    attachmentRoot: attachmentRoot
+                    request: AttachmentExportRequest(
+                        id: ref,
+                        fallbackAsset: fallbackAsset,
+                        noteID: note.id
+                    ),
+                    environment: environment
                 )
             else { continue }
             blocks[index].kind = .image(ref: ref, asset: exportPath)
@@ -229,33 +218,30 @@ public enum MarkdownExporter {
 
     @MainActor
     private static func exportAttachment(
-        id: UUID,
-        fallbackAsset: String?,
-        noteID: UUID,
-        context: ModelContext,
-        exportFolder: URL,
-        attachmentRoot: URL?
+        request: AttachmentExportRequest,
+        environment: ExportEnvironment
     ) throws -> String {
+        let id = request.id
         var descriptor = FetchDescriptor<AttachmentAsset>(predicate: #Predicate { $0.id == id })
         descriptor.fetchLimit = 1
-        guard let asset = try context.fetch(descriptor).first, asset.deletedAt == nil else {
-            return fallbackAsset ?? ""
+        guard let asset = try environment.context.fetch(descriptor).first, asset.deletedAt == nil else {
+            return request.fallbackAsset ?? ""
         }
 
         let filename = sanitizedPathComponent(
             asset.originalFilename.isEmpty ? asset.id.uuidString : asset.originalFilename
         )
-        let relativePath = "_assets/\(noteID.uuidString)/\(filename)"
-        guard let attachmentRoot else {
-            return fallbackAsset ?? asset.storagePath
+        let relativePath = "_assets/\(request.noteID.uuidString)/\(filename)"
+        guard let attachmentRoot = environment.attachmentRoot else {
+            return request.fallbackAsset ?? asset.storagePath
         }
 
         let source = attachmentRoot.appendingPathComponent(asset.storagePath, isDirectory: false)
         guard FileManager.default.fileExists(atPath: source.path) else {
-            return fallbackAsset ?? asset.storagePath
+            return request.fallbackAsset ?? asset.storagePath
         }
 
-        let destination = exportFolder.appendingPathComponent(relativePath, isDirectory: false)
+        let destination = environment.folder.appendingPathComponent(relativePath, isDirectory: false)
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -348,5 +334,18 @@ public enum MarkdownExporter {
         var itemsExported = 0
         var linksAttached = 0
         var usedFilenames: Set<String> = []
+    }
+
+    private struct ExportEnvironment {
+        let context: ModelContext
+        let linksByFromID: [UUID: [Link]]
+        let folder: URL
+        let attachmentRoot: URL?
+    }
+
+    private struct AttachmentExportRequest {
+        let id: UUID
+        let fallbackAsset: String?
+        let noteID: UUID
     }
 }
