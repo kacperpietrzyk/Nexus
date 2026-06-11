@@ -82,3 +82,35 @@ private func makeEvent(id: String, calendarID: String?) -> CalendarEvent {
     // The disabled "home" event is hidden; the nil-calendar event is kept (cannot classify).
     #expect(prefs.visibleEvents(events).map(\.id) == ["b"])
 }
+
+// MARK: - seriesPreviewHorizonDays (M2)
+
+@Test func calendarPreferences_defaultHorizonIsSevenDays() {
+    #expect(CalendarPreferences.default.seriesPreviewHorizonDays == 7)
+}
+
+@Test func calendarPreferences_horizonRoundTripsThroughTheStore() {
+    let store = UserDefaultsCalendarPreferencesStore(defaults: makeIsolatedDefaults())
+    var prefs = CalendarPreferences.default
+    prefs.seriesPreviewHorizonDays = 14
+    store.save(prefs)
+    #expect(store.load().seriesPreviewHorizonDays == 14)
+}
+
+@Test func calendarPreferences_legacyPayloadWithoutHorizonDecodesWithDefault() throws {
+    // A pre-M2 blob exactly as `UserDefaultsCalendarPreferencesStore` persisted
+    // it (no `seriesPreviewHorizonDays` key). Decoding must NOT throw — a throw
+    // would make `load()` silently reset the user's preferences to `.default`.
+    let legacyJSON = """
+        {"workdayStart":{"hour":8,"minute":30},"workdayEnd":{"hour":17,"minute":0},\
+        "minBlockMinutes":20,"maxBlockMinutes":90,"bufferMinutes":10,\
+        "readCalendarIDs":["cal-A"],"writeCalendarID":"nexus-cal","rolloverEnabled":false}
+        """
+    let decoded = try JSONDecoder().decode(CalendarPreferences.self, from: Data(legacyJSON.utf8))
+    #expect(decoded.seriesPreviewHorizonDays == 7)
+    #expect(decoded.workdayStart == DateComponents(hour: 8, minute: 30))
+    #expect(decoded.minBlockMinutes == 20)
+    #expect(decoded.readCalendarIDs == ["cal-A"])
+    #expect(decoded.writeCalendarID == "nexus-cal")
+    #expect(decoded.rolloverEnabled == false)
+}

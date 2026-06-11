@@ -24,6 +24,11 @@ public struct CalendarPreferences: Codable, Equatable, Sendable {
     /// Whether the daily-rollover job moves unfinished due-today/overdue tasks
     /// to the next workday.
     public var rolloverEnabled: Bool
+    /// M2 — how many days ahead of today the week view projects ghost preview
+    /// blocks for FUTURE occurrences of recurring tasks (runtime-only, never
+    /// persisted as `ScheduledBlock`s). 0 disables projection. Default 7 ≈ the
+    /// current week.
+    public var seriesPreviewHorizonDays: Int
 
     public init(
         workdayStart: DateComponents = DateComponents(hour: 9, minute: 0),
@@ -33,7 +38,8 @@ public struct CalendarPreferences: Codable, Equatable, Sendable {
         bufferMinutes: Int = 0,
         readCalendarIDs: [String] = [],
         writeCalendarID: String? = nil,
-        rolloverEnabled: Bool = true
+        rolloverEnabled: Bool = true,
+        seriesPreviewHorizonDays: Int = 7
     ) {
         self.workdayStart = workdayStart
         self.workdayEnd = workdayEnd
@@ -43,10 +49,36 @@ public struct CalendarPreferences: Codable, Equatable, Sendable {
         self.readCalendarIDs = readCalendarIDs
         self.writeCalendarID = writeCalendarID
         self.rolloverEnabled = rolloverEnabled
+        self.seriesPreviewHorizonDays = seriesPreviewHorizonDays
     }
 
-    /// Spec §4.4 defaults (09:00 / 18:00, 15, 120, 0, [], nil, true).
+    /// Spec §4.4 defaults (09:00 / 18:00, 15, 120, 0, [], nil, true) + M2
+    /// series-preview horizon 7.
     public static let `default` = CalendarPreferences()
+
+    private enum CodingKeys: String, CodingKey {
+        case workdayStart, workdayEnd, minBlockMinutes, maxBlockMinutes, bufferMinutes
+        case readCalendarIDs, writeCalendarID, rolloverEnabled, seriesPreviewHorizonDays
+    }
+
+    /// Custom decode only: `seriesPreviewHorizonDays` was added (M2) after
+    /// preference blobs already existed in UserDefaults, so a missing key must
+    /// fall back to the default instead of throwing `keyNotFound` (which would
+    /// silently reset the user's preferences via `load()`'s `.default`
+    /// fallback). Encoding stays synthesized.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.workdayStart = try container.decode(DateComponents.self, forKey: .workdayStart)
+        self.workdayEnd = try container.decode(DateComponents.self, forKey: .workdayEnd)
+        self.minBlockMinutes = try container.decode(Int.self, forKey: .minBlockMinutes)
+        self.maxBlockMinutes = try container.decode(Int.self, forKey: .maxBlockMinutes)
+        self.bufferMinutes = try container.decode(Int.self, forKey: .bufferMinutes)
+        self.readCalendarIDs = try container.decode([String].self, forKey: .readCalendarIDs)
+        self.writeCalendarID = try container.decodeIfPresent(String.self, forKey: .writeCalendarID)
+        self.rolloverEnabled = try container.decode(Bool.self, forKey: .rolloverEnabled)
+        self.seriesPreviewHorizonDays =
+            try container.decodeIfPresent(Int.self, forKey: .seriesPreviewHorizonDays) ?? 7
+    }
 
     /// Filter `events` to the calendars the user has chosen to read (#6). An empty
     /// `readCalendarIDs` means "all granted calendars" (the store cannot enumerate
