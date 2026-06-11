@@ -37,6 +37,7 @@ public struct CapturePane: View {
 
     @Environment(\.taskParser) private var parser
     @Environment(\.taskRepository) private var repository
+    @Environment(\.projectTokenResolver) private var projectTokenResolver
     @Environment(\.dismiss) private var dismiss
 
     public let mode: Mode
@@ -161,7 +162,12 @@ public struct CapturePane: View {
                 .padding(.bottom, 12)
 
                 HStack(spacing: 8) {
-                    ForEach(Array(CaptureChipModel.chips(for: result, now: .now).enumerated()), id: \.offset) { i, entry in
+                    ForEach(
+                        Array(
+                            CaptureChipModel.chips(for: result, now: .now, resolvedProjectName: resolvedProjectName)
+                                .enumerated()),
+                        id: \.offset
+                    ) { i, entry in
                         CaptureChipModel.chip(icon: entry.icon, label: entry.label)
                             .nexusReveal(i + 1)
                     }
@@ -218,7 +224,7 @@ public struct CapturePane: View {
     private var iosCapturePanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             inputField
-            CaptureChipsView(result: state?.lastResult)
+            CaptureChipsView(result: state?.lastResult, resolvedProjectName: resolvedProjectName)
             HStack(spacing: 10) {
                 if showsCancelAction {
                     NexusButton(variant: .outline, size: .lg, action: cancel) {
@@ -292,7 +298,20 @@ public struct CapturePane: View {
     @MainActor
     private func ensureState() {
         guard state == nil, let parser else { return }
-        state = CapturePaneState(parser: parser)
+        state = CapturePaneState(parser: parser, projectResolver: makeProjectIDResolver())
+    }
+
+    @MainActor
+    private func makeProjectIDResolver() -> (@MainActor (String) -> UUID?)? {
+        guard let resolver = projectTokenResolver else { return nil }
+        return { token in resolver.project(for: token)?.id }
+    }
+
+    /// Canonical name of the project matched by the current parse's @token;
+    /// nil while unresolved (drives the chip's resolved/unresolved appearance).
+    private var resolvedProjectName: String? {
+        guard let token = state?.lastResult?.projectToken else { return nil }
+        return projectTokenResolver?.project(for: token)?.name
     }
 
     @MainActor

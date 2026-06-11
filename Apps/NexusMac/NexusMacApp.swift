@@ -230,6 +230,14 @@ struct NexusMacApp: App {
                 .environment(\.aiRouter, aiRouter)
                 .environment(\.taskParser, taskParser)
                 .environment(\.taskRepository, taskRepository)
+                .environment(
+                    \.projectTokenResolver,
+                    ProjectTokenResolver { token in
+                        (try? ProjectRepository(context: taskRepository.context)
+                            .findActive(matchingToken: token))
+                            .flatMap { $0 }
+                    }
+                )
                 .environment(\.noteRepository, noteRepository)
                 .environment(\.personRepository, personRepository)
                 // People profile meeting history: PeopleFeature cannot import
