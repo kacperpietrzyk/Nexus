@@ -166,6 +166,25 @@ struct TaskDTOTests {
         #expect(ReminderDTO.from(absolute, formatter: formatter).toRule() == absolute)
     }
 
+    @Test @MainActor func reminderDTORoundTripsRepeatingAbsolute() {
+        let formatter = ISO8601DateFormatter()
+        let rule = ReminderRule.absolute(at: Date(timeIntervalSince1970: 1_700_000_000), repeats: .weekly)
+        let dto = ReminderDTO.from(rule, formatter: formatter)
+        #expect(dto.repeatFrequency == "weekly")
+        #expect(dto.toRule() == rule)
+    }
+
+    @Test func reminderDTODecodesRepeatFromWireKeyAndRejectsUnknownValues() throws {
+        let daily = #"{"type":"absolute","at":"2026-06-11T09:00:00Z","repeat":"daily"}"#
+        let decoded = try JSONDecoder().decode(ReminderDTO.self, from: Data(daily.utf8))
+        #expect(decoded.repeatFrequency == "daily")
+        #expect(decoded.toRule() != nil)
+
+        let bogus = #"{"type":"absolute","at":"2026-06-11T09:00:00Z","repeat":"hourly"}"#
+        let rejected = try JSONDecoder().decode(ReminderDTO.self, from: Data(bogus.utf8))
+        #expect(rejected.toRule() == nil)  // surfaces as AgentError.validation in optionalReminders
+    }
+
     private func encodedObject(_ value: some Encodable) throws -> [String: Any] {
         let data = try JSONEncoder().encode(value)
         let object = try JSONSerialization.jsonObject(with: data)

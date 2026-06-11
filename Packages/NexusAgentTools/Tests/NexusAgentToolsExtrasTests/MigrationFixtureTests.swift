@@ -158,10 +158,13 @@ struct MigrationFixtureTests {
         #expect(sectionList.tasks.allSatisfy { $0.sectionID == fixture.doing.id.uuidString })
         #expect(sectionList.tasks.filter { $0.parentID == imported.parent.task.id }.count == 9)
         #expect(imported.daily.task.recurrenceRule == "FREQ=DAILY")
-        #expect(imported.daily.task.reminders == [ReminderDTO(type: "relative", offset: -900, anchor: "due", at: nil)])
+        #expect(
+            imported.daily.task.reminders == [
+                ReminderDTO(type: "relative", offset: -900, anchor: "due", at: nil, repeatFrequency: nil)
+            ])
         #expect(imported.weekly.task.recurrenceRule == "FREQ=WEEKLY;BYDAY=SU")
         #expect(comments.map(\.externalSourceID) == ["todoist-comment:cyberlab-parent-1"])
-        #expect(imported.reminded.reminders == [ReminderDTO(type: "relative", offset: -1800, anchor: "due", at: nil)])
+        #expect(imported.reminded.reminders == [ReminderDTO(type: "relative", offset: -1800, anchor: "due", at: nil, repeatFrequency: nil)])
     }
 
     @MainActor

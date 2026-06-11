@@ -33,6 +33,10 @@ public struct TasksCreateTool: AgentTool {
                         ),
                         "anchor": .string(enumValues: ["due", "deadline"], description: "relative: due | deadline"),
                         "at": .string(description: "absolute: ISO8601 timestamp"),
+                        "repeat": .string(
+                            enumValues: ["daily", "weekly"],
+                            description: "absolute only: repeat the reminder daily or weekly at that time"
+                        ),
                     ],
                     required: ["type"]
                 ),

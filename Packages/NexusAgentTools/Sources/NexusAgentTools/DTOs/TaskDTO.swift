@@ -195,14 +195,24 @@ public struct ReminderDTO: Codable, Sendable, Equatable {
     public let anchor: String?
     /// Absolute only: ISO8601 date string.
     public let at: String?
+    /// Absolute only: "daily" or "weekly" (`ReminderRepeat` raw value). nil = one-shot.
+    public let repeatFrequency: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case type, offset, anchor, at
+        case repeatFrequency = "repeat"
+    }
 
     @MainActor
     static func from(_ rule: ReminderRule, formatter: ISO8601DateFormatter) -> ReminderDTO {
         switch rule {
         case .relative(let offset, let anchor):
-            return ReminderDTO(type: "relative", offset: offset, anchor: anchor.rawValue, at: nil)
-        case .absolute(let date, _):
-            return ReminderDTO(type: "absolute", offset: nil, anchor: nil, at: formatter.string(from: date))
+            return ReminderDTO(type: "relative", offset: offset, anchor: anchor.rawValue, at: nil, repeatFrequency: nil)
+        case .absolute(let date, let repeats):
+            return ReminderDTO(
+                type: "absolute", offset: nil, anchor: nil,
+                at: formatter.string(from: date), repeatFrequency: repeats?.rawValue
+            )
         }
     }
 
@@ -213,10 +223,17 @@ public struct ReminderDTO: Codable, Sendable, Equatable {
             return .relative(offset: offset, anchor: anchor)
         case "absolute":
             guard let at else { return nil }
+            let repeats: ReminderRepeat?
+            if let repeatFrequency {
+                guard let parsed = ReminderRepeat(rawValue: repeatFrequency) else { return nil }
+                repeats = parsed
+            } else {
+                repeats = nil
+            }
             let fractional = ISO8601DateFormatter()
             fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = fractional.date(from: at) { return .absolute(date) }
-            if let date = ISO8601DateFormatter().date(from: at) { return .absolute(date) }
+            if let date = fractional.date(from: at) { return .absolute(at: date, repeats: repeats) }
+            if let date = ISO8601DateFormatter().date(from: at) { return .absolute(at: date, repeats: repeats) }
             return nil
         default:
             return nil
