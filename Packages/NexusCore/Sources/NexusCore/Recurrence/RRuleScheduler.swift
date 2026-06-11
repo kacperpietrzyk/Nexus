@@ -34,6 +34,40 @@ public struct RRuleScheduler: Sendable {
         return candidate
     }
 
+    /// Forward-walk `next(after:)` to enumerate occurrence dates strictly after
+    /// `seed` and strictly before `end` (M2 series projection). Honors `COUNT`
+    /// (continuing from `occurrencesSoFar`, the `countSiblings + 1` convention
+    /// used by `TaskItemRepository.completeTask`) and `UNTIL` via `next`'s own
+    /// guards. `limit` hard-caps the walk so a degenerate rule (or a seed far
+    /// in the past) can never spin — callers get a truncated, still-correct
+    /// prefix. Deterministic: same input → same output.
+    public func occurrences(
+        after seed: Date,
+        rule: RRule,
+        before end: Date,
+        occurrencesSoFar: Int = 0,
+        limit: Int = 1024
+    ) -> [Date] {
+        var results: [Date] = []
+        var cursor = seed
+        var generated = occurrencesSoFar
+        var iterations = 0
+        while iterations < limit {
+            iterations += 1
+            guard let candidate = next(after: cursor, rule: rule, occurrencesSoFar: generated) else {
+                break
+            }
+            // Defensive monotonicity guard: `next` always advances for the
+            // supported rule subset; if it ever didn't, bail instead of looping.
+            guard candidate > cursor else { break }
+            guard candidate < end else { break }
+            results.append(candidate)
+            generated += 1
+            cursor = candidate
+        }
+        return results
+    }
+
     private func nextWeekly(after: Date, rule: RRule) -> Date? {
         guard !rule.byWeekday.isEmpty else {
             return calendar.date(byAdding: .weekOfYear, value: rule.interval, to: after)

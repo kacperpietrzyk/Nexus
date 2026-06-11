@@ -105,6 +105,82 @@ struct RRuleSchedulerTests {
         #expect(observed.day == 30)
         #expect(observed.hour == 9)
     }
+
+    // MARK: - occurrences(after:rule:before:) — M2 series projection
+
+    @Test func occurrences_dailyEnumeratesStrictlyAfterSeedAndBeforeEnd() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let scheduler = RRuleScheduler(calendar: calendar)
+        // 2026-06-08 10:00 UTC
+        let seed = Date(timeIntervalSince1970: 1_780_653_600)
+        let end = seed.addingTimeInterval(4 * 86_400 - 36_000)  // 2026-06-12 00:00 UTC
+        let rule = RRule(frequency: .daily)
+
+        let dates = scheduler.occurrences(after: seed, rule: rule, before: end)
+
+        #expect(dates.count == 3)
+        #expect(dates[0] == seed.addingTimeInterval(86_400))  // Jun 9 10:00
+        #expect(dates[1] == seed.addingTimeInterval(2 * 86_400))  // Jun 10 10:00
+        #expect(dates[2] == seed.addingTimeInterval(3 * 86_400))  // Jun 11 10:00
+    }
+
+    @Test func occurrences_respectsCountAcrossTheWalk() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let scheduler = RRuleScheduler(calendar: calendar)
+        let seed = Date(timeIntervalSince1970: 1_780_653_600)
+        let end = seed.addingTimeInterval(30 * 86_400)
+        let rule = RRule(frequency: .daily, count: 3)
+
+        // One occurrence already exists (the base instance) → only 2 more allowed.
+        let dates = scheduler.occurrences(after: seed, rule: rule, before: end, occurrencesSoFar: 1)
+
+        #expect(dates.count == 2)
+    }
+
+    @Test func occurrences_weeklyByDayWalksMatchingWeekdays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let scheduler = RRuleScheduler(calendar: calendar)
+        // Monday 2026-06-08 09:00 UTC
+        let seed = Date(timeIntervalSince1970: 1_780_909_200)
+        let end = seed.addingTimeInterval(20 * 86_400)  // before Sun Jun 28
+        let rule = RRule(frequency: .weekly, byWeekday: [.monday])
+
+        let dates = scheduler.occurrences(after: seed, rule: rule, before: end)
+
+        #expect(dates.count == 2)
+        #expect(dates[0] == seed.addingTimeInterval(7 * 86_400))  // Mon Jun 15
+        #expect(dates[1] == seed.addingTimeInterval(14 * 86_400))  // Mon Jun 22
+    }
+
+    @Test func occurrences_limitCapsTheWalk() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let scheduler = RRuleScheduler(calendar: calendar)
+        let seed = Date(timeIntervalSince1970: 1_780_653_600)
+        let end = seed.addingTimeInterval(365 * 86_400)
+        let rule = RRule(frequency: .daily)
+
+        let dates = scheduler.occurrences(after: seed, rule: rule, before: end, limit: 3)
+
+        #expect(dates.count == 3)
+    }
+
+    @Test func occurrences_untilStopsEnumeration() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let scheduler = RRuleScheduler(calendar: calendar)
+        let seed = Date(timeIntervalSince1970: 1_780_653_600)
+        let until = seed.addingTimeInterval(2 * 86_400)  // Jun 10 10:00 inclusive
+        let end = seed.addingTimeInterval(30 * 86_400)
+        let rule = RRule(frequency: .daily, until: until)
+
+        let dates = scheduler.occurrences(after: seed, rule: rule, before: end)
+
+        #expect(dates.count == 2)  // Jun 9, Jun 10 — Jun 11 > UNTIL
+    }
 }
 
 extension Calendar {
