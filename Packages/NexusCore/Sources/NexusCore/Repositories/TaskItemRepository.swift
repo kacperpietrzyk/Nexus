@@ -59,6 +59,9 @@ public final class TaskItemRepository {
     public let scheduler: RRuleScheduler
     public let now: () -> Date
     public let notifications: any NotificationScheduling
+    /// Audit-log hook (Tranche 2 Plan B, spec §4.1). Insert-only; entries ride
+    /// this repository's saves (I-B1). Defaults to no-op, like `notifications`.
+    public let activity: any ActivityRecording
     public let snapshotPusher: WatchSnapshotPusher
 
     public init(
@@ -66,18 +69,24 @@ public final class TaskItemRepository {
         scheduler: RRuleScheduler,
         now: @escaping () -> Date,
         notifications: any NotificationScheduling = NoopNotificationScheduler(),
+        activity: any ActivityRecording = NoopActivityRecorder(),
         snapshotPusher: @escaping WatchSnapshotPusher = noopWatchSnapshotPusher
     ) {
         self.context = context
         self.scheduler = scheduler
         self.now = now
         self.notifications = notifications
+        self.activity = activity
         self.snapshotPusher = snapshotPusher
     }
 
     public func insert(_ task: TaskItem) throws {
         task.tags = Self.normalize(tags: task.tags)
         context.insert(task)
+        // Templates are inert (I-D1) — authoring one is not a lifecycle event.
+        if !task.isTemplate {
+            activity.record(.created, itemID: task.id, itemKind: .task)
+        }
         try context.save()
         let notifier = notifications
         Task { @MainActor in try? await notifier.schedule(task) }
@@ -209,6 +218,7 @@ public final class TaskItemRepository {
         if task.statusRaw == TaskStatus.open.rawValue && task.lastCompletedAt == nil {
             return
         }
+        activity.record(.reopened, itemID: task.id, itemKind: .task)
 
         var removedSpawnID: UUID?
         if task.recurrenceRule != nil {
@@ -254,6 +264,10 @@ public final class TaskItemRepository {
         if task.statusRaw == TaskStatus.done.rawValue && task.lastCompletedAt != nil {
             return
         }
+        // Single completion choke point (spec §4.1): one `completed` event per
+        // real completion, regardless of entry path. The caller always saves
+        // when this method passes the guard (it registers side effects).
+        activity.record(.completed, itemID: task.id, itemKind: .task)
 
         // Project tasks (`workflowState != nil`) complete by advancing the
         // machine to `.done` (spec §5.3); GTD tasks (nil) stay nil so I7 holds.
@@ -300,6 +314,9 @@ public final class TaskItemRepository {
         )
         nextInstance.noteRef = try duplicatedNoteRef(of: task.noteRef)
         context.insert(nextInstance)
+        // A spawned next occurrence is a real new row (spec §4.1) — it gets
+        // `created` even though it bypasses `insert(_:)`.
+        activity.record(.created, itemID: nextInstance.id, itemKind: .task)
         sideEffects.scheduledTasks.append(nextInstance)
     }
 
