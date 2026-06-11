@@ -50,6 +50,32 @@ struct ProjectRepositoryTests {
     }
 
     @MainActor
+    @Test("findActive(matchingToken:) matches case-insensitively, with space-stripped names, active only")
+    func findActiveMatchingToken() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let nexus = try repo.create(name: "Nexus")
+        let side = try repo.create(name: "Side Project")
+        let archived = try repo.create(name: "Frozen")
+        try repo.archive(archived)
+        let deleted = try repo.create(name: "Gone")
+        deleted.deletedAt = .now
+        try context.save()
+
+        // exact, case-insensitive
+        #expect(try repo.findActive(matchingToken: "nexus")?.id == nexus.id)
+        #expect(try repo.findActive(matchingToken: "NEXUS")?.id == nexus.id)
+        // multi-word project reachable via space-stripped form
+        #expect(try repo.findActive(matchingToken: "SideProject")?.id == side.id)
+        #expect(try repo.findActive(matchingToken: "sideproject")?.id == side.id)
+        // archived / deleted / unknown / empty ⇒ nil
+        #expect(try repo.findActive(matchingToken: "frozen") == nil)
+        #expect(try repo.findActive(matchingToken: "gone") == nil)
+        #expect(try repo.findActive(matchingToken: "missing") == nil)
+        #expect(try repo.findActive(matchingToken: "") == nil)
+    }
+
+    @MainActor
     @Test("archive cascades to child projects")
     func archiveCascade() throws {
         let stamp = Date(timeIntervalSince1970: 1_800_000_000)

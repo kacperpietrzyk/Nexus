@@ -90,6 +90,21 @@ public final class ProjectRepository {
         return try context.fetch(descriptor)
     }
 
+    /// Case-insensitive lookup of an active project by NL-capture token
+    /// (`@project` in quick add). A token matches a project when it equals the
+    /// lowercased name, or the lowercased name with spaces removed — so
+    /// `@SideProject` and `@sideproject` both match "Side Project". First
+    /// alphabetical hit wins (`allActive()` sorts by name), archived and
+    /// deleted projects never match.
+    public func findActive(matchingToken token: String) throws -> Project? {
+        let needle = token.lowercased()
+        guard !needle.isEmpty else { return nil }
+        return try allActive().first { project in
+            let name = project.name.lowercased()
+            return name == needle || name.replacingOccurrences(of: " ", with: "") == needle
+        }
+    }
+
     public func find(id: UUID) throws -> Project? {
         let descriptor = FetchDescriptor<Project>(
             predicate: #Predicate { project in project.id == id }
