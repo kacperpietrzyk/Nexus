@@ -36,6 +36,7 @@ extension TaskDetailInspector {
                     promoteCard
                     notesCard
                     commentsCard
+                    activityCard
                 }
                 .padding(20)
             }
@@ -83,6 +84,7 @@ extension TaskDetailInspector {
                 linksCompactCard
             }
             commentsCard
+            activityCard
         }
         .padding(20)
         // Liquid re-skin: the wallpaper background is dropped — the Mac modal
