@@ -1,7 +1,7 @@
 import Foundation
 
 /// Convenience builder for all core tools that do not depend on TasksFeature.
-/// Includes `tasks.*`, `comments.*`, `note.*`, the Projects-tier `projects.*`,
+/// Includes `tasks.*`, `comments.*`, `activity.*`, `note.*`, the Projects-tier `projects.*`,
 /// `labels.*`, `agents.*`, `blocks.*` tools (spec §10), and the People/Contacts
 /// `people.*` tools (spec §7).
 public enum CoreTaskTools {
@@ -21,6 +21,7 @@ public enum CoreTaskTools {
             CommentsAddTool(),
             CommentsEditTool(),
             CommentsDeleteTool(),
+            ActivityGetTool(),
             NotesCreateTool(),
             NotesUpdateTool(),
             NotesGetTool(),

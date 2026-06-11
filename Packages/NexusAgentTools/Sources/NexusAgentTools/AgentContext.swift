@@ -53,6 +53,13 @@ public struct AgentContext: Sendable {
         CycleRepository(context: modelContext.context, now: now)
     }
 
+    /// On-demand read-only `ActivityEntryRepository` reader (Tranche 2 Plan B,
+    /// spec §6.3) backed by the same `ModelContext` as `taskRepository`. Tools
+    /// only READ the audit log — they never insert rows (invariant I-B1).
+    @MainActor public var activityEntryRepository: ActivityEntryRepository {
+        ActivityEntryRepository(context: modelContext.context, now: now)
+    }
+
     /// On-demand `PersonRepository` (People/Contacts module, spec §7) backed by the
     /// same `ModelContext` as `taskRepository`. CRUD + dedup/upsert + atomic merge +
     /// graph aggregation; the only `task ↔ person` edge it emits is `.mentions`
