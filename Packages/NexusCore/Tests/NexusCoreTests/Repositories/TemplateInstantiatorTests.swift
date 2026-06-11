@@ -166,4 +166,84 @@ struct TemplateInstantiatorTests {
             try harness.instantiator.saveAsTemplate(template)
         }
     }
+
+    @MainActor
+    @Test("instantiate recreates the subtask tree with remapped parents")
+    func instantiateRecreatesSubtaskTree() throws {
+        let harness = try Harness()
+        let root = TaskItem(title: "tpl root", isTemplate: true)
+        harness.context.insert(root)
+        let child = TaskItem(title: "tpl child", parentTaskID: root.id, isTemplate: true)
+        harness.context.insert(child)
+        let grandchild = TaskItem(title: "tpl grandchild", parentTaskID: child.id, isTemplate: true)
+        harness.context.insert(grandchild)
+        try harness.context.save()
+
+        let instance = try harness.instantiator.instantiate(root)
+
+        let all = try harness.context.fetch(FetchDescriptor<TaskItem>())
+        let copies = all.filter { !$0.isTemplate }
+        #expect(copies.count == 3)
+        let newChild = try #require(copies.first { $0.title == "tpl child" })
+        let newGrandchild = try #require(copies.first { $0.title == "tpl grandchild" })
+        #expect(newChild.parentTaskID == instance.id)
+        #expect(newGrandchild.parentTaskID == newChild.id)
+        #expect(copies.allSatisfy { $0.status == .open && $0.dueAt == nil })
+    }
+
+    @MainActor
+    @Test("saveAsTemplate marks every copied node as a template")
+    func saveAsTemplateMarksWholeTree() throws {
+        let harness = try Harness()
+        let root = TaskItem(title: "live root")
+        try harness.repo.insert(root)
+        let child = TaskItem(title: "live child", parentTaskID: root.id)
+        try harness.repo.insert(child)
+
+        let template = try harness.instantiator.saveAsTemplate(root)
+
+        let all = try harness.context.fetch(FetchDescriptor<TaskItem>())
+        let templates = all.filter(\.isTemplate)
+        #expect(templates.count == 2)
+        let templateChild = try #require(templates.first { $0.title == "live child" })
+        #expect(templateChild.parentTaskID == template.id)
+        // Originals untouched.
+        #expect(root.isTemplate == false)
+        #expect(child.isTemplate == false)
+    }
+
+    @MainActor
+    @Test("instantiate recreates outgoing links, remaps intra-tree targets, skips scheduledAs")
+    func instantiateRecreatesLinks() throws {
+        let harness = try Harness()
+        let links = LinkRepository(context: harness.context)
+        let root = TaskItem(title: "tpl root", isTemplate: true)
+        harness.context.insert(root)
+        let child = TaskItem(title: "tpl child", parentTaskID: root.id, isTemplate: true)
+        harness.context.insert(child)
+        try harness.context.save()
+
+        let labelID = UUID()
+        let blockID = UUID()
+        try links.create(from: (.task, root.id), to: (.label, labelID), linkKind: .labeled)
+        try links.create(from: (.task, root.id), to: (.task, child.id), linkKind: .blocks)
+        try links.create(from: (.task, root.id), to: (.scheduledBlock, blockID), linkKind: .scheduledAs)
+
+        let instance = try harness.instantiator.instantiate(root)
+
+        let outgoing = try links.outgoing(from: (.task, instance.id))
+        #expect(outgoing.count == 2)
+        let labeled = try #require(outgoing.first { $0.linkKind == .labeled })
+        #expect(labeled.toKind == .label)
+        #expect(labeled.toID == labelID)
+        let blocks = try #require(outgoing.first { $0.linkKind == .blocks })
+        let newChild = try #require(
+            try harness.context.fetch(FetchDescriptor<TaskItem>())
+                .first { !$0.isTemplate && $0.title == "tpl child" }
+        )
+        #expect(blocks.toID == newChild.id)  // intra-tree target remapped
+        #expect(outgoing.allSatisfy { $0.linkKind != .scheduledAs })
+        // Template's own links untouched.
+        #expect(try links.outgoing(from: (.task, root.id)).count == 3)
+    }
 }
