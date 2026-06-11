@@ -44,6 +44,7 @@ public enum DeadlineRiskProjector {
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate<TaskItem> { task in
                 task.deletedAt == nil && task.statusRaw == openStatus
+                    && task.isTemplate == false
             }
         )
         return try context.fetch(descriptor)
@@ -64,6 +65,9 @@ public enum DeadlineRiskProjector {
                     && task.estimatedDurationSeconds != nil
             }
         )
-        return try context.fetch(descriptor)
+        // I-D1 defensive: a fifth `#Predicate` conjunct blows the type-checker
+        // budget here; templates can never be done post-guard, so this only
+        // shields against pre-guard synced rows.
+        return try context.fetch(descriptor).filter { !$0.isTemplate }
     }
 }

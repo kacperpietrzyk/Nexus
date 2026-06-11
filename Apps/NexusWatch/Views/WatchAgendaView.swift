@@ -12,6 +12,7 @@ struct WatchAgendaView: View {
         filter: #Predicate<TaskItem> { task in
             task.deletedAt == nil
                 && task.dueAt != nil
+                && task.isTemplate == false
         }, sort: \TaskItem.dueAt)
     private var openWithDue: [TaskItem]
 
@@ -19,6 +20,7 @@ struct WatchAgendaView: View {
         filter: #Predicate<TaskItem> { task in
             task.deletedAt == nil
                 && task.lastCompletedAt != nil
+                && task.isTemplate == false
         },
         sort: \TaskItem.lastCompletedAt,
         order: .reverse

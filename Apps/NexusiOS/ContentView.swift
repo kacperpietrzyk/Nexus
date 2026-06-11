@@ -338,7 +338,7 @@ struct ContentView: View {
         let highPriority = TaskPriority.high.rawValue
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { task in
-                task.deletedAt == nil && task.statusRaw == openStatus
+                task.deletedAt == nil && task.statusRaw == openStatus && task.isTemplate == false
             }
         )
         guard let tasks = try? modelContext.fetch(descriptor) else { return nil }

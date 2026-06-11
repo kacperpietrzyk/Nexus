@@ -536,7 +536,7 @@ struct NexusMacApp: App {
         let openStatus = TaskStatus.open.rawValue
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { item in
-                item.deletedAt == nil && item.statusRaw == openStatus
+                item.deletedAt == nil && item.statusRaw == openStatus && item.isTemplate == false
             },
             sortBy: [
                 SortDescriptor(\.dueAt, order: .forward),

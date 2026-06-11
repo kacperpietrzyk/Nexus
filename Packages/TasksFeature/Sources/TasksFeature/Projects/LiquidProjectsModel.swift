@@ -81,7 +81,8 @@ public final class LiquidProjectsModel {
 
         // One grouped fetch covers both picker columns (open count + progress).
         let projectTasks = try modelContext.fetch(
-            FetchDescriptor<TaskItem>(predicate: #Predicate { $0.deletedAt == nil && $0.projectID != nil })
+            FetchDescriptor<TaskItem>(
+                predicate: #Predicate { $0.deletedAt == nil && $0.projectID != nil && $0.isTemplate == false })
         )
         let byProject = Dictionary(grouping: projectTasks, by: { $0.projectID })
         var openCounts: [UUID: Int] = [:]

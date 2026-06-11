@@ -82,6 +82,7 @@ extension TodayDashboard {
             task.deletedAt == nil
                 && task.statusRaw == doneStatus
                 && task.dueAt != nil
+                && task.isTemplate == false
         }
         let descriptor = FetchDescriptor<TaskItem>(predicate: predicate)
         let fetched = try modelContext.fetch(descriptor)
@@ -120,7 +121,9 @@ extension TodayDashboard {
     @MainActor
     static func shutdownTasks(now: Date, modelContext: ModelContext) -> [TaskItem] {
         let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { $0.deletedAt == nil && ($0.dueAt != nil || $0.lastCompletedAt != nil) }
+            predicate: #Predicate {
+                $0.deletedAt == nil && ($0.dueAt != nil || $0.lastCompletedAt != nil) && $0.isTemplate == false
+            }
         )
         return (try? modelContext.fetch(descriptor)) ?? []
     }

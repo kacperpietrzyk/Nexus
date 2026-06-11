@@ -412,7 +412,7 @@ public final class CalendarViewModel {
     public func schedulableTasks() -> [(id: UUID, title: String)] {
         let openRaw = TaskStatus.open.rawValue
         let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.statusRaw == openRaw },
+            predicate: #Predicate { $0.deletedAt == nil && $0.statusRaw == openRaw && $0.isTemplate == false },
             sortBy: [SortDescriptor(\.title, order: .forward)]
         )
         return (try? context.fetch(descriptor))?.map { ($0.id, $0.title) } ?? []
