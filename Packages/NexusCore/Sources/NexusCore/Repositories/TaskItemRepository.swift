@@ -472,9 +472,16 @@ public final class TaskItemRepository {
         // (invariant I7). `.todo.forcedStatus == .open`, so `status: .open` here
         // already reconciles with the spawned workflow for both branches.
         let nextWorkflowState: WorkflowState? = task.workflowState == nil ? nil : .todo
-        let carriedReminders = task.reminders.compactMap { rule -> ReminderRule? in
-            if case .relative = rule { return rule }
-            return nil
+        // Carry relative rules (re-anchored to the new occurrence's dates) and
+        // repeating absolutes (wall-clock-anchored, never stale — T4). One-shot
+        // absolutes are occurrence-bound and stay dropped (I7).
+        let carriedReminders = task.reminders.filter { rule in
+            switch rule {
+            case .relative:
+                return true
+            case .absolute(_, let repeats):
+                return repeats != nil
+            }
         }
         // `agent` assignment is pure metadata (I8) and carries to the next
         // occurrence so the queue assignment survives a recurrence.

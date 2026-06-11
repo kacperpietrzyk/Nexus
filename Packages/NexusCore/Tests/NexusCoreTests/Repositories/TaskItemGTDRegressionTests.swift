@@ -147,6 +147,25 @@ struct TaskItemGTDRegressionTests {
     }
 
     @MainActor
+    @Test("T4: recurring spawn carries repeating absolute reminders, still drops one-shots")
+    func gtdRecurrenceSpawnCarriesRepeatingAbsoluteReminders() throws {
+        let now = Self.fixedNow
+        let (repo, context) = try makeRepo(now: { now })
+        let task = TaskItem(title: "morning brief", dueAt: now, recurrenceRule: "FREQ=DAILY")
+        task.reminders = [
+            .absolute(now.addingTimeInterval(600)),
+            .absolute(at: now.addingTimeInterval(600), repeats: .daily),
+        ]
+        try repo.insert(task)
+
+        try repo.markDone(task)
+
+        let all = try context.fetch(FetchDescriptor<TaskItem>())
+        let spawn = try #require(all.first { $0.id != task.id })
+        #expect(spawn.reminders == [.absolute(at: now.addingTimeInterval(600), repeats: .daily)])
+    }
+
+    @MainActor
     @Test("I7: recurring GTD task spawn preserves placement and deadline")
     func gtdRecurrenceSpawnPreservesPlacementAndDeadline() throws {
         let now = Self.fixedNow

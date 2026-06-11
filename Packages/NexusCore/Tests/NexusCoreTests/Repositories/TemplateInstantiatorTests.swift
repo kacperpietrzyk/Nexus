@@ -110,6 +110,22 @@ struct TemplateInstantiatorTests {
     }
 
     @MainActor
+    @Test("T4: instantiate carries repeating absolute reminders, still drops one-shots")
+    func instantiateCarriesRepeatingAbsoluteReminders() throws {
+        let harness = try Harness()
+        let template = TaskItem(title: "tpl", isTemplate: true)
+        template.reminders = [
+            .absolute(harness.now),
+            .absolute(at: harness.now, repeats: .weekly),
+        ]
+        harness.context.insert(template)
+        try harness.context.save()
+
+        let instance = try harness.instantiator.instantiate(template)
+        #expect(instance.reminders == [.absolute(at: harness.now, repeats: .weekly)])
+    }
+
+    @MainActor
     @Test("instantiate deep-copies the backing note (duplicatedNoteRef / T1)")
     func instantiateDuplicatesNote() throws {
         let harness = try Harness()

@@ -24,8 +24,8 @@ public enum TemplateInstantiatorError: Error, Equatable {
 ///   `externalSourceID/Metadata = nil`, `cycleID = nil`, fresh timestamps;
 /// - `recurrenceRule` verbatim — recurrence activates once an instance gets a
 ///   due date;
-/// - reminders: `.relative` rules only — the exact `carriedReminders` filter
-///   `makeNextOccurrence` applies;
+/// - reminders: `.relative` rules and repeating `.absolute` rules — the exact
+///   `carriedReminders` filter `makeNextOccurrence` applies;
 /// - workflow: nil stays nil (GTD, invariant I7); non-nil resets to `.todo`
 ///   (the `makeNextOccurrence` precedent — a copy never starts terminal, I1);
 /// - note content: per-node copy via `duplicatedNoteRef` (T1 precedent), so
@@ -118,11 +118,16 @@ public final class TemplateInstantiator {
         // Fresh per-copy note row (T1): editing the copy's note never mutates
         // the source's.
         copy.noteRef = try tasks.duplicatedNoteRef(of: source.noteRef)
-        // Relative-only carry — identical to `carriedReminders` in
-        // `makeNextOccurrence`: absolute reminders are occurrence-bound.
-        copy.reminders = source.reminders.compactMap { rule -> ReminderRule? in
-            if case .relative = rule { return rule }
-            return nil
+        // Carry `.relative` rules and repeating `.absolute` rules — identical
+        // to `carriedReminders` in `makeNextOccurrence` (T4): one-shot absolute
+        // reminders are occurrence-bound and stay dropped.
+        copy.reminders = source.reminders.filter { rule in
+            switch rule {
+            case .relative:
+                return true
+            case .absolute(_, let repeats):
+                return repeats != nil
+            }
         }
         return copy
     }
