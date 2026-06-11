@@ -26,6 +26,7 @@ extension TaskDetailInspector {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     headerCard
                     workflowCard
+                    cycleCard
                     labelsCard
                     aiAssistCard
                     scheduleCard
@@ -66,6 +67,7 @@ extension TaskDetailInspector {
                 VStack(alignment: .leading, spacing: 16) {
                     headerCard
                     workflowCard
+                    cycleCard
                     labelsCard
                     scheduleCard
                 }
