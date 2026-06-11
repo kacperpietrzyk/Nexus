@@ -172,4 +172,93 @@ struct RecurringSeriesProjectorTests {
         #expect(previews.allSatisfy { $0.taskID == spawn.id })
         #expect(previews.allSatisfy { $0.seriesID == parent.id })
     }
+
+    @MainActor
+    @Test("previews avoid calendar events: a 09:00–17:00 event pushes the preview to 17:00")
+    func placementAvoidsEvents() {
+        let task = makeDailyTask()
+        let tomorrowStart = calendar.startOfDay(for: now).addingTimeInterval(86_400)
+        let busyTuesday = CalendarEvent(
+            id: "evt-busy",
+            title: "Offsite",
+            start: tomorrowStart.addingTimeInterval(9 * 3600),
+            end: tomorrowStart.addingTimeInterval(17 * 3600),
+            isAllDay: false
+        )
+        let projector = RecurringSeriesProjector()
+
+        let previews = projector.preview(
+            tasks: [task], events: [busyTuesday], obstacles: [], prefs: .default,
+            window: weekWindow, now: now, calendar: calendar
+        )
+
+        let tomorrow = previews.filter {
+            calendar.isDate($0.start, inSameDayAs: tomorrowStart)
+        }
+        #expect(tomorrow.count == 1)
+        #expect(tomorrow.first?.start == tomorrowStart.addingTimeInterval(17 * 3600))
+        #expect(tomorrow.first?.end == tomorrowStart.addingTimeInterval(18 * 3600))
+    }
+
+    @MainActor
+    @Test("a day with an existing live block for the series yields no preview (manual schedule wins)")
+    func existingBlockSuppressesPreview() {
+        let task = makeDailyTask()
+        let tomorrowStart = calendar.startOfDay(for: now).addingTimeInterval(86_400)
+        let manual = ScheduledBlock(
+            taskID: task.id,
+            start: tomorrowStart.addingTimeInterval(10 * 3600),
+            end: tomorrowStart.addingTimeInterval(11 * 3600),
+            title: "hand-placed",
+            status: .accepted,
+            origin: .manual,
+            externalEventID: "evt-1"
+        )
+        let projector = RecurringSeriesProjector()
+
+        let previews = projector.preview(
+            tasks: [task], events: [], obstacles: [manual], prefs: .default,
+            window: weekWindow, now: now, calendar: calendar
+        )
+
+        // Tomorrow suppressed → the remaining 5 future days still preview.
+        #expect(previews.count == 5)
+        #expect(!previews.contains { calendar.isDate($0.start, inSameDayAs: tomorrowStart) })
+    }
+
+    @MainActor
+    @Test("an estimate above maxBlockMinutes chunks into sub-blocks sharing one occurrenceDate, distinct ids")
+    func oversizedEstimateChunks() {
+        let task = makeDailyTask(estimateSeconds: 3 * 3600)  // 3h vs default max 120 min
+        var prefs = CalendarPreferences.default
+        prefs.seriesPreviewHorizonDays = 1  // single future day: tomorrow
+        let projector = RecurringSeriesProjector()
+
+        let previews = projector.preview(
+            tasks: [task], events: [], obstacles: [], prefs: prefs,
+            window: weekWindow, now: now, calendar: calendar
+        )
+
+        #expect(previews.count == 2)  // 2h + 1h
+        #expect(Set(previews.map(\.id)).count == 2)
+        #expect(Set(previews.map(\.occurrenceDate)).count == 1)
+    }
+
+    @MainActor
+    @Test("identical input produces identical output (determinism)")
+    func deterministicOutput() {
+        let taskA = makeDailyTask(title: "alpha")
+        let taskB = makeDailyTask(title: "beta")
+        let projector = RecurringSeriesProjector()
+
+        let run = {
+            projector.preview(
+                tasks: [taskA, taskB], events: [], obstacles: [], prefs: .default,
+                window: self.weekWindow, now: self.now, calendar: self.calendar
+            )
+        }
+
+        #expect(run() == run())
+        #expect(!run().isEmpty)
+    }
 }
