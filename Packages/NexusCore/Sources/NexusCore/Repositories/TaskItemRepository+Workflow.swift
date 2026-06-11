@@ -34,6 +34,10 @@ extension TaskItemRepository {
     /// - open-group (`backlog`/`todo`/`inProgress`/`inReview`) forces
     ///   `.snoozed` if a snooze is active (I2) else `.open`.
     public func setWorkflowState(_ state: WorkflowState, on task: TaskItem) throws {
+        // I-D1: the workflow machine is a completion/queue surface; templates are
+        // inert blueprints — `instantiate` resets workflow to `.todo` instead.
+        // Placed BEFORE the activity record: templates emit no activity events.
+        guard !task.isTemplate else { return }
         // Record the transition ONCE, with the pre-mutation raw (spec §4.1).
         // Skip when unchanged: besides being noise, an unchanged `.done` would
         // hit `markDone`'s early return (no save) and strand an inserted entry

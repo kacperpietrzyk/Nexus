@@ -89,8 +89,12 @@ public final class TaskItemRepository {
             activity.record(.created, itemID: task.id, itemKind: .task)
         }
         try context.save()
-        let notifier = notifications
-        Task { @MainActor in try? await notifier.schedule(task) }
+        // I-D1: a template is never scheduled — no notification ever fires
+        // for an inert blueprint.
+        if !task.isTemplate {
+            let notifier = notifications
+            Task { @MainActor in try? await notifier.schedule(task) }
+        }
         let pusher = snapshotPusher
         Task { @MainActor in await pusher() }
     }
@@ -111,13 +115,19 @@ public final class TaskItemRepository {
             insertedSpawn = result.inserted
         }
 
-        recordFieldChanges(on: task, since: snapshot)
+        // I-D1: templates emit no activity events anywhere (same convention as
+        // the `.created` skip in `insert` — authoring/editing a blueprint is
+        // not a lifecycle event) and are never (re)scheduled.
+        if !task.isTemplate {
+            recordFieldChanges(on: task, since: snapshot)
+        }
         try context.save()
         let notifier = notifications
         let parent = task
+        let parentIsTemplate = task.isTemplate
         Task { @MainActor in
             if let removedSpawnID { await notifier.cancel(taskID: removedSpawnID) }
-            try? await notifier.reschedule(parent)
+            if !parentIsTemplate { try? await notifier.reschedule(parent) }
             if let insertedSpawn { try? await notifier.schedule(insertedSpawn) }
         }
         let pusher = snapshotPusher
@@ -191,6 +201,8 @@ public final class TaskItemRepository {
     }
 
     public func snooze(_ task: TaskItem, until: Date) throws {
+        // I-D1: a template is never scheduled — snooze is date machinery.
+        guard !task.isTemplate else { return }
         task.snoozedUntil = until
         task.statusRaw = TaskStatus.snoozed.rawValue
         task.updatedAt = now()
@@ -266,6 +278,11 @@ public final class TaskItemRepository {
         stamp: Date,
         sideEffects: inout TaskCompletionSideEffects
     ) throws {
+        // I-D1 (Tranche 2 spec §4.3): a template is never completable, so it can
+        // never spawn a recurrence either. Single choke point — covers markDone,
+        // markDoneStrict, cascadeComplete, and setWorkflowState(.done). Placed
+        // BEFORE the activity record: templates emit no activity events.
+        if task.isTemplate { return }
         if task.statusRaw == TaskStatus.done.rawValue && task.lastCompletedAt != nil {
             return
         }
@@ -339,31 +356,6 @@ public final class TaskItemRepository {
         }
         let pusher = snapshotPusher
         Task { @MainActor in await pusher() }
-    }
-
-    static func normalize(tags: [String]) -> [String] {
-        var seen = Set<String>()
-        var normalized: [String] = []
-        for tag in tags {
-            let cleaned = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard !cleaned.isEmpty, !seen.contains(cleaned) else { continue }
-            seen.insert(cleaned)
-            normalized.append(cleaned)
-        }
-        return normalized
-    }
-
-    static func assignmentOrder(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
-        switch (lhs.orderIndex, rhs.orderIndex) {
-        case (let left?, let right?) where left != right:
-            return left < right
-        case (nil, _?):
-            return false
-        case (_?, nil):
-            return true
-        default:
-            return lhs.createdAt < rhs.createdAt
-        }
     }
 
     private func countSiblings(parentID: UUID) throws -> Int {
@@ -551,6 +543,31 @@ public final class TaskItemRepository {
 }
 
 extension TaskItemRepository {
+    static func normalize(tags: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for tag in tags {
+            let cleaned = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !cleaned.isEmpty, !seen.contains(cleaned) else { continue }
+            seen.insert(cleaned)
+            normalized.append(cleaned)
+        }
+        return normalized
+    }
+
+    static func assignmentOrder(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
+        switch (lhs.orderIndex, rhs.orderIndex) {
+        case (let left?, let right?) where left != right:
+            return left < right
+        case (nil, _?):
+            return false
+        case (_?, nil):
+            return true
+        default:
+            return lhs.createdAt < rhs.createdAt
+        }
+    }
+
     /// Duplicates a recurring task's backing note for its next occurrence (T1).
     /// Each occurrence then owns its `Note` row, so a later `tasks.update(notes:)`
     /// on one occurrence can't mutate or delete a sibling's notes. Scalar content
