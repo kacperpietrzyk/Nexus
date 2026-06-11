@@ -73,6 +73,12 @@ public struct SidebarView: View {
                         selection = .tasks
                     }
 
+                    CyclesSidebarSection(
+                        selection: $taskFilter,
+                        onSelect: {
+                            selection = .tasks
+                        })
+
                     SmartListsSidebarSection(
                         selection: $taskFilter,
                         onSelect: {
