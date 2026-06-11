@@ -23,6 +23,10 @@ public struct TimelineItem: Identifiable, Equatable, Sendable {
     /// All-day calendar event — rendered in the pinned banner, not on the hour
     /// axis (S3a). Always false for blocks (they are timed).
     public let isAllDay: Bool
+    /// M1: the block now collides with a calendar event (or another committed
+    /// block). Runtime-only, computed by `BlockConflictDetector` and published
+    /// via `CalendarViewModel.conflictedBlockIDs`. Always false for events.
+    public let isConflicted: Bool
 
     public init(
         id: String,
@@ -32,7 +36,8 @@ public struct TimelineItem: Identifiable, Equatable, Sendable {
         kind: Kind,
         blockID: UUID? = nil,
         colorHex: String? = nil,
-        isAllDay: Bool = false
+        isAllDay: Bool = false,
+        isConflicted: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -42,6 +47,7 @@ public struct TimelineItem: Identifiable, Equatable, Sendable {
         self.blockID = blockID
         self.colorHex = colorHex
         self.isAllDay = isAllDay
+        self.isConflicted = isConflicted
     }
 }
 
@@ -95,12 +101,15 @@ public struct AxisMetrics: Equatable, Sendable {
 /// Pure hour-axis layout (spec §9). Deterministic: same items + metrics → same
 /// geometry. No UI, no ambient clock — fully unit-testable.
 public enum DayTimelineLayout {
-    /// Convert events + blocks into placeable items for `day`.
+    /// Convert events + blocks into placeable items for `day`. Blocks whose id
+    /// is in `conflictedBlockIDs` render conflicted (M1); the default keeps
+    /// pre-M1 call sites identical.
     public static func items(
         forDay day: Date,
         events: [CalendarEvent],
         blocks: [ScheduledBlock],
-        calendar: Calendar
+        calendar: Calendar,
+        conflictedBlockIDs: Set<UUID> = []
     ) -> [TimelineItem] {
         let dayStart = calendar.startOfDay(for: day)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
@@ -127,7 +136,8 @@ public enum DayTimelineLayout {
                     start: block.start,
                     end: block.end,
                     kind: block.status == .accepted ? .acceptedBlock : .proposedBlock,
-                    blockID: block.id
+                    blockID: block.id,
+                    isConflicted: conflictedBlockIDs.contains(block.id)
                 )
             )
         }
