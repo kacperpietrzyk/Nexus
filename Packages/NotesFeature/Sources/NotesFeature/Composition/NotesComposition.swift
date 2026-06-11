@@ -1,3 +1,4 @@
+import CommandPaletteShell
 import Foundation
 import NexusCore
 import SwiftData
@@ -22,5 +23,16 @@ public enum NotesComposition {
         observers: [any LinkableObserver] = []
     ) -> NoteRepository {
         NoteRepository(context: context, tasks: tasks, now: { .now }, observers: observers)
+    }
+
+    /// Registers Notes command-palette actions into the shared registry. Apps
+    /// call this once from their composition root, alongside
+    /// `TasksComposition.bootstrap` (same pattern, no cross-module imports).
+    @MainActor
+    public static func bootstrap(
+        commandRegistry: CommandRegistry = .shared,
+        openDailyNote: @escaping @MainActor @Sendable () -> Void
+    ) async {
+        await commandRegistry.register(OpenDailyNoteCommand(action: openDailyNote))
     }
 }

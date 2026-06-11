@@ -13,6 +13,7 @@ let package = Package(
     dependencies: [
         .package(path: "../NexusCore"),
         .package(path: "../NexusUI"),
+        .package(path: "../CommandPaletteShell"),
     ],
     targets: [
         .target(
@@ -20,6 +21,7 @@ let package = Package(
             dependencies: [
                 .product(name: "NexusCore", package: "NexusCore"),
                 .product(name: "NexusUI", package: "NexusUI"),
+                .product(name: "CommandPaletteShell", package: "CommandPaletteShell"),
             ]
         ),
         .testTarget(
@@ -28,6 +30,7 @@ let package = Package(
                 "NotesFeature",
                 .product(name: "NexusCore", package: "NexusCore"),
                 .product(name: "NexusUI", package: "NexusUI"),
+                .product(name: "CommandPaletteShell", package: "CommandPaletteShell"),
             ]
         ),
     ]
