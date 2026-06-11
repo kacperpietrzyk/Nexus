@@ -102,6 +102,38 @@ public final class NoteRepository {
         broadcastUpsert(for: note)
     }
 
+    /// Persist imported attachment metadata and insert a note image block in one save boundary.
+    @discardableResult
+    public func insertImageAttachment(
+        _ imported: ImportedAttachmentFile,
+        into note: Note,
+        after afterID: UUID?
+    ) throws -> AttachmentAsset {
+        var blocks = try NoteContentCoder.decode(note.contentData)
+        let stamp = now()
+        let asset = AttachmentAsset(
+            id: imported.id,
+            originalFilename: imported.originalFilename,
+            mimeType: imported.mimeType,
+            byteCount: imported.byteCount,
+            sha256: imported.sha256,
+            storagePath: imported.storagePath,
+            createdAt: stamp,
+            updatedAt: stamp
+        )
+        context.insert(asset)
+
+        let block = Block(kind: .image(ref: asset.id, asset: asset.storagePath))
+        blocks = Self.inserting(block, after: afterID, in: blocks)
+        note.contentData = try NoteContentCoder.encode(blocks)
+        note.updatedAt = stamp
+
+        try reconciler.reconcile(note)
+        try context.save()
+        broadcastUpsert(for: note)
+        return asset
+    }
+
     /// Update scalar fields (title/tags/role); content is untouched. Still drives
     /// reconcile so a `role` change (free → projectPage) re-homes new todos.
     public func updateFields(
@@ -422,5 +454,15 @@ public final class NoteRepository {
         id: UUID
     ) throws -> Model? {
         try context.fetch(FetchDescriptor<Model>()).first { $0.id == id && $0.deletedAt == nil }
+    }
+
+    private static func inserting(_ block: Block, after afterID: UUID?, in blocks: [Block]) -> [Block] {
+        guard let afterID, let index = blocks.firstIndex(where: { $0.id == afterID }) else {
+            return blocks + [block]
+        }
+
+        var updated = blocks
+        updated.insert(block, at: index + 1)
+        return updated
     }
 }
