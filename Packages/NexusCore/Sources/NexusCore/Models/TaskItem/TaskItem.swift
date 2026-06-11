@@ -88,6 +88,17 @@ public final class TaskItem: Searchable {
     /// override cascade: `.explicit` always wins and feeds the history corpus.
     public var durationSourceRaw: String?
 
+    /// Cycle assignment (Tranche 2, Linear L1). nil = no cycle. Raw pointer to
+    /// `Cycle.id`, follows the `projectID` precedent — no @Relationship. A
+    /// dangling id (cycle soft-deleted) resolves to "no cycle" at read time.
+    public var cycleID: UUID?
+
+    /// Template flag (Tranche 2, Todoist T2). A template is inert: excluded
+    /// from every operational query/notification/snapshot surface (invariant
+    /// I-D1 — the exclusion sweep itself ships in Plan D). Defaulted
+    /// non-optional Bool — the `pinnedAsFocus` precedent.
+    public var isTemplate: Bool = false
+
     public init(
         id: UUID = UUID(),
         title: String,
@@ -110,7 +121,9 @@ public final class TaskItem: Searchable {
         workflowState: WorkflowState? = nil,
         assignedAgent: AgentAssignee? = nil,
         estimatedDurationSeconds: Int? = nil,
-        durationSource: DurationSource? = nil
+        durationSource: DurationSource? = nil,
+        cycleID: UUID? = nil,
+        isTemplate: Bool = false
     ) {
         self.id = id
         self.kind = .task
@@ -141,6 +154,8 @@ public final class TaskItem: Searchable {
         self.assignedAgent = assignedAgent?.rawValue
         self.estimatedDurationSeconds = estimatedDurationSeconds
         self.durationSourceRaw = durationSource?.rawValue
+        self.cycleID = cycleID
+        self.isTemplate = isTemplate
     }
 
     public var status: TaskStatus {
