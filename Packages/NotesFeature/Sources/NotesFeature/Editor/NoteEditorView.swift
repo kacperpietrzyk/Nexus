@@ -12,6 +12,8 @@ struct NoteEditorView: View {
     @State private var pickerContext: PickerContext?
     @State private var backlinks: [BacklinkEntry] = []
     @State private var newTag: String = ""
+    @State private var folderText: String = ""
+    @State private var newPropertyKey: String = ""
 
     // O4 daily-note navigation: adjacent EXISTING daily notes + today check.
     @State private var previousDailyNoteID: UUID?
@@ -95,14 +97,17 @@ struct NoteEditorView: View {
             .listRowSeparator(.hidden)
     }
 
-    /// Obsidian-style properties/metadata panel (A3): editable tag chips + read-only
-    /// type and timestamps, all from fields the `Note` model already carries (no
-    /// schema change). Status / extra typed properties lean on `tags` per the task's
-    /// guidance; a structured property bag is deferred (it would touch the schema).
+    /// Obsidian-style properties/metadata panel (A3 + Tranche 2 Plan E): editable
+    /// tag chips, an editable folder path, read-only type and timestamps, then the
+    /// structured custom property bag (key/value rows + an "add property" field)
+    /// persisted via `NoteRepository.updateProperties`.
     private var propertiesSection: some View {
         VStack(alignment: .leading, spacing: DS.Space.s + 2) {
             propertyRow(label: "Tags") {
                 tagEditor
+            }
+            propertyRow(label: "Folder") {
+                folderEditor
             }
             propertyRow(label: "Type") {
                 Text(roleLabel)
@@ -118,6 +123,10 @@ struct NoteEditorView: View {
                 Text(model.updatedAt, format: .dateTime.day().month().year().hour().minute())
                     .font(DS.FontToken.metadata)
                     .foregroundStyle(DS.ColorToken.textMuted)
+            }
+            customPropertyRows
+            if model.canEdit {
+                addPropertyField
             }
         }
         .padding(DS.Space.m)
@@ -198,6 +207,74 @@ struct NoteEditorView: View {
         newTag = ""
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         model.addTag(value)
+    }
+
+    // MARK: - Folder + custom properties (Tranche 2 Plan E)
+
+    /// Editable folder path. Commits on submit through the model (which
+    /// normalizes); the field re-seeds from the normalized result.
+    private var folderEditor: some View {
+        Group {
+            if model.canEdit {
+                folderInputField
+            } else {
+                Text(model.folderPath ?? "No folder")
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+            }
+        }
+    }
+
+    private var folderInputField: some View {
+        let field = TextField("No folder", text: $folderText)
+            .textFieldStyle(.plain)
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textPrimary)
+            .onSubmit { commitFolder() }
+        #if os(iOS)
+        return
+            field
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+        #else
+        return field
+        #endif
+    }
+
+    private func commitFolder() {
+        model.setFolderPath(folderText.isEmpty ? nil : folderText)
+        folderText = model.folderPath ?? ""
+    }
+
+    /// Editable key/value property rows (Tranche 2 Plan E, spec §4.4). Rows are
+    /// identified by key — keys are unique case-sensitively (`NotePropertyEditing`
+    /// enforces at the edit seam).
+    private var customPropertyRows: some View {
+        ForEach(model.properties, id: \.key) { property in
+            NotePropertyRowView(
+                property: property,
+                canEdit: model.canEdit,
+                onRenameKey: { model.renameProperty(property.key, to: $0) },
+                onSetValue: { model.setPropertyValue($0, forKey: property.key) },
+                onRemove: { model.removeProperty(property.key) }
+            )
+        }
+    }
+
+    private var addPropertyField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "plus.circle")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textTertiary)
+            TextField("Add property", text: $newPropertyKey)
+                .textFieldStyle(.plain)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+                .onSubmit {
+                    model.addProperty(key: newPropertyKey)
+                    newPropertyKey = ""
+                }
+        }
     }
 
     private var blockRows: some View {
@@ -365,6 +442,7 @@ struct NoteEditorView: View {
 
     private func rebindModel() {
         model = NoteEditorModel(note: note, repository: noteRepository)
+        folderText = model.folderPath ?? ""
         reloadBacklinks()
         reloadDailyNavigation()
     }
