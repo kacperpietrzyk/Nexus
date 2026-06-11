@@ -53,6 +53,9 @@ public enum CoreTaskTools {
             PeopleAggregateTool(),
             PeopleLinkTool(),
             PeopleMergeTool(),
+            // Cycles (Tranche 2 Plan C)
+            CyclesListTool(),
+            CyclesAssignTool(),
         ]
     }
 }
