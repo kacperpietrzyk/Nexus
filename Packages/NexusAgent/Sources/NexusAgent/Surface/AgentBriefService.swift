@@ -43,26 +43,21 @@ public protocol AgentBriefDailyNoteWriting: Sendable {
 public final class AgentBriefDailyNoteWriter: AgentBriefDailyNoteWriting, @unchecked Sendable {
     private let modelContext: ModelContext
     private let calendar: Calendar
-    private let keyFormatter: DateFormatter
 
     public init(modelContext: ModelContext, calendar: Calendar = .current) {
         self.modelContext = modelContext
         self.calendar = calendar
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        self.keyFormatter = formatter
     }
 
     public func upsertDailyNote(for request: AgentBriefRequest, brief: String) throws {
         let text = brief.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        let dayKey = keyFormatter.string(from: calendar.startOfDay(for: request.now))
-        let title = "Daily Brief \(dayKey)"
-        let tags = ["daily", dayKey]
+        // Shared identity convention (NexusCore): the user-facing "Today's
+        // note" flow (`DailyNoteService`) resolves the SAME title/tags, so both
+        // flows agree on one daily note per day.
+        let title = DailyNoteConvention.title(for: request.now, calendar: calendar)
+        let tags = DailyNoteConvention.tags(for: request.now, calendar: calendar)
         let blocks = MarkdownBlockParser.parse(Self.strippingDigestMarkers(from: text))
         let repository = NoteRepository(context: modelContext, now: { request.now })
 
