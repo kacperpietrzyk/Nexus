@@ -119,6 +119,41 @@ public final class NoteRepository {
         broadcastUpsert(for: note)
     }
 
+    // MARK: - Organization (Tranche 2 Plan E: properties + folders)
+
+    /// Replace the note's custom property bag (spec §4.4). The single write path
+    /// for `Note.propertiesJSON` — views and agent tools never write the blob.
+    /// Keys are unique case-sensitively: the editor enforces uniqueness up front;
+    /// defensively, duplicates collapse last-value-wins at the first occurrence's
+    /// position so caller order stays deterministic. No reconcile / no index
+    /// broadcast: properties are not part of `searchableText` v1 (spec §6.2).
+    public func updateProperties(_ note: Note, properties: [NoteProperty]) throws {
+        var order: [String] = []
+        var valuesByKey: [String: NotePropertyValue] = [:]
+        for property in properties {
+            if valuesByKey[property.key] == nil { order.append(property.key) }
+            valuesByKey[property.key] = property.value
+        }
+        note.properties = order.compactMap { key in
+            valuesByKey[key].map { NoteProperty(key: key, value: $0) }
+        }
+        note.updatedAt = now()
+        try context.save()
+    }
+
+    /// Move a note to a folder (spec §4.5). `rawPath` is normalized through
+    /// `NoteFolderPath.normalize`; nil / empty / all-junk input means root.
+    /// A no-op (no save, no `updatedAt` churn) when the normalized path is
+    /// unchanged. No reconcile / no index broadcast — folder placement is not
+    /// indexed v1.
+    public func setFolderPath(_ note: Note, _ rawPath: String?) throws {
+        let normalized = NoteFolderPath.normalize(rawPath)
+        guard normalized != note.folderPath else { return }
+        note.folderPath = normalized
+        note.updatedAt = now()
+        try context.save()
+    }
+
     /// Instantiate a note template (Tranche 2 Plan D, Obsidian O3 — spec §4.3):
     /// copy `contentData`/`plainText`/`tags`/`propertiesJSON` into a fresh
     /// `.free` note; `folderPath` is copied verbatim; fresh id/timestamps.
