@@ -40,6 +40,7 @@ struct ReminderQuickChoice: Equatable, Identifiable {
 struct RemindersEditor: View {
     @Binding var reminders: [ReminderRule]
     @State private var absoluteDate = Date().addingTimeInterval(3600)
+    @State private var absoluteRepeat: ReminderRepeat?
 
     private let quickChoiceColumns = [
         GridItem(.adaptive(minimum: 96), spacing: 6)
@@ -76,11 +77,20 @@ struct RemindersEditor: View {
                     components: [.date, .hourAndMinute],
                     accessibilityLabel: "Reminder date and time"
                 )
+                Picker("Repeat", selection: $absoluteRepeat) {
+                    Text("Once").tag(ReminderRepeat?.none)
+                    Text("Daily").tag(ReminderRepeat?.some(.daily))
+                    Text("Weekly").tag(ReminderRepeat?.some(.weekly))
+                }
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityLabel("Reminder repeat frequency")
                 NexusButton(
                     variant: .outline,
                     size: .sm,
                     action: {
-                        reminders = RemindersReducer.add(.absolute(absoluteDate), to: reminders)
+                        reminders = RemindersReducer.add(
+                            .absolute(at: absoluteDate, repeats: absoluteRepeat), to: reminders)
                     },
                     label: { Text("Add") }
                 )
@@ -90,8 +100,10 @@ struct RemindersEditor: View {
 
     static func describe(_ rule: ReminderRule) -> String {
         switch rule {
-        case .absolute(let date, _):
-            return date.formatted(date: .abbreviated, time: .shortened)
+        case .absolute(let date, let repeats):
+            let base = date.formatted(date: .abbreviated, time: .shortened)
+            guard let repeats else { return base }
+            return "\(base) · \(repeats == .daily ? "daily" : "weekly")"
         case .relative(let offset, let anchor):
             let minutes = Int(-offset / 60)
             let unit = anchor == .due ? "due" : "deadline"

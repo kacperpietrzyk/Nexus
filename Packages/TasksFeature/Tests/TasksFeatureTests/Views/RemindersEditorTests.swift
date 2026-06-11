@@ -54,4 +54,17 @@ import Testing
         let label = RemindersEditor.describe(.absolute(when))
         #expect(!label.isEmpty)
     }
+
+    @Test @MainActor func describeRepeatingAbsoluteAppendsFrequency() {
+        let when = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(RemindersEditor.describe(.absolute(at: when, repeats: .daily)).hasSuffix(" · daily"))
+        #expect(RemindersEditor.describe(.absolute(at: when, repeats: .weekly)).hasSuffix(" · weekly"))
+        #expect(!RemindersEditor.describe(.absolute(when)).contains(" · "))
+    }
+
+    @Test func reducerTreatsRepeatVariantsAsDistinctRules() {
+        let when = Date(timeIntervalSince1970: 1)
+        let rules = RemindersReducer.add(.absolute(at: when, repeats: .daily), to: [.absolute(when)])
+        #expect(rules.count == 2)
+    }
 }
