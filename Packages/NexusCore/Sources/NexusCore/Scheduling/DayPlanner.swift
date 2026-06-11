@@ -95,6 +95,62 @@ public struct DayPlanner {
         return Result(proposals: persisted, overload: plan.overload)
     }
 
+    /// Targeted re-proposal (M1 "Replan" affordance): schedule ONLY `taskIDs`
+    /// into free slots, treating every other live block in the day — accepted,
+    /// manual, AND other tasks' auto proposals — as hard obstacles. Unlike
+    /// `planDay` it does not clear or regenerate anything else, and it does not
+    /// require the tasks to be in the candidate pool (their now-deleted
+    /// conflicted blocks prove they were planned). Today-only by design (the
+    /// planner is today-only since S2).
+    ///
+    /// Edge case (accepted): if a replanned task still has another live block
+    /// elsewhere, that sibling block is excluded from the obstacle set with the
+    /// rest of the task's blocks.
+    @discardableResult
+    public func replan(
+        taskIDs: [UUID],
+        events: [CalendarEvent],
+        prefs: CalendarPreferences,
+        now: Date,
+        calendar: Calendar
+    ) throws -> Result {
+        let ids = Set(taskIDs)
+        guard !ids.isEmpty else {
+            return Result(
+                proposals: [],
+                overload: OverloadReport(totalEstimatedSeconds: 0, totalFreeSeconds: 0, unplacedTaskIDs: [])
+            )
+        }
+
+        let allTasks = try fetchOpenTasks()
+        let candidates = allTasks.filter { ids.contains($0.id) && $0.status == .open }
+        let history = allTasks.filter {
+            $0.status == .done && $0.durationSource == .explicit && $0.estimatedDurationSeconds != nil
+        }
+
+        let dayStart = calendar.startOfDay(for: now)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let obstacles = try blocks.blocks(from: dayStart, to: dayEnd).filter { !ids.contains($0.taskID) }
+
+        let plan = scheduler.plan(
+            candidates: candidates,
+            events: events,
+            accepted: obstacles,
+            prefs: prefs,
+            estimator: estimator,
+            history: history,
+            now: now,
+            calendar: calendar,
+            horizonDays: 1
+        )
+
+        var persisted: [ScheduledBlock] = []
+        for proposal in plan.proposals {
+            persisted.append(try blocks.persistProposal(proposal))
+        }
+        return Result(proposals: persisted, overload: plan.overload)
+    }
+
     // MARK: - Fetch helpers
 
     private func fetchOpenTasks() throws -> [TaskItem] {

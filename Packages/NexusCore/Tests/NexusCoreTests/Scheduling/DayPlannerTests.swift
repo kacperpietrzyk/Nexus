@@ -114,4 +114,70 @@ struct DayPlannerTests {
         // The new auto proposal is placed AFTER the manual block (it is an obstacle).
         #expect(result.proposals.first?.start == now.addingTimeInterval(3600))
     }
+
+    @MainActor
+    @Test("replan(taskIDs:) schedules only the requested tasks around every other live block")
+    func replanTargetsOnlyRequestedTasks() throws {
+        let context = try makeContext()
+        let cal = calendar
+        // The task to replan: open, NO due date — deliberately outside the
+        // planDay candidate pool (overdue + due-today + pinned). replan must
+        // work for it anyway: its conflicted block proved it was planned.
+        let task = TaskItem(title: "rescue me")
+        task.estimatedDurationSeconds = 1800
+        task.durationSourceRaw = DurationSource.explicit.rawValue
+        context.insert(task)
+        try context.save()
+
+        let repo = ScheduledBlockRepository(context: context)
+        _ = try repo.create(
+            taskID: UUID(),
+            start: now,
+            end: now.addingTimeInterval(3600),
+            title: "accepted block",
+            status: .accepted,
+            externalEventID: "mirror-1"
+        )
+        let otherProposal = try repo.create(
+            taskID: UUID(),
+            start: now.addingTimeInterval(3600),
+            end: now.addingTimeInterval(5400),
+            title: "other proposal",
+            status: .proposed,
+            origin: .auto
+        )
+
+        let planner = DayPlanner(context: context)
+        let result = try planner.replan(
+            taskIDs: [task.id],
+            events: [],
+            prefs: .default,
+            now: now,
+            calendar: cal
+        )
+
+        #expect(result.proposals.count == 1)
+        #expect(result.proposals.first?.taskID == task.id)
+        // Placed after BOTH the accepted block and the other task's proposal —
+        // a targeted replan never double-books an already-promised slot.
+        #expect(result.proposals.first?.start == now.addingTimeInterval(5400))
+        // And never clears other proposals (unlike planDay).
+        #expect(otherProposal.deletedAt == nil)
+    }
+
+    @MainActor
+    @Test("replan with no task ids is a no-op")
+    func replanEmptyIsNoop() throws {
+        let context = try makeContext()
+        let planner = DayPlanner(context: context)
+        let result = try planner.replan(
+            taskIDs: [],
+            events: [],
+            prefs: .default,
+            now: now,
+            calendar: calendar
+        )
+        #expect(result.proposals.isEmpty)
+        #expect(result.overload.unplacedTaskIDs.isEmpty)
+    }
 }
