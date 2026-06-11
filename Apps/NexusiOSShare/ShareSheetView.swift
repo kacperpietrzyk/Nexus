@@ -150,8 +150,13 @@ struct ShareSheetView: View {
         parsedResult = result
 
         do {
-            let repository = TasksComposition.makeRepository(for: ModelContext(container))
-            let task = try ShareTaskBuilder.task(from: result)
+            let context = ModelContext(container)
+            let repository = TasksComposition.makeRepository(for: context)
+            let projectRepository = ProjectRepository(context: context)
+            let task = try ShareTaskBuilder.task(from: result) { token in
+                (try? projectRepository.findActive(matchingToken: token))
+                    .flatMap { $0 }?.id
+            }
             try repository.insert(task)
             errorMessage = nil
             onDone(true)
@@ -195,6 +200,7 @@ private struct ParsedSummaryView: View {
                     SummaryRow(label: "Deadline", value: result.deadlineAt.map(formatDate))
                     SummaryRow(label: "Priority", value: result.priority?.label)
                     SummaryRow(label: "Tags", value: result.tags.isEmpty ? nil : result.tags.joined(separator: ", "))
+                    SummaryRow(label: "Project", value: result.projectToken.map { "@\($0)" })
                     SummaryRow(label: "Repeat", value: result.recurrence)
                 }
             } else {

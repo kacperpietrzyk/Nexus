@@ -44,7 +44,10 @@ public enum ShareTaskBuilderError: Error, Equatable {
 
 public enum ShareTaskBuilder {
     @MainActor
-    public static func task(from result: ParseResult) throws -> TaskItem {
+    public static func task(
+        from result: ParseResult,
+        resolveProject: (@MainActor (String) -> UUID?)? = nil
+    ) throws -> TaskItem {
         let title = result.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { throw ShareTaskBuilderError.emptyTitle }
 
@@ -56,7 +59,8 @@ public enum ShareTaskBuilder {
             deadlineAt: result.deadlineAt,
             priority: result.priority ?? .none,
             tags: result.tags,
-            recurrenceRule: result.recurrence
+            recurrenceRule: result.recurrence,
+            projectID: result.projectToken.flatMap { resolveProject?($0) }
         )
     }
 }
