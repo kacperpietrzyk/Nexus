@@ -113,6 +113,11 @@ internal struct Tokenizer: Sendable {
             let body = String(word.dropFirst()).lowercased()
             return .tag(body, confidence: 0.95)
         }
+        if word.hasPrefix("@"), word.count > 1, word.range(of: #"^@[A-Za-z0-9_/-]+$"#, options: .regularExpression) != nil {
+            // Project sigil. Typed case is preserved (unlike tags) — resolution
+            // downstream is case-insensitive and the chip echoes what was typed.
+            return .project(String(word.dropFirst()), confidence: 0.95)
+        }
         if word.range(of: #"^![1-4]$"#, options: .regularExpression) != nil, let digit = Int(word.dropFirst()) {
             let priority: TaskPriority
             switch digit {
