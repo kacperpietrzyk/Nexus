@@ -68,6 +68,12 @@ public actor FoundationModelParser: NLParser {
         // Strip a leading `@` for parity with `Tokenizer.classify`, which calls
         // `dropFirst()` on project tokens. LMs emit either form depending on
         // prompt nuance; normalizing here keeps cross-path output stable.
+        // Invariant difference vs the handcoded path: the tokenizer is
+        // whitespace-split and can only ever emit SINGLE-WORD tokens, while the
+        // model may return a project's full multi-word name ("Side Project").
+        // We keep it verbatim — `ProjectRepository.findActive(matchingToken:)`
+        // resolves multi-word tokens through its exact lowercased-name pass,
+        // so the looser FM shape still lands on the same project.
         let projectToken: String? = schema.project.flatMap { raw in
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             let stripped = trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed

@@ -107,6 +107,20 @@ struct ProjectRepositoryTests {
     }
 
     @MainActor
+    @Test("findActive(matchingToken:) resolves a multi-word token via the exact pass (FM-path shape)")
+    func findActiveMultiWordToken() throws {
+        // The handcoded parser only emits single-word tokens, but the FM path
+        // can return a project's full multi-word name as the token. Pin: such
+        // a token resolves through the exact lowercased-name match.
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let side = try repo.create(name: "Side Project")
+
+        #expect(try repo.findActive(matchingToken: "Side Project")?.id == side.id)
+        #expect(try repo.findActive(matchingToken: "side project")?.id == side.id)
+    }
+
+    @MainActor
     @Test("findActive(matchingToken:) matches diacritic names case-insensitively")
     func findActiveDiacriticName() throws {
         let context = try makeContext()
