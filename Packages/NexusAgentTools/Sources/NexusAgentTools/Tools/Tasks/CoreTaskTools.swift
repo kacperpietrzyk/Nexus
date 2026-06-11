@@ -17,6 +17,7 @@ public enum CoreTaskTools {
             TasksReopenTool(),
             TasksSnoozeTool(),
             TasksDeleteTool(),
+            TasksInstantiateTemplateTool(),
             CommentsListTool(),
             CommentsAddTool(),
             CommentsEditTool(),
