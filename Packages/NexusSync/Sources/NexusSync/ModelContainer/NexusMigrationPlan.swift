@@ -34,6 +34,14 @@ import SwiftData
 ///   already-open container in `backfillPeopleFromMeetingParticipants` and is deferred
 ///   to first-launch bootstrap because it needs the concrete `Meeting` type (a
 ///   composition-time extra NexusSync cannot import).
+/// - V12 -> V13 lightweight (additive schema: `Cycle` + `ActivityEntry` entities,
+///   plus additive defaulted/optional columns `TaskItem.cycleID` /
+///   `TaskItem.isTemplate` and `Note.propertiesJSON` / `Note.folderPath`;
+///   Tranche-2 parity batch). Pure additive — no data move, NO backfill, NO
+///   marker-gated post-open bootstrap step (every new field starts
+///   nil/defaulted, every new table starts empty). The new `ItemKind.cycle` /
+///   `NoteRole.template` raw enum cases ride existing `String`-backed columns
+///   and need no schema change.
 ///
 /// WHY the body -> Note move is NOT a `.custom` migration stage (a deliberate
 /// deviation from the spec's "custom stage" wording, forced by this codebase's
@@ -68,6 +76,7 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             NexusSchemaV10.self,
             NexusSchemaV11.self,
             NexusSchemaV12.self,
+            NexusSchemaV13.self,
         ]
     }
 
@@ -116,6 +125,10 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             MigrationStage.lightweight(
                 fromVersion: NexusSchemaV11.self,
                 toVersion: NexusSchemaV12.self
+            ),
+            MigrationStage.lightweight(
+                fromVersion: NexusSchemaV12.self,
+                toVersion: NexusSchemaV13.self
             ),
         ]
     }
