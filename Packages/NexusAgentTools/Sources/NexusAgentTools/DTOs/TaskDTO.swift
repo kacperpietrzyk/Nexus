@@ -201,7 +201,7 @@ public struct ReminderDTO: Codable, Sendable, Equatable {
         switch rule {
         case .relative(let offset, let anchor):
             return ReminderDTO(type: "relative", offset: offset, anchor: anchor.rawValue, at: nil)
-        case .absolute(let date):
+        case .absolute(let date, _):
             return ReminderDTO(type: "absolute", offset: nil, anchor: nil, at: formatter.string(from: date))
         }
     }

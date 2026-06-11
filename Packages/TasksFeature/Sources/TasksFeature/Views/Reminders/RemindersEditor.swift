@@ -90,7 +90,7 @@ struct RemindersEditor: View {
 
     static func describe(_ rule: ReminderRule) -> String {
         switch rule {
-        case .absolute(let date):
+        case .absolute(let date, _):
             return date.formatted(date: .abbreviated, time: .shortened)
         case .relative(let offset, let anchor):
             let minutes = Int(-offset / 60)

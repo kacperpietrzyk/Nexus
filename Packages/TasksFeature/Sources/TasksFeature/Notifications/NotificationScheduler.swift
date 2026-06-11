@@ -129,7 +129,7 @@ public final class NotificationScheduler {
     /// (relative rule whose anchor date is not set).
     private func resolve(_ rule: ReminderRule, for task: TaskItem) -> Date? {
         switch rule {
-        case .absolute(let date):
+        case .absolute(let date, _):
             return date
         case .relative(let offset, let anchor):
             let base: Date? = (anchor == .due) ? task.dueAt : task.deadlineAt
