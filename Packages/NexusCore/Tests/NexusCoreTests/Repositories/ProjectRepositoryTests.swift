@@ -76,6 +76,49 @@ struct ProjectRepositoryTests {
     }
 
     @MainActor
+    @Test("findActive(matchingToken:) prefers an exact name match over a space-stripped match")
+    func findActiveExactBeatsStripped() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        // "A BC" sorts before "ABC" and matches "abc" via space-stripping, but
+        // the exact-match pass must win regardless of sort order.
+        let spaced = try repo.create(name: "A BC")
+        let exact = try repo.create(name: "ABC")
+
+        #expect(try repo.findActive(matchingToken: "ABC")?.id == exact.id)
+        #expect(try repo.findActive(matchingToken: "abc")?.id == exact.id)
+        // Without an exact candidate the stripped pass still resolves.
+        try repo.softDelete(exact)
+        #expect(try repo.findActive(matchingToken: "abc")?.id == spaced.id)
+    }
+
+    @MainActor
+    @Test("findActive(matchingToken:) tie-break is deterministic: name, then UUID string")
+    func findActiveTieBreakDeterministic() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let first = try repo.create(name: "Dup")
+        let second = try repo.create(name: "Dup")
+        let expected = [first, second].min { $0.id.uuidString < $1.id.uuidString }
+
+        for _ in 0..<5 {
+            #expect(try repo.findActive(matchingToken: "dup")?.id == expected?.id)
+        }
+    }
+
+    @MainActor
+    @Test("findActive(matchingToken:) matches diacritic names case-insensitively")
+    func findActiveDiacriticName() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "Prząśnik")
+
+        #expect(try repo.findActive(matchingToken: "Prząśnik")?.id == project.id)
+        #expect(try repo.findActive(matchingToken: "prząśnik")?.id == project.id)
+        #expect(try repo.findActive(matchingToken: "PRZĄŚNIK")?.id == project.id)
+    }
+
+    @MainActor
     @Test("archive cascades to child projects")
     func archiveCascade() throws {
         let stamp = Date(timeIntervalSince1970: 1_800_000_000)

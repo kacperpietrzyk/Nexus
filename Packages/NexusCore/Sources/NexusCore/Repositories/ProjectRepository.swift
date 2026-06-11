@@ -91,17 +91,26 @@ public final class ProjectRepository {
     }
 
     /// Case-insensitive lookup of an active project by NL-capture token
-    /// (`@project` in quick add). A token matches a project when it equals the
-    /// lowercased name, or the lowercased name with spaces removed — so
-    /// `@SideProject` and `@sideproject` both match "Side Project". First
-    /// alphabetical hit wins (`allActive()` sorts by name), archived and
-    /// deleted projects never match.
+    /// (`@project` in quick add). Two-pass resolution: an exact lowercased-name
+    /// match always wins over a space-stripped match (so `@ABC` prefers project
+    /// "ABC" over "A BC"); only when no exact candidate exists does the
+    /// space-stripped pass run — `@SideProject` and `@sideproject` both match
+    /// "Side Project". Within each pass ties break deterministically by name,
+    /// then by UUID string, so duplicate-named projects resolve stably across
+    /// calls. Archived and deleted projects never match.
     public func findActive(matchingToken token: String) throws -> Project? {
         let needle = token.lowercased()
         guard !needle.isEmpty else { return nil }
-        return try allActive().first { project in
-            let name = project.name.lowercased()
-            return name == needle || name.replacingOccurrences(of: " ", with: "") == needle
+        // allActive() sorts by name only; add the UUID-string tie-break for
+        // projects sharing a name (no stable secondary order otherwise).
+        let candidates = try allActive().sorted {
+            ($0.name, $0.id.uuidString) < ($1.name, $1.id.uuidString)
+        }
+        if let exact = candidates.first(where: { $0.name.lowercased() == needle }) {
+            return exact
+        }
+        return candidates.first { project in
+            project.name.lowercased().replacingOccurrences(of: " ", with: "") == needle
         }
     }
 
