@@ -11,10 +11,122 @@ struct LiquidProjectsModelTests {
     @MainActor
     private func makeContext() throws -> ModelContext {
         let container = try ModelContainer(
-            for: Project.self, TaskItem.self, Section.self, Note.self, Comment.self, Link.self,
+            for: Project.self, TaskItem.self, Section.self, Note.self, Comment.self, Link.self, Cycle.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         return ModelContext(container)
+    }
+
+    private static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    private static func date(_ year: Int, _ month: Int, _ day: Int, hour: Int = 0) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+    }
+
+    private struct RoadmapFixtures {
+        let dated: Project
+        let dateless: Project
+        let liveSection: Section
+    }
+
+    private struct RoadmapSections {
+        let live: Section
+        let deleted: Section
+        let foreign: Section
+    }
+
+    @MainActor
+    private func insertRoadmapFixtures(in context: ModelContext, now: Date) -> RoadmapFixtures {
+        let dated = Project(name: "Dated", color: "spark", status: .active)
+        dated.createdAt = Self.date(2026, 6, 2)
+        let dateless = Project(name: "Dateless", color: "leaf", status: .active)
+        dateless.createdAt = Self.date(2026, 6, 5)
+        let archived = Project(name: "Archived", color: "moon", status: .active)
+        archived.createdAt = Self.date(2026, 6, 1)
+        archived.archivedAt = now
+        for project in [dated, dateless, archived] {
+            context.insert(project)
+        }
+
+        let sections = insertRoadmapSections(in: context, dated: dated, dateless: dateless, now: now)
+        insertRoadmapTasks(in: context, dated: dated, sections: sections)
+        insertRoadmapCycles(in: context, now: now)
+        return RoadmapFixtures(dated: dated, dateless: dateless, liveSection: sections.live)
+    }
+
+    @MainActor
+    private func insertRoadmapSections(
+        in context: ModelContext,
+        dated: Project,
+        dateless: Project,
+        now: Date
+    ) -> RoadmapSections {
+        let liveSection = Section(projectID: dated.id, name: "Live milestone", orderIndex: 0)
+        let deletedSection = Section(projectID: dated.id, name: "Deleted milestone", orderIndex: 1)
+        deletedSection.deletedAt = now
+        let foreignSection = Section(projectID: dateless.id, name: "Foreign milestone", orderIndex: 2)
+        for section in [liveSection, deletedSection, foreignSection] {
+            context.insert(section)
+        }
+        return RoadmapSections(live: liveSection, deleted: deletedSection, foreign: foreignSection)
+    }
+
+    @MainActor
+    private func insertRoadmapTasks(
+        in context: ModelContext,
+        dated: Project,
+        sections: RoadmapSections
+    ) {
+        context.insert(TaskItem(title: "Ship dated", dueAt: Self.date(2026, 6, 20), projectID: dated.id))
+        context.insert(
+            TaskItem(
+                title: "Live section task",
+                dueAt: Self.date(2026, 6, 18),
+                projectID: dated.id,
+                sectionID: sections.live.id
+            )
+        )
+        context.insert(
+            TaskItem(
+                title: "Deleted section task",
+                dueAt: Self.date(2026, 6, 19),
+                projectID: dated.id,
+                sectionID: sections.deleted.id
+            )
+        )
+        context.insert(
+            TaskItem(
+                title: "Foreign section task",
+                dueAt: Self.date(2026, 6, 17),
+                projectID: dated.id,
+                sectionID: sections.foreign.id
+            )
+        )
+        context.insert(
+            TaskItem(
+                title: "Template should not move the bar",
+                dueAt: Self.date(2026, 12, 31),
+                projectID: dated.id,
+                isTemplate: true
+            )
+        )
+    }
+
+    @MainActor
+    private func insertRoadmapCycles(in context: ModelContext, now: Date) {
+        context.insert(Cycle(name: "Sprint 1", startAt: Self.date(2026, 6, 9), endAt: Self.date(2026, 6, 22), status: .active))
+        let deletedCycle = Cycle(
+            name: "Deleted sprint",
+            startAt: Self.date(2026, 6, 1),
+            endAt: Self.date(2026, 6, 8),
+            status: .completed
+        )
+        deletedCycle.deletedAt = now
+        context.insert(deletedCycle)
     }
 
     /// The subtask count fetch is project-scoped IN-STORE via the `if let`
@@ -77,5 +189,31 @@ struct LiquidProjectsModelTests {
         note.plainText = "\n   \n  Build the next thing  \nsecond line"
         #expect(LiquidProjectsModel.firstLine(of: note) == "Build the next thing")
         #expect(LiquidProjectsModel.firstLine(of: nil) == nil)
+    }
+
+    @Test("Reload publishes roadmap project bars and cycle lane")
+    @MainActor
+    func reloadPublishesRoadmapFeed() throws {
+        let context = try makeContext()
+        let fixedNow = Self.date(2026, 6, 11, hour: 12)
+        let fixtures = insertRoadmapFixtures(in: context, now: fixedNow)
+        try context.save()
+
+        let model = LiquidProjectsModel()
+        model.reload(modelContext: context, now: fixedNow)
+
+        #expect(model.loadError == nil)
+        #expect(model.roadmapBars.map(\.name) == ["Dated", "Dateless"])
+        #expect(model.roadmapBars.map(\.projectID) == [fixtures.dated.id, fixtures.dateless.id])
+        #expect(model.roadmapBars.first?.start == Self.date(2026, 6, 2))
+        #expect(model.roadmapBars.first?.end == Self.date(2026, 6, 20))
+        #expect(model.roadmapBars.first?.milestones.map(\.sectionID) == [fixtures.liveSection.id])
+        #expect(model.roadmapBars.first?.milestones.map(\.title) == ["Live milestone"])
+        #expect(model.roadmapBars.first?.milestones.map(\.date) == [Self.date(2026, 6, 18)])
+        #expect(model.roadmapBars.last?.start == Self.date(2026, 6, 5))
+        #expect(model.roadmapBars.last?.end == nil)
+        #expect(model.roadmapBars.last?.milestones == [])
+        #expect(model.roadmapCycles.map(\.name) == ["Sprint 1"])
+        #expect(model.roadmapCycles.map(\.status) == [.active])
     }
 }

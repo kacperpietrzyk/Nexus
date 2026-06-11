@@ -30,6 +30,8 @@ public final class LiquidProjectsModel {
     public private(set) var openCountsByProject: [UUID: Int] = [:]
     /// done/total completion per project for the picker rows.
     public private(set) var progressByProject: [UUID: Double] = [:]
+    public private(set) var roadmapBars: [RoadmapModel.ProjectBar] = []
+    public private(set) var roadmapCycles: [RoadmapModel.CycleBar] = []
 
     // MARK: Selected-project feed
 
@@ -63,7 +65,7 @@ public final class LiquidProjectsModel {
     /// calls this from `.task` / `reloadOnStoreChange`, mirroring Today.
     public func reload(modelContext: ModelContext, now: Date = .now) {
         do {
-            try loadProjects(modelContext: modelContext)
+            try loadProjects(modelContext: modelContext, now: now)
             try loadSelectedProject(modelContext: modelContext, now: now)
             loadError = nil
         } catch {
@@ -73,11 +75,11 @@ public final class LiquidProjectsModel {
 
     // MARK: - Picker
 
-    private func loadProjects(modelContext: ModelContext) throws {
+    private func loadProjects(modelContext: ModelContext, now: Date) throws {
         let all = try modelContext.fetch(
             FetchDescriptor<Project>(sortBy: [SortDescriptor(\.name)])
         )
-        projects = all.filter { $0.deletedAt == nil && $0.archivedAt == nil && $0.parentProjectID == nil }
+        let loadedProjects = all.filter { $0.deletedAt == nil && $0.archivedAt == nil && $0.parentProjectID == nil }
 
         // One grouped fetch covers both picker columns (open count + progress).
         let projectTasks = try modelContext.fetch(
@@ -87,13 +89,38 @@ public final class LiquidProjectsModel {
         let byProject = Dictionary(grouping: projectTasks, by: { $0.projectID })
         var openCounts: [UUID: Int] = [:]
         var progresses: [UUID: Double] = [:]
-        for project in projects {
+        for project in loadedProjects {
             let tasks = byProject[project.id] ?? []
             openCounts[project.id] = tasks.count(where: { $0.status == .open })
             progresses[project.id] = ProjectExecutionModel.progress(tasks: tasks)
         }
+
+        let sections = try modelContext.fetch(
+            FetchDescriptor<ProjectSection>(predicate: #Predicate { $0.deletedAt == nil })
+        )
+        let sectionsByProject = Dictionary(grouping: sections, by: { $0.projectID })
+        let loadedRoadmapBars = loadedProjects.map {
+            RoadmapModel.bar(
+                project: $0,
+                tasks: byProject[$0.id] ?? [],
+                sections: sectionsByProject[$0.id] ?? [],
+                now: now
+            )
+        }
+
+        let cycles = try modelContext.fetch(
+            FetchDescriptor<Cycle>(
+                predicate: #Predicate { $0.deletedAt == nil },
+                sortBy: [SortDescriptor(\.startAt)]
+            )
+        )
+        let loadedRoadmapCycles = RoadmapModel.cycleBars(cycles)
+
+        projects = loadedProjects
         openCountsByProject = openCounts
         progressByProject = progresses
+        roadmapBars = loadedRoadmapBars
+        roadmapCycles = loadedRoadmapCycles
 
         // A deleted/archived selection falls back to the picker list.
         if let selectedProjectID, !projects.contains(where: { $0.id == selectedProjectID }) {
