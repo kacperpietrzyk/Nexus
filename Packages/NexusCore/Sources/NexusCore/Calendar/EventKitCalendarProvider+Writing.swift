@@ -267,4 +267,9 @@ extension EventKitCalendarProvider: CalendarEventWriting, CalendarListing {
         }
     }
 }
+
+/// `observeStoreChanges` (above) already matches the seam's requirement; this
+/// conformance lets composition roots hand the shared provider to
+/// `CalendarViewModel` as its change source (M1).
+extension EventKitCalendarProvider: CalendarChangeObserving {}
 #endif
