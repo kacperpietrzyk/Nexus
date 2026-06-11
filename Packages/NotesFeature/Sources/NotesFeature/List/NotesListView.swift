@@ -64,7 +64,23 @@ public struct NotesListView: View {  // swiftlint:disable:this type_body_length
         NavigationStack(path: $path) {
             platformContent
                 .navigationDestination(for: UUID.self) { id in
+                    #if os(macOS)
+                    NoteDetailLoader(
+                        noteID: id,
+                        onOpenNote: { path.append($0) },
+                        onOpenGraph: { noteID in
+                            path.removeAll()
+                            openGraph(
+                                scope: .local(
+                                    center: GraphNodeID(.note, noteID),
+                                    depth: 1
+                                )
+                            )
+                        }
+                    )
+                    #else
                     NoteDetailLoader(noteID: id, onOpenNote: { path.append($0) })
+                    #endif
                 }
                 .alert(
                     "Couldn't create note",

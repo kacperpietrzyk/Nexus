@@ -6,7 +6,7 @@ import SwiftUI
 /// properties/metadata panel (tags, type, timestamps) + an ordered stack of
 /// per-block render/edit views, an "insert block" menu, a wikilink/embed picker,
 /// and a backlinks panel. Mac + iOS; the Watch projection is separate.
-struct NoteEditorView: View {
+struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     @Environment(\.noteRepository) private var noteRepository
     @State private var model: NoteEditorModel
     @State private var pickerContext: PickerContext?
@@ -26,10 +26,18 @@ struct NoteEditorView: View {
     /// shared path. Cross-feature targets (Task/Project) are not wired here — see
     /// `openRef`.
     private let onOpenNote: (UUID) -> Void
+    /// Open the local graph centered on this note (O1). nil means the host has
+    /// not wired the graph surface, so the row stays hidden.
+    private let onOpenGraph: ((UUID) -> Void)?
 
-    init(note: Note, onOpenNote: @escaping (UUID) -> Void = { _ in }) {
+    init(
+        note: Note,
+        onOpenNote: @escaping (UUID) -> Void = { _ in },
+        onOpenGraph: ((UUID) -> Void)? = nil
+    ) {
         self.note = note
         self.onOpenNote = onOpenNote
+        self.onOpenGraph = onOpenGraph
         // The repository is read from the environment in `body`; the model is
         // rebuilt with it on appear so persistence is wired.
         _model = State(initialValue: NoteEditorModel(note: note, repository: nil))
@@ -123,6 +131,22 @@ struct NoteEditorView: View {
                 Text(model.updatedAt, format: .dateTime.day().month().year().hour().minute())
                     .font(DS.FontToken.metadata)
                     .foregroundStyle(DS.ColorToken.textMuted)
+            }
+            if let onOpenGraph {
+                propertyRow(label: "Graph") {
+                    Button {
+                        onOpenGraph(note.id)
+                    } label: {
+                        SwiftUI.Label(
+                            "View local graph",
+                            systemImage: "point.3.connected.trianglepath.dotted"
+                        )
+                        .font(DS.FontToken.metadata)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+                    .accessibilityLabel("View local graph for this note")
+                }
             }
             customPropertyRows
             if model.canEdit {
