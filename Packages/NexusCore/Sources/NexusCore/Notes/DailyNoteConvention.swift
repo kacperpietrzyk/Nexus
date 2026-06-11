@@ -42,12 +42,29 @@ public enum DailyNoteConvention {
         return calendar.startOfDay(for: parsed)
     }
 
+    // nonisolated(unsafe) required: NSCache is a class and not marked Sendable,
+    // so Swift 6 strict concurrency rejects it as static storage. Safe here
+    // because NSCache documents its own internal thread-safety, and configured
+    // DateFormatters are documented thread-safe for reads (since macOS 10.9 /
+    // iOS 7); cached formatters are never mutated after insertion.
+    private nonisolated(unsafe) static let formatterCache = NSCache<NSString, DateFormatter>()
+
+    /// `DateFormatter` is an expensive Objective-C object; `adjacentDailyNote`
+    /// calls `date(fromTitle:)` once per live daily note, so an uncached
+    /// formatter would allocate O(notes) per chevron tap. Cached per calendar
+    /// identity (identifier + time zone) — the only inputs `yyyy-MM-dd`
+    /// formatting depends on.
     private static func formatter(for calendar: Calendar) -> DateFormatter {
+        let key = "\(calendar.identifier)|\(calendar.timeZone.identifier)" as NSString
+        if let cached = formatterCache.object(forKey: key) {
+            return cached
+        }
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
+        formatterCache.setObject(formatter, forKey: key)
         return formatter
     }
 }

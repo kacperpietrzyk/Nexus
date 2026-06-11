@@ -72,6 +72,32 @@ struct DailyNoteServiceTests {
         #expect(try liveNotes(repository).count == 1)
     }
 
+    @Test func openOrCreateResolvesLegacyTwinsToOldestDeterministically() throws {
+        // Legacy twin daily notes (pre-convention data or a CloudKit merge) can
+        // share one title. Without an explicit fetch order SwiftData returns
+        // rows in implementation-defined order, so "Today" could bounce between
+        // twins across launches. Pin: the OLDEST twin (createdAt) always wins.
+        let (service, repository) = try makeService()
+        let newer = try repository.create(
+            title: "Daily Brief 2026-06-11", blocks: [], role: .dailyNote,
+            tags: ["daily", "2026-06-11"]
+        )
+        let older = try repository.create(
+            title: "Daily Brief 2026-06-11", blocks: [], role: .dailyNote,
+            tags: ["daily", "2026-06-11"]
+        )
+        // Inserted newer-first to bias against insertion-order luck; identity
+        // must come from createdAt, not fetch order.
+        newer.createdAt = day(2026, 6, 11).addingTimeInterval(3600)
+        older.createdAt = day(2026, 6, 11)
+        try repository.context.save()
+
+        for _ in 0..<5 {
+            #expect(try service.openOrCreate(for: day(2026, 6, 11)).id == older.id)
+        }
+        #expect(try liveNotes(repository).count == 2, "resolution must not mint a third twin")
+    }
+
     @Test func openOrCreateIgnoresSoftDeletedDailyNote() throws {
         let (service, repository) = try makeService()
         let deleted = try service.openOrCreate(for: day(2026, 6, 11))

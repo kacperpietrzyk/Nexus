@@ -74,8 +74,16 @@ public struct DailyNoteService {
     }
 
     private func liveDailyNotes() throws -> [Note] {
+        // Sorted by createdAt so duplicate-titled legacy twins (pre-convention
+        // data, CloudKit merges) resolve to the OLDEST note deterministically —
+        // SwiftData's order is implementation-defined without an explicit sort.
         try repository.context
-            .fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.deletedAt == nil }))
+            .fetch(
+                FetchDescriptor<Note>(
+                    predicate: #Predicate { $0.deletedAt == nil },
+                    sortBy: [SortDescriptor(\Note.createdAt)]
+                )
+            )
             .filter { $0.role == .dailyNote }
     }
 }

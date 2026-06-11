@@ -92,7 +92,13 @@ public final class AgentBriefDailyNoteWriter: AgentBriefDailyNoteWriting, @unche
     }
 
     private func findExistingDailyNote(title: String) throws -> Note? {
-        let descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.deletedAt == nil })
+        // Sorted by createdAt so duplicate-titled legacy twins resolve to the
+        // OLDEST note deterministically — same rule as `DailyNoteService`, so
+        // the agent upsert and the user's "Today" action land on ONE note.
+        let descriptor = FetchDescriptor<Note>(
+            predicate: #Predicate { $0.deletedAt == nil },
+            sortBy: [SortDescriptor(\Note.createdAt)]
+        )
         return try modelContext.fetch(descriptor)
             .first { $0.role == .dailyNote && $0.title == title }
     }
