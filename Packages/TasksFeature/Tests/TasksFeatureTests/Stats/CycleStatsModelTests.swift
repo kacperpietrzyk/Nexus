@@ -90,4 +90,16 @@ struct CycleStatsModelTests {
         #expect(withoutNext?.openCount == 1)
         #expect(withoutNext?.nextCycleID == nil)
     }
+
+    @MainActor
+    @Test("planning view and stats header construct for any cycle")
+    func planningSurfacesConstruct() {
+        let cycle = Cycle(
+            name: "Sprint",
+            startAt: Self.start,
+            endAt: Self.start.addingTimeInterval(14 * 86_400)
+        )
+        _ = CyclePlanningView(cycle: cycle)
+        _ = CycleStatsHeader(stats: CycleStatsModel.Stats(total: 3, done: 1, addedAfterStart: 1))
+    }
 }
