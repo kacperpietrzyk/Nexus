@@ -102,6 +102,8 @@ struct TimelineItemView: View {
             return NexusColor.Text.tertiary
         case .acceptedBlock:
             return NexusColor.Accent.lime
+        case .seriesPreview:
+            return NexusColor.Text.muted
         }
     }
 
@@ -126,6 +128,8 @@ struct TimelineItemView: View {
             NexusColor.Background.panel.opacity(0.7)
         case .acceptedBlock:
             NexusColor.Background.control
+        case .seriesPreview:
+            NexusColor.Background.panel.opacity(0.45)
         }
     }
 
@@ -147,6 +151,11 @@ struct TimelineItemView: View {
                 // A faint tint-tinged rim keeps the card edge legible without the
                 // hard saturated border the raw color produced.
                 shape.strokeBorder((calendarTint ?? NexusColor.Line.hairline).opacity(0.4), lineWidth: 1)
+            case .seriesPreview:
+                shape.strokeBorder(
+                    NexusColor.Line.strong.opacity(0.6),
+                    style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                )
             }
         }
     }
@@ -161,6 +170,7 @@ struct TimelineItemView: View {
         case .event: kind = "Event"
         case .proposedBlock: kind = "Proposed block"
         case .acceptedBlock: kind = "Scheduled block"
+        case .seriesPreview: kind = "Upcoming recurring block"
         }
         let suffix = item.isConflicted ? ", conflicts with a calendar event" : ""
         return "\(kind): \(item.title), \(timeRange)\(suffix)"

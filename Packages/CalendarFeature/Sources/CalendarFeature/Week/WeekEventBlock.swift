@@ -18,7 +18,7 @@ public enum WeekEventClassifier {
     public static func kind(for item: TimelineItem) -> LiquidEventKind {
         switch item.kind {
         case .event: return .meeting
-        case .proposedBlock, .acceptedBlock: return .focus
+        case .proposedBlock, .acceptedBlock, .seriesPreview: return .focus
         }
     }
 
@@ -131,7 +131,7 @@ struct WeekEventBlock: View {
         let shape = RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
         let base = hovering ? DS.ColorToken.strokeStrong : (calendarTint?.stroke ?? kind.stroke)
         let color = item.isConflicted ? DS.ColorToken.statusWarning : base
-        if item.kind == .proposedBlock {
+        if item.kind == .proposedBlock || item.kind == .seriesPreview {
             shape.strokeBorder(color, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
         } else {
             shape.strokeBorder(color, lineWidth: 1)

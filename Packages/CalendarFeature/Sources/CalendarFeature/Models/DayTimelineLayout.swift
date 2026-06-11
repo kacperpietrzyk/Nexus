@@ -10,6 +10,10 @@ public struct TimelineItem: Identifiable, Equatable, Sendable {
         case event
         case proposedBlock
         case acceptedBlock
+        /// M2: a runtime-computed ghost preview of a FUTURE occurrence of a
+        /// recurring task. Never backed by a persisted block (`blockID == nil`);
+        /// non-interactive (no accept/reject — see RecurringSeriesProjector).
+        case seriesPreview
     }
 
     public let id: String
@@ -109,7 +113,8 @@ public enum DayTimelineLayout {
         events: [CalendarEvent],
         blocks: [ScheduledBlock],
         calendar: Calendar,
-        conflictedBlockIDs: Set<UUID> = []
+        conflictedBlockIDs: Set<UUID> = [],
+        seriesPreviews: [SeriesOccurrencePreview] = []
     ) -> [TimelineItem] {
         let dayStart = calendar.startOfDay(for: day)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
@@ -138,6 +143,17 @@ public enum DayTimelineLayout {
                     kind: block.status == .accepted ? .acceptedBlock : .proposedBlock,
                     blockID: block.id,
                     isConflicted: conflictedBlockIDs.contains(block.id)
+                )
+            )
+        }
+        for preview in seriesPreviews where preview.end > dayStart && preview.start < dayEnd {
+            items.append(
+                TimelineItem(
+                    id: preview.id,
+                    title: preview.title.isEmpty ? "Upcoming" : preview.title,
+                    start: preview.start,
+                    end: preview.end,
+                    kind: .seriesPreview
                 )
             )
         }
