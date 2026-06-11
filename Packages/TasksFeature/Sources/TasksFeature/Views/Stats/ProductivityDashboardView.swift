@@ -16,6 +16,7 @@ public struct ProductivityDashboardView: View {
     @State private var dailyCounts: [ProductivityStatsService.DailyCount] = []
     @State private var streak = 0
     @State private var perProject: [ProductivityStatsService.PerProject] = []
+    @State private var goalProgress: ProductivityStatsService.GoalProgress?
 
     public init() {}
 
@@ -27,6 +28,10 @@ public struct ProductivityDashboardView: View {
                 LazyVGrid(columns: summaryColumns, alignment: .leading, spacing: DS.Space.m) {
                     streakCard
                     totalCard
+                }
+
+                if let goalProgress, goalProgress.dailyTarget > 0 || goalProgress.weeklyTarget > 0 {
+                    goalsCard(goalProgress)
                 }
 
                 completionsChartCard
@@ -192,6 +197,64 @@ public struct ProductivityDashboardView: View {
         }
     }
 
+    private func goalsCard(_ progress: ProductivityStatsService.GoalProgress) -> some View {
+        LiquidGlassCard("Goals") {
+            HStack(alignment: .center, spacing: DS.Space.xl) {
+                if progress.dailyTarget > 0 {
+                    goalRing(
+                        fraction: progress.dailyFraction,
+                        completed: progress.dailyCompleted,
+                        target: progress.dailyTarget,
+                        caption: "Today"
+                    )
+                }
+                if progress.weeklyTarget > 0 {
+                    goalRing(
+                        fraction: progress.weeklyFraction,
+                        completed: progress.weeklyCompleted,
+                        target: progress.weeklyTarget,
+                        caption: "This week"
+                    )
+                }
+                if let copy = Self.goalStatusCopy(for: progress) {
+                    Text(copy)
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Spacer(minLength: 0)
+                }
+            }
+        } trailing: {
+            Text("Targets in Settings")
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textTertiary)
+        }
+    }
+
+    private func goalRing(fraction: Double, completed: Int, target: Int, caption: String) -> some View {
+        VStack(spacing: DS.Space.xs) {
+            LiquidCircularProgress(value: fraction, title: "\(completed)/\(target)")
+            eyebrow(caption)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(caption): \(completed) of \(target) tasks completed")
+    }
+
+    /// Status line under the goal rings. Priority: streak protection > goal
+    /// reached > remaining count. Internal (not private) so tests pin the rules.
+    static func goalStatusCopy(for progress: ProductivityStatsService.GoalProgress) -> String? {
+        if let streak = progress.streakAtRisk {
+            return "Complete a task today to keep your \(streak)-day streak."
+        }
+        guard progress.dailyTarget > 0 else { return nil }
+        if progress.dailyCompleted >= progress.dailyTarget {
+            return "Daily goal reached — nice work."
+        }
+        let remaining = progress.dailyTarget - progress.dailyCompleted
+        return remaining == 1 ? "1 task to go today." : "\(remaining) tasks to go today."
+    }
+
     /// Tracked-caption eyebrow shared by the header and stat tiles — same
     /// uppercase + kerning idiom as `LiquidSidebarSectionHeader`.
     private func eyebrow(_ text: String) -> some View {
@@ -228,6 +291,8 @@ public struct ProductivityDashboardView: View {
         let now = Date.now
         dailyCounts = (try? service.completedPerDay(last: 30, now: now)) ?? []
         streak = (try? service.currentStreakDays(now: now)) ?? 0
+        let goalsPreferences = UserDefaultsGoalsPreferencesStore().load()
+        goalProgress = try? service.goalProgress(preferences: goalsPreferences, now: now)
 
         // Use the service's calendar so injected test calendars (and future
         // user-locale overrides) flow through to the per-project window.
