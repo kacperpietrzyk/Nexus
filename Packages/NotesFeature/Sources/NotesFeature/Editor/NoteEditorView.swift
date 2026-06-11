@@ -13,6 +13,11 @@ struct NoteEditorView: View {
     @State private var backlinks: [BacklinkEntry] = []
     @State private var newTag: String = ""
 
+    // O4 daily-note navigation: adjacent EXISTING daily notes + today check.
+    @State private var previousDailyNoteID: UUID?
+    @State private var nextDailyNoteID: UUID?
+    @State private var isTodaysNote = true
+
     private let note: Note
     /// Navigate to another note's editor (spec §10 "klik → otwórz obiekt").
     /// Owned by the list's `NavigationStack`, so a Note→Note open pushes onto the
@@ -55,6 +60,9 @@ struct NoteEditorView: View {
     /// iOS keeps the platform-native list. Same rows, same interactions.
     private var editorList: some View {
         let list = List {
+            if model.role == .dailyNote {
+                dailyNoteNavRow
+            }
             titleField
             propertiesSection
             blockRows
@@ -269,6 +277,75 @@ struct NoteEditorView: View {
         .listRowSeparator(.hidden)
     }
 
+    // MARK: - Daily-note navigation (O4)
+
+    /// Prev/next-day chevrons between EXISTING daily notes (gaps are skipped,
+    /// edges disable) + a "Today" jump that open-or-creates today's note when
+    /// this note is not today's. Only mounted for `role == .dailyNote`.
+    private var dailyNoteNavRow: some View {
+        HStack(spacing: DS.Space.s) {
+            Button {
+                if let previousDailyNoteID { onOpenNote(previousDailyNoteID) }
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.borderless)
+            .disabled(previousDailyNoteID == nil)
+            .help("Previous daily note")
+            .accessibilityLabel("Previous daily note")
+
+            Button {
+                if let nextDailyNoteID { onOpenNote(nextDailyNoteID) }
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.borderless)
+            .disabled(nextDailyNoteID == nil)
+            .help("Next daily note")
+            .accessibilityLabel("Next daily note")
+
+            Spacer(minLength: 0)
+
+            if !isTodaysNote {
+                Button {
+                    openTodaysDailyNote()
+                } label: {
+                    Label("Today", systemImage: "calendar")
+                        .font(DS.FontToken.metadata)
+                }
+                .buttonStyle(.borderless)
+                .help("Open today's note")
+                .accessibilityLabel("Open today's note")
+            }
+        }
+        .foregroundStyle(DS.ColorToken.textSecondary)
+        .listRowSeparator(.hidden)
+    }
+
+    private func reloadDailyNavigation() {
+        guard note.role == .dailyNote, let noteRepository else {
+            previousDailyNoteID = nil
+            nextDailyNoteID = nil
+            isTodaysNote = true
+            return
+        }
+        let service = DailyNoteService(repository: noteRepository)
+        previousDailyNoteID =
+            (try? service.adjacentDailyNote(from: note, direction: .previous))?.id
+        nextDailyNoteID =
+            (try? service.adjacentDailyNote(from: note, direction: .next))?.id
+        isTodaysNote = service.day(of: note) == Calendar.current.startOfDay(for: Date.now)
+    }
+
+    private func openTodaysDailyNote() {
+        guard let noteRepository else { return }
+        guard
+            let today = try? DailyNoteService(repository: noteRepository)
+                .openOrCreate(for: Date.now)
+        else { return }
+        onOpenNote(today.id)
+    }
+
     private var lastBlockID: UUID? { model.blocks.last?.id }
 
     // MARK: - Wiring
@@ -288,6 +365,7 @@ struct NoteEditorView: View {
     private func rebindModel() {
         model = NoteEditorModel(note: note, repository: noteRepository)
         reloadBacklinks()
+        reloadDailyNavigation()
     }
 
     private func reloadBacklinks() {
