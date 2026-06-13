@@ -1,4 +1,5 @@
 import SwiftUI
+import NexusUI
 import TasksFeature
 
 // Liquid Projects / Execution composition (Task 8), extracted out of
@@ -26,7 +27,9 @@ extension ContentView {
     /// list is showing (no selected project → nothing to inspect) and on
     /// every other destination, so the 304 pt column disappears entirely.
     var projectsInspectorSlot: (() -> AnyView)? {
-        guard selection == .projects, liquidProjectsModel.selectedProjectID != nil else { return nil }
+        guard selection == .projects, liquidProjectsModel.selectedProjectID != nil || LiquidReferenceMode.isEnabled else {
+            return nil
+        }
         let model = liquidProjectsModel
         return {
             AnyView(

@@ -216,4 +216,17 @@ struct LiquidProjectsModelTests {
         #expect(model.roadmapCycles.map(\.name) == ["Sprint 1"])
         #expect(model.roadmapCycles.map(\.status) == [.active])
     }
+
+    @Test("Reference project snapshot supplies execution cockpit data")
+    @MainActor
+    func referenceProjectSnapshotIsDense() {
+        let snapshot = LiquidProjectsReferenceData.snapshot(now: Self.date(2026, 6, 12, hour: 12))
+        #expect(snapshot.project.name == "Product Roadmap")
+        #expect(snapshot.tasks.count >= 12)
+        #expect(snapshot.sections.count >= 4)
+        #expect(snapshot.milestones.count >= 5)
+        #expect(snapshot.risks.count >= 2)
+        #expect(snapshot.activity.count >= 3)
+        #expect(snapshot.progress > 0.5)
+    }
 }

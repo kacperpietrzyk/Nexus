@@ -137,7 +137,7 @@ public struct SchedulingInspector: View {
                 meetingLoadCard
                 conflictsCard
                 focusBlocksCard
-                if !conflicts.isEmpty && viewModel.hasCalendarAccess {
+                if !conflicts.isEmpty && (viewModel.hasCalendarAccess || LiquidReferenceMode.isEnabled) {
                     quickRescheduleCard
                 }
                 timeInsightsCard
@@ -161,21 +161,42 @@ public struct SchedulingInspector: View {
         Set(viewModel.blocks.compactMap(\.externalEventID))
     }
 
+    private var reference: LiquidWeekReferenceData.Snapshot? {
+        LiquidReferenceMode.isEnabled
+            ? LiquidWeekReferenceData.snapshot(days: viewModel.visibleDays, now: now(), calendar: calendar)
+            : nil
+    }
+
+    private var intelligenceEvents: [CalendarEvent] {
+        reference?.events ?? viewModel.events
+    }
+
+    private var intelligenceDays: [Date] {
+        reference?.days ?? viewModel.visibleDays
+    }
+
+    private var unscheduledTasks: [WeekUnscheduledTask] {
+        reference?.unscheduledTasks ?? viewModel.unscheduledTasks
+    }
+
     private var conflicts: [SchedulingIntelligence.EventConflict] {
-        SchedulingIntelligence.conflicts(in: viewModel.events)
+        SchedulingIntelligence.conflicts(in: intelligenceEvents)
     }
 
     private var meetingLoad: Double {
         WeekIntelligence.weekMeetingLoad(
-            events: viewModel.events,
-            days: viewModel.visibleDays,
+            events: intelligenceEvents,
+            days: intelligenceDays,
             calendar: calendar,
             mirroredEventIDs: mirroredEventIDs
         )
     }
 
     private var focusGaps: [DateInterval] {
-        WeekIntelligence.todayFocusGaps(
+        if let reference {
+            return reference.focusGaps
+        }
+        return WeekIntelligence.todayFocusGaps(
             events: viewModel.events,
             days: viewModel.visibleDays,
             calendar: calendar,
@@ -184,6 +205,12 @@ public struct SchedulingInspector: View {
     }
 
     private var weekWindow: DateInterval {
+        if let first = intelligenceDays.first, let last = intelligenceDays.last {
+            let start = calendar.startOfDay(for: first)
+            let lastStart = calendar.startOfDay(for: last)
+            let end = calendar.date(byAdding: .day, value: 1, to: lastStart) ?? lastStart
+            return DateInterval(start: start, end: end)
+        }
         // `viewModel.window` is a named tuple `(start: Date, end: Date)`, not
         // a DateInterval — the conversion here is intentional, for the
         // interval-based SchedulingIntelligence API.
@@ -314,14 +341,15 @@ public struct SchedulingInspector: View {
             .buttonStyle(.plain)
             .font(DS.FontToken.caption)
             .foregroundStyle(
-                viewModel.unscheduledTasks.isEmpty ? DS.ColorToken.textMuted : DS.ColorToken.accentPrimaryHover
+                unscheduledTasks.isEmpty ? DS.ColorToken.textMuted : DS.ColorToken.accentPrimaryHover
             )
-            .disabled(viewModel.unscheduledTasks.isEmpty)
+            .disabled(unscheduledTasks.isEmpty)
             .accessibilityLabel("Schedule top unscheduled task into this gap")
         }
     }
 
     private func scheduleTopTask(into gap: DateInterval) {
+        guard !LiquidReferenceMode.isEnabled else { return }
         guard let task = viewModel.unscheduledTasks.first else { return }
         let duration = WeekUnscheduledLoader.clampDuration(estimate: task.estimatedSeconds, gap: gap)
         _Concurrency.Task { @MainActor in
@@ -357,8 +385,8 @@ public struct SchedulingInspector: View {
         let gap = WeekIntelligence.nextFitGap(
             after: max(event.end, now()),
             duration: duration,
-            events: viewModel.events,
-            days: viewModel.visibleDays,
+            events: intelligenceEvents,
+            days: intelligenceDays,
             calendar: calendar
         )
         HStack(spacing: DS.Space.s) {
@@ -391,6 +419,7 @@ public struct SchedulingInspector: View {
     }
 
     private func reschedule(eventID: String, to gap: DateInterval) {
+        guard !LiquidReferenceMode.isEnabled else { return }
         guard var draft = viewModel.draft(forEventID: eventID, calendars: availableCalendars) else { return }
         draft.start = gap.start
         draft.end = gap.end
@@ -413,7 +442,7 @@ public struct SchedulingInspector: View {
     private var timeInsightsCard: some View {
         let mirrored = mirroredEventIDs
         let insights = SchedulingIntelligence.timeInsights(
-            events: viewModel.events,
+            events: intelligenceEvents,
             week: weekWindow,
             classify: { WeekEventClassifier.category(for: $0, mirroredEventIDs: mirrored) }
         )

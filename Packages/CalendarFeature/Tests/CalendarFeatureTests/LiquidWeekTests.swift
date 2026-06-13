@@ -255,4 +255,21 @@ struct LiquidWeekTests {
         )
         #expect(WeekEventClassifier.kind(for: item) == .focus)
     }
+
+    @MainActor
+    @Test("Reference week snapshot supplies dense calendar data without persistence")
+    func referenceSnapshotDensity() {
+        let snapshot = LiquidWeekReferenceData.snapshot(
+            days: Self.weekDays,
+            now: date(day: 4, hours: 13.65),
+            calendar: Self.calendar
+        )
+        let items = snapshot.itemsByDay.values.flatMap { $0 }
+        #expect(snapshot.days.count == 7)
+        #expect(items.count >= 10)
+        #expect(items.contains { $0.isAllDay })
+        #expect(snapshot.unscheduledTasks.count >= 4)
+        #expect(snapshot.focusGaps.count >= 2)
+        #expect(SchedulingIntelligence.conflicts(in: snapshot.events).isEmpty == false)
+    }
 }

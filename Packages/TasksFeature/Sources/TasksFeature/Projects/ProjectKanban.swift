@@ -56,7 +56,7 @@ struct ProjectKanban: View {
                     .lineLimit(2)
             }
 
-            ScrollView(.horizontal, showsIndicators: true) {
+            ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: DS.Space.m) {
                     ForEach(columns) { column in
                         KanbanColumnView(

@@ -3,8 +3,9 @@ import SwiftUI
 /// Nav row corner radius — `docs/03_COMPONENTS.md` §Sidebar: "nav row radius: 10 pt".
 /// No 10 pt entry in `DS.Radius`, so the spec value lives here.
 private let navRowCornerRadius: CGFloat = 10
-/// Hover wash — `docs/03_COMPONENTS.md` §LiquidGlassPanel states: "hover: fill jaśniejszy o 6–8%".
-private let navRowHoverFill = Color.white.opacity(0.07)
+/// Hover wash. Kept below card intensity so the sidebar remains part of the
+/// same glass sheet instead of a stack of opaque selected pills.
+private let navRowHoverFill = Color.white.opacity(0.034)
 
 /// Sidebar navigation row per `docs/03_COMPONENTS.md` §Sidebar.
 ///
@@ -40,7 +41,7 @@ public struct LiquidSidebarNavRow: View {
     }
 
     private var fill: Color {
-        if isSelected { return DS.ColorToken.glassSelected }
+        if isSelected { return Color.white.opacity(0.052) }
         return hovering ? navRowHoverFill : .clear
     }
 
@@ -52,12 +53,12 @@ public struct LiquidSidebarNavRow: View {
                     // "icon size: 16 pt" refers to the slot; symbol point size is optical).
                     // Medium weight is deliberate — heavier than DS.FontToken.body's regular
                     // so glyphs hold up against the 13 pt title at sidebar density.
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(isSelected ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
                     .frame(width: 16, height: 16)
 
                 Text(title)
-                    .font(isSelected ? DS.FontToken.bodyStrong : DS.FontToken.body)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
                     .lineLimit(1)
 
@@ -84,11 +85,24 @@ public struct LiquidSidebarNavRow: View {
             .background {
                 RoundedRectangle(cornerRadius: navRowCornerRadius, style: .continuous)
                     .fill(fill)
+                    .overlay {
+                        if isSelected {
+                            ZStack {
+                                DS.ColorToken.accentPrimary.opacity(0.060)
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.10), Color.white.opacity(0.026), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: navRowCornerRadius, style: .continuous))
+                        }
+                    }
             }
             .overlay {
                 if isSelected {
                     RoundedRectangle(cornerRadius: navRowCornerRadius, style: .continuous)
-                        .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
+                        .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
                 }
             }
             .overlay(alignment: .leading) {
@@ -98,6 +112,12 @@ public struct LiquidSidebarNavRow: View {
                         .frame(width: 2, height: DS.Size.navItemHeight - 2 * DS.Space.s)
                 }
             }
+            .shadow(
+                color: isSelected ? DS.ColorToken.accentPrimary.opacity(0.08) : .clear,
+                radius: 8,
+                x: 0,
+                y: 0
+            )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(badge.map { "\(title), \($0) items" } ?? title)

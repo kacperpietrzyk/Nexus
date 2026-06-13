@@ -2,9 +2,6 @@ import NexusCore
 import NexusUI
 import SwiftUI
 
-/// Row hover wash — same calibration as the kit's task-row hover
-/// (`LiquidListKit`): subtle fill, no scale.
-private let noteRowHoverFill = Color.white.opacity(0.04)
 /// Tag pills shown per note before truncating — keeps dense rows readable.
 private let noteTagCap = 2
 
@@ -16,7 +13,7 @@ struct TodayNotesCard: View {
     let onOpenNotes: () -> Void
 
     var body: some View {
-        LiquidGlassCard("Notes & Knowledge") {
+        TodayGlassCard("Notes & Knowledge") {
             if notes.isEmpty {
                 LiquidEmptyState(
                     systemImage: "note.text",
@@ -84,10 +81,22 @@ private struct TodayNoteRow: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(DS.Space.s)
+            .padding(DS.Space.m)
             .background {
-                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                    .fill(hovering ? noteRowHoverFill : .clear)
+                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                    .fill(hovering ? Color.white.opacity(0.030) : Color.white.opacity(0.006))
+                    .overlay {
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.026), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                    }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                    .stroke(Color.white.opacity(0.050), lineWidth: 1)
             }
             .contentShape(Rectangle())
         }

@@ -10,7 +10,8 @@ import TasksFeature
 /// sidebar's top band (outer window padding 12 + sidebar padding 12 puts the
 /// first row at y≈24, the lights extend to y≈30). Reserved as empty space;
 /// never drawn (the design-system example's painted circles are placeholder).
-private let trafficLightClearance: CGFloat = 26
+private let trafficLightClearance: CGFloat = 58
+private let sidebarCornerRadius: CGFloat = 16
 
 /// The Liquid 224 pt glass sidebar — REAL app data only.
 ///
@@ -63,8 +64,7 @@ struct LiquidSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.l) {
-            Color.clear
-                .frame(height: trafficLightClearance)
+            sidebarTopControl
 
             VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 ForEach(primaryItems) { item in
@@ -141,8 +141,36 @@ struct LiquidSidebar: View {
         }
         .padding(DS.Space.m)
         .frame(maxHeight: .infinity, alignment: .top)
-        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.window, style: .continuous))
-        .liquidGlass(.sidebar, radius: DS.Radius.window)
+        .clipShape(RoundedRectangle(cornerRadius: sidebarCornerRadius, style: .continuous))
+        .liquidGlass(.sidebar, radius: sidebarCornerRadius)
+    }
+
+    private var sidebarTopControl: some View {
+        HStack {
+            Spacer(minLength: 0)
+
+            Button {
+                onNavigate(.settings)
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+                    .frame(width: 34, height: 34)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Color.white.opacity(0.026))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
+            }
+            .help("Open settings")
+            .accessibilityLabel("Open settings")
+        }
+        .frame(height: trafficLightClearance, alignment: .top)
     }
 
     /// Real macOS account display name + an initials avatar; opens Settings.

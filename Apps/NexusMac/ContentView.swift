@@ -76,6 +76,7 @@ struct ContentView: View {
                 dashboardBody
             }
         }
+        .background(LiquidWindowTransparency())
         .task { await observeMeetingNavigation() }
     }
 
@@ -167,7 +168,7 @@ struct ContentView: View {
     private var dashboardChrome: some View {
         // Liquid chrome (Task 3): the old `NexusWallpaper` + 54pt `NexusNavRail`
         // + `NexusShell` band stack is replaced by `LiquidAppShell` — three
-        // floating glass columns over a dark wallpaper gradient. The sidebar
+        // floating glass columns over the transparent macOS window backdrop. The sidebar
         // binds to the SAME `TodayNavSelection` state through the
         // `navigate(to:)` chokepoint, and a destination still owns the whole
         // content slot, exclusive of the task-detail inspector (§1 invariant
@@ -175,7 +176,7 @@ struct ContentView: View {
         // unchanged).
         appShell
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .containerBackground(DS.ColorToken.backgroundApp, for: .window)
+            .containerBackground(Color.clear, for: .window)
             // List stays FULL-WIDTH; task detail opens as a CENTERED MODAL over a
             // dimmed scrim (see `taskModal`) — the old trailing peek was too narrow
             // for the inspector's content. Gated on the UNCHANGED `inspectorBinding`
@@ -269,6 +270,10 @@ struct ContentView: View {
             }
         } else if selection == .agent, let agentViewModel {
             AgentTopControl(viewModel: agentViewModel)
+        } else if selection == .today {
+            LiquidTodayToolbarControl {
+                navigate(to: .calendar)
+            }
         } else {
             LiquidToolbarBreadcrumb(crumbs: ["Personal", shellTitle])
         }

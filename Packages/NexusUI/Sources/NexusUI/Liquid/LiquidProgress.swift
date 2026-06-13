@@ -22,8 +22,15 @@ public struct LiquidProgressLine: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(progressTrack)
                 Capsule()
-                    .fill(color)
+                    .fill(
+                        LinearGradient(
+                            colors: [color, color.opacity(0.72)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(width: max(0, min(1, value)) * proxy.size.width)
+                    .shadow(color: color.opacity(0.34), radius: 6, x: 0, y: 0)
             }
         }
         .frame(height: 5)
@@ -61,6 +68,7 @@ public struct LiquidCircularProgress: View {
                 .foregroundStyle(DS.ColorToken.textPrimary)
         }
         .frame(width: size, height: size)
+        .shadow(color: color.opacity(0.12), radius: 12, x: 0, y: 0)
     }
 }
 

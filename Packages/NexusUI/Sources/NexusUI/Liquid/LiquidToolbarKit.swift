@@ -57,15 +57,28 @@ public struct LiquidSearchField: View {
                         }
                 }
             }
-            .padding(.horizontal, DS.Space.s)
+            .padding(.horizontal, DS.Space.m)
             .frame(height: 32)
             .background {
                 RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                    .fill(DS.ColorToken.glassSoft)
+                    .fill(Color.white.opacity(0.024))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
             }
             .overlay {
                 RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                    .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
+                    .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+            }
+            .overlay(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.13), Color.white.opacity(0.028), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+                    .blendMode(.screen)
             }
         }
         .buttonStyle(.plain)

@@ -26,16 +26,20 @@ public struct LiquidPill: View {
             .frame(height: 20)
             .background {
                 Capsule(style: .continuous)
-                    // Tint formula ported from the starter
-                    // (liquid_productivity_design_system/swiftui/LiquidGlassComponents.swift):
-                    // 28% accent fill when filled, 14% when passive — visual calibration,
-                    // no DS alpha tokens exist for accent tinting.
-                    .fill(color.opacity(filled ? 0.28 : 0.14))
+                    .fill(color.opacity(filled ? 0.30 : 0.16))
+                    .overlay {
+                        LinearGradient(
+                            colors: [Color.white.opacity(filled ? 0.14 : 0.07), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .clipShape(Capsule(style: .continuous))
+                    }
             }
             .overlay {
                 Capsule(style: .continuous)
-                    // 22% accent border, ported from the starter alongside the fill alphas.
-                    .stroke(color.opacity(0.22), lineWidth: 1)
+                    .stroke(color.opacity(filled ? 0.34 : 0.24), lineWidth: 1)
             }
+            .shadow(color: color.opacity(filled ? 0.18 : 0.08), radius: filled ? 8 : 4, x: 0, y: 0)
     }
 }

@@ -21,15 +21,9 @@ struct TopPrioritiesCard: View {
     let onViewAll: () -> Void
 
     var body: some View {
-        LiquidGlassCard("Top Priorities") {
+        TodayGlassCard("Top Priorities") {
             if groups.isEmpty {
-                LiquidEmptyState(
-                    systemImage: "checkmark.circle",
-                    message: "Nothing due today — you're clear."
-                ) {
-                    LiquidPrimaryButton("Add a task", systemImage: "plus", action: onAddTask)
-                }
-                .frame(maxHeight: .infinity)
+                emptySummary
             } else {
                 VStack(alignment: .leading, spacing: DS.Space.m) {
                     ForEach(groups) { group in
@@ -41,6 +35,89 @@ struct TopPrioritiesCard: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
+    }
+
+    private var emptySummary: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                emptyRow(
+                    "High Priority",
+                    color: DS.ColorToken.accentRed,
+                    message: "No urgent tasks due today"
+                )
+                emptyRow(
+                    "Medium Priority",
+                    color: DS.ColorToken.accentAmber,
+                    message: "No scheduled follow-ups"
+                )
+                emptyRow(
+                    "Low Priority",
+                    color: DS.ColorToken.accentBlue,
+                    message: "Backlog is quiet"
+                )
+            }
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: DS.Space.m) {
+                LiquidCardFooterLink("View all tasks", action: onViewAll)
+                Spacer()
+                LiquidPrimaryButton("Add task", systemImage: "plus", action: onAddTask)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func emptyRow(_ title: String, color: Color, message: String) -> some View {
+        HStack(spacing: DS.Space.s) {
+            Circle()
+                .stroke(color.opacity(0.46), lineWidth: 1.25)
+                .background {
+                    Circle()
+                        .fill(color.opacity(0.08))
+                }
+                .frame(width: 16, height: 16)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(DS.FontToken.metadata.weight(.semibold))
+                    .foregroundStyle(color)
+                Text(message)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DS.Space.s)
+        .frame(height: 46)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                .fill(Color.white.opacity(0.007))
+                .overlay {
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.026),
+                            .clear,
+                            Color.black.opacity(0.016),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                }
+                .overlay(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(color)
+                        .frame(width: 3)
+                        .padding(.vertical, DS.Space.s)
+                }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                .stroke(Color.white.opacity(0.042), lineWidth: 1)
+        }
+        .shadow(color: color.opacity(0.028), radius: 7, x: 0, y: 0)
     }
 
     private func section(_ group: LiquidPriorityGroup) -> some View {

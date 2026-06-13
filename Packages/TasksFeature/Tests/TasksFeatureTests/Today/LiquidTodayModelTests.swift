@@ -178,4 +178,19 @@ struct LiquidTodayModelTests {
         let unstarted = TaskItem(title: "u")
         #expect(TodayInspector.elapsedText(for: unstarted, now: now) == "0:00")
     }
+
+    // MARK: - Reference data
+
+    @Test("Reference snapshot supplies dense Today data without persistence")
+    @MainActor
+    func referenceTodaySnapshotIsDense() {
+        let snapshot = LiquidTodayReferenceData.snapshot(now: .now)
+        #expect(snapshot.agendaItems.count >= 5)
+        #expect(snapshot.priorityGroups.count >= 3)
+        #expect(snapshot.projects.count >= 3)
+        #expect(snapshot.notes.count >= 3)
+        #expect(snapshot.linkedNotes.count >= 2)
+        #expect(snapshot.meetingIntel?.actionItemCount ?? 0 >= 3)
+        #expect(!snapshot.brief.isEmpty)
+    }
 }

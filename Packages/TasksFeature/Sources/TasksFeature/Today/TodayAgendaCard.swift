@@ -25,7 +25,7 @@ struct TodayAgendaCard: View {
     let onOpenCalendar: () -> Void
 
     var body: some View {
-        LiquidGlassCard("Today's Agenda") {
+        TodayGlassCard("Today's Agenda") {
             if items.isEmpty {
                 LiquidEmptyState(
                     systemImage: "calendar",
@@ -77,7 +77,8 @@ struct TodayAgendaCard: View {
     /// Default scroll position: the current or next item (the "8AM → now"
     /// sensible default); falls back to the last item late in the day.
     private var defaultScrollTarget: String? {
-        items.first(where: { !$0.isAllDay && $0.end > now })?.id ?? items.last?.id
+        if LiquidReferenceMode.isEnabled { return items.first?.id }
+        return items.first(where: { !$0.isAllDay && $0.end > now })?.id ?? items.last?.id
     }
 
     private func agendaRow(_ item: LiquidAgendaItem) -> some View {

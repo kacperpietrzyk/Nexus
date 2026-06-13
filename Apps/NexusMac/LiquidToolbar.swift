@@ -22,7 +22,7 @@ struct LiquidToolbar<Leading: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             LiquidSearchField("Search anything…", action: onOpenCommandPalette)
-                .frame(width: 270)
+                .frame(width: 300)
 
             LiquidIconButton(
                 systemImage: "bell",
@@ -41,6 +41,7 @@ struct LiquidToolbar<Leading: View>: View {
             Rectangle()
                 .fill(DS.ColorToken.strokeHairline)
                 .frame(height: 1)
+                .padding(.horizontal, DS.Space.l)
         }
     }
 }
@@ -69,5 +70,90 @@ struct LiquidToolbarBreadcrumb: View {
         }
         .lineLimit(1)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Today-specific command-center control. Other destinations keep breadcrumbs;
+/// Today matches the reference topbar composition without inventing day-state
+/// plumbing in the app shell.
+struct LiquidTodayToolbarControl: View {
+    let onOpenCalendar: () -> Void
+
+    var body: some View {
+        HStack(spacing: DS.Space.m) {
+            LiquidIconButton(
+                systemImage: "chevron.left",
+                accessibilityLabel: "Previous day",
+                action: {}
+            )
+            .disabled(true)
+            .opacity(0.72)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 0) {
+                LiquidToolbarSegmentIcon(systemImage: "chevron.left")
+                LiquidToolbarSegmentSeparator()
+                Text("Today")
+                    .font(DS.FontToken.bodyStrong)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                    .frame(width: 88, height: 32)
+                LiquidToolbarSegmentSeparator()
+                LiquidToolbarSegmentIcon(systemImage: "chevron.right")
+            }
+            .padding(2)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.030))
+                    .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+                    .overlay {
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.070), .clear, Color.black.opacity(0.040)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .clipShape(Capsule(style: .continuous))
+                    }
+            }
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(Color.white.opacity(0.095), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 5)
+
+            Button(action: onOpenCalendar) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Open calendar")
+            .accessibilityLabel("Open calendar")
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct LiquidToolbarSegmentIcon: View {
+    let systemImage: String
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(DS.ColorToken.textSecondary)
+            .frame(width: 36, height: 32)
+    }
+}
+
+private struct LiquidToolbarSegmentSeparator: View {
+    var body: some View {
+        Capsule(style: .continuous)
+            .fill(Color.white.opacity(0.075))
+            .frame(width: 1, height: 16)
+            .padding(.vertical, 8)
+            .accessibilityHidden(true)
     }
 }

@@ -3,9 +3,9 @@ import SwiftUI
 /// Hover fill for icon buttons — `docs/03_COMPONENTS.md` §IconButton: "hover fill #FFFFFF10".
 private let iconButtonHoverFill = Color.white.opacity(0x10 / 255.0)
 #if os(macOS)
-/// Idle icon-button fill: a subtle glass wash one step below the hover fill,
-/// so the macOS hover ladder reads idle 4% → hover 10% → selected.
-private let iconButtonIdleFill = Color.white.opacity(0.04)
+/// Idle icon-button fill: a faint glass wash below hover so toolbar controls
+/// remain present without forming a second heavy bar.
+private let iconButtonIdleFill = Color.white.opacity(0.022)
 #else
 /// No hover affordance on touch platforms (the design system is macOS-first),
 /// so idle icon buttons sit flat on the glass — the stroke alone bounds them.
@@ -50,8 +50,8 @@ public struct LiquidPrimaryButton: View {
                     .fill(
                         LinearGradient(
                             colors: hovering
-                                ? [DS.ColorToken.accentPrimaryHover, DS.ColorToken.accentPrimaryHover]
-                                : [DS.ColorToken.accentPrimary, DS.ColorToken.accentPrimaryHover],
+                                ? [DS.ColorToken.accentPrimaryHover, DS.ColorToken.accentBlue]
+                                : [DS.ColorToken.accentPrimary, DS.ColorToken.accentBlue],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -65,11 +65,16 @@ public struct LiquidPrimaryButton: View {
                     // into a border (ported from the design-system starter).
                     .stroke(Color.white.opacity(hovering ? 0.24 : 0.16), lineWidth: 1)
             }
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .stroke(Color.white.opacity(0.34), lineWidth: 0.5)
+                    .blendMode(.screen)
+            }
             .shadow(
                 color: DS.ColorToken.accentPrimary.opacity(hovering ? 0.42 : 0.30),
-                radius: 14,
+                radius: hovering ? DS.Elevation.accentGlowRadius : 20,
                 x: 0,
-                y: 4
+                y: 6
             )
         }
         .buttonStyle(NexusPressableButtonStyle())
@@ -122,7 +127,7 @@ public struct LiquidIconButton: View {
     private var core: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(isSelected ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
                 .frame(width: 30, height: 30)
                 .background {
@@ -131,8 +136,14 @@ public struct LiquidIconButton: View {
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                        .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
+                        .stroke(isSelected ? DS.ColorToken.strokeDefault : DS.ColorToken.strokeHairline, lineWidth: 1)
                 }
+                .shadow(
+                    color: isSelected ? DS.ColorToken.accentPrimary.opacity(0.16) : .clear,
+                    radius: 8,
+                    x: 0,
+                    y: 0
+                )
         }
         .buttonStyle(NexusPressableButtonStyle())
         .accessibilityAddTraits(isSelected ? .isSelected : [])

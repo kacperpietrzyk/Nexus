@@ -37,6 +37,7 @@ public struct LiquidGlassCard<Content: View, Trailing: View>: View {
                     Spacer()
                     trailing()
                 }
+                .frame(height: 24)
             }
             content()
         }

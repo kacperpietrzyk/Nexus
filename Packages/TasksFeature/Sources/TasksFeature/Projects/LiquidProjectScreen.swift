@@ -70,7 +70,9 @@ public struct LiquidProjectScreen: View {
 
     public var body: some View {
         Group {
-            if let project = model.selectedProject {
+            if LiquidReferenceMode.isEnabled {
+                referenceExecutionScreen(LiquidProjectsReferenceData.snapshot(now: .now))
+            } else if let project = model.selectedProject {
                 executionScreen(project)
             } else if model.projects.isEmpty {
                 emptyStore
@@ -275,6 +277,53 @@ public struct LiquidProjectScreen: View {
                     table
                 case .list:
                     table
+                }
+            }
+            .padding(DS.Space.l)
+        }
+    }
+
+    private func referenceExecutionScreen(_ snapshot: LiquidProjectsReferenceData.Snapshot) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Space.l) {
+                ProjectHeader(
+                    project: snapshot.project,
+                    descriptionLine: snapshot.descriptionLine,
+                    progress: snapshot.progress,
+                    onBack: {},
+                    onEdit: {}
+                )
+
+                LiquidSegmentedControl(
+                    options: ProjectScreenTab.allCases.map { .init($0, label: $0.label) },
+                    selection: $tab
+                )
+
+                switch tab {
+                case .overview:
+                    MilestoneStrip(milestones: snapshot.milestones)
+                    ProjectKanban(
+                        projectID: snapshot.project.id,
+                        tasks: snapshot.tasks,
+                        sectionNames: snapshot.sectionNamesByID,
+                        commentCounts: snapshot.commentCountsByTask,
+                        subtaskCounts: snapshot.subtaskCountsByTask,
+                        onSelect: onOpenTask,
+                        onChanged: {}
+                    )
+                    ProjectTaskTable(
+                        tasks: snapshot.tasks,
+                        sectionNames: snapshot.sectionNamesByID,
+                        now: .now,
+                        onSelect: onOpenTask
+                    )
+                case .list:
+                    ProjectTaskTable(
+                        tasks: snapshot.tasks,
+                        sectionNames: snapshot.sectionNamesByID,
+                        now: .now,
+                        onSelect: onOpenTask
+                    )
                 }
             }
             .padding(DS.Space.l)

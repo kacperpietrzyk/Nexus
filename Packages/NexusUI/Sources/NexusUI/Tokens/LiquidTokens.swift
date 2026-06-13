@@ -18,26 +18,15 @@ public enum DS {
         /// #02050A at CC/255 ≈ 0.80 opacity
         public static let backgroundWallpaperScrim = Color(hex: 0x02050A, alpha: 0xCC / 255.0)
 
-        // Glass — RGB values and alphas from JSON (8-digit hex trailing byte).
-        // The big window surfaces (base/sidebar/toolbar) are back on the JSON
-        // alphas: the tint itself supplies the boards' panel luminance
-        // (measured ~rgb(18,22,30) interiors). The 2026-06-10 lowered-alpha
-        // calibration chased behind-window desktop transparency and made the
-        // whole frame track the desktop — dark desktop = flat black app.
-        /// #111824 at B8/255 ≈ 0.72
-        public static let glassBase = Color(hex: 0x111824, alpha: 0xB8 / 255.0)
-        /// #121A26 at 7A/255 ≈ 0.48
-        public static let glassSoft = Color(hex: 0x121A26, alpha: 0x7A / 255.0)
-        /// #151E2B at CC/255 ≈ 0.80
-        public static let glassStrong = Color(hex: 0x151E2B, alpha: 0xCC / 255.0)
-        /// #111722 at 99/255 ≈ 0.60
-        public static let glassToolbar = Color(hex: 0x111722, alpha: 0x99 / 255.0)
-        /// #101722 at A8/255 ≈ 0.66
-        public static let glassSidebar = Color(hex: 0x101722, alpha: 0xA8 / 255.0)
-        /// #0F151F at B8/255 ≈ 0.72
-        public static let glassCard = Color(hex: 0x0F151F, alpha: 0xB8 / 255.0)
-        /// #172131 at CC/255 ≈ 0.80
-        public static let glassCardHover = Color(hex: 0x172131, alpha: 0xCC / 255.0)
+        // Glass tint. These are translucent tints over material; keep them
+        // light enough that the scenic layer remains visible through panels.
+        public static let glassBase = Color.white.opacity(0.034)
+        public static let glassSoft = Color.white.opacity(0.026)
+        public static let glassStrong = Color(hex: 0x0B1320, alpha: 0.34)
+        public static let glassToolbar = Color.white.opacity(0.030)
+        public static let glassSidebar = Color.white.opacity(0.040)
+        public static let glassCard = Color.white.opacity(0.024)
+        public static let glassCardHover = Color.white.opacity(0.042)
         /// White at 12/255 ≈ 0.07. Intentionally the same value as `strokeHairline`
         /// (#FFFFFF12 in the source JSON) but with a distinct semantic role:
         /// selected surface overlay, not a border.
@@ -45,13 +34,13 @@ public enum DS {
 
         // Stroke
         /// white at 12/255 ≈ 0.07
-        public static let strokeHairline = Color(hex: 0xFFFFFF, alpha: 0x12 / 255.0)
+        public static let strokeHairline = Color.white.opacity(0.075)
         /// white at 1C/255 ≈ 0.11
-        public static let strokeDefault = Color(hex: 0xFFFFFF, alpha: 0x1C / 255.0)
+        public static let strokeDefault = Color.white.opacity(0.110)
         /// white at 2B/255 ≈ 0.17
-        public static let strokeStrong = Color(hex: 0xFFFFFF, alpha: 0x2B / 255.0)
+        public static let strokeStrong = Color.white.opacity(0.180)
         /// white at 26/255 ≈ 0.15
-        public static let strokeInnerHighlight = Color(hex: 0xFFFFFF, alpha: 0x26 / 255.0)
+        public static let strokeInnerHighlight = Color.white.opacity(0.150)
         /// black at 66/255 ≈ 0.40
         public static let shadowEdge = Color(hex: 0x000000, alpha: 0x66 / 255.0)
 
@@ -115,9 +104,23 @@ public enum DS {
         public static let s: CGFloat = 8
         public static let m: CGFloat = 12
         public static let l: CGFloat = 16
-        public static let xl: CGFloat = 20
+        public static let xl: CGFloat = 22
         public static let window: CGFloat = 22
         public static let pill: CGFloat = 999
+    }
+
+    // MARK: Elevation
+
+    public enum Elevation {
+        public static let cardShadowRadius: CGFloat = 18
+        public static let cardShadowY: CGFloat = 8
+        public static let shellShadowRadius: CGFloat = 28
+        public static let shellShadowY: CGFloat = 14
+        public static let accentGlowRadius: CGFloat = 36
+        public static let innerHighlightOpacity: Double = 0.68
+        public static let rimHighlightOpacity: Double = 0.36
+        public static let glassSheenOpacity: Double = 0.36
+        public static let ambientPanelGlowOpacity: Double = 0.06
     }
 
     // MARK: Size

@@ -32,12 +32,10 @@ public struct LiquidMeetingsNavigation {
 }
 
 /// Main-content width below which the Knowledge Column folds into the right
-/// inspector. 04_LAYOUT_SYSTEM.md §Wide desktop: only 1600 pt+ windows "show
-/// knowledge column and right actions simultaneously". In the liquid shell the
-/// main column is `window − 576` (224 sidebar + 304 inspector + 2×12 gaps +
-/// 2×12 outer padding), so the 1600 pt window breakpoint lands at 1024 pt of
-/// main width.
-private let knowledgeColumnBreakpoint: CGFloat = 1024
+/// inspector. The reference wide layout needs the middle knowledge column to
+/// survive the real shell/sidebar/inspector chrome, so the breakpoint leaves a
+/// little less dead zone before collapsing.
+private let knowledgeColumnBreakpoint: CGFloat = 920
 /// Meeting list pane width (spec §Meeting list: 230–250 pt).
 private let listPaneWidth: CGFloat = 240
 /// Knowledge column width (spec §Layout: 280–300 pt).

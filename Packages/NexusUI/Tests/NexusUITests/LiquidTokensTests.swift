@@ -25,7 +25,7 @@ import Testing
     #expect(DS.Radius.s == 8)
     #expect(DS.Radius.m == 12)
     #expect(DS.Radius.l == 16)
-    #expect(DS.Radius.xl == 20)
+    #expect(DS.Radius.xl == 22)
     #expect(DS.Radius.window == 22)
     #expect(DS.Radius.pill == 999)
 }
@@ -62,4 +62,23 @@ import Testing
     #expect(display != DS.FontToken.body)
     let hover: Animation = DS.Motion.hover
     #expect(hover != DS.Motion.panelReveal)
+}
+
+@Test func liquidTokens_depthMembersResolve() {
+    #expect(DS.Elevation.cardShadowRadius < DS.Elevation.shellShadowRadius)
+    #expect(DS.Elevation.cardShadowY < DS.Elevation.shellShadowY)
+    #expect(DS.Elevation.accentGlowRadius > DS.Elevation.cardShadowRadius)
+    #expect(DS.Elevation.innerHighlightOpacity > 0)
+}
+
+@Test func liquidReferenceModeRequiresDebugEnvironmentFlag() {
+    #if DEBUG
+    #expect(LiquidReferenceMode.isEnabled(environment: ["NEXUS_LIQUID_REFERENCE_DATA": "1"]))
+    #expect(LiquidReferenceMode.isEnabled(environment: ["NEXUS_LIQUID_REFERENCE_DATA": "true"]))
+    #expect(LiquidReferenceMode.isEnabled(environment: [:], arguments: ["Nexus", "--liquid-reference-data"]))
+    #expect(!LiquidReferenceMode.isEnabled(environment: [:]))
+    #expect(!LiquidReferenceMode.isEnabled(environment: ["NEXUS_LIQUID_REFERENCE_DATA": "0"]))
+    #else
+    #expect(!LiquidReferenceMode.isEnabled(environment: ["NEXUS_LIQUID_REFERENCE_DATA": "1"]))
+    #endif
 }

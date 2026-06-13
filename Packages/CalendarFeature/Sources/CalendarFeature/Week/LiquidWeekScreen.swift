@@ -256,13 +256,25 @@ public struct LiquidWeekScreen: View {
     private var content: some View {
         switch viewModel.scope {
         case .week:
+            let reference = LiquidReferenceMode.isEnabled
+                ? LiquidWeekReferenceData.snapshot(days: viewModel.visibleDays, now: now(), calendar: calendar)
+                : nil
             WeekGrid(
-                days: viewModel.visibleDays,
+                days: reference?.days ?? viewModel.visibleDays,
                 calendar: calendar,
                 now: now(),
-                itemsForDay: { weekItems(forDay: $0) },
-                onTapItem: { handleTap($0) },
+                itemsForDay: { day in
+                    if let reference {
+                        return reference.itemsByDay[calendar.startOfDay(for: day)] ?? []
+                    }
+                    return weekItems(forDay: day)
+                },
+                onTapItem: { item in
+                    guard reference == nil else { return }
+                    handleTap(item)
+                },
                 onDropTask: { taskID, start in
+                    guard reference == nil else { return }
                     _Concurrency.Task { await schedule(taskID: taskID, at: start) }
                 }
             )
@@ -271,15 +283,22 @@ public struct LiquidWeekScreen: View {
             // (04_LAYOUT_SYSTEM.md §Calendar Week — grid over a bottom strip).
             .layoutPriority(1)
             SchedulingStrip(
-                tasks: viewModel.unscheduledTasks,
-                focusGap: WeekIntelligence.todayFocusGaps(
-                    events: viewModel.events,
-                    days: viewModel.visibleDays,
-                    calendar: calendar,
-                    now: now()
-                ).first,
-                onScheduleTopTask: { gap in scheduleTopTask(into: gap) },
-                onDropTaskToZone: { taskID in manualBlockRequest = ManualBlockRequest(taskID: taskID) },
+                tasks: reference?.unscheduledTasks ?? viewModel.unscheduledTasks,
+                focusGap: reference?.primaryFocusGap
+                    ?? WeekIntelligence.todayFocusGaps(
+                        events: viewModel.events,
+                        days: viewModel.visibleDays,
+                        calendar: calendar,
+                        now: now()
+                    ).first,
+                onScheduleTopTask: { gap in
+                    guard reference == nil else { return }
+                    scheduleTopTask(into: gap)
+                },
+                onDropTaskToZone: { taskID in
+                    guard reference == nil else { return }
+                    manualBlockRequest = ManualBlockRequest(taskID: taskID)
+                },
                 onAddTask: onAddTask
             )
             // Fixed strip band so the grid keeps the page (reference
