@@ -106,8 +106,9 @@ struct TasksDailySummaryToolTests {
     func registration() {
         let names = AgentToolsAll.tools().map(\.name)
 
-        #expect(names.count == 72)
+        #expect(names.count == 73)
         #expect(Set(names).count == names.count)
+        #expect(names.contains("tasks.set_reminders"))
         #expect(names.contains("saved_filters.list"))
         #expect(names.contains("saved_filters.create"))
         #expect(names.contains("saved_filters.apply"))
