@@ -86,6 +86,10 @@ public enum CoreTaskTools {
             PeopleMergeTool(),
             CyclesListTool(),
             CyclesAssignTool(),
+            CyclesCreateTool(),
+            CyclesUpdateTool(),
+            CyclesSetStatusTool(),
+            CyclesDeleteTool(),
             SearchGlobalTool(),
         ]
     }
