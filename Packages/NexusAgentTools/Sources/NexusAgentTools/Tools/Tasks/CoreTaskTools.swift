@@ -6,6 +6,11 @@ import Foundation
 /// `people.*` tools (spec §7).
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
+        tasksAndNotes + projectsTier + peopleCyclesSearch
+    }
+
+    /// `tasks.*`, `comments.*`, `activity.*`, and `note.*` tools.
+    private static var tasksAndNotes: [any AgentTool] {
         [
             TasksGetTool(),
             TasksListTool(),
@@ -30,7 +35,13 @@ public enum CoreTaskTools {
             NotesSearchTool(),
             NotesLinkTool(),
             NotesDeleteTool(),
-            // Projects tier (spec §10)
+        ]
+    }
+
+    /// Projects tier (spec §10): `projects.*`, `projects.sections.*`, `labels.*`,
+    /// `agents.*`, `blocks.*`, and the task workflow/agent-assignment tools.
+    private static var projectsTier: [any AgentTool] {
+        [
             ProjectsCreateTool(),
             SectionsCreateTool(),
             ProjectsGetTool(),
@@ -51,10 +62,19 @@ public enum CoreTaskTools {
             LabelsListForTool(),
             LabelsAssignTool(),
             LabelsRemoveTool(),
+            LabelsCreateTool(),
+            LabelsUpdateTool(),
+            LabelsDeleteTool(),
             BlocksListTool(),
             BlocksAddTool(),
             BlocksRemoveTool(),
-            // People / Contacts module (spec §7)
+        ]
+    }
+
+    /// People/Contacts module (spec §7), Cycles (Tranche 2 Plan C), and the
+    /// unified `search.global` tool (Tranche 2).
+    private static var peopleCyclesSearch: [any AgentTool] {
+        [
             PeopleCreateTool(),
             PeopleCreateIdempotentTool(),
             PeopleUpdateTool(),
@@ -64,10 +84,8 @@ public enum CoreTaskTools {
             PeopleAggregateTool(),
             PeopleLinkTool(),
             PeopleMergeTool(),
-            // Cycles (Tranche 2 Plan C)
             CyclesListTool(),
             CyclesAssignTool(),
-            // Unified search (Tranche 2)
             SearchGlobalTool(),
         ]
     }

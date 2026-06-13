@@ -106,7 +106,7 @@ struct TasksDailySummaryToolTests {
     func registration() {
         let names = AgentToolsAll.tools().map(\.name)
 
-        #expect(names.count == 60)
+        #expect(names.count == 63)
         #expect(Set(names).count == names.count)
         #expect(names.contains("projects.list"))
         #expect(names.contains("projects.update"))
@@ -125,6 +125,9 @@ struct TasksDailySummaryToolTests {
         // Projects tier (spec §10) tools are part of the full registration.
         #expect(names.contains("tasks.set_workflow_state"))
         #expect(names.contains("labels.assign"))
+        #expect(names.contains("labels.create"))
+        #expect(names.contains("labels.update"))
+        #expect(names.contains("labels.delete"))
         #expect(names.contains("blocks.add"))
         // People / Contacts module (spec §7).
         #expect(names.contains("people.create"))
