@@ -3,10 +3,21 @@ import Foundation
 /// Convenience builder for all core tools that do not depend on TasksFeature.
 /// Includes `tasks.*`, `comments.*`, `activity.*`, `note.*`, the Projects-tier `projects.*`,
 /// `labels.*`, `agents.*`, `blocks.*` tools (spec §10), the People/Contacts
-/// `people.*` tools (spec §7), `cycles.*`, `search.*`, and the `saved_filters.*` tools.
+/// `people.*` tools (spec §7), `cycles.*`, `search.*`, the `saved_filters.*` tools,
+/// and the `calendar.preferences.*` tools.
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
-        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters
+        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences
+    }
+
+    /// `calendar.preferences.*` tools — thin wrappers over
+    /// `UserDefaultsCalendarPreferencesStore`. No EventKit dependency (unlike the
+    /// `CalendarAgentTools` schedule/event tools), so they live with the core set.
+    private static var calendarPreferences: [any AgentTool] {
+        [
+            CalendarPreferencesGetTool(),
+            CalendarPreferencesUpdateTool(),
+        ]
     }
 
     /// `saved_filters.*` tools — thin wrappers over `SavedFilterRepository`.
