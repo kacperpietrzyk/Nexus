@@ -4,7 +4,9 @@ import NexusCore
 /// Unified cross-entity search over the in-memory `SearchIndex`.
 ///
 /// `kinds` omitted (or empty) searches every indexed kind; supplying raw `ItemKind`
-/// values restricts the result set. Hits come back ranked (score desc, then recency).
+/// values restricts the result set. A non-empty `kinds` array of only unrecognised
+/// values is rejected as a validation error (rather than silently searching all kinds).
+/// Hits come back ranked (score desc, then recency).
 public struct SearchGlobalTool: AgentTool {
     public let name = "search.global"
     public let description = """
@@ -35,10 +37,17 @@ public struct SearchGlobalTool: AgentTool {
             range: 1...100
         )
 
+        // An empty/absent `kinds` array means "search every kind" (nil filter). But a
+        // non-empty array whose values are ALL unrecognised is a caller error — silently
+        // promoting a misspelled filter to an unfiltered search would surprise an agent
+        // expecting a narrow result set, so reject it.
         var kinds: Set<ItemKind>?
-        if let raw = args["kinds"]?.arrayValue {
+        if let raw = args["kinds"]?.arrayValue, !raw.isEmpty {
             let parsed = raw.compactMap { $0.stringValue.flatMap(ItemKind.init(rawValue:)) }
-            kinds = parsed.isEmpty ? nil : Set(parsed)
+            guard !parsed.isEmpty else {
+                throw AgentError.validation("kinds contained no recognised ItemKind values")
+            }
+            kinds = Set(parsed)
         }
 
         let hits = await context.searchIndex.search(query, kinds: kinds, limit: limit)
