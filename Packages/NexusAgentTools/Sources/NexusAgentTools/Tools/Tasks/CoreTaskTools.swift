@@ -7,7 +7,16 @@ import Foundation
 /// the `calendar.preferences.*` tools, and the `stats.*` tools.
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
-        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats
+        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats + export
+    }
+
+    /// `export.*` tools — anti-lock-in Markdown export. `export.item` renders one
+    /// entity to a string; `export.bundle` writes the whole-vault folder.
+    private static var export: [any AgentTool] {
+        [
+            ExportItemTool(),
+            ExportBundleTool(),
+        ]
     }
 
     /// `stats.*` tools — `stats.goals.*` wrap `UserDefaultsGoalsPreferencesStore`

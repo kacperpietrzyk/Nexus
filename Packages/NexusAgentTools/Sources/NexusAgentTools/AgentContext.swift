@@ -10,6 +10,13 @@ public struct AgentContext: Sendable {
     public let searchIndex: SearchIndex
     public let now: @Sendable () -> Date
 
+    /// Boxed `ModelContainer` for whole-vault walks (the `export.bundle` tool
+    /// opens its own `ModelContext` per container, mirroring `MarkdownExporter`).
+    /// `nil` when no container was injected — export tools then throw
+    /// `.internalError`. Defaulted nil so non-production callers (e.g. older
+    /// fixtures) keep compiling without supplying one.
+    public let modelContainer: ModelContainerRef?
+
     /// On-demand `CommentRepository` backed by the same `ModelContext` as `taskRepository`.
     @MainActor public var commentRepository: CommentRepository {
         CommentRepository(context: modelContext.context)
@@ -84,7 +91,8 @@ public struct AgentContext: Sendable {
         searchIndex: SearchIndex,
         now: @escaping @Sendable () -> Date,
         nlParser: AnyNLParserRef? = nil,
-        heroBriefService: HeroBriefServiceRef? = nil
+        heroBriefService: HeroBriefServiceRef? = nil,
+        modelContainer: ModelContainerRef? = nil
     ) {
         self.modelContext = modelContext
         self.taskRepository = taskRepository
@@ -92,6 +100,19 @@ public struct AgentContext: Sendable {
         self.now = now
         self.nlParser = nlParser
         self.heroBriefService = heroBriefService
+        self.modelContainer = modelContainer
+    }
+}
+
+/// Boxed @MainActor reference to ModelContainer (ModelContainer is Sendable, but
+/// keep the same boxed shape as `ModelContextRef` for consistency at call sites).
+public struct ModelContainerRef: @unchecked Sendable {
+    private let stored: ModelContainer
+
+    @MainActor public var container: ModelContainer { stored }
+
+    @MainActor public init(_ container: ModelContainer) {
+        self.stored = container
     }
 }
 

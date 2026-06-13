@@ -3,7 +3,7 @@ import Testing
 
 @testable import NexusAgentTools
 
-@Suite("AgentTool conformance - all 76 core tools")
+@Suite("AgentTool conformance - all 78 core tools")
 struct AgentToolConformanceTests {
     @Test("each core tool has non-empty name and description")
     func nonEmptyMetadata() {
@@ -36,12 +36,12 @@ struct AgentToolConformanceTests {
         #expect(names.count == Set(names).count, "duplicate tool names: \(names)")
     }
 
-    @Test("registry built from CoreTaskTools.all has 76 tools")
+    @Test("registry built from CoreTaskTools.all has 78 tools")
     func registryCount() {
         let registry = ToolRegistry(tools: CoreTaskTools.all())
 
-        #expect(registry.tools.count == 76)
-        #expect(registry.manifest().tools.count == 76)
+        #expect(registry.tools.count == 78)
+        #expect(registry.manifest().tools.count == 78)
     }
 
     // MARK: - Calendar / schedule tools (injected at app level, so otherwise
@@ -77,7 +77,7 @@ struct AgentToolConformanceTests {
         let knownNamespaces: Set<Substring> = [
             "tasks", "comments", "note", "schedule", "calendar",
             "projects", "agents", "labels", "blocks", "people", "activity", "cycles", "search",
-            "saved_filters", "stats",
+            "saved_filters", "stats", "export",
         ]
         guard parts.count >= 2, let first = parts.first, knownNamespaces.contains(first) else { return false }
         return parts.allSatisfy { part in

@@ -64,42 +64,8 @@ public enum MarkdownExporter {
         let items = try environment.context.fetch(FetchDescriptor<L>())
             .filter { $0.deletedAt == nil }
         for item in items {
-            let outgoing = (environment.linksByFromID[item.id] ?? []).map { link in
-                MarkdownDocument.LinkRef(
-                    toKind: link.toKind,
-                    toID: link.toID,
-                    linkKind: link.linkKind
-                )
-            }
-            // Feature-module Linkables (e.g. `Meeting`) own their export via
-            // `MarkdownExportRenderable`; NexusCore's built-in note-body
-            // resolution covers everything else.
-            let extras: [(String, FrontmatterValue)]
-            let bodyText: String
-            if let renderable = item as? any MarkdownExportRenderable {
-                extras = renderable.exportFrontmatterExtras()
-                bodyText = renderable.exportMarkdownBody(in: environment.context)
-            } else {
-                // Tranche 2 Plan E: a Note carries organization frontmatter
-                // (folder + custom properties); every other built-in type has none.
-                extras = (item as? Note).map(Self.noteFrontmatterExtras) ?? []
-                bodyText = body(
-                    for: item,
-                    in: environment,
-                    noteBodyCache: &noteBodyCache
-                )
-            }
-            let doc = MarkdownDocument(
-                id: item.id,
-                kind: item.kind,
-                title: item.title,
-                createdAt: item.createdAt,
-                updatedAt: item.updatedAt,
-                deletedAt: item.deletedAt,
-                extraFrontmatter: extras,
-                outgoingLinks: outgoing,
-                body: bodyText
-            )
+            let doc = renderDocument(for: item, in: environment, noteBodyCache: &noteBodyCache)
+            let outgoing = doc.outgoingLinks
             let relativeDirectory = Self.relativeDirectory(for: item)
             let targetFolder =
                 relativeDirectory.isEmpty
@@ -115,6 +81,74 @@ public enum MarkdownExporter {
             counters.itemsExported += 1
             counters.linksAttached += outgoing.count
         }
+    }
+
+    /// Renders one `Linkable` to a `MarkdownDocument` (frontmatter + body), the
+    /// per-item core of both the bundle writer and the single-item export.
+    /// Feature-module Linkables (e.g. `Meeting`) own their export via
+    /// `MarkdownExportRenderable`; NexusCore's built-in note-body resolution covers
+    /// everything else. Extraction is byte-for-byte equivalent to the prior inline
+    /// loop body — the bundle output is unchanged.
+    @MainActor
+    static func renderDocument<L: Linkable>(
+        for item: L,
+        in environment: ExportEnvironment,
+        noteBodyCache: inout [UUID: String]
+    ) -> MarkdownDocument {
+        let outgoing = (environment.linksByFromID[item.id] ?? []).map { link in
+            MarkdownDocument.LinkRef(
+                toKind: link.toKind,
+                toID: link.toID,
+                linkKind: link.linkKind
+            )
+        }
+        let extras: [(String, FrontmatterValue)]
+        let bodyText: String
+        if let renderable = item as? any MarkdownExportRenderable {
+            extras = renderable.exportFrontmatterExtras()
+            bodyText = renderable.exportMarkdownBody(in: environment.context)
+        } else {
+            // Tranche 2 Plan E: a Note carries organization frontmatter
+            // (folder + custom properties); every other built-in type has none.
+            extras = (item as? Note).map(Self.noteFrontmatterExtras) ?? []
+            bodyText = body(
+                for: item,
+                in: environment,
+                noteBodyCache: &noteBodyCache
+            )
+        }
+        return MarkdownDocument(
+            id: item.id,
+            kind: item.kind,
+            title: item.title,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+            deletedAt: item.deletedAt,
+            extraFrontmatter: extras,
+            outgoingLinks: outgoing,
+            body: bodyText
+        )
+    }
+
+    /// Renders one `Linkable`'s Markdown (frontmatter + body) to a string for
+    /// single-item export (MCP `export.item`). Resolves the item's outgoing
+    /// `Link`s and — for built-in types — its note body, exactly as the bundle
+    /// writer does. Attachments are NOT copied to disk (no `attachmentRoot`): an
+    /// image block falls back to its stored asset path, matching a bundle export
+    /// with no attachment root.
+    @MainActor
+    public static func renderItem<L: Linkable>(_ item: L, context: ModelContext) throws -> String {
+        let allLinks = try context.fetch(FetchDescriptor<Link>())
+        let linksByFromID = Dictionary(grouping: allLinks, by: \.fromID)
+        let environment = ExportEnvironment(
+            context: context,
+            linksByFromID: linksByFromID,
+            folder: FileManager.default.temporaryDirectory,
+            attachmentRoot: nil
+        )
+        var noteBodyCache: [UUID: String] = [:]
+        let doc = renderDocument(for: item, in: environment, noteBodyCache: &noteBodyCache)
+        return doc.render()
     }
 
     /// `MarkdownDocument.filename` is `<id>.md`. Synced entities cannot enforce id uniqueness
@@ -336,7 +370,7 @@ public enum MarkdownExporter {
         var usedFilenames: Set<String> = []
     }
 
-    private struct ExportEnvironment {
+    struct ExportEnvironment {
         let context: ModelContext
         let linksByFromID: [UUID: [Link]]
         let folder: URL

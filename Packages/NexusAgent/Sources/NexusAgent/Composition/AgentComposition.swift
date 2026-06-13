@@ -242,7 +242,8 @@ public struct AgentComposition {
                 modelContext: ModelContextRef(context),
                 taskRepository: TaskItemRepositoryRef(taskRepository),
                 searchIndex: searchIndex,
-                now: { .now }
+                now: { .now },
+                modelContainer: ModelContainerRef(context.container)
             )
     }
 

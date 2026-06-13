@@ -43,7 +43,8 @@ enum InMemoryAgentContext {
             modelContext: ModelContextRef(modelContext),
             taskRepository: TaskItemRepositoryRef(repo),
             searchIndex: searchIndex,
-            now: now
+            now: now,
+            modelContainer: ModelContainerRef(container)
         )
         return (agentContext, container, repo)
     }
