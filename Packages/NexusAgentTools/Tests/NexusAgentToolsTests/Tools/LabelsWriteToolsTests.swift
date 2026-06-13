@@ -52,4 +52,32 @@ struct LabelsWriteToolsTests {
         _ = try await LabelsDeleteTool().call(args: .object(["label_id": .string(label.id.uuidString)]), context: context)
         #expect(try context.labelRepository.find(id: label.id)?.deletedAt != nil)
     }
+
+    @Test("labels.delete rejects a system label")
+    @MainActor
+    func deleteRejectsSystem() async throws {
+        let (context, container, _) = try await InMemoryAgentContext.make()
+        _ = container
+        let sys = try context.labelRepository.create(name: "bug", group: .domain, isSystem: true)
+        await #expect(throws: AgentError.self) {
+            _ = try await LabelsDeleteTool().call(
+                args: .object(["label_id": .string(sys.id.uuidString)]), context: context
+            )
+        }
+        #expect(try context.labelRepository.find(id: sys.id)?.deletedAt == nil)
+    }
+
+    @Test("labels.update rejects a non-system domain label (group arm)")
+    @MainActor
+    func rejectsNonSystemDomain() async throws {
+        let (context, container, _) = try await InMemoryAgentContext.make()
+        _ = container
+        // isSystem == false isolates the `group != .free` arm of the guard.
+        let domain = try context.labelRepository.create(name: "infra", group: .domain, isSystem: false)
+        await #expect(throws: AgentError.self) {
+            _ = try await LabelsUpdateTool().call(
+                args: .object(["label_id": .string(domain.id.uuidString), "name": .string("x")]), context: context
+            )
+        }
+    }
 }

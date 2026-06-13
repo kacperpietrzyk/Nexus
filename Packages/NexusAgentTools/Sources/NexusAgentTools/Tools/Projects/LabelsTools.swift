@@ -119,9 +119,10 @@ public struct LabelsRemoveTool: AgentTool {
 @MainActor
 func requireUserLabel(_ label: Label) throws {
     if label.isSystem || label.group != .free {
+        let reason = label.isSystem ? "system" : label.group.rawValue
         throw AgentError.validation(
-            "Label '\(label.name)' is a system/\(label.group.rawValue) label and cannot be modified by "
-                + "agents. Agents manage free labels only."
+            "Label '\(label.name)' is a \(reason) label and cannot be modified by agents. "
+                + "Agents manage free labels only."
         )
     }
 }
