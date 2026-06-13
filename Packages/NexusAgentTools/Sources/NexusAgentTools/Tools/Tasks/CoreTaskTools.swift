@@ -58,6 +58,8 @@ public enum CoreTaskTools {
             // Cycles (Tranche 2 Plan C)
             CyclesListTool(),
             CyclesAssignTool(),
+            // Unified search (Tranche 2)
+            SearchGlobalTool(),
         ]
     }
 }
