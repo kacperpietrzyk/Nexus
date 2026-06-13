@@ -306,23 +306,37 @@ public struct LiquidWeekScreen: View {
             // column), so the strip stays a thin band (~1/8), not 1/5.
             .frame(height: 150)
         case .day:
-            // Existing day grid re-mounted under the liquid header (same
-            // handler wiring as the legacy CalendarView mount).
-            DayGridView(
-                day: viewModel.anchor,
-                items: viewModel.timelineItems(forDay: viewModel.anchor),
+            // Day = a single-column WeekGrid, so it inherits the exact Liquid
+            // styling (glass card, hour axis, current-time line) instead of the
+            // legacy NexusColor `DayGridView` (still used by the iOS
+            // CalendarView, so left untouched).
+            let dayReference = LiquidReferenceMode.isEnabled
+                ? LiquidWeekReferenceData.snapshot(days: [viewModel.anchor], now: now(), calendar: calendar)
+                : nil
+            WeekGrid(
+                days: [viewModel.anchor],
                 calendar: calendar,
                 now: now(),
-                onAccept: { id in _Concurrency.Task { await viewModel.accept(blockID: id) } },
-                onReject: { id in viewModel.reject(blockID: id) },
-                onTapItem: { handleTap($0) },
-                onAdjust: { id, start, end in
-                    _Concurrency.Task { await viewModel.adjust(blockID: id, start: start, end: end) }
+                itemsForDay: { day in
+                    if let dayReference {
+                        return dayReference.itemsByDay[calendar.startOfDay(for: day)] ?? []
+                    }
+                    return weekItems(forDay: day)
+                },
+                onTapItem: { item in
+                    guard dayReference == nil else { return }
+                    handleTap(item)
+                },
+                onDropTask: { taskID, start in
+                    guard dayReference == nil else { return }
+                    _Concurrency.Task { await schedule(taskID: taskID, at: start) }
                 }
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .month:
-            // Existing month grid re-mounted under the liquid header.
-            MonthGridView(
+            // Liquid-native month grid (glass card + DS tokens), not the legacy
+            // NexusColor `MonthGridView` still used by the iOS CalendarView.
+            LiquidMonthGrid(
                 days: viewModel.visibleDays,
                 anchor: viewModel.anchor,
                 calendar: calendar,
@@ -333,6 +347,7 @@ public struct LiquidWeekScreen: View {
                     viewModel.scope = .day
                 }
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
