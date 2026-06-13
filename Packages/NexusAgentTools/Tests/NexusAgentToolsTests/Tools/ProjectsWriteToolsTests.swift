@@ -17,6 +17,31 @@ struct ProjectsWriteToolsTests {
         let out = try await ProjectsListTool().call(args: .object([:]), context: context)
         let names = out["projects"]?.arrayValue?.compactMap { $0["name"]?.stringValue }
         #expect(names?.sorted() == ["Alpha", "Beta"])
+        // Bare list DTOs must omit the enrichment keys (synthesized encodeIfPresent),
+        // so `projects.list`/`projects.create` wire output is unchanged.
+        #expect(out["projects"]?.arrayValue?.first?["sections"] == nil)
+        #expect(out["projects"]?.arrayValue?.first?["task_count"] == nil)
+    }
+
+    @Test("projects.unarchive restores to active list")
+    @MainActor
+    func unarchiveProject() async throws {
+        let (context, container, _) = try await InMemoryAgentContext.make()
+        _ = container
+        let project = try context.projectRepository.create(name: "Parked", color: "azure", parentProjectID: nil)
+        _ = try await ProjectsArchiveTool().call(
+            args: .object(["project_id": .string(project.id.uuidString)]),
+            context: context
+        )
+        #expect(try context.projectRepository.allActive().isEmpty)
+        _ = try await ProjectsUnarchiveTool().call(
+            args: .object(["project_id": .string(project.id.uuidString)]),
+            context: context
+        )
+        #expect(try context.projectRepository.find(id: project.id)?.archivedAt == nil)
+        let out = try await ProjectsListTool().call(args: .object([:]), context: context)
+        let names = out["projects"]?.arrayValue?.compactMap { $0["name"]?.stringValue }
+        #expect(names == ["Parked"])
     }
 
     @Test("projects.update renames")
