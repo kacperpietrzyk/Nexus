@@ -246,3 +246,115 @@ public struct ProjectsDeleteTool: AgentTool {
         return .object(["id": .string(id.uuidString), "deleted": .bool(true)])
     }
 }
+
+// MARK: - projects.sections.list
+
+public struct SectionsListTool: AgentTool {
+    public let name = "projects.sections.list"
+    public let description = "Lists the ordered sections of a live project."
+    public let inputSchema: JSONSchema = .object(
+        properties: ["project_id": .string(description: "Project UUID.")],
+        required: ["project_id"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let projectID = try TasksToolArguments.requiredUUID(args["project_id"], field: "project_id")
+        _ = try ProjectsToolSupport.liveProject(id: projectID, context: context)
+        let sections = try SectionRepository(context: context.modelContext.context, now: context.now)
+            .sections(in: projectID)
+        return .object(["sections": try TasksToolJSON.encode(sections.map { SectionDTO(from: $0) })])
+    }
+}
+
+// MARK: - projects.sections.update
+
+public struct SectionsUpdateTool: AgentTool {
+    public let name = "projects.sections.update"
+    public let description = "Renames a section. Returns the updated section DTO."
+    public let inputSchema: JSONSchema = .object(
+        properties: [
+            "section_id": .string(description: "Section UUID."),
+            "name": .string(description: "New section name."),
+        ],
+        required: ["section_id", "name"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let id = try TasksToolArguments.requiredUUID(args["section_id"], field: "section_id")
+        let section = try ProjectsToolSupport.liveSection(id: id, context: context)
+        let name = try ProjectsToolSupport.trimmedRequiredString(args["name"], field: "name")
+        try SectionRepository(context: context.modelContext.context, now: context.now).rename(section, to: name)
+        return try TasksToolJSON.encode(SectionDTO(from: section))
+    }
+}
+
+// MARK: - projects.sections.delete
+
+public struct SectionsDeleteTool: AgentTool {
+    public let name = "projects.sections.delete"
+    public let description = """
+        Deletes a section. Tasks in it are reassigned to reassign_to_section_id if given, \
+        else moved to the project's no-section bucket.
+        """
+    public let inputSchema: JSONSchema = .object(
+        properties: [
+            "section_id": .string(description: "Section UUID to delete."),
+            "reassign_to_section_id": .string(description: "Optional destination section for its tasks."),
+        ],
+        required: ["section_id"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let id = try TasksToolArguments.requiredUUID(args["section_id"], field: "section_id")
+        let section = try ProjectsToolSupport.liveSection(id: id, context: context)
+        let destination = try TasksStructuredCreateArguments.optionalUUID(
+            args["reassign_to_section_id"],
+            field: "reassign_to_section_id"
+        )
+        try SectionRepository(context: context.modelContext.context, now: context.now)
+            .delete(section, reassignTasksTo: destination)
+        return .object(["id": .string(id.uuidString), "deleted": .bool(true)])
+    }
+}
+
+// MARK: - projects.sections.reorder
+
+public struct SectionsReorderTool: AgentTool {
+    public let name = "projects.sections.reorder"
+    public let description = "Moves a section between two siblings (after_section_id / before_section_id)."
+    public let inputSchema: JSONSchema = .object(
+        properties: [
+            "section_id": .string(description: "Section UUID to move."),
+            "after_section_id": .string(description: "Optional section it should follow."),
+            "before_section_id": .string(description: "Optional section it should precede."),
+        ],
+        required: ["section_id"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let id = try TasksToolArguments.requiredUUID(args["section_id"], field: "section_id")
+        let section = try ProjectsToolSupport.liveSection(id: id, context: context)
+        let afterID = try TasksStructuredCreateArguments.optionalUUID(args["after_section_id"], field: "after_section_id")
+        let beforeID = try TasksStructuredCreateArguments.optionalUUID(
+            args["before_section_id"],
+            field: "before_section_id"
+        )
+        let after = try afterID.map { try ProjectsToolSupport.liveSection(id: $0, context: context) }
+        let before = try beforeID.map { try ProjectsToolSupport.liveSection(id: $0, context: context) }
+        try SectionRepository(context: context.modelContext.context, now: context.now)
+            .reorder(section, after: after, before: before)
+        return try TasksToolJSON.encode(SectionDTO(from: section))
+    }
+}
