@@ -130,20 +130,19 @@ public struct SchedulingInspector: View {
     }
 
     public var body: some View {
-        ScrollView(showsIndicators: false) {
-            // 04_LAYOUT_SYSTEM.md: "Prawy panel ma własne karty ułożone w
-            // pionie, spacing 12".
-            VStack(spacing: DS.Space.m) {
-                meetingLoadCard
-                conflictsCard
-                focusBlocksCard
-                if !conflicts.isEmpty && (viewModel.hasCalendarAccess || LiquidReferenceMode.isEnabled) {
-                    quickRescheduleCard
-                }
-                timeInsightsCard
+        // No ScrollView — the inspector is a fixed column that fits the window
+        // height (matches the Today inspector). Empty cards collapse to a
+        // single muted line via `inspectorEmptyLine`.
+        VStack(spacing: DS.Space.m) {
+            meetingLoadCard
+            conflictsCard
+            focusBlocksCard
+            if !conflicts.isEmpty && (viewModel.hasCalendarAccess || LiquidReferenceMode.isEnabled) {
+                quickRescheduleCard
             }
-            .padding(DS.Space.m)
+            timeInsightsCard
         }
+        .padding(DS.Space.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task {
             availableCalendars = await viewModel.availableCalendars()
@@ -218,6 +217,16 @@ public struct SchedulingInspector: View {
         return DateInterval(start: window.start, end: window.end)
     }
 
+    /// Compact empty affordance for inspector cards: one muted line, no hero
+    /// glyph — keeps an empty card ~1 row tall so the column fits without scroll.
+    private func inspectorEmptyLine(_ message: String) -> some View {
+        Text(message)
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     // MARK: - Meeting Load
 
     private var meetingLoadCard: some View {
@@ -244,10 +253,7 @@ public struct SchedulingInspector: View {
     private var conflictsCard: some View {
         LiquidGlassCard("Conflicts") {
             if conflicts.isEmpty {
-                LiquidEmptyState(
-                    systemImage: "checkmark.circle",
-                    message: "No overlapping events this week."
-                )
+                inspectorEmptyLine("No overlapping events this week.")
             } else {
                 VStack(spacing: DS.Space.s) {
                     ForEach(conflicts) { conflict in
@@ -301,10 +307,7 @@ public struct SchedulingInspector: View {
     private var focusBlocksCard: some View {
         LiquidGlassCard("Suggested Focus Blocks") {
             if focusGaps.isEmpty {
-                LiquidEmptyState(
-                    systemImage: "moon.zzz",
-                    message: "No free focus gaps left in today's workday."
-                )
+                inspectorEmptyLine("No free focus gaps left in today's workday.")
             } else {
                 VStack(spacing: DS.Space.s) {
                     ForEach(focusGaps.prefix(Self.maxFocusGapRows), id: \.start) { gap in
@@ -448,10 +451,7 @@ public struct SchedulingInspector: View {
         )
         LiquidGlassCard("Time Insights") {
             if insights.totalScheduled == 0 {
-                LiquidEmptyState(
-                    systemImage: "chart.bar",
-                    message: "Nothing scheduled this week yet."
-                )
+                inspectorEmptyLine("Nothing scheduled this week yet.")
             } else {
                 VStack(spacing: DS.Space.s) {
                     ForEach(Self.insightOrder, id: \.self) { category in

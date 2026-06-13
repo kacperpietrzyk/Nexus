@@ -97,18 +97,11 @@ struct WeekGrid: View {
             LiquidDividerLine()
             hourAxis
         }
-        .background {
-            // Spec §Visual fidelity: "the grid itself can be darker/sunken,
-            // while events are elevated glass blocks" — sunken tint, no token
-            // for the 0.55 calibration alpha.
-            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                .fill(DS.ColorToken.backgroundSunken.opacity(0.55))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
-        }
         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+        // The grid uses the SAME glass recipe as every card (material +
+        // dark-navy tint), not a flat near-black sunken fill — that lone flat
+        // panel read darker/blacker than the rest of the app and clashed.
+        .liquidGlass(.card, radius: DS.Radius.m)
     }
 
     // MARK: - Header (weekday + day number)

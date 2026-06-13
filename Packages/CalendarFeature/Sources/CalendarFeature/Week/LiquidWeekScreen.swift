@@ -301,9 +301,10 @@ public struct LiquidWeekScreen: View {
                 },
                 onAddTask: onAddTask
             )
-            // Fixed strip band so the grid keeps the page (reference
-            // proportions: strip ≈ 1/5 of the content column).
-            .frame(height: 210)
+            // Fixed strip band so the grid keeps the page. Reference
+            // proportions put the grid clearly dominant (~75% of the content
+            // column), so the strip stays a thin band (~1/8), not 1/5.
+            .frame(height: 150)
         case .day:
             // Existing day grid re-mounted under the liquid header (same
             // handler wiring as the legacy CalendarView mount).

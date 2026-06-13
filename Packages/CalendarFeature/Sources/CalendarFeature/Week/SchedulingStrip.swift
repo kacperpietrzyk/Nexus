@@ -106,10 +106,8 @@ struct SchedulingStrip: View {
     private var unscheduledCard: some View {
         LiquidGlassCard("Unscheduled Tasks") {
             if tasks.isEmpty {
-                LiquidEmptyState(
-                    systemImage: "tray",
-                    message: "Every open task has a date or a scheduled block."
-                ) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
+                    stripEmptyLine("Every open task has a date or a scheduled block.")
                     if let onAddTask {
                         LiquidPrimaryButton("Add task", action: onAddTask)
                     }
@@ -213,12 +211,19 @@ struct SchedulingStrip: View {
                     }
                 }
             } else {
-                LiquidEmptyState(
-                    systemImage: "moon.zzz",
-                    message: "No free focus gaps left in today's workday."
-                )
+                stripEmptyLine("No free focus gaps left in today's workday.")
             }
         }
+    }
+
+    /// Compact one-line empty affordance — keeps strip cards inside the fixed
+    /// band so they don't overflow upward into the grid (no hero glyph).
+    private func stripEmptyLine(_ message: String) -> some View {
+        Text(message)
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
