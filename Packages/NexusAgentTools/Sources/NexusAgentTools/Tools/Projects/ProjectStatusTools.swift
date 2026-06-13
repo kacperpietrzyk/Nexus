@@ -77,7 +77,10 @@ public struct ProjectsGetTool: AgentTool {
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let id = try TasksToolArguments.requiredUUID(args["project_id"], field: "project_id")
         let project = try ProjectsToolSupport.liveProject(id: id, context: context)
-        return try TasksToolJSON.encode(ProjectDTO(from: project))
+        let sectionRepository = SectionRepository(context: context.modelContext.context, now: context.now)
+        let sections = try sectionRepository.sections(in: project.id)
+        let tasks = try context.taskRepository.repository.tasks(in: project.id)
+        return try TasksToolJSON.encode(ProjectDTO(from: project, sections: sections, taskCount: tasks.count))
     }
 }
 
@@ -115,5 +118,131 @@ public struct ProjectsSetStatusTool: AgentTool {
         let project = try ProjectsToolSupport.liveProject(id: id, context: context)
         try context.projectRepository.setStatus(status, on: project)
         return try TasksToolJSON.encode(ProjectDTO(from: project))
+    }
+}
+
+// MARK: - projects.list
+
+public struct ProjectsListTool: AgentTool {
+    public let name = "projects.list"
+    public let description = "Lists active (non-deleted, non-archived) projects, optionally filtered by status."
+    public let inputSchema: JSONSchema = .object(
+        properties: [
+            "status": .string(
+                enumValues: ProjectStatus.allCases.map(\.rawValue),
+                description: "Optional ProjectStatus filter."
+            )
+        ],
+        required: []
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        var projects = try context.projectRepository.allActive()
+        if let statusText = args["status"]?.stringValue {
+            guard let status = ProjectStatus(rawValue: statusText) else {
+                throw AgentError.validation(
+                    "Invalid status '\(statusText)'. Expected one of: "
+                        + ProjectStatus.allCases.map(\.rawValue).joined(separator: ", ")
+                )
+            }
+            projects = projects.filter { $0.status == status }
+        }
+        return .object(["projects": try TasksToolJSON.encode(projects.map { ProjectDTO(from: $0) })])
+    }
+}
+
+// MARK: - projects.update
+
+public struct ProjectsUpdateTool: AgentTool {
+    public let name = "projects.update"
+    public let description = "Renames and/or recolors (glyph) a project. Returns the updated project DTO."
+    public let inputSchema: JSONSchema = .object(
+        properties: [
+            "project_id": .string(description: "Project UUID."),
+            "name": .string(description: "Optional new name."),
+            "glyph": .string(description: "Optional new achromatic glyph key."),
+        ],
+        required: ["project_id"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let id = try TasksToolArguments.requiredUUID(args["project_id"], field: "project_id")
+        let project = try ProjectsToolSupport.liveProject(id: id, context: context)
+        if let name = try ProjectsToolSupport.optionalTrimmedString(args["name"], field: "name") {
+            try context.projectRepository.rename(project, to: name)
+        }
+        if let glyph = try ProjectsToolSupport.optionalTrimmedString(args["glyph"], field: "glyph") {
+            try context.projectRepository.recolor(project, to: glyph)
+        }
+        return try TasksToolJSON.encode(ProjectDTO(from: project))
+    }
+}
+
+// MARK: - projects.archive
+
+public struct ProjectsArchiveTool: AgentTool {
+    public let name = "projects.archive"
+    public let description = "Archives a project (and its sub-projects). Returns the updated project DTO."
+    public let inputSchema: JSONSchema = .object(
+        properties: ["project_id": .string(description: "Project UUID.")],
+        required: ["project_id"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let id = try TasksToolArguments.requiredUUID(args["project_id"], field: "project_id")
+        let project = try ProjectsToolSupport.liveProject(id: id, context: context)
+        try context.projectRepository.archive(project)
+        return try TasksToolJSON.encode(ProjectDTO(from: project))
+    }
+}
+
+// MARK: - projects.unarchive
+
+public struct ProjectsUnarchiveTool: AgentTool {
+    public let name = "projects.unarchive"
+    public let description = "Unarchives a project. Returns the updated project DTO."
+    public let inputSchema: JSONSchema = .object(
+        properties: ["project_id": .string(description: "Project UUID.")],
+        required: ["project_id"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let id = try TasksToolArguments.requiredUUID(args["project_id"], field: "project_id")
+        let project = try ProjectsToolSupport.liveProject(id: id, context: context)
+        try context.projectRepository.unarchive(project)
+        return try TasksToolJSON.encode(ProjectDTO(from: project))
+    }
+}
+
+// MARK: - projects.delete
+
+public struct ProjectsDeleteTool: AgentTool {
+    public let name = "projects.delete"
+    public let description = "Soft-deletes a project and cascades to its sub-projects. Returns {id, deleted}."
+    public let inputSchema: JSONSchema = .object(
+        properties: ["project_id": .string(description: "Project UUID.")],
+        required: ["project_id"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let id = try TasksToolArguments.requiredUUID(args["project_id"], field: "project_id")
+        let project = try ProjectsToolSupport.liveProject(id: id, context: context)
+        try context.projectRepository.softDelete(project, cascade: true)
+        return .object(["id": .string(id.uuidString), "deleted": .bool(true)])
     }
 }
