@@ -4,10 +4,21 @@ import Foundation
 /// Includes `tasks.*`, `comments.*`, `activity.*`, `note.*`, the Projects-tier `projects.*`,
 /// `labels.*`, `agents.*`, `blocks.*` tools (spec §10), the People/Contacts
 /// `people.*` tools (spec §7), `cycles.*`, `search.*`, the `saved_filters.*` tools,
-/// and the `calendar.preferences.*` tools.
+/// the `calendar.preferences.*` tools, and the `stats.*` tools.
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
-        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences
+        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats
+    }
+
+    /// `stats.*` tools — `stats.goals.*` wrap `UserDefaultsGoalsPreferencesStore`
+    /// (the `calendarPreferences` pattern); `stats.productivity` reads completion
+    /// counts through the task repository.
+    private static var stats: [any AgentTool] {
+        [
+            StatsGoalsGetTool(),
+            StatsGoalsUpdateTool(),
+            StatsProductivityTool(),
+        ]
     }
 
     /// `calendar.preferences.*` tools — thin wrappers over

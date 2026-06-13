@@ -426,6 +426,25 @@ public final class TaskItemRepository {
         return (removedID, nextInstance)
     }
 
+    /// Tasks whose `lastCompletedAt` falls within the interval (productivity
+    /// stats). Release-safe form: a `#Predicate` over an optional `Date` with a
+    /// force-unwrapped comparison can TRAP under `-O` (verified), so we fetch the
+    /// non-nil candidates in the predicate and apply the date-range filter in
+    /// plain Swift. Counts by completion stamp regardless of current status —
+    /// matching the "lastCompletedAt within interval" contract.
+    public func completedTasks(in interval: DateInterval) throws -> [TaskItem] {
+        let descriptor = FetchDescriptor<TaskItem>(
+            predicate: #Predicate<TaskItem> { task in
+                task.deletedAt == nil && task.lastCompletedAt != nil
+            }
+        )
+        let candidates = try context.fetch(descriptor)
+        return candidates.filter { task in
+            guard let completed = task.lastCompletedAt else { return false }
+            return completed >= interval.start && completed <= interval.end
+        }
+    }
+
     public func allExternalSourceIDs(withPrefix prefix: String) throws -> [String] {
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { task in
