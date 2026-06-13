@@ -271,6 +271,7 @@ public struct NotesDeleteTool: AgentTool {
             throw AgentError.notFound("Note not found: \(id.uuidString)")
         }
         try context.noteRepository.delete(note)
+        await context.searchIndex.remove(kind: .note, id: id)
         return .object(["id": .string(id.uuidString), "deleted": .bool(true)])
     }
 }
