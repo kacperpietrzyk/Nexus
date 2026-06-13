@@ -11,7 +11,7 @@ struct MeetingIntelCard: View {
     let onOpenMeetings: () -> Void
 
     var body: some View {
-        LiquidGlassCard("Meeting Intelligence") {
+        TodayGlassCard("Meeting Intelligence") {
             if let intel {
                 content(intel)
             } else {
@@ -28,35 +28,31 @@ struct MeetingIntelCard: View {
 
     private func content(_ intel: LiquidTodayMeetingIntel) -> some View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
-            HStack(alignment: .top, spacing: DS.Space.s) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(DS.ColorToken.accentPurple)
-                    .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(intel.title)
-                        .font(DS.FontToken.bodyStrong)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                        .lineLimit(2)
-                    Text(Self.metadataLine(for: intel))
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                }
-                Spacer(minLength: DS.Space.xs)
-                LiquidPill(intel.statusLabel, color: DS.ColorToken.accentGreen)
-            }
+            meetingHeader(intel)
 
             if !intel.summary.isEmpty {
-                Text("Summary")
-                    .font(DS.FontToken.metadata.weight(.semibold))
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                // Stored summaries can carry Markdown heading chrome; the
-                // excerpt renders plain ink (LiquidTodayText strips it).
-                Text(LiquidTodayText.strippingMarkers(from: intel.summary))
-                    .font(DS.FontToken.body)
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    // Spec §Meeting Intelligence: "summary text max 3 lines".
-                    .lineLimit(3)
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
+                    Text("Summary")
+                        .font(DS.FontToken.metadata.weight(.semibold))
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                    // Stored summaries can carry Markdown heading chrome; the
+                    // excerpt renders plain ink (LiquidTodayText strips it).
+                    Text(LiquidTodayText.strippingMarkers(from: intel.summary))
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                        // Spec §Meeting Intelligence: "summary text max 3 lines".
+                        .lineLimit(3)
+                }
+                .padding(DS.Space.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                        .fill(Color.white.opacity(0.006))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                        .stroke(Color.white.opacity(0.050), lineWidth: 1)
+                }
             }
 
             if !intel.decisions.isEmpty {
@@ -82,6 +78,53 @@ struct MeetingIntelCard: View {
             LiquidCardFooterLink("View full meeting", action: onOpenMeetings)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func meetingHeader(_ intel: LiquidTodayMeetingIntel) -> some View {
+        // Title + status pill share the top line; the date · time · duration
+        // metadata sits on its own full-width line below so it is never
+        // squeezed by the pill into a wrap or truncation (narrow 3-col card).
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            HStack(alignment: .top, spacing: DS.Space.s) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(DS.ColorToken.accentPurple)
+                    .frame(width: 26, height: 26)
+                    .background {
+                        RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                            .fill(DS.ColorToken.accentPurple.opacity(0.14))
+                    }
+                Text(intel.title)
+                    .font(DS.FontToken.bodyStrong)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                    .lineLimit(2)
+                Spacer(minLength: DS.Space.xs)
+                LiquidPill(intel.statusLabel, color: DS.ColorToken.accentGreen)
+            }
+
+            Text(Self.metadataLine(for: intel))
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+        }
+        .padding(DS.Space.m)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .fill(Color.white.opacity(0.008))
+                .overlay {
+                    LinearGradient(
+                        colors: [DS.ColorToken.accentPurple.opacity(0.052), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .stroke(Color.white.opacity(0.052), lineWidth: 1)
+        }
     }
 
     /// Up to three parsed decisions as green-check rows

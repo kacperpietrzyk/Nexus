@@ -6,14 +6,6 @@ import SwiftUI
 /// Spec `docs/04_LAYOUT_SYSTEM.md` §Grid Rules / Today Dashboard:
 /// "Today's Agenda — width ~380".
 private let agendaCardWidth: CGFloat = 380
-/// Reference proportions (`references/01_today_dashboard.png`): the agenda/
-/// priorities row holds ~40% of the page height even when sparse, so empty
-/// states stay calm cards rather than collapsing the grid.
-private let topRowMinHeight: CGFloat = 340
-/// Reference proportions: the three lower cards share one baseline height
-/// (04_LAYOUT_SYSTEM.md §Visual Alignment "karty lower dashboard powinny mieć
-/// zbliżoną wysokość").
-private let bottomRowMinHeight: CGFloat = 240
 
 /// The Liquid `Today / Command Center` main column (Task 5, spec
 /// `docs/05_MODULE_TODAY.md`): serif page header, then Agenda + Top
@@ -63,7 +55,8 @@ public struct LiquidTodayScreen: View {
     }
 
     public var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
+            let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
             VStack(alignment: .leading, spacing: DS.Space.l) {
                 header
 
@@ -71,9 +64,14 @@ public struct LiquidTodayScreen: View {
                     errorRow(error)
                 }
 
+                // Row height = the tallest card's intrinsic content (no magic
+                // constant, no `.clipped()`): empty states stay compact instead
+                // of stretching to a fixed 420 pt, and dense cards grow rather
+                // than hard-truncating. `maxHeight: .infinity` makes the shorter
+                // card match the taller one so the row stays baseline-aligned.
                 HStack(alignment: .top, spacing: DS.Space.m) {
                     TodayAgendaCard(
-                        items: model.agendaItems,
+                        items: reference?.agendaItems ?? model.agendaItems,
                         now: .now,
                         onOpenCalendar: { onNavigate(.calendar) }
                     )
@@ -81,48 +79,51 @@ public struct LiquidTodayScreen: View {
                     .frame(maxHeight: .infinity)
 
                     TopPrioritiesCard(
-                        groups: model.priorityGroups,
+                        groups: reference?.priorityGroups ?? model.priorityGroups,
                         now: .now,
-                        projectName: { model.projectNamesByID[$0] },
-                        onToggle: { toggleDone($0) },
+                        projectName: { projectID in
+                            reference?.projectNamesByID[projectID] ?? model.projectNamesByID[projectID]
+                        },
+                        onToggle: { task in
+                            guard !LiquidReferenceMode.isEnabled else { return }
+                            toggleDone(task)
+                        },
                         onOpen: onOpenTask,
                         onAddTask: { onOpenCapture(.task) },
                         onViewAll: { onNavigate(.tasks) }
                     )
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(minHeight: topRowMinHeight)
                 .fixedSize(horizontal: false, vertical: true)
 
                 HStack(alignment: .top, spacing: DS.Space.m) {
                     TodayProjectsCard(
-                        projects: model.projects,
+                        projects: reference?.projects ?? model.projects,
                         onOpenProjects: { onNavigate(.projects) }
                     )
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     TodayNotesCard(
-                        notes: model.notes,
+                        notes: reference?.notes ?? model.notes,
                         onOpenNotes: { onNavigate(.notes) }
                     )
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     MeetingIntelCard(
-                        intel: model.meetingIntel,
+                        intel: reference?.meetingIntel ?? model.meetingIntel,
                         onOpenMeetings: { onNavigate(.meetings) }
                     )
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(minHeight: bottomRowMinHeight)
                 .fixedSize(horizontal: false, vertical: true)
             }
             .padding(DS.Space.l)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background {
+            TodaySceneWash()
+                .allowsHitTesting(false)
+        }
         .task { await reload() }
         .task(id: calendarEventsEnabled) { await reload() }
         .reloadOnStoreChange { _Concurrency.Task { await reload() } }
@@ -138,15 +139,56 @@ public struct LiquidTodayScreen: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: DS.Space.xxs) {
-            Text("Today")
-                .font(DS.FontToken.displayLarge)
+        HStack(alignment: .top, spacing: DS.Space.l) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                Text("Today")
+                    .font(DS.FontToken.displayLarge)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                // Real formatted date only — the reference's weather chip has no
+                // backing service and is intentionally omitted (no fake data).
+                Text(Self.dateFormatter.string(from: .now))
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                onNavigate(.agent)
+            } label: {
+                HStack(spacing: DS.Space.xs) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("AI Daily Brief")
+                }
+                .font(DS.FontToken.button)
                 .foregroundStyle(DS.ColorToken.textPrimary)
-            // Real formatted date only — the reference's weather chip has no
-            // backing service and is intentionally omitted (no fake data).
-            Text(Self.dateFormatter.string(from: .now))
-                .font(DS.FontToken.body)
-                .foregroundStyle(DS.ColorToken.textSecondary)
+                .padding(.horizontal, DS.Space.l)
+                .frame(height: 32)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.040))
+                        .overlay {
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.10),
+                                    .clear,
+                                    Color.black.opacity(0.030),
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            .clipShape(Capsule(style: .continuous))
+                        }
+                }
+                .overlay {
+                    Capsule(style: .continuous)
+                        .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
+                }
+                .shadow(color: DS.ColorToken.accentPrimary.opacity(0.16), radius: 18, x: 0, y: 0)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, DS.Space.s)
         }
         .accessibilityElement(children: .combine)
     }
@@ -222,6 +264,44 @@ public struct LiquidTodayScreen: View {
             _Concurrency.Task { await reload() }
         } catch {
             actionError = String(describing: error)
+        }
+    }
+}
+
+private struct TodaySceneWash: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                stops: [
+                    .init(color: Color.white.opacity(0.006), location: 0.0),
+                    .init(color: DS.ColorToken.accentBlue.opacity(0.006), location: 0.18),
+                    .init(color: .clear, location: 0.50),
+                    .init(color: DS.ColorToken.accentAmber.opacity(0.004), location: 1.0),
+                ],
+                startPoint: .topTrailing,
+                endPoint: .bottomLeading
+            )
+
+            RadialGradient(
+                colors: [
+                    Color.white.opacity(0.014),
+                    DS.ColorToken.accentBlue.opacity(0.006),
+                    .clear,
+                ],
+                center: UnitPoint(x: 0.92, y: 0.18),
+                startRadius: 0,
+                endRadius: 380
+            )
+
+            RadialGradient(
+                colors: [
+                    DS.ColorToken.accentAmber.opacity(0.005),
+                    .clear,
+                ],
+                center: UnitPoint(x: 0.20, y: 0.96),
+                startRadius: 0,
+                endRadius: 420
+            )
         }
     }
 }

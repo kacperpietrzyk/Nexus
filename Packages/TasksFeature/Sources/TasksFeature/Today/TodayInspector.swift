@@ -8,8 +8,8 @@ private let quickCaptureMinHeight: CGFloat = 72
 private let focusRingSize: CGFloat = 66
 
 /// The Today right inspector (spec §Right inspector): Daily Brief, Focus
-/// Suggestion, Up Next, Linked Notes, Focus Timer, and Quick Capture as
-/// vertical glass cards. Reads the same shared `LiquidTodayModel` the main
+/// Suggestion, Up Next, Linked Notes, Focus Timer, and Quick Capture as one
+/// integrated glass column. Reads the same shared `LiquidTodayModel` the main
 /// column renders; cross-module intelligence arrives through injected
 /// providers composed in the app layer.
 public struct TodayInspector: View {
@@ -43,43 +43,59 @@ public struct TodayInspector: View {
     }
 
     public var body: some View {
-        ScrollView(showsIndicators: false) {
-            // Spec §Right inspector + 04_LAYOUT_SYSTEM.md: "Prawy panel ma
-            // własne karty ułożone w pionie, spacing 12".
-            VStack(spacing: DS.Space.m) {
-                dailyBriefCard
-                focusSuggestionCard
-                upNextCard
-                linkedNotesCard
-                focusTimerCard
-                quickCaptureCard
-            }
-            .padding(DS.Space.m)
+        // No ScrollView — the inspector is a fixed column that must fit the
+        // window height. Empty cards collapse to a single muted line (see
+        // `inspectorEmptyLine`) so vertical demand tracks real content and the
+        // six cards fit without scrolling.
+        VStack(spacing: DS.Space.s) {
+            dailyBriefCard
+            focusSuggestionCard
+            upNextCard
+            linkedNotesCard
+            focusTimerCard
+            quickCaptureCard
         }
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background {
+            TodayInspectorColumnWash()
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// Compact empty affordance for inspector cards: one muted line, no hero
+    /// glyph. Keeps an empty card ~1 row tall so the column fits without scroll.
+    private func inspectorEmptyLine(_ message: String) -> some View {
+        Text(message)
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var reference: LiquidTodayReferenceData.Snapshot? {
+        LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
     }
 
     // MARK: - Daily Brief
 
     @ViewBuilder
     private var dailyBriefCard: some View {
-        LiquidGlassCard("Daily Brief") {
-            if model.briefIsLoading && model.brief.isEmpty {
+        TodayInspectorSection("Daily Brief") {
+            if let brief = reference?.brief, !brief.isEmpty {
+                briefText(brief)
+            } else if model.briefIsLoading && model.brief.isEmpty {
                 Text("Preparing your brief…")
                     .font(DS.FontToken.body)
                     .foregroundStyle(DS.ColorToken.textTertiary)
             } else if model.brief.isEmpty {
-                LiquidEmptyState(
-                    systemImage: "sparkles",
-                    message: "The agent writes a daily brief here once it's enabled."
-                ) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
+                    inspectorEmptyLine("The agent writes a daily brief here once it's enabled.")
                     LiquidPrimaryButton("Open Settings") { onNavigate(.settings) }
                 }
             } else {
-                Text(LiquidTodayText.strippingMarkers(from: model.brief))
-                    .font(DS.FontToken.body)
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                briefText(model.brief)
             }
         } trailing: {
             Image(systemName: "sparkles")
@@ -89,14 +105,31 @@ public struct TodayInspector: View {
         }
     }
 
+    private func briefText(_ text: String) -> some View {
+        Text(LiquidTodayText.strippingMarkers(from: text))
+            .font(.system(size: 14, weight: .regular))
+            .foregroundStyle(DS.ColorToken.textSecondary)
+            .lineSpacing(4)
+            .lineLimit(5)
+            .padding(.top, DS.Space.xs)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(alignment: .topTrailing) {
+                Circle()
+                    .fill(DS.ColorToken.accentBlue.opacity(0.10))
+                    .frame(width: 120, height: 120)
+                    .blur(radius: 26)
+                    .offset(x: 40, y: -52)
+            }
+    }
+
     // MARK: - Focus Suggestion
 
     @ViewBuilder
     private var focusSuggestionCard: some View {
-        LiquidGlassCard("Focus Suggestion") {
+        TodayInspectorSection("Focus Suggestion") {
             // Stored on the model (computed during reload via the injected
             // SchedulingIntelligence seam) — no per-render recomputation.
-            if let gap = model.focusSuggestion {
+            if let gap = reference?.focusSuggestion ?? model.focusSuggestion {
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     Text(
                         "You have \(Self.durationText(gap.duration)) of focus time "
@@ -107,10 +140,7 @@ public struct TodayInspector: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
-                LiquidEmptyState(
-                    systemImage: "moon.zzz",
-                    message: "No free focus gaps left in today's workday."
-                )
+                inspectorEmptyLine("No free focus gaps left in today's workday.")
             }
         }
     }
@@ -128,8 +158,8 @@ public struct TodayInspector: View {
 
     @ViewBuilder
     private var upNextCard: some View {
-        LiquidGlassCard("Up Next") {
-            if let item = model.upNextItem() {
+        TodayInspectorSection("Up Next") {
+            if let item = reference?.agendaItems.first(where: { !$0.isAllDay && $0.start > .now }) ?? model.upNextItem() {
                 HStack(alignment: .top, spacing: DS.Space.s) {
                     Circle()
                         .fill(item.kind.accent)
@@ -151,10 +181,7 @@ public struct TodayInspector: View {
                     Spacer(minLength: 0)
                 }
             } else {
-                LiquidEmptyState(
-                    systemImage: "clock",
-                    message: "Nothing else scheduled today."
-                )
+                inspectorEmptyLine("Nothing else scheduled today.")
             }
         }
     }
@@ -165,15 +192,13 @@ public struct TodayInspector: View {
     // targeting the specific note) is deferred to a later task.
     @ViewBuilder
     private var linkedNotesCard: some View {
-        LiquidGlassCard("Linked Notes") {
-            if model.linkedNotes.isEmpty {
-                LiquidEmptyState(
-                    systemImage: "link",
-                    message: "No notes linked to today's tasks."
-                )
+        TodayInspectorSection("Linked Notes") {
+            let notes = reference?.linkedNotes ?? model.linkedNotes
+            if notes.isEmpty {
+                inspectorEmptyLine("No notes linked to today's tasks yet.")
             } else {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    ForEach(model.linkedNotes, id: \.id) { note in
+                    ForEach(notes, id: \.id) { note in
                         Button {
                             onNavigate(.notes)
                         } label: {
@@ -214,8 +239,8 @@ public struct TodayInspector: View {
 
     @ViewBuilder
     private var focusTimerCard: some View {
-        LiquidGlassCard("Focus Timer") {
-            if let task = model.pinnedFocusTask {
+        TodayInspectorSection("Focus Timer") {
+            if let task = reference?.pinnedFocusTask ?? model.pinnedFocusTask {
                 HStack(spacing: DS.Space.m) {
                     LiquidCircularProgress(
                         value: FocusTimelineProgress.progress(
@@ -232,7 +257,8 @@ public struct TodayInspector: View {
                             .font(DS.FontToken.bodyStrong)
                             .foregroundStyle(DS.ColorToken.textPrimary)
                             .lineLimit(2)
-                        if let projectID = task.projectID, let name = model.projectNamesByID[projectID] {
+                        let names = reference?.projectNamesByID ?? model.projectNamesByID
+                        if let projectID = task.projectID, let name = names[projectID] {
                             Text(name)
                                 .font(DS.FontToken.metadata)
                                 .foregroundStyle(DS.ColorToken.textTertiary)
@@ -243,12 +269,31 @@ public struct TodayInspector: View {
                     playButton(task)
                 }
             } else {
-                LiquidEmptyState(
-                    systemImage: "timer",
-                    message: "Pin a task as focus to start a session."
-                ) {
+                VStack(spacing: DS.Space.m) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.10), lineWidth: 7)
+                            .frame(width: focusRingSize, height: focusRingSize)
+                        Circle()
+                            .trim(from: 0, to: 0.22)
+                            .stroke(
+                                DS.ColorToken.accentPrimary,
+                                style: StrokeStyle(lineWidth: 7, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: focusRingSize, height: focusRingSize)
+                            .shadow(color: DS.ColorToken.accentPrimary.opacity(0.24), radius: 10)
+                        Image(systemName: "timer")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(DS.ColorToken.textTertiary)
+                    }
+                    Text("Pin a task as focus to start a session.")
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                        .multilineTextAlignment(.center)
                     LiquidPrimaryButton("Browse tasks") { onNavigate(.tasks) }
                 }
+                .frame(maxWidth: .infinity, minHeight: 138)
             }
         }
     }
@@ -292,7 +337,7 @@ public struct TodayInspector: View {
 
     @ViewBuilder
     private var quickCaptureCard: some View {
-        LiquidGlassCard("Quick Capture") {
+        TodayInspectorSection("Quick Capture") {
             VStack(alignment: .leading, spacing: DS.Space.s) {
                 TextField("Jot something down…", text: $captureText, axis: .vertical)
                     .textFieldStyle(.plain)
@@ -303,11 +348,11 @@ public struct TodayInspector: View {
                     .frame(minHeight: quickCaptureMinHeight, alignment: .topLeading)
                     .background {
                         RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                            .fill(DS.ColorToken.backgroundSunken.opacity(0.6))
+                            .fill(Color.white.opacity(0.018))
                     }
                     .overlay {
                         RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                            .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
+                            .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
                     }
                     .onSubmit { submitCapture() }
 
@@ -380,6 +425,96 @@ public struct TodayInspector: View {
                 captureError = "Couldn't save the task. Please try again."
             }
             captureIsSaving = false
+        }
+    }
+}
+
+private struct TodayInspectorSection<Content: View, Trailing: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+    @ViewBuilder let trailing: () -> Trailing
+
+    init(
+        _ title: String,
+        @ViewBuilder content: @escaping () -> Content,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.title = title
+        self.content = content
+        self.trailing = trailing
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            HStack(spacing: DS.Space.s) {
+                Text(title)
+                    .font(DS.FontToken.section)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                Spacer(minLength: 0)
+                trailing()
+            }
+            .frame(height: 22)
+
+            content()
+        }
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .fill(Color.white.opacity(0.010))
+                .overlay {
+                    RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.042),
+                                    .clear,
+                                    Color.black.opacity(0.014),
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.softLight)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.052), lineWidth: 1)
+                }
+        }
+    }
+}
+
+private extension TodayInspectorSection where Trailing == EmptyView {
+    init(_ title: String, @ViewBuilder content: @escaping () -> Content) {
+        self.init(title, content: content, trailing: { EmptyView() })
+    }
+}
+
+private struct TodayInspectorColumnWash: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                stops: [
+                    .init(color: Color.white.opacity(0.006), location: 0),
+                    .init(color: DS.ColorToken.accentBlue.opacity(0.008), location: 0.25),
+                    .init(color: .clear, location: 0.62),
+                    .init(color: DS.ColorToken.accentPurple.opacity(0.006), location: 1),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            RadialGradient(
+                colors: [
+                    DS.ColorToken.accentBlue.opacity(0.014),
+                    .clear,
+                ],
+                center: UnitPoint(x: 0.72, y: 0.16),
+                startRadius: 0,
+                endRadius: 260
+            )
         }
     }
 }

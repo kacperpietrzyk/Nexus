@@ -192,11 +192,20 @@ public struct LiquidAgendaBlock: View {
         .background {
             RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
                 .fill(kind.fill)
+                .overlay {
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.08), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous))
+                }
         }
         .overlay {
             RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
                 .stroke(kind.stroke, lineWidth: 1)
         }
+        .shadow(color: kind.accent.opacity(0.16), radius: 10, x: 0, y: 0)
     }
 }
 
@@ -215,11 +224,33 @@ public struct LiquidEmptyState<Actions: View>: View {
 
     public var body: some View {
         VStack(spacing: DS.Space.m) {
-            Image(systemName: systemImage)
-                // Hero glyph sized between NexusEmptyState's 26 pt and list chrome;
-                // DS.FontToken has no display-icon size — visual calibration.
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textMuted)
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                DS.ColorToken.accentBlue.opacity(0.070),
+                                DS.ColorToken.glassSoft.opacity(0.42),
+                                .clear,
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 24
+                        )
+                    )
+                    .frame(width: 46, height: 46)
+                    .overlay {
+                        Circle()
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    }
+
+                Image(systemName: systemImage)
+                    // Hero glyph sized between NexusEmptyState's 26 pt and list chrome;
+                    // DS.FontToken has no display-icon size — visual calibration.
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                    .symbolRenderingMode(.hierarchical)
+            }
 
             Text(message)
                 .font(DS.FontToken.metadata)
@@ -230,7 +261,9 @@ public struct LiquidEmptyState<Actions: View>: View {
             actions()
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, DS.Space.xxl)
+        // Compact: empty cards should not balloon — keep the calm state low so
+        // equal-height rows stay tight instead of stretching to a tall void.
+        .padding(.vertical, DS.Space.l)
     }
 }
 
@@ -275,7 +308,19 @@ public struct LiquidDropZone: View {
         .padding(.vertical, DS.Space.l)
         .background {
             RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                .fill(isTargeted ? DS.ColorToken.accentPrimary.opacity(dropZoneTargetedOpacity) : .clear)
+                .fill(
+                    isTargeted
+                        ? DS.ColorToken.accentPrimary.opacity(dropZoneTargetedOpacity)
+                        : DS.ColorToken.glassSoft.opacity(0.34)
+                )
+                .overlay {
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.055), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
+                }
         }
         .overlay {
             RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
@@ -283,7 +328,7 @@ public struct LiquidDropZone: View {
                     // Idle border: spec (03_COMPONENTS.md §Empty / Drop Zone) says
                     // "dashed border white 18%"; strokeStrong (white ~17%) is the
                     // closest token — strokeDefault (~11%) reads too faint here.
-                    isTargeted ? DS.ColorToken.accentPrimary : DS.ColorToken.strokeStrong,
+                    isTargeted ? DS.ColorToken.accentPrimary : DS.ColorToken.strokeStrong.opacity(1.35),
                     style: StrokeStyle(lineWidth: 1, dash: [5, 4])
                 )
         }

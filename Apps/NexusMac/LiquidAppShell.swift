@@ -1,13 +1,14 @@
 import NexusUI
 import SwiftUI
 
+private let shellOuterHorizontalPadding: CGFloat = 14
+private let shellOuterVerticalPadding: CGFloat = 12
+
 /// The Liquid app frame (design-system `docs/03_COMPONENTS.md` §AppShell +
-/// `docs/04_LAYOUT_SYSTEM.md` §Base shell): a deep dark background with a
-/// subtle wallpaper gradient under glass, then three floating glass columns —
-/// the 224 pt sidebar, the flexible content shell (58 pt toolbar + page
-/// content), and an OPTIONAL 304 pt right inspector. The inspector slot is
-/// per-destination: `nil` means the column is absent entirely (not an empty
-/// glass panel).
+/// `docs/04_LAYOUT_SYSTEM.md` §Base shell): a translucent desktop backdrop,
+/// a floating sidebar, and one command-center content shell. When a page has
+/// an inspector, it is integrated inside that same shell behind an internal
+/// divider instead of becoming a third floating window.
 ///
 /// Pure layout — no business logic, no data. The host (`ContentView`)
 /// composes real sidebar/toolbar/page content into the slots.
@@ -57,34 +58,41 @@ struct LiquidAppShell<Sidebar: View, Toolbar: View, Main: View, Inspector: View>
                 sidebar()
                     .frame(width: DS.Size.sidebarWidth)
 
-                VStack(spacing: 0) {
-                    toolbar()
-                        .frame(height: DS.Size.toolbarHeight)
-                    main()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                // Clip the page content to the window radius FIRST so square
-                // scroll content cannot bleed past the glass corners; the
-                // glass recipe then paints background/stroke/shadow around it.
-                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.window, style: .continuous))
-                .liquidGlass(.shell, radius: DS.Radius.window)
-
-                if let inspector {
-                    inspector()
-                        .frame(width: DS.Size.rightInspectorWidth)
-                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.window, style: .continuous))
-                        .liquidGlass(.sidebar, radius: DS.Radius.window)
-                        // Panel reveal per 01_FOUNDATIONS §Ruch: the column
-                        // slides in from the window edge instead of popping.
-                        // The host's `withAnimation(NexusMotion.nav)` around
-                        // selection writes drives this transition.
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                }
+                // Layout-only — no fill / border / rounding. The cards,
+                // sidebar and inspector are the only visible surfaces on the
+                // backdrop (matches the reference); wrapping them in a bordered
+                // glass "shell" read as an app-inside-an-app.
+                contentShell
             }
-            .padding(DS.Space.m)
+            .padding(.horizontal, shellOuterHorizontalPadding)
+            .padding(.vertical, shellOuterVerticalPadding)
         }
         // 04_LAYOUT_SYSTEM.md: minimum useful size 1180 × 760.
         .frame(minWidth: DS.Size.windowMinWidth, minHeight: 760)
+    }
+
+    private var contentShell: some View {
+        VStack(spacing: 0) {
+            toolbar()
+                .frame(height: DS.Size.toolbarHeight)
+
+            HStack(spacing: 0) {
+                main()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if let inspector {
+                    // No drawn divider — the gap + the inspector cards' own
+                    // edges separate the columns (the shell border that used to
+                    // sit beside this line is gone).
+                    Spacer().frame(width: DS.Space.m)
+
+                    inspector()
+                        .frame(width: DS.Size.rightInspectorWidth)
+                        .frame(maxHeight: .infinity)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+        }
     }
 }
 
