@@ -60,6 +60,11 @@ public struct AgentContext: Sendable {
         ActivityEntryRepository(context: modelContext.context, now: now)
     }
 
+    /// On-demand `SavedFilterRepository` backed by the same `ModelContext`.
+    @MainActor public var savedFilterRepository: SavedFilterRepository {
+        SavedFilterRepository(context: modelContext.context, now: now)
+    }
+
     /// On-demand `PersonRepository` (People/Contacts module, spec §7) backed by the
     /// same `ModelContext` as `taskRepository`. CRUD + dedup/upsert + atomic merge +
     /// graph aggregation; the only `task ↔ person` edge it emits is `.mentions`

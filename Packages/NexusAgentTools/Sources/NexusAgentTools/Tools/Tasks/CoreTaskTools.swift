@@ -2,11 +2,22 @@ import Foundation
 
 /// Convenience builder for all core tools that do not depend on TasksFeature.
 /// Includes `tasks.*`, `comments.*`, `activity.*`, `note.*`, the Projects-tier `projects.*`,
-/// `labels.*`, `agents.*`, `blocks.*` tools (spec §10), and the People/Contacts
-/// `people.*` tools (spec §7).
+/// `labels.*`, `agents.*`, `blocks.*` tools (spec §10), the People/Contacts
+/// `people.*` tools (spec §7), `cycles.*`, `search.*`, and the `saved_filters.*` tools.
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
-        tasksAndNotes + projectsTier + peopleCyclesSearch
+        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters
+    }
+
+    /// `saved_filters.*` tools — thin wrappers over `SavedFilterRepository`.
+    private static var savedFilters: [any AgentTool] {
+        [
+            SavedFiltersListTool(),
+            SavedFiltersCreateTool(),
+            SavedFiltersUpdateTool(),
+            SavedFiltersDeleteTool(),
+            SavedFiltersApplyTool(),
+        ]
     }
 
     /// `tasks.*`, `comments.*`, `activity.*`, and `note.*` tools.
