@@ -251,6 +251,30 @@ public struct NotesSearchTool: AgentTool {
     }
 }
 
+// MARK: - note.delete
+
+/// Soft-deletes a note by UUID and detaches its edges (NoteRepository.delete).
+public struct NotesDeleteTool: AgentTool {
+    public let name = "note.delete"
+    public let description = "Deletes a note by UUID. Returns the id and a deleted flag."
+    public let inputSchema: JSONSchema = .object(
+        properties: ["note_id": .string(description: "Note UUID to delete.")],
+        required: ["note_id"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let id = try NotesToolSupport.requiredUUID(args["note_id"], field: "note_id")
+        guard let note = try context.noteRepository.find(id: id) else {
+            throw AgentError.notFound("Note not found: \(id.uuidString)")
+        }
+        try context.noteRepository.delete(note)
+        return .object(["id": .string(id.uuidString), "deleted": .bool(true)])
+    }
+}
+
 // MARK: - note.link
 
 /// Create an explicit graph edge from a note to another item.
