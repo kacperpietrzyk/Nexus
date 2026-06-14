@@ -34,11 +34,10 @@ public struct OrganizationsCreateTool: AgentTool {
             args["external_source_id"], field: "external_source_id"
         )
 
-        if let externalID,
-            let existing = try OrganizationsToolSupport.existing(
-                externalSourceID: externalID, context: context
-            )
-        {
+        let existing: Organization? = try externalID.flatMap { id in
+            try OrganizationsToolSupport.existing(externalSourceID: id, context: context)
+        }
+        if let existing {
             try context.organizationRepository.rename(existing, to: name)
             if let sector {
                 existing.sector = sector
