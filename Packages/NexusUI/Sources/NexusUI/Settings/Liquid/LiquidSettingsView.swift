@@ -69,9 +69,7 @@ public struct LiquidSettingsView: View {
         case .sync:
             SyncPanel()
         case .tasks:
-            LiquidGlassCard("Tasks") {
-                EmptyView()
-            }
+            TasksPanel()
         case .aiModels:
             LiquidGlassCard("AI & Models") {
                 EmptyView()
@@ -226,6 +224,244 @@ private struct SyncPanel: View {
                 .frame(minHeight: 44)
             }
         }
+    }
+}
+
+// MARK: - Tasks panel
+
+/// Quiet hours + calendar-events toggle + Goals panel.
+///
+/// Quiet-hours `DatePicker`s bind to `deps.quietHoursStart` / `deps.quietHoursEnd`.
+/// Calendar toggle uses `@AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled)`
+/// (key `"nexus.calendar.eventsInTodayEnabled"`), mirroring `NexusSettingsView.macTasksSection`.
+/// `GoalsSettingsState` is self-contained (`@Observable` + `UserDefaultsGoalsPreferencesStore`)
+/// and is instantiated directly as `@State`, identical to the pattern in `NexusSettingsView`.
+private struct TasksPanel: View {
+    @Environment(\.macSettingsDependencies) private var deps
+
+    @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled)
+    private var calendarEventsInTodayEnabled = false
+
+    @State private var calendarPermission = CalendarPermissionState()
+    @State private var goalsState = GoalsSettingsState()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+            quietHoursCard
+            goalsCard
+        }
+        .onAppear { calendarPermission.refresh() }
+    }
+
+    // MARK: Quiet hours card
+
+    private var quietHoursCard: some View {
+        LiquidGlassCard("Quiet hours") {
+            VStack(spacing: 0) {
+                if !deps.notificationsAuthorized {
+                    notificationsDeniedBanner
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, DS.Space.l)
+                        .padding(.vertical, DS.Space.m)
+
+                    Divider()
+                        .overlay(DS.ColorToken.strokeHairline)
+                }
+
+                // Quiet hours from
+                HStack {
+                    Text("Quiet hours from")
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
+                    Spacer()
+                    DatePicker("", selection: deps.quietHoursStart, displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                        .frame(width: 102)
+                }
+                .frame(minHeight: 44)
+
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
+
+                // Quiet hours until
+                HStack {
+                    Text("Quiet hours until")
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
+                    Spacer()
+                    DatePicker("", selection: deps.quietHoursEnd, displayedComponents: .hourAndMinute)
+                        .labelsHidden()
+                        .frame(width: 102)
+                }
+                .frame(minHeight: 44)
+
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
+
+                // Calendar events toggle
+                HStack {
+                    Text("Show Calendar events in Today")
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $calendarEventsInTodayEnabled)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .onChange(of: calendarEventsInTodayEnabled) { _, newValue in
+                            handleCalendarToggleChange(newValue)
+                        }
+                }
+                .frame(minHeight: 44)
+
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
+
+                // Calendar permission status
+                HStack {
+                    Text("Calendar permissions")
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
+                    Spacer()
+                    calendarPermissionStatusLabel
+                }
+                .frame(minHeight: 44)
+
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
+
+                Text(
+                    "Nexus reads events from the system Calendar in read-only mode."
+                        + " It never creates or modifies anything."
+                )
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, DS.Space.s)
+            }
+        }
+    }
+
+    // MARK: Goals card
+
+    private var goalsCard: some View {
+        @Bindable var goals = goalsState
+        return LiquidGlassCard("Goals") {
+            VStack(spacing: 0) {
+                // Daily goal row
+                HStack {
+                    Text("Daily goal")
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
+                    Spacer()
+                    goalStepper(value: $goals.dailyTarget)
+                }
+                .frame(minHeight: 44)
+
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
+
+                // Weekly goal row
+                HStack {
+                    Text("Weekly goal")
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
+                    Spacer()
+                    goalStepper(value: $goals.weeklyTarget)
+                }
+                .frame(minHeight: 44)
+
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
+
+                Text(
+                    "Daily and weekly completion targets drive the Goals card on the productivity dashboard."
+                        + " Set a target to 0 to hide it."
+                )
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, DS.Space.s)
+            }
+        }
+    }
+
+    // MARK: Helpers
+
+    private func goalStepper(value: Binding<Int>) -> some View {
+        HStack(spacing: DS.Space.m) {
+            Text(goalLabel(for: value.wrappedValue))
+                .font(DS.FontToken.body.weight(.medium))
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .monospacedDigit()
+            Stepper("", value: value, in: 0...99)
+                .labelsHidden()
+        }
+    }
+
+    private func goalLabel(for target: Int) -> String {
+        switch target {
+        case 0: return "Off"
+        case 1: return "1 task"
+        default: return "\(target) tasks"
+        }
+    }
+
+    private func handleCalendarToggleChange(_ newValue: Bool) {
+        guard newValue else { return }
+        switch calendarPermission.status {
+        case .notDetermined:
+            Task { await calendarPermission.requestAccess() }
+        case .denied, .restricted:
+            calendarEventsInTodayEnabled = false
+        case .fullAccess, .writeOnly:
+            break
+        }
+    }
+
+    @ViewBuilder
+    private var calendarPermissionStatusLabel: some View {
+        switch calendarPermission.status {
+        case .notDetermined:
+            Text("Not requested")
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textMuted)
+        case .denied:
+            Text("Denied")
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+        case .restricted:
+            Text("Restricted")
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+        case .fullAccess:
+            Text("Granted")
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+        case .writeOnly:
+            Text("Write only")
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textMuted)
+        }
+    }
+
+    @ViewBuilder
+    private var notificationsDeniedBanner: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            Label("Notifications disabled", systemImage: "bell.slash.fill")
+                .foregroundStyle(DS.ColorToken.textPrimary)
+                .font(DS.FontToken.body.weight(.bold))
+            Button("Open System Settings") {
+                openSystemSettings()
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(.vertical, DS.Space.s)
+    }
+
+    private func openSystemSettings() {
+        #if os(macOS)
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
+        #endif
     }
 }
 
