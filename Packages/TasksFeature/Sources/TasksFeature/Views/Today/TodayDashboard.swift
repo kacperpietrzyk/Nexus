@@ -129,9 +129,6 @@ public struct TodayDashboard: View {
     @AppStorage(NexusPreferences.Keys.agentEnabled) private var agentEnabled = true
     // Internal (not `private`): read from the `+Standalone` extension file.
     @AppStorage(NexusPreferences.Keys.workspaceDisplayName) var workspaceDisplayName: String = ""
-    #if os(macOS)
-    @Environment(\.openSettings) var openSettings
-    #endif
     @Query(sort: \Project.name) private var taskFilterProjects: [Project]
     @Query(sort: \ProjectSection.orderIndex) private var taskFilterSections: [ProjectSection]
     @Query(sort: \SavedFilter.orderIndex) private var taskFilterSavedFilters: [SavedFilter]
@@ -407,7 +404,12 @@ public struct TodayDashboard: View {
         case .productivity:
             ProductivityDashboardView()
         case .settings:
-            settingsRoute
+            // On Mac, Settings is a shell destination handled upstream;
+            // this arm is unreached. On iOS compact the tab shell handles
+            // navigation; on iOS regular the notification fires and selection
+            // resets to .today so this is momentarily visible then replaced.
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

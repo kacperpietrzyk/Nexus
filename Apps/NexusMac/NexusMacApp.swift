@@ -418,6 +418,13 @@ struct NexusMacApp: App {
                 .keyboardShortcut("n", modifiers: [.command])
             }
 
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    NotificationCenter.default.post(name: .nexusGoToSettings, object: nil)
+                }
+                .keyboardShortcut(",", modifiers: [.command])
+            }
+
             CommandMenu("Navigate") {
                 Button("Go to Today") {
                     NotificationCenter.default.post(name: .nexusGoToToday, object: nil)
@@ -507,67 +514,6 @@ struct NexusMacApp: App {
                     focusModeState.toggle(pickFrom: { resolveFocusCandidate() })
                 }
                 .keyboardShortcut(".", modifiers: .command)
-            }
-        }
-
-        Settings {
-            NavigationStack {
-                NexusSettingsView(
-                    cloudKitEnabled: environment.cloudKitEnabled,
-                    containerIdentifier: environment.cloudKitContainerIdentifier,
-                    aiRouter: aiRouter,
-                    notificationsAuthorized: permissionState.status != .denied,
-                    quietHoursStartTime: $quietHoursState.startTime,
-                    quietHoursEndTime: $quietHoursState.endTime,
-                    externalAccessConfig: NexusSettingsView.ExternalAccessConfig(
-                        sidecarPath: Bundle.main.bundleURL
-                            .appendingPathComponent("Contents/MacOS/nexus-mcp")
-                            .path,
-                        activityLog: agentActivityLog
-                    ),
-                    agentSettingsContent: AnyView(
-                        AgentSettingsView(context: agentComposition.settingsContext)
-                    ),
-                    meetingsSettingsContent: AnyView(
-                        MeetingsSettingsSection(
-                            composition: meetingsComposition,
-                            helperViewModel: MeetingsHelperSettingsViewModel()
-                        )
-                    ),
-                    manageModelsContent: AnyView(
-                        ManageModelsSection(
-                            localStateStore: ModelManifestLocalState.Store(),
-                            downloadManager: welcomeMLXDownloads.manager,
-                            lifecycle: aiGraph.mlxLifecycle,
-                            onChatReassigned: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
-                            onEmbedderReassigned: { [aiRouter] in
-                                try? await aiRouter.reloadMLXEmbedder()
-                            }
-                        )
-                    ),
-                    onExportRequested: { exportPickerPresented = true }
-                )
-                .navigationTitle("Settings")
-            }
-            // The Settings scene is SEPARATE from the main `Window` and does NOT
-            // inherit its `.modelContainer`. Without this, the `@Query` in
-            // `ManageModelsSection` has no SwiftData container in scope and Manage
-            // Models renders empty (no model rows — the Mac-only "can't manage
-            // models" bug). The main window already attaches the same container.
-            .modelContainer(container)
-            // Native Toggle/DatePicker/Button controls in the Settings Form
-            // inherit this scene tint. Liquid re-skin (Task 11): re-pointed
-            // from the achromatic `Text.primary` (MP-4.1 §3 Linear burn) to
-            // the liquid accent so Settings controls match the app family.
-            .tint(DS.ColorToken.accentPrimary)
-            // Liquid re-skin: the Settings window chrome joins the liquid
-            // background family (same token the main window uses).
-            .containerBackground(DS.ColorToken.backgroundApp, for: .window)
-            .task { await permissionState.refresh() }
-            .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
-                syncAgentListener(
-                    enabled: UserDefaults.standard.bool(forKey: AgentServiceConstants.mcpEnabledKey)
-                )
             }
         }
 
@@ -946,8 +892,8 @@ private struct NexusMenuBarContent: View {
 
         Divider()
 
-        SettingsLink {
-            Text("Settings…")
+        Button("Settings…") {
+            NotificationCenter.default.post(name: .nexusGoToSettings, object: nil)
         }
 
         Divider()
