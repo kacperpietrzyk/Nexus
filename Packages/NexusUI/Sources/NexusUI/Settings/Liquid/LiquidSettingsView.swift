@@ -1,4 +1,5 @@
 #if os(macOS)
+import NexusCore
 import SwiftUI
 
 /// Two-pane macOS Settings view — left category rail + right detail pane.
@@ -79,17 +80,11 @@ public struct LiquidSettingsView: View {
         case .aiModels:
             AIModelsPanel()
         case .meetings:
-            LiquidGlassCard("Meetings") {
-                EmptyView()
-            }
+            MeetingsPanel()
         case .advanced:
-            LiquidGlassCard("Advanced") {
-                EmptyView()
-            }
+            AdvancedPanel()
         case .about:
-            LiquidGlassCard("About") {
-                EmptyView()
-            }
+            AboutPanel()
         }
     }
 }
@@ -466,6 +461,101 @@ private struct TasksPanel: View {
         #if os(macOS)
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
         #endif
+    }
+}
+
+// MARK: - Meetings panel
+
+/// Renders the composed `meetingsSettingsContent` thunk from deps chromeless.
+private struct MeetingsPanel: View {
+    @Environment(\.macSettingsDependencies) private var deps
+
+    var body: some View {
+        deps.meetingsSettingsContent()
+            .environment(\.settingsDetailEmbedded, true)
+    }
+}
+
+// MARK: - Advanced panel
+
+/// External access (MCP) sub-view + data export row.
+private struct AdvancedPanel: View {
+    @Environment(\.macSettingsDependencies) private var deps
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+            deps.externalAccessContent()
+                .environment(\.settingsDetailEmbedded, true)
+
+            LiquidGlassCard("Export") {
+                VStack(spacing: 0) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: DS.Space.s) {
+                            Text("Export to Folder…")
+                                .font(DS.FontToken.body)
+                                .foregroundStyle(DS.ColorToken.textPrimary)
+                            Text("Export all tasks and notes as Markdown files.")
+                                .font(DS.FontToken.caption)
+                                .foregroundStyle(DS.ColorToken.textTertiary)
+                        }
+                        Spacer()
+                        NexusButton(
+                            variant: .default,
+                            size: .sm,
+                            action: { deps.onExportRequested() },
+                            label: { Text("Export to Folder…") }
+                        )
+                    }
+                    .frame(minHeight: 44)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - About panel
+
+/// Version + build + core read-only rows.
+private struct AboutPanel: View {
+
+    private var bundleShortVersion: String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.0.0"
+    }
+
+    private var bundleVersion: String {
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "0"
+    }
+
+    var body: some View {
+        LiquidGlassCard("About") {
+            VStack(spacing: 0) {
+                readOnlyRow("Nexus", value: bundleShortVersion)
+
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
+
+                readOnlyRow("Build", value: bundleVersion)
+
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
+
+                readOnlyRow("Core", value: NexusCore.version)
+            }
+        }
+    }
+
+    private func readOnlyRow(_ title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+            Spacer()
+            Text(value)
+                .font(DS.FontToken.metadata)
+                .monospacedDigit()
+                .foregroundStyle(DS.ColorToken.textSecondary)
+        }
+        .frame(minHeight: 44)
     }
 }
 
