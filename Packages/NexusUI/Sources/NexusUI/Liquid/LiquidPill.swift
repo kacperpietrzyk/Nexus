@@ -26,10 +26,10 @@ public struct LiquidPill: View {
             .frame(height: 20)
             .background {
                 Capsule(style: .continuous)
-                    .fill(color.opacity(filled ? 0.30 : 0.16))
+                    .fill(color.opacity(filled ? 0.40 : 0.16))
                     .overlay {
                         LinearGradient(
-                            colors: [Color.white.opacity(filled ? 0.14 : 0.07), .clear],
+                            colors: [Color.white.opacity(filled ? 0.16 : 0.07), .clear],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -38,8 +38,8 @@ public struct LiquidPill: View {
             }
             .overlay {
                 Capsule(style: .continuous)
-                    .stroke(color.opacity(filled ? 0.34 : 0.24), lineWidth: 1)
+                    .stroke(color.opacity(filled ? 0.55 : 0.24), lineWidth: 1)
             }
-            .shadow(color: color.opacity(filled ? 0.18 : 0.08), radius: filled ? 8 : 4, x: 0, y: 0)
+            .shadow(color: color.opacity(filled ? 0.22 : 0.08), radius: filled ? 8 : 4, x: 0, y: 0)
     }
 }
