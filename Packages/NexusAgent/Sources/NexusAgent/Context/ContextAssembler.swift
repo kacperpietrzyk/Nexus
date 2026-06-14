@@ -18,31 +18,38 @@ public final class ContextAssembler {
         if recipe.includeEntity, let entity = renderEntity(focus) {
             sections.append(entity)
         }
-        if recipe.linkGraphDepth > 0, let primary = focus.primaryID, let kindRaw = focus.kind,
-            let kind = ItemKind(rawValue: kindRaw)
-        {
-            if let links = renderLinkNeighbours(id: primary, kind: kind, depth: recipe.linkGraphDepth) {
-                sections.append(links)
-            }
+        if recipe.linkGraphDepth > 0, let links = renderLinkSection(focus: focus, depth: recipe.linkGraphDepth) {
+            sections.append(links)
         }
         for slice in recipe.repoSlices {
-            if let s = renderSlice(slice, now: now) { sections.append(s) }
+            if let section = renderSlice(slice, now: now) { sections.append(section) }
         }
-        var ragSection: AssembledContext.Section?
-        if let rag = recipe.ragQuery,
-            let hits = try? await retriever.retrieve(query: rag.query, scope: "global", limit: rag.limit),
-            !hits.isEmpty
-        {
-            ragSection = AssembledContext.Section(
-                title: "Relevant notes (\(hits.count))",
-                body: hits.map { "- \($0.title): \($0.snippet)" }.joined(separator: "\n"))
+        if let rag = recipe.ragQuery, let section = await renderRagSection(rag) {
+            sections.append(section)
         }
-        if let ragSection { sections.append(ragSection) }
 
         return truncate(sections, to: recipe.tokenBudget)
     }
 
     // MARK: rendering
+
+    /// Resolves the focus's `(kind, id)` and renders its Link-graph neighbours, if any.
+    private func renderLinkSection(focus: ContextFocus, depth: Int) -> AssembledContext.Section? {
+        guard let primary = focus.primaryID, let kindRaw = focus.kind,
+            let kind = ItemKind(rawValue: kindRaw)
+        else { return nil }
+        return renderLinkNeighbours(id: primary, kind: kind, depth: depth)
+    }
+
+    /// Runs hybrid RAG for the recipe query; nil when the retriever fails or returns nothing.
+    private func renderRagSection(_ rag: RagQuerySpec) async -> AssembledContext.Section? {
+        guard let hits = try? await retriever.retrieve(query: rag.query, scope: "global", limit: rag.limit),
+            !hits.isEmpty
+        else { return nil }
+        return AssembledContext.Section(
+            title: "Relevant notes (\(hits.count))",
+            body: hits.map { "- \($0.title): \($0.snippet)" }.joined(separator: "\n"))
+    }
 
     private func renderEntity(_ focus: ContextFocus) -> AssembledContext.Section? {
         guard let id = focus.primaryID, let kindRaw = focus.kind, let kind = ItemKind(rawValue: kindRaw) else { return nil }
