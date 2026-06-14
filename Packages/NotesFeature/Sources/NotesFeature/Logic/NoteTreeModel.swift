@@ -55,7 +55,9 @@ public enum NoteTreeModel {
 
     public static func build(notes: [Note], links: [GraphLink], projects: [ProjectRef]) -> Tree {
         let live = notes.filter { $0.deletedAt == nil }
-        let byID = Dictionary(uniqueKeysWithValues: live.map { ($0.id, $0) })
+        // `uniquingKeysWith` (not `uniqueKeysWithValues`) so a duplicate id on the
+        // main-actor render path can never trap — first wins, matching list order.
+        let byID = Dictionary(live.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         // Build note-id → set of project-ids it is linked to (either edge direction).
         var projectIDsByNote: [UUID: Set<UUID>] = [:]
@@ -78,8 +80,16 @@ public enum NoteTreeModel {
         }
 
         let free = live.filter { $0.role == .free }
-        let unfiled = free.filter { $0.folderPath == nil && !projectLinkedNoteIDs.contains($0.id) }
-        let library = buildFolderTree(free.filter { $0.folderPath != nil })
+        // Bucket on the NORMALIZED path, not the raw field: a synced path that
+        // predates normalization (e.g. " ", ".", "///") is `!= nil` raw but
+        // normalizes to `nil` (root). Splitting on the raw value would drop such
+        // a note from BOTH `unfiled` (raw `!= nil`) and `library`
+        // (`buildFolderTree` re-normalizes and skips it) — it would vanish. This
+        // matches the defensive re-normalization in `NoteFolderTree.build`.
+        let unfiled = free.filter {
+            NoteFolderPath.normalize($0.folderPath) == nil && !projectLinkedNoteIDs.contains($0.id)
+        }
+        let library = buildFolderTree(free.filter { NoteFolderPath.normalize($0.folderPath) != nil })
         let journal = live.filter { $0.role == .dailyNote }
         let templates = live.filter { $0.role == .template }
 

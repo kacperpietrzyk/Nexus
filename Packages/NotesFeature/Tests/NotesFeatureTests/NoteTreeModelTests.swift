@@ -76,6 +76,18 @@ struct NoteTreeModelTests {
         #expect(c.notes.map(\.id) == [deep.id])
     }
 
+    @Test("a folderPath that normalizes to nil lands in unfiled, not lost")
+    func folderPathNormalizingToNilStaysUnfiled() {
+        // " " / "." / "///" are `!= nil` raw but normalize to root — must NOT
+        // vanish from every bucket.
+        let blank = note("blank", folder: "   ")
+        let dot = note("dot", folder: ".")
+        let slashes = note("slashes", folder: "///")
+        let tree = NoteTreeModel.build(notes: [blank, dot, slashes], links: [], projects: [])
+        #expect(tree.unfiled.map(\.id) == [blank.id, dot.id, slashes.id])
+        #expect(tree.library.isEmpty)
+    }
+
     @Test("journal and templates bucket by role; tombstones excluded everywhere")
     func journalTemplatesAndTombstones() {
         let daily = note("2026-06-14", role: .dailyNote)
