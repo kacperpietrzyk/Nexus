@@ -112,6 +112,9 @@ public enum CoreTaskTools {
             BlocksListTool(),
             BlocksAddTool(),
             BlocksRemoveTool(),
+            ProjectsSetKeyDateTool(),
+            ProjectsListKeyDatesTool(),
+            ProjectsDeleteKeyDateTool(),
         ]
     }
 
