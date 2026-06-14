@@ -139,9 +139,10 @@ public final class ContextBuilder {
         slidingWindowSize: Int = 10,
         memoryLimit: Int = 5,
         ragLimit: Int = 5,
-        toolAllowlist: [String]? = nil
+        toolAllowlist: [String]? = nil,
+        systemPromptOverride: String? = nil
     ) async throws -> AgentContextWindow {
-        let systemPrompt = Self.systemPrompt
+        let systemPrompt = systemPromptOverride ?? Self.systemPrompt
         let memorySection: String
         do {
             let memories = try memoryStore.recent(scope: scope, limit: memoryLimit)

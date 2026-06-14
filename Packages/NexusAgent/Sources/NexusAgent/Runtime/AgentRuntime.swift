@@ -257,7 +257,8 @@ public final class AgentRuntime {
             threadID: request.threadID,
             scope: request.scope,
             userPrompt: request.userMessage,
-            toolAllowlist: request.toolAllowlist
+            toolAllowlist: request.toolAllowlist,
+            systemPromptOverride: request.systemPromptOverride
         )
     }
 

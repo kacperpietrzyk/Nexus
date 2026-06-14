@@ -11,6 +11,10 @@ public struct AgentTurnRequest: Sendable {
     /// model (both in the flat-prompt `toolDefinitionsJSON` and in the structured
     /// `AIRequest.tools` surface). `nil` preserves full-registry behaviour.
     public let toolAllowlist: [String]?
+    /// When non-nil, replaces the `ContextBuilder`'s default system prompt for this
+    /// turn only. Used by `assistant.chat` to inject the persona + proposal-block
+    /// instruction without touching the global ContextBuilder configuration.
+    public let systemPromptOverride: String?
 
     public init(
         threadID: UUID,
@@ -19,7 +23,8 @@ public struct AgentTurnRequest: Sendable {
         contextPrefix: String? = nil,
         scope: String,
         providerHint: String? = nil,
-        toolAllowlist: [String]? = nil
+        toolAllowlist: [String]? = nil,
+        systemPromptOverride: String? = nil
     ) {
         self.threadID = threadID
         self.userMessage = userMessage
@@ -28,5 +33,6 @@ public struct AgentTurnRequest: Sendable {
         self.scope = scope
         self.providerHint = providerHint
         self.toolAllowlist = toolAllowlist
+        self.systemPromptOverride = systemPromptOverride
     }
 }

@@ -36,6 +36,19 @@ public final class AgentMessageStore {
         return message.id
     }
 
+    /// Overwrites the persisted `content` of the message with the given `id`.
+    /// Used after a turn to strip the raw `nexus-proposal` block from the stored
+    /// assistant message so history never exposes it (proposal-block-leak landmine).
+    public func overwriteContent(id: UUID, content: String) throws {
+        var descriptor = FetchDescriptor<AgentMessage>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        guard let message = try context.fetch(descriptor).first else { return }
+        message.content = content
+        try context.save()
+    }
+
     public func slidingWindow(threadID: UUID, last n: Int) throws -> [AgentMessage] {
         guard n > 0 else { return [] }
 

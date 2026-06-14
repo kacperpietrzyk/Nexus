@@ -13,6 +13,11 @@ public final class AgentChatViewModel: ObservableObject {
     /// "model not downloaded" banner stays hidden by default. Refreshed via
     /// `refreshChatModelAvailability()` on view appearance.
     @Published public private(set) var isChatModelAvailable = true
+    /// In-memory map from agent message id → parsed `Proposal`. Populated after each
+    /// turn whose assistant text contained a valid `nexus-proposal` block. The raw
+    /// block is stripped from the persisted `AgentMessage.content` before this is set
+    /// (leak-prevention landmine §4). Cleared on accept or reject.
+    @Published public private(set) var pendingProposals: [UUID: Proposal] = [:]
 
     public let voiceCapture: AgentVoiceCapture?
 
@@ -22,7 +27,11 @@ public final class AgentChatViewModel: ObservableObject {
     private let memoryStore: AgentMemoryStore
     private let chatModelAvailabilityProbe: (@MainActor () -> Bool)?
     private let warmChatModel: (@MainActor () async -> Void)?
+    private let chatConfig: AssistantChatConfig
+    private let proposalCoordinator: ProposalCoordinator?
 
+    /// Primary init — callers that don't use chat config (brief / schedule / legacy)
+    /// omit `chatConfig` and `proposalCoordinator`; defaults keep existing behaviour.
     public init(
         runtime: AgentRuntime,
         threadStore: AgentThreadStore,
@@ -30,7 +39,9 @@ public final class AgentChatViewModel: ObservableObject {
         memoryStore: AgentMemoryStore,
         voiceCapture: AgentVoiceCapture? = nil,
         chatModelAvailability: (@MainActor () -> Bool)? = nil,
-        warmChatModel: (@MainActor () async -> Void)? = nil
+        warmChatModel: (@MainActor () async -> Void)? = nil,
+        chatConfig: AssistantChatConfig = .mac,
+        proposalCoordinator: ProposalCoordinator? = nil
     ) {
         self.runtime = runtime
         self.threadStore = threadStore
@@ -39,6 +50,8 @@ public final class AgentChatViewModel: ObservableObject {
         self.voiceCapture = voiceCapture
         self.chatModelAvailabilityProbe = chatModelAvailability
         self.warmChatModel = warmChatModel
+        self.chatConfig = chatConfig
+        self.proposalCoordinator = proposalCoordinator
         self.isChatModelAvailable = chatModelAvailability?() ?? true
 
         reloadThreads()
@@ -117,7 +130,9 @@ public final class AgentChatViewModel: ObservableObject {
                     userMessage: userMessage,
                     attachments: attachments,
                     contextPrefix: contextPrefix,
-                    scope: "global"
+                    scope: "global",
+                    toolAllowlist: chatConfig.toolNames.isEmpty ? nil : chatConfig.toolNames,
+                    systemPromptOverride: chatConfig.systemPrompt
                 )
             )
             // Stale-completion guard (§5 BINDING contract — await-completion class):
@@ -128,6 +143,13 @@ public final class AgentChatViewModel: ObservableObject {
             // counter is needed because @MainActor reloads here are synchronous.
             if currentThreadID == threadID {
                 lastError = errorMessage(for: response.haltReason)
+                // Strip proposal block from the assistant message before display/history.
+                if let rawContent = response.finalAssistantContent {
+                    stripAndCaptureProposal(
+                        rawContent: rawContent,
+                        threadID: threadID
+                    )
+                }
                 reloadMessages()
             }
         } catch {
@@ -139,6 +161,49 @@ public final class AgentChatViewModel: ObservableObject {
 
         let accepted = !currentMessageIDs(threadID: threadID).subtracting(initialMessageIDs).isEmpty
         return accepted ? .accepted : .rejected(lastError)
+    }
+
+    /// Accept the pending proposal for the given message id.
+    /// Routes through `ProposalCoordinator` → `ToolDispatcher` (audited).
+    /// Clears the pending proposal entry regardless of success/failure.
+    public func acceptProposal(messageID: UUID) async throws {
+        guard let proposal = pendingProposals[messageID],
+            let coordinator = proposalCoordinator
+        else { return }
+        pendingProposals[messageID] = nil
+        try await coordinator.accept(proposal, threadID: currentThreadID)
+    }
+
+    /// Reject the pending proposal for the given message id — zero side effects.
+    public func rejectProposal(messageID: UUID) {
+        guard let proposal = pendingProposals[messageID] else { return }
+        proposalCoordinator?.reject(proposal)
+        pendingProposals[messageID] = nil
+    }
+
+    // MARK: - Proposal stripping (leak-prevention §4)
+
+    /// Parses the raw assistant content for a `nexus-proposal` block.
+    /// - Overwrites the persisted `AgentMessage.content` with the stripped `displayText`
+    ///   so history is never polluted with raw JSON fences.
+    /// - Captures any parsed `Proposal` in `pendingProposals` keyed by message id.
+    private func stripAndCaptureProposal(rawContent: String, threadID: UUID) {
+        let parsed = ChatProposalParser.parse(rawContent)
+        // If nothing to strip and no proposal, skip the store round-trip.
+        guard parsed.displayText != rawContent || parsed.proposal != nil else { return }
+
+        // Find the agent message that carries the raw content and overwrite it.
+        let window = (try? messageStore.slidingWindow(threadID: threadID, last: 200)) ?? []
+        guard let agentMessage = window.last(where: { $0.role == .agent && $0.content == rawContent })
+        else { return }
+
+        let messageID = agentMessage.id
+        // Persist stripped text — critical: no raw block in DB.
+        try? messageStore.overwriteContent(id: messageID, content: parsed.displayText)
+
+        if let proposal = parsed.proposal {
+            pendingProposals[messageID] = proposal
+        }
     }
 
     public func isImageCaptureAvailable() -> Bool {
