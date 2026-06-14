@@ -86,8 +86,7 @@ struct LiquidSidebar: View {
                     ForEach(activeProjects) { project in
                         LiquidSidebarNavRow(
                             project.name,
-                            systemImage: nexusProjectGlyph(named: project.color),
-                            showsSelectionAccent: false
+                            systemImage: nexusProjectGlyph(named: project.color)
                         ) {
                             // No public project-selection seam on
                             // `ProjectsRootView` (its `selectedProjectID` is
@@ -106,8 +105,7 @@ struct LiquidSidebar: View {
                     ForEach(visibleSavedFilters) { filter in
                         LiquidSidebarNavRow(
                             filter.name,
-                            systemImage: filter.icon,
-                            showsSelectionAccent: false
+                            systemImage: filter.icon
                         ) {
                             // The Tasks destination's saved-filter selection
                             // lives in TodayDashboard-internal state (no host

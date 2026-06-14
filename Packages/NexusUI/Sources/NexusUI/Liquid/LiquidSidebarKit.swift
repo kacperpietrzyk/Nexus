@@ -11,15 +11,14 @@ private let navRowHoverFill = Color.white.opacity(0.034)
 ///
 /// 34 pt tall: 16 pt SF Symbol slot, title, optional trailing badge count
 /// (min 20×20 pt pill). Selection renders the `glassSelected` fill with a
-/// `strokeDefault` border and an optional 2 pt leading accent line; hover
-/// adds a subtle white wash (macOS only).
+/// `strokeDefault` border and an accent tint; hover adds a subtle white wash
+/// (macOS only).
 public struct LiquidSidebarNavRow: View {
 
     public let title: String
     public let systemImage: String
     public let badge: Int?
     public let isSelected: Bool
-    public let showsSelectionAccent: Bool
     public let action: () -> Void
 
     @State private var hovering = false
@@ -29,14 +28,12 @@ public struct LiquidSidebarNavRow: View {
         systemImage: String,
         badge: Int? = nil,
         isSelected: Bool = false,
-        showsSelectionAccent: Bool = true,
         action: @escaping () -> Void
     ) {
         self.title = title
         self.systemImage = systemImage
         self.badge = badge
         self.isSelected = isSelected
-        self.showsSelectionAccent = showsSelectionAccent
         self.action = action
     }
 
@@ -103,13 +100,6 @@ public struct LiquidSidebarNavRow: View {
                 if isSelected {
                     RoundedRectangle(cornerRadius: navRowCornerRadius, style: .continuous)
                         .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
-                }
-            }
-            .overlay(alignment: .leading) {
-                if isSelected && showsSelectionAccent {
-                    Capsule(style: .continuous)
-                        .fill(DS.ColorToken.accentPrimary)
-                        .frame(width: 2, height: DS.Size.navItemHeight - 2 * DS.Space.s)
                 }
             }
             .shadow(
