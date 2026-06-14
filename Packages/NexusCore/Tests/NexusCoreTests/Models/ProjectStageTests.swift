@@ -7,6 +7,11 @@ struct ProjectStageTests {
     func presets() {
         #expect(ProjectType.implementation.stages.first == .kickoff)
         #expect(ProjectType.implementation.stages.last == .closed)
+        #expect(
+            ProjectType.implementation.stages == [
+                .kickoff, .deliveryDocs, .softwareDelivery, .installation, .asBuiltDocs,
+                .acceptance, .training, .support, .closed,
+            ])
         #expect(ProjectType.sales.stages == [.lead, .qualifying, .proposal, .tender, .won, .lost])
         #expect(ProjectType.audit.stages == [.auditPlan, .auditExecution, .auditReport])
         #expect(ProjectType.internalDev.stages == [.planning, .building, .reviewing, .shipped])
