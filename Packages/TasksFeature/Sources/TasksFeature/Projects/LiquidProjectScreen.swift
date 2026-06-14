@@ -133,7 +133,6 @@ public struct LiquidProjectScreen: View {
         case .grid:
             ScrollView {
                 pickerGridMode
-                    .frame(maxWidth: pickerMaxWidth, alignment: .topLeading)
                     .padding(DS.Space.l)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
@@ -167,6 +166,7 @@ public struct LiquidProjectScreen: View {
             pickerHeader
             pickerLoadError
             pickerGrid
+                .frame(maxWidth: pickerMaxWidth, alignment: .topLeading)
         }
     }
 
