@@ -67,9 +67,7 @@ public struct LiquidSettingsView: View {
         case .general:
             GeneralPanel()
         case .sync:
-            LiquidGlassCard("Sync") {
-                EmptyView()
-            }
+            SyncPanel()
         case .tasks:
             LiquidGlassCard("Tasks") {
                 EmptyView()
@@ -167,6 +165,66 @@ private struct GeneralPanel: View {
     private func label(for theme: NexusTheme) -> String {
         switch theme {
         case .amberDark: return "Dark"
+        }
+    }
+}
+
+// MARK: - Sync panel
+
+/// Read-only iCloud/CloudKit status panel.
+///
+/// Derives state from `deps.cloudKitEnabled` and `deps.cloudKitContainerIdentifier`,
+/// mirroring the logic in `NexusSettingsView.macSyncSection`.
+private struct SyncPanel: View {
+    @Environment(\.macSettingsDependencies) private var deps
+
+    var body: some View {
+        LiquidGlassCard("iCloud Sync") {
+            VStack(spacing: 0) {
+                HStack(alignment: .top, spacing: DS.Space.m) {
+                    Image(systemName: deps.cloudKitEnabled ? "checkmark.icloud.fill" : "icloud.slash")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(
+                            deps.cloudKitEnabled
+                                ? DS.ColorToken.textTertiary
+                                : DS.ColorToken.textSecondary
+                        )
+                        .frame(width: 18, alignment: .center)
+
+                    VStack(alignment: .leading, spacing: DS.Space.s) {
+                        HStack {
+                            Text(deps.cloudKitEnabled ? "iCloud active" : "iCloud unavailable")
+                                .font(DS.FontToken.body.weight(.semibold))
+                                .foregroundStyle(DS.ColorToken.textPrimary)
+                            Spacer()
+                            if deps.cloudKitEnabled {
+                                LiquidPill("Active", color: DS.ColorToken.accentGreen, filled: true)
+                            } else {
+                                LiquidPill("Unavailable", color: DS.ColorToken.statusNeutral)
+                            }
+                        }
+
+                        if let container = deps.cloudKitContainerIdentifier {
+                            Text(container)
+                                .font(DS.FontToken.metadata)
+                                .monospacedDigit()
+                                .foregroundStyle(DS.ColorToken.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+
+                        Text(
+                            deps.cloudKitEnabled
+                                ? "CloudKit private database is enabled."
+                                : "Disabled in the local development environment."
+                        )
+                        .font(DS.FontToken.caption)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
+            }
         }
     }
 }
