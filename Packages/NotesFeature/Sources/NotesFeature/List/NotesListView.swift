@@ -15,7 +15,7 @@ import SwiftUI
 ///
 /// Mounts inside the existing app navigation, so it inherits the scene's
 /// `.modelContainer` — no separate container registration is needed.
-public struct NotesListView: View {  // swiftlint:disable:this type_body_length
+public struct NotesListView: View {
     @Environment(\.noteRepository) private var noteRepository
     #if os(macOS)
     @Environment(\.modelContext) private var modelContext
@@ -220,139 +220,9 @@ public struct NotesListView: View {  // swiftlint:disable:this type_body_length
                     onClose: { self.graphModel = nil }
                 )
             } else {
-                listHeader
-
-                if notes.isEmpty {
-                    LiquidEmptyState(
-                        systemImage: "note.text",
-                        message: "Capture a thought, draft a page, or link ideas together."
-                    ) {
-                        LiquidPrimaryButton("New Note", systemImage: "square.and.pencil") {
-                            createNote()
-                        }
-                        .disabled(noteRepository == nil)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    liquidList
-                }
+                NotesTreeView(path: $path)
             }
         }
-    }
-
-    /// In-panel header: grouping control + New Note CTA. Replaces the old
-    /// window-toolbar items, which leaked next to the traffic lights on macOS.
-    private var listHeader: some View {
-        HStack(spacing: DS.Space.m) {
-            LiquidSegmentedControl(
-                options: [
-                    LiquidSegmentOption(NoteListGrouping.Mode.role, label: "Type"),
-                    LiquidSegmentOption(NoteListGrouping.Mode.tag, label: "Tag"),
-                    LiquidSegmentOption(NoteListGrouping.Mode.folder, label: "Folder"),
-                ],
-                selection: $groupMode
-            )
-
-            Spacer(minLength: DS.Space.m)
-
-            LiquidIconButton(
-                systemImage: "point.3.connected.trianglepath.dotted",
-                accessibilityLabel: "Open graph view"
-            ) {
-                openGraph(scope: .global)
-            }
-            .help("Graph view")
-
-            LiquidIconButton(
-                systemImage: "calendar",
-                accessibilityLabel: "Open today's note"
-            ) {
-                openTodaysDailyNote()
-            }
-            .disabled(noteRepository == nil)
-            .help("Open today's note (⌘⇧D)")
-
-            if !templateNotes.isEmpty {
-                Menu {
-                    ForEach(templateNotes) { template in
-                        Button(template.title.isEmpty ? "Untitled template" : template.title) {
-                            createNoteFromTemplate(template)
-                        }
-                    }
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                .disabled(noteRepository == nil)
-                .help("New note from template")
-                .accessibilityLabel("New note from template")
-            }
-
-            LiquidPrimaryButton("New Note", systemImage: "square.and.pencil") {
-                createNote()
-            }
-            .disabled(noteRepository == nil)
-        }
-        .padding(.horizontal, DS.Space.xl)
-        .padding(.top, DS.Space.l)
-        .padding(.bottom, DS.Space.s)
-    }
-
-    private var liquidList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: DS.Space.xxs) {
-                ForEach(groups) { group in
-                    liquidSectionHeader(group)
-                    ForEach(group.notes) { note in
-                        LiquidNoteRow(
-                            note: note,
-                            backlinkCount: backlinkCounts[note.id] ?? 0,
-                            onOpen: { path.append(note.id) },
-                            onDelete: { deleteNote(note) },
-                            extraContextMenu: AnyView(
-                                Group {
-                                    noteTemplateContextMenu(note)
-                                    moveToFolderMenu(for: note)
-                                }
-                            )
-                        )
-                    }
-                }
-            }
-            .padding(.horizontal, DS.Space.xl)
-            .padding(.vertical, DS.Space.m)
-        }
-    }
-
-    private func liquidSectionHeader(_ group: NoteListGrouping.Group) -> some View {
-        HStack(spacing: DS.Space.xs) {
-            Text(group.title.uppercased())
-                .font(DS.FontToken.caption)
-                .foregroundStyle(DS.ColorToken.textTertiary)
-                .kerning(0.6)
-            Text("\(group.notes.count)")
-                .font(DS.FontToken.caption)
-                .monospacedDigit()
-                .foregroundStyle(DS.ColorToken.textMuted)
-            if groupMode == .folder, group.id != NoteListGrouping.noFolderGroupID {
-                Menu {
-                    Button("Rename Folder…") { promptRenameFolder(group.id) }
-                    Button("Remove Folder (Keep Notes)", role: .destructive) {
-                        removeFolder(group.id)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .accessibilityLabel("Folder actions for \(group.title)")
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, DS.Space.s)
-        .padding(.top, DS.Space.l)
-        .padding(.bottom, DS.Space.xs)
     }
 
     #else
