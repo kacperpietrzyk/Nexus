@@ -292,6 +292,8 @@ public struct ProjectEditorSheet: View {
                 }
             }
 
+            // Compact triple-field add row — 30pt / 8pt horizontal padding (vs the
+            // 36pt / 12pt single-field rows above) so three controls fit one HStack.
             HStack {
                 TextField("key", text: $newFieldKey)
                     .textFieldStyle(.plain)
@@ -319,9 +321,10 @@ public struct ProjectEditorSheet: View {
                     }
 
                 Button {
-                    let k = newFieldKey.trimmingCharacters(in: .whitespaces)
+                    // Trim matches trimmedName/trimmedVendor; an existing key is overwritten.
+                    let k = newFieldKey.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !k.isEmpty else { return }
-                    customFields[k] = newFieldValue
+                    customFields[k] = newFieldValue.trimmingCharacters(in: .whitespacesAndNewlines)
                     newFieldKey = ""
                     newFieldValue = ""
                 } label: {
