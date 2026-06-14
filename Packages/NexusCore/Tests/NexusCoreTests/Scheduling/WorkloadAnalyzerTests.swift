@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import NexusCore
 
 @Suite struct WorkloadAnalyzerTests {
@@ -17,12 +18,13 @@ import Testing
             ScheduledItem(id: UUID(), durationMinutes: 200, day: day("2026-06-15T13:00:00Z")),
         ]
         let events = [
-            CalendarEvent(id: "e1", title: "Sync", start: day("2026-06-15T10:00:00Z"),
-                          end: day("2026-06-15T11:00:00Z"), location: nil, attendees: [],
-                          isVideoCall: false, urlForJoin: nil, calendarColorHex: nil,
-                          isAllDay: false, calendarID: nil, organizer: nil, notes: nil, meetingID: nil),
+            CalendarEvent(
+                id: "e1", title: "Sync", start: day("2026-06-15T10:00:00Z"),
+                end: day("2026-06-15T11:00:00Z"), location: nil, attendees: [],
+                isVideoCall: false, urlForJoin: nil, calendarColorHex: nil,
+                isAllDay: false, calendarID: nil, organizer: nil, notes: nil, meetingID: nil)
         ]
-        let capacity = CapacityModel(dailyCapacityMinutes: 240) // 4h
+        let capacity = CapacityModel(dailyCapacityMinutes: 240)  // 4h
         let loads = analyzer.analyze(tasks: items, events: events, days: [d], capacity: capacity)
         #expect(loads.count == 1)
         // 120 + 200 task + 60 event = 380 > 240 capacity

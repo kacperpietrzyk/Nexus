@@ -7,14 +7,17 @@ public struct SlotScheduler: Sendable {
     public init(calendar: Calendar = .current) { self.calendar = calendar }
 
     /// Free gaps inside `workday`, each ≥ minimumMinutes, chunked to ≤ maximumMinutes.
-    public func freeSlots(events: [CalendarEvent], within workday: DateInterval,
-                          minimumMinutes: Int, maximumMinutes: Int) -> [DateInterval] {
+    public func freeSlots(
+        events: [CalendarEvent], within workday: DateInterval,
+        minimumMinutes: Int, maximumMinutes: Int
+    ) -> [DateInterval] {
         let minSec = TimeInterval(minimumMinutes * 60)
         let maxSec = maximumMinutes <= 0 ? TimeInterval.infinity : TimeInterval(maximumMinutes * 60)
         // Busy spans clipped to the workday, merged.
         // Pre-filter to only events that actually overlap the workday window before clipping
         // (prevents end < start in DateInterval when an event ends before the window starts).
-        let busy = events
+        let busy =
+            events
             .filter { !$0.isAllDay && $0.start < workday.end && $0.end > workday.start }
             .map { DateInterval(start: max($0.start, workday.start), end: min($0.end, workday.end)) }
             .filter { $0.duration > 0 }
@@ -23,7 +26,9 @@ public struct SlotScheduler: Sendable {
         for span in busy {
             if let last = merged.last, span.start <= last.end {
                 merged[merged.count - 1] = DateInterval(start: last.start, end: max(last.end, span.end))
-            } else { merged.append(span) }
+            } else {
+                merged.append(span)
+            }
         }
         // Gaps between merged busy spans.
         var gaps: [DateInterval] = []
@@ -47,15 +52,18 @@ public struct SlotScheduler: Sendable {
     }
 
     /// First slot of `durationMinutes` at/after `after`, scanning workday windows across `days`.
-    public func slot(durationMinutes: Int, within days: [Date], events: [CalendarEvent],
-                     prefs: CalendarPreferences, after: Date) -> DateInterval? {
+    public func slot(
+        durationMinutes: Int, within days: [Date], events: [CalendarEvent],
+        prefs: CalendarPreferences, after: Date
+    ) -> DateInterval? {
         let needSec = TimeInterval(durationMinutes * 60)
         for rawDay in days.sorted() {
             guard let window = workdayWindow(for: rawDay, prefs: prefs) else { continue }
             let clamped = DateInterval(start: max(window.start, after), end: window.end)
             guard clamped.duration >= needSec else { continue }
-            let free = freeSlots(events: events, within: clamped,
-                                 minimumMinutes: durationMinutes, maximumMinutes: 0)
+            let free = freeSlots(
+                events: events, within: clamped,
+                minimumMinutes: durationMinutes, maximumMinutes: 0)
             if let first = free.first(where: { $0.duration >= needSec }) {
                 return DateInterval(start: first.start, duration: needSec)
             }
@@ -66,7 +74,8 @@ public struct SlotScheduler: Sendable {
     private func workdayWindow(for day: Date, prefs: CalendarPreferences) -> DateInterval? {
         let sod = calendar.startOfDay(for: day)
         guard let start = calendar.date(byAdding: prefs.workdayStart, to: sod),
-              let end = calendar.date(byAdding: prefs.workdayEnd, to: sod), end > start else { return nil }
+            let end = calendar.date(byAdding: prefs.workdayEnd, to: sod), end > start
+        else { return nil }
         return DateInterval(start: start, end: end)
     }
 }

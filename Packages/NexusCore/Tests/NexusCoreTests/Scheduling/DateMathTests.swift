@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import NexusCore
 
 @Suite struct DateMathTests {
@@ -13,7 +14,7 @@ import Testing
         var cal = Calendar(identifier: .iso8601)
         cal.timeZone = TimeZone(identifier: "Europe/Warsaw")!
         let math = DateMath(calendar: cal)
-        let noon = Date(timeIntervalSince1970: 1_800_000_000) // arbitrary
+        let noon = Date(timeIntervalSince1970: 1_800_000_000)  // arbitrary
         let sod = math.startOfDay(noon)
         #expect(cal.component(.hour, from: sod) == 0)
         #expect(cal.component(.minute, from: sod) == 0)
