@@ -220,7 +220,7 @@ public struct NotesListView: View {
                     onClose: { self.graphModel = nil }
                 )
             } else {
-                NotesTreeView(path: $path)
+                NotesTreeView(path: $path, onOpenGraph: { openGraph(scope: .global) })
             }
         }
     }

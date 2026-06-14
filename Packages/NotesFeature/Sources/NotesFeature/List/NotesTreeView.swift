@@ -28,6 +28,7 @@ struct NotesTreeView: View {
     private var activeProjects: [Project]
 
     @Binding var path: [UUID]
+    var onOpenGraph: (() -> Void)?
 
     /// The currently-shown note, derived from the shared navigation `path` rather
     /// than held as standalone state. The same `NavigationStack` is mutated
@@ -102,8 +103,9 @@ struct NotesTreeView: View {
                 systemImage: "point.3.connected.trianglepath.dotted",
                 accessibilityLabel: "Open graph view"
             ) {
-                // Task 5 wires graph navigation
+                onOpenGraph?()
             }
+            .disabled(onOpenGraph == nil)
             .help("Graph view")
             LiquidIconButton(
                 systemImage: "folder.badge.plus",
@@ -167,7 +169,7 @@ struct NotesTreeView: View {
         if !tree.templates.isEmpty {
             treeSection("Templates") {
                 ForEach(tree.templates) { note in
-                    leaf(note)
+                    templateLeaf(note)
                 }
             }
         }
@@ -208,6 +210,26 @@ struct NotesTreeView: View {
         .contextMenu { noteContextMenu(note) }
     }
 
+    /// Template-specific row: tap or context-menu to instantiate a new note from
+    /// this template. Does NOT offer Move/Convert-to-Task/Delete — template rows
+    /// are structural, not knowledge notes to convert.
+    private func templateLeaf(_ note: Note) -> some View {
+        NoteTreeLeaf(
+            note: note,
+            isCanonical: false,
+            isSelected: note.id == selection
+        )
+        .onTapGesture { instantiateTemplate(note) }
+        .contextMenu {
+            Button("New Note from Template") { instantiateTemplate(note) }
+        }
+    }
+
+    private func instantiateTemplate(_ template: Note) {
+        guard let created = try? noteRepository?.instantiateTemplate(template) else { return }
+        select(created.id)
+    }
+
     /// Shared per-note context menu used by both the flat-section leaves and the
     /// recursive Library `NoteFolderDisclosure`. Not offered on canonical project
     /// pages (Convert/Delete on a project's page would be wrong).
@@ -224,9 +246,17 @@ struct NotesTreeView: View {
 
     @ViewBuilder private func treeSection<Content: View>(
         _ title: String,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+        let key = "\u{0}sec:\(title)"
+        DisclosureGroup(
+            isExpanded: Binding(
+                get: { !collapsed.contains(key) },
+                set: { setCollapsed(key, !$0) }
+            )
+        ) {
+            content()
+        } label: {
             Text(title.uppercased())
                 .font(NexusType.metaMono)
                 .foregroundStyle(DS.ColorToken.textTertiary)
@@ -234,7 +264,6 @@ struct NotesTreeView: View {
                 .padding(.horizontal, DS.Space.xs)
                 .padding(.top, DS.Space.s)
                 .padding(.bottom, DS.Space.xxs)
-            content()
         }
     }
 
