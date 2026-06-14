@@ -71,16 +71,17 @@ extension ProjectEditorSheet {
                             .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
                     }
 
-                DatePicker("", selection: $newKeyDate, displayedComponents: .date)
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
-                    .frame(height: 30)
+                NexusDateField(
+                    date: $newKeyDate,
+                    components: [.date],
+                    accessibilityLabel: "Key date"
+                )
 
-                Toggle("", isOn: $newKeyDateContractual)
-                    .labelsHidden()
-                    .toggleStyle(.checkbox)
-                    .help("Contractual")
-                    .accessibilityLabel("Contractual")
+                NexusCheckbox(
+                    isChecked: $newKeyDateContractual,
+                    accessibilityLabel: "Contractual"
+                )
+                .help("Contractual")
 
                 Button {
                     let key = newAnchorKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -105,6 +106,7 @@ extension ProjectEditorSheet {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(NexusColor.Text.primary)
+                .disabled(newAnchorKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
