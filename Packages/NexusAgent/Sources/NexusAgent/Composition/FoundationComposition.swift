@@ -98,6 +98,29 @@ public struct FoundationComposition {
             inference: NoopSkillInference()
         )
     }
+
+    /// Builds a minimal `SkillRunner` for in-view panel calls inside
+    /// `TasksFeature`. No real RAG — panel skills pass text in `userText`.
+    /// Must be called on `@MainActor` (all Ref-box inits require it).
+    public static func makeLocalRunner(
+        modelContext: ModelContext,
+        router: AIRouter,
+        now: @escaping @Sendable () -> Date = { .now }
+    ) -> SkillRunner {
+        let repo = TaskItemRepository(
+            context: modelContext,
+            scheduler: RRuleScheduler(),
+            now: now
+        )
+        let agentContext = AgentContext(
+            modelContext: ModelContextRef(modelContext),
+            taskRepository: TaskItemRepositoryRef(repo),
+            searchIndex: SearchIndex(),
+            now: now
+        )
+        let assembler = ContextAssembler(agentContext: agentContext, retriever: EmptyRetriever())
+        return SkillRunner(inference: RouterSkillInference(router: router), assembler: assembler)
+    }
 }
 
 // MARK: - Private stubs (Sources-safe; no test types)

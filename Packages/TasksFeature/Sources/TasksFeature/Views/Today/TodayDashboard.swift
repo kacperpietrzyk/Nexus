@@ -109,8 +109,10 @@ public struct TodayDashboard: View {
     @Environment(\.modelContext) var modelContext
     // Internal (not `private`): read from the `+EmbeddedToday` extension file.
     @Environment(\.taskRepository) var taskRepository
-    @Environment(\.aiRouter) private var aiRouter
-    @Environment(\.agentBriefService) private var agentBriefService
+    // Internal (not `private`): read from the `+DigestData` extension file.
+    @Environment(\.aiRouter) var aiRouter
+    // Internal (not `private`): read from the `+DigestData` extension file.
+    @Environment(\.agentBriefService) var agentBriefService
     @Environment(\.calendarEventProvider) var calendarProvider
     @Environment(\.calendarEventWriter) var calendarWriter
     // The embedded-Today NowCard "Focus" pill routes to this existing
@@ -126,7 +128,8 @@ public struct TodayDashboard: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
     @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) var calendarEventsEnabled = false
-    @AppStorage(NexusPreferences.Keys.agentEnabled) private var agentEnabled = true
+    // Internal (not `private`): read from the `+DigestData` extension file.
+    @AppStorage(NexusPreferences.Keys.agentEnabled) var agentEnabled = true
     // Internal (not `private`): read from the `+Standalone` extension file.
     @AppStorage(NexusPreferences.Keys.workspaceDisplayName) var workspaceDisplayName: String = ""
     @Query(sort: \Project.name) private var taskFilterProjects: [Project]
@@ -176,7 +179,8 @@ public struct TodayDashboard: View {
     @State var deadlineRiskTopTask: TaskItem?
     @State private var digestText: String = ""
     @State private var digestTimestamp: Date = .now
-    @State private var heroService: HeroBriefService?
+    // Internal (not `private`): written from the `+DigestData` extension file.
+    @State var heroService: HeroBriefService?
     @State private var reloadGeneration = 0
     // Internal (not `private`): bound from the `+Standalone` extension file.
     @State var taskFilter: TaskFilter = .all  // .upcoming hides overdue/today/undated → empty Tasks view
@@ -427,29 +431,6 @@ public struct TodayDashboard: View {
                 .fill(NexusColor.Line.hairline)
                 .frame(width: 1)
         }
-    }
-
-    @MainActor
-    private func digestText(input: DigestInput, now: Date) async -> String {
-        if agentEnabled, let agentBriefService {
-            return await agentBriefService.brief(for: input.agentBriefRequest(now: now))
-        }
-        return await legacyDigestText(input: input, now: now)
-    }
-
-    @MainActor
-    private func legacyDigestText(input: DigestInput, now: Date) async -> String {
-        guard let aiRouter else {
-            return ""
-        }
-        if heroService == nil {
-            heroService = HeroBriefService(router: aiRouter)
-        }
-        return await heroService?.brief(
-            for: input.counts,
-            firstTitles: input.firstTitles,
-            now: now
-        ) ?? ""
     }
 
     private var title: String {
