@@ -158,7 +158,7 @@ public struct InboxReaderPane: View {
             LiquidPrimaryButton("Send to Tasks", systemImage: "arrow.right.circle") {
                 onOpen(item)
             }
-            ReaderGhostButton("Snooze 1d", systemImage: "moon.zzz") {
+            ReaderGhostButton("Snooze", systemImage: "moon.zzz") {
                 onSnooze(item, 24)
             }
             ReaderGhostButton("Archive", systemImage: "archivebox") {
@@ -187,11 +187,15 @@ private struct ReaderGhostButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
+            HStack(spacing: DS.Space.xs) {
                 Image(systemName: systemImage)
                 Text(title)
+                    .lineLimit(1)
             }
             .font(DS.FontToken.button)
+            // Pin to intrinsic width so a labelled secondary never wraps inside
+            // the fixed-width reader pane (matches LiquidPrimaryButton's idiom).
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(hovering ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
             .padding(.horizontal, DS.Space.m)
             .frame(height: 32)
@@ -205,7 +209,10 @@ private struct ReaderGhostButton: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        // House press idiom: 0.97 scale on press via the shared style (the
+        // labelled-control sibling of LiquidPrimaryButton). Was `.plain` —
+        // it depressed on hover only, one step behind the polished surfaces.
+        .buttonStyle(NexusPressableButtonStyle())
         #if os(macOS)
         .onHover { value in
             withAnimation(DS.Motion.hover) { hovering = value }
