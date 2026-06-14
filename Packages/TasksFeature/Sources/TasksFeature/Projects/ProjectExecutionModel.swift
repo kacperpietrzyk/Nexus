@@ -331,6 +331,27 @@ public enum ProjectExecutionModel {
         }
     }
 
+    // MARK: - Type-aware helpers
+
+    /// Whole calendar days from `now` to `date` (negative when `date` is in the past).
+    /// Used for anchor countdowns (days to PO / days to decision).
+    public static func daysRemaining(to date: Date, from now: Date) -> Int {
+        Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: now),
+            to: Calendar.current.startOfDay(for: date)
+        ).day ?? 0
+    }
+
+    /// Which base task-derived KPI tiles to show for a project type. Type-specific
+    /// extras (deal value, days-to-anchor) are appended by the view from project data.
+    public static func kpiLabels(for type: ProjectType) -> [String] {
+        switch type {
+        case .sales: return ["Open", "Done"]
+        default: return ["Open", "Done", "Overdue"]
+        }
+    }
+
     // MARK: - Shared predicates
 
     /// Defensive soft-delete filter; callers are expected to pass live rows.
