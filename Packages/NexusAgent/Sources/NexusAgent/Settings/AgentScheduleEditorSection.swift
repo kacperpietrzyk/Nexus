@@ -15,15 +15,11 @@ public struct AgentScheduleEditorSection: View {
                 threadStore: AgentThreadStore(context: context.auditContext)
             )
         } else {
-            VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-                nexusSettingsCardSectionHeader("Schedules")
-                NexusSettingsCard {
-                    Text("Schedules are unavailable in this context.")
-                        .font(NexusType.caption)
-                        .foregroundStyle(NexusColor.Text.muted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(NexusSpacing.s4)
-                }
+            LiquidGlassCard("Schedules") {
+                Text("Schedules are unavailable in this context.")
+                    .font(DS.FontToken.caption)
+                    .foregroundStyle(DS.ColorToken.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -42,9 +38,8 @@ private struct AgentScheduleEditorContent: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader("Schedules")
-            NexusSettingsCard {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            LiquidGlassCard("Schedules") {
                 VStack(alignment: .leading, spacing: 0) {
                     if viewModel.schedules.isEmpty {
                         NexusEmptyState(
@@ -54,33 +49,32 @@ private struct AgentScheduleEditorContent: View {
                     } else {
                         ForEach(Array(viewModel.schedules.enumerated()), id: \.element.id) { index, schedule in
                             if index > 0 {
-                                NexusSettingsDivider()
+                                Divider()
+                                    .overlay(DS.ColorToken.strokeHairline)
                             }
                             scheduleRow(schedule)
-                                .padding(.horizontal, NexusSpacing.s4)
-                                .padding(.vertical, NexusSpacing.s3)
+                                .padding(.vertical, DS.Space.s)
                         }
                     }
 
-                    NexusSettingsDivider()
+                    Divider()
+                        .overlay(DS.ColorToken.strokeHairline)
 
                     Button {
                         draft = .new()
                     } label: {
                         Label("Add schedule", systemImage: "plus")
-                            .font(NexusType.bodySmall.weight(.medium))
+                            .font(DS.FontToken.body.weight(.medium))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(NexusColor.Text.primary)
-                    .padding(.horizontal, NexusSpacing.s4)
-                    .padding(.vertical, NexusSpacing.s3)
+                    .buttonStyle(NexusPressableButtonStyle())
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                    .frame(minHeight: 44)
                 }
             }
             Text("Cron is validated before save.")
-                .font(NexusType.caption)
-                .foregroundStyle(NexusColor.Text.muted)
-                .padding(.horizontal, NexusSpacing.s4)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textMuted)
         }
         .onAppear(perform: reload)
         .sheet(item: $draft) { draft in
@@ -103,13 +97,13 @@ private struct AgentScheduleEditorContent: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(schedule.name)
-                        .font(NexusType.bodySmall)
+                        .font(DS.FontToken.body)
                         .fontWeight(.bold)
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
 
                     Text(schedule.cronExpression)
                         .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .foregroundStyle(DS.ColorToken.textMuted)
                 }
 
                 Spacer(minLength: 12)
@@ -122,13 +116,13 @@ private struct AgentScheduleEditorContent: View {
                 } label: {
                     Image(systemName: "pencil")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(NexusPressableButtonStyle())
                 .help("Edit schedule")
             }
 
             Text(schedule.prompt)
-                .font(NexusType.caption)
-                .foregroundStyle(NexusColor.Text.muted)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textMuted)
                 .lineLimit(2)
 
             HStack(spacing: 8) {
@@ -257,8 +251,8 @@ private struct AgentScheduleEditorSheet: View {
                         // — ink steps to most-salient, no weight bump (§2
                         // LabPalette.ink).
                         Text(validationError)
-                            .font(NexusType.caption)
-                            .foregroundStyle(NexusColor.Text.primary)
+                            .font(DS.FontToken.caption)
+                            .foregroundStyle(DS.ColorToken.textPrimary)
                     }
                 }
             }

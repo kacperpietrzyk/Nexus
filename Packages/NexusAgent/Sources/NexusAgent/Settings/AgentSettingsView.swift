@@ -67,7 +67,7 @@ public struct AgentSettingsView: View {
 
     public var body: some View {
         NexusSettingsDetailContainer(title: "Agent") {
-            VStack(alignment: .leading, spacing: NexusSpacing.s7) {
+            VStack(alignment: .leading, spacing: 44) {
                 ForEach(Self.sectionOrder, id: \.self) { section in
                     sectionBody(section)
                 }

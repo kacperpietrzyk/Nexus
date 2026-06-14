@@ -16,24 +16,21 @@ public struct AgentAuditSection: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader("Recent autonomous mutations")
-            NexusSettingsCard {
-                if viewModel.entries.isEmpty {
-                    NexusEmptyState(
-                        systemImage: "clock.arrow.circlepath",
-                        title: "No autonomous mutations yet."
-                    )
-                } else {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
-                            if index > 0 {
-                                NexusSettingsDivider()
-                            }
-                            auditRow(entry)
-                                .padding(.horizontal, NexusSpacing.s4)
-                                .padding(.vertical, NexusSpacing.s3)
+        LiquidGlassCard("Recent autonomous mutations") {
+            if viewModel.entries.isEmpty {
+                NexusEmptyState(
+                    systemImage: "clock.arrow.circlepath",
+                    title: "No autonomous mutations yet."
+                )
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
+                        if index > 0 {
+                            Divider()
+                                .overlay(DS.ColorToken.strokeHairline)
                         }
+                        auditRow(entry)
+                            .padding(.vertical, DS.Space.s)
                     }
                 }
             }
@@ -47,12 +44,12 @@ public struct AgentAuditSection: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(entry.toolName)
-                    .font(NexusType.bodySmall)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.body)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
 
                 Text(entry.timestamp, style: .relative)
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .font(DS.FontToken.caption)
+                    .foregroundStyle(DS.ColorToken.textMuted)
             }
 
             Spacer(minLength: 12)
@@ -70,20 +67,20 @@ public struct AgentAuditSection: View {
             // structurally parallel to slice-1 `Text("Granted")` → §2
             // LabPalette.read.
             Text("Undone")
-                .font(NexusType.caption)
-                .foregroundStyle(NexusColor.Text.secondary)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textSecondary)
         } else if entry.inverseAction != nil {
             Button("Undo") {
                 Task {
                     await viewModel.undo(id: entry.id)
                 }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(NexusPressableButtonStyle())
             .disabled(viewModel.isUndoing)
         } else {
             Text("Read-only")
-                .font(NexusType.caption)
-                .foregroundStyle(NexusColor.Text.muted)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textMuted)
         }
     }
 }
