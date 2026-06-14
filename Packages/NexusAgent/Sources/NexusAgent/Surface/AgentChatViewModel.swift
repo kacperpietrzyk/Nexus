@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import NexusAI
 
 @MainActor
 public final class AgentChatViewModel: ObservableObject {
@@ -27,11 +28,13 @@ public final class AgentChatViewModel: ObservableObject {
     private let memoryStore: AgentMemoryStore
     private let chatModelAvailabilityProbe: (@MainActor () -> Bool)?
     private let warmChatModel: (@MainActor () async -> Void)?
-    private let chatConfig: AssistantChatConfig
+    public let chatConfig: AssistantChatConfig
     private let proposalCoordinator: ProposalCoordinator?
+    private let readinessProbe: (@MainActor () -> AssistantReadiness)?
 
     /// Primary init — callers that don't use chat config (brief / schedule / legacy)
-    /// omit `chatConfig` and `proposalCoordinator`; defaults keep existing behaviour.
+    /// omit `chatConfig`, `proposalCoordinator`, and `readinessProbe`; defaults keep
+    /// existing behaviour.
     public init(
         runtime: AgentRuntime,
         threadStore: AgentThreadStore,
@@ -41,7 +44,8 @@ public final class AgentChatViewModel: ObservableObject {
         chatModelAvailability: (@MainActor () -> Bool)? = nil,
         warmChatModel: (@MainActor () async -> Void)? = nil,
         chatConfig: AssistantChatConfig = .mac,
-        proposalCoordinator: ProposalCoordinator? = nil
+        proposalCoordinator: ProposalCoordinator? = nil,
+        readinessProbe: (@MainActor () -> AssistantReadiness)? = nil
     ) {
         self.runtime = runtime
         self.threadStore = threadStore
@@ -52,9 +56,17 @@ public final class AgentChatViewModel: ObservableObject {
         self.warmChatModel = warmChatModel
         self.chatConfig = chatConfig
         self.proposalCoordinator = proposalCoordinator
+        self.readinessProbe = readinessProbe
         self.isChatModelAvailable = chatModelAvailability?() ?? true
 
         reloadThreads()
+    }
+
+    /// Returns the current on-device assistant readiness. Defaults to `.ready`
+    /// when no probe was injected (e.g. in tests or callers that don't gate on
+    /// a local model). Called by the status badge in `AgentTopControl`.
+    public func assistantReadiness() -> AssistantReadiness {
+        readinessProbe?() ?? .ready
     }
 
     /// Warms the assigned on-device chat model if one is assigned but not yet
@@ -165,13 +177,19 @@ public final class AgentChatViewModel: ObservableObject {
 
     /// Accept the pending proposal for the given message id.
     /// Routes through `ProposalCoordinator` → `ToolDispatcher` (audited).
-    /// Clears the pending proposal entry regardless of success/failure.
+    /// Clears the pending proposal entry only on success; on failure the
+    /// entry is kept so the confirm card stays visible and `lastError` is set.
     public func acceptProposal(messageID: UUID) async throws {
         guard let proposal = pendingProposals[messageID],
             let coordinator = proposalCoordinator
         else { return }
-        pendingProposals[messageID] = nil
-        try await coordinator.accept(proposal, threadID: currentThreadID)
+        do {
+            try await coordinator.accept(proposal, threadID: currentThreadID)
+            pendingProposals[messageID] = nil
+        } catch {
+            lastError = error.localizedDescription
+            throw error
+        }
     }
 
     /// Reject the pending proposal for the given message id — zero side effects.

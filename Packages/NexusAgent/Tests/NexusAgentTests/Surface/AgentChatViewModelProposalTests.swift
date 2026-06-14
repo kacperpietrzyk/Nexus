@@ -110,6 +110,40 @@ struct AgentChatViewModelProposalTests {
             "pending proposal must be removed after accept")
     }
 
+    // MARK: - Accept on a failing coordinator keeps proposal and surfaces lastError
+
+    @Test func acceptProposalFailureKeepsProposalAndSetsLastError() async throws {
+        // Use a harness whose dispatcher has an EMPTY registry — every
+        // ProposalCoordinator.accept call will throw ToolDispatcherError.toolNotFound
+        // because `tasks.create` is not registered.
+        let harness = try ProposalTestHarness.make(
+            scriptedResponse: Self.assistantTextWithBlock,
+            registeredTools: []
+        )
+        let threadID = try harness.threadStore.create(title: "chat")
+        let vm = AgentChatViewModel(
+            runtime: harness.runtime,
+            threadStore: harness.threadStore,
+            messageStore: harness.messageStore,
+            memoryStore: harness.memoryStore,
+            chatConfig: .mac,
+            proposalCoordinator: harness.proposalCoordinator
+        )
+        vm.selectThread(id: threadID)
+        await vm.send(userMessage: "add a task")
+
+        let agentMessage = try #require(vm.messages.first { $0.role == .agent })
+        // Accept must throw (toolNotFound); swallow it — the point is the side-effects.
+        try? await vm.acceptProposal(messageID: agentMessage.id)
+
+        #expect(
+            vm.pendingProposals[agentMessage.id] != nil,
+            "pending proposal must be KEPT after a failing accept")
+        #expect(
+            vm.lastError != nil,
+            "lastError must be set after a failing accept")
+    }
+
     // MARK: - Reject clears proposal, no side effects
 
     @Test func rejectProposalLeavesNoSideEffects() async throws {
@@ -195,7 +229,10 @@ private struct ProposalTestHarness {
     let proposalCoordinator: ProposalCoordinator
     let modelContext: ModelContext
 
-    static func make(scriptedResponse: String) throws -> ProposalTestHarness {
+    static func make(
+        scriptedResponse: String,
+        registeredTools: [any AgentTool]? = nil
+    ) throws -> ProposalTestHarness {
         let modelContext = try makeModelContext()
         let threadStore = AgentThreadStore(context: modelContext)
         let messageStore = AgentMessageStore(context: modelContext)
@@ -213,7 +250,8 @@ private struct ProposalTestHarness {
             quota: InMemoryQuotaTracker(),
             secrets: InMemorySecretStore()
         )
-        let dispatcher = makeDispatcher(modelContext: modelContext)
+        let tools: [any AgentTool] = registeredTools ?? [TasksCreateTool()]
+        let dispatcher = makeDispatcher(modelContext: modelContext, tools: tools)
         let runtime = AgentRuntime(
             router: router,
             threadStore: threadStore,
@@ -246,8 +284,12 @@ private struct ProposalTestHarness {
         return ModelContext(try ModelContainer(for: schema, configurations: [config]))
     }
 
-    // Use TasksCreateTool so accept() can create a task + write an audit row.
-    private static func makeDispatcher(modelContext: ModelContext) -> ToolDispatcher {
+    // Default tools: TasksCreateTool so accept() can create a task + write an
+    // audit row. Pass an empty array to get a dispatcher that throws toolNotFound.
+    private static func makeDispatcher(
+        modelContext: ModelContext,
+        tools: [any AgentTool] = [TasksCreateTool()]
+    ) -> ToolDispatcher {
         let repository = TaskItemRepository(
             context: modelContext,
             scheduler: RRuleScheduler(),
@@ -260,7 +302,7 @@ private struct ProposalTestHarness {
             now: { Date(timeIntervalSince1970: 1_700_000_000) }
         )
         return ToolDispatcher(
-            registry: ToolRegistry(tools: [TasksCreateTool()]),
+            registry: ToolRegistry(tools: tools),
             modelContext: modelContext,
             agentContext: agentContext
         )
