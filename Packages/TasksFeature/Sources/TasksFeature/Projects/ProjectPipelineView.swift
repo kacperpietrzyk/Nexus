@@ -16,6 +16,24 @@ struct ProjectPipelineView: View {
     let onOpen: (Project) -> Void
 
     var body: some View {
+        if lanes.isEmpty {
+            emptyState
+        } else {
+            laneScroll
+        }
+    }
+
+    /// Shown when no project carries a stage preset (e.g. all projects are
+    /// `.generic`), so there are no lanes to render.
+    private var emptyState: some View {
+        LiquidEmptyState(
+            systemImage: "arrow.left.arrow.right",
+            message: "No pipeline projects yet — set a Sales, Implementation, Audit, or Internal type to track stages here."
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var laneScroll: some View {
         ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: DS.Space.m) {
                 ForEach(lanes, id: \.stageID) { lane in
@@ -25,7 +43,7 @@ struct ProjectPipelineView: View {
                                 Button {
                                     onOpen(project)
                                 } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
                                         Text(project.name)
                                             .font(DS.FontToken.bodyStrong)
                                             .foregroundStyle(DS.ColorToken.textPrimary)
@@ -39,6 +57,7 @@ struct ProjectPipelineView: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel(project.name)
                             }
                             if lane.projects.isEmpty {
                                 Text("—")
