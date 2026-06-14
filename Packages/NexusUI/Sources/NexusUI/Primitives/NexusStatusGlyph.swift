@@ -10,6 +10,7 @@ public enum NexusStatus: Equatable, Sendable {
 
 public struct NexusStatusGlyph: View {
     public let status: NexusStatus
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(_ status: NexusStatus) {
         self.status = status
@@ -47,7 +48,9 @@ public struct NexusStatusGlyph: View {
                 .foregroundStyle(NexusColor.Accent.limeInk)
                 .scaleEffect(isDone ? 1 : 0.1)
                 .opacity(isDone ? 1 : 0)
-                .symbolEffect(.bounce, value: isDone)
+                // Single intentional delight beat on completion; gated so
+                // Reduce Motion gets the static scale/opacity swap with no bounce.
+                .modifier(DoneBounceEffect(isDone: isDone, reduceMotion: reduceMotion))
         }
         .frame(width: 12, height: 12)
         .animation(NexusMotion.standard, value: status)
@@ -89,6 +92,22 @@ public struct NexusStatusGlyph: View {
 
     internal static func clampedProgress(_ progress: Double) -> Double {
         min(max(progress, 0), 1)
+    }
+}
+
+/// Applies the completion `.bounce` only when Reduce Motion is off. The static
+/// scale/opacity swap on the checkmark already carries the state change, so the
+/// reduced path loses nothing but the flourish.
+private struct DoneBounceEffect: ViewModifier {
+    let isDone: Bool
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content
+        } else {
+            content.symbolEffect(.bounce, value: isDone)
+        }
     }
 }
 

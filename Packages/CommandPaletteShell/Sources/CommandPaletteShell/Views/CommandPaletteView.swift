@@ -219,7 +219,7 @@ public struct CommandPaletteView: View {
         #if os(macOS)
         .onHover { hovering in
             guard hovering, isEnabled else { return }
-            withAnimation(.easeOut(duration: 0.12)) {
+            withAnimation(DS.Motion.hover) {
                 selectedIndex = index
             }
         }

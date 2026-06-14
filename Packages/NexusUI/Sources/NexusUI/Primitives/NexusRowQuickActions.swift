@@ -90,7 +90,7 @@ private struct QuickActionButton: View {
         .buttonStyle(NexusPressableButtonStyle())
         #if !os(watchOS)
         .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.15)) {
+            withAnimation(DS.Motion.hover) {
                 isHovered = hovering
             }
         }
