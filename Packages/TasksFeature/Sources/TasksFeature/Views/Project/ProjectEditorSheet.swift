@@ -78,24 +78,35 @@ public struct ProjectEditorSheet: View {
 
             statusSection
 
-            Picker("Type", selection: $type) {
-                ForEach(ProjectType.allCases, id: \.self) { t in
-                    Text(t.displayName).tag(t)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Type")
+                    .nexusType(.eyebrow)
+                    .foregroundStyle(NexusColor.Text.muted)
+
+                NexusSelect(
+                    selection: $type,
+                    options: ProjectType.allCases,
+                    label: { $0.displayName },
+                    accessibilityLabel: "Type"
+                )
+                .onChange(of: type) { _, newType in
+                    if let s = stage, !newType.stages.contains(s) { stage = nil }
                 }
-            }
-            .pickerStyle(.menu)
-            .onChange(of: type) { _, newType in
-                if let s = stage, !newType.stages.contains(s) { stage = nil }
             }
 
             if !type.stages.isEmpty {
-                Picker("Stage", selection: $stage) {
-                    Text("—").tag(ProjectStage?.none)
-                    ForEach(type.stages, id: \.self) { s in
-                        Text(s.displayName).tag(ProjectStage?.some(s))
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Stage")
+                        .nexusType(.eyebrow)
+                        .foregroundStyle(NexusColor.Text.muted)
+
+                    NexusSelect(
+                        selection: $stage,
+                        options: [ProjectStage?.none] + type.stages.map { ProjectStage?.some($0) },
+                        label: { $0?.displayName ?? "—" },
+                        accessibilityLabel: "Stage"
+                    )
                 }
-                .pickerStyle(.menu)
             }
 
             TextField("Vendor / product", text: $vendor)
@@ -231,14 +242,12 @@ public struct ProjectEditorSheet: View {
                 .nexusType(.eyebrow)
                 .foregroundStyle(NexusColor.Text.muted)
 
-            Picker("Status", selection: $status) {
-                ForEach(ProjectStatus.allCases, id: \.self) { value in
-                    Text(statusLabel(value)).tag(value)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .tint(NexusColor.Text.primary)
+            NexusSelect(
+                selection: $status,
+                options: ProjectStatus.allCases,
+                label: { statusLabel($0) },
+                accessibilityLabel: "Status"
+            )
         }
     }
 
