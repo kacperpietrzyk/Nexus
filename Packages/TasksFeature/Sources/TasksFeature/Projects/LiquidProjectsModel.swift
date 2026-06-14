@@ -5,8 +5,8 @@ import SwiftData
 
 /// Shared data feed for the Liquid Projects/Execution screen (Task 8, spec
 /// `liquid_productivity_design_system/docs/07_MODULE_PROJECTS.md`). One
-/// `@Observable` instance is owned by the app shell so the main column
-/// (`LiquidProjectScreen`) and the right inspector (`ProjectInspector`) render
+/// `@Observable` instance is owned by the app shell so the Projects screen
+/// (`LiquidProjectScreen`) and its Overview dashboard (`ProjectOverview`) render
 /// the same load — the identical sharing shape `LiquidTodayModel` uses.
 ///
 /// Every feed is a REAL store read: live projects/sections/tasks via

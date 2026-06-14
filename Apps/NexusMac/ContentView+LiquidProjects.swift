@@ -5,8 +5,8 @@ import TasksFeature
 // Liquid Projects / Execution composition (Task 8), extracted out of
 // `ContentView` (file-length budget) alongside the Today and Calendar
 // extensions. One shared `LiquidProjectsModel` (`@State` on `ContentView`)
-// drives BOTH the main column (`LiquidProjectScreen`) and the right-inspector
-// slot (`ProjectInspector`), so the board, table, and health/risk/activity
+// drives the Projects screen (`LiquidProjectScreen`) and its Overview
+// dashboard (`ProjectOverview`), so the board, table, and health/risk/activity
 // cards render the same load — the same sharing shape as Liquid Today.
 extension ContentView {
 
@@ -23,21 +23,8 @@ extension ContentView {
         .id(TodayNavSelection.projects)
     }
 
-    /// Right-inspector slot content for `.projects`; `nil` while the picker
-    /// list is showing (no selected project → nothing to inspect) and on
-    /// every other destination, so the 304 pt column disappears entirely.
-    var projectsInspectorSlot: (() -> AnyView)? {
-        guard selection == .projects, liquidProjectsModel.selectedProjectID != nil || LiquidReferenceMode.isEnabled else {
-            return nil
-        }
-        let model = liquidProjectsModel
-        return {
-            AnyView(
-                ProjectInspector(
-                    model: model,
-                    onOpenTask: { self.openTask($0) }
-                )
-            )
-        }
-    }
+    /// Projects no longer mount a right inspector — Health/Risk/Activity now live
+    /// in the Overview tab (`ProjectOverview`), so all Projects tabs render
+    /// full-width. The 304 pt slot stays unused for this destination.
+    var projectsInspectorSlot: (() -> AnyView)? { nil }
 }

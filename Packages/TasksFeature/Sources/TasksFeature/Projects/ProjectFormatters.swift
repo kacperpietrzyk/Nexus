@@ -5,7 +5,7 @@ import NexusCore
 /// English UI rule: explicit en_US (system locale may be pl_PL).
 /// `@MainActor` because `DateFormatter` is not Sendable and every caller is
 /// SwiftUI view code (`ProjectKanban` cards, `ProjectTaskTable` Due column,
-/// `ProjectInspector` risk anchors).
+/// `DeliveryRiskCard` risk anchors).
 @MainActor
 enum ProjectFormatters {
 

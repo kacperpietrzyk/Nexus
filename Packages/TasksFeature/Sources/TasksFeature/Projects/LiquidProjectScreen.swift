@@ -45,14 +45,14 @@ enum ProjectsPickerMode: String, CaseIterable, Identifiable {
 
 /// The Liquid Projects / Execution main column (Task 8, spec
 /// `docs/07_MODULE_PROJECTS.md`): project picker list → per-project execution
-/// screen (header + tabs + milestones + Kanban + all-tasks table). The
-/// matching right inspector (`ProjectInspector`) is mounted separately
-/// through the app shell's inspector slot; both read the same shared
+/// screen (header + tabs + milestones + Kanban + all-tasks table). All tabs
+/// render full-width; health/risk/activity content lives in the Overview tab
+/// (`ProjectOverview`). Both screen and overview read the same shared
 /// `LiquidProjectsModel` — the `LiquidTodayScreen` sharing shape.
 ///
 /// Picker UX keeps the old `ProjectsRootView` selection shape (list →
 /// full-page project, breadcrumb back) restyled liquid; selection state lives
-/// on the shared model so the app layer can gate the inspector slot.
+/// on the shared model so the app layer can show the correct tab content.
 public struct LiquidProjectScreen: View {
 
     @Environment(\.modelContext) private var modelContext

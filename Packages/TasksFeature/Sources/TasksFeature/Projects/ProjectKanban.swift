@@ -12,6 +12,15 @@ private let kanbanColumnWidth: CGFloat = 260
 private let laneFillOpacity = 0.06
 private let laneStrokeOpacity = 0.14
 
+/// Measures the lane HStack's intrinsic width so the board can show a
+/// trailing-fade overflow cue when the columns exceed the viewport.
+private struct BoardContentWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat { 0 }
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 /// The liquid Kanban board (spec §Kanban board) labeled "Board" — NOT
 /// "Active Sprint": there is no sprint backend, so no sprint header/range/
 /// dropdown is fabricated. Columns reuse the existing board's pure grouping
@@ -32,6 +41,14 @@ struct ProjectKanban: View {
     let onChanged: () -> Void
 
     @State private var error: String?
+    /// Trailing-fade affordance: the board's six fixed-width lanes overflow any
+    /// non-ultrawide window, so a "there's more →" cue and visible scroll
+    /// indicator make the horizontal scroll discoverable (it always worked, it
+    /// just read as non-scrollable without an affordance).
+    @State private var viewportWidth: CGFloat = 0
+    @State private var contentWidth: CGFloat = 0
+
+    private var hasOverflow: Bool { contentWidth > viewportWidth + 1 }
 
     private var columns: [ProjectBoardColumn] {
         projectBoardColumns(for: tasks)
@@ -56,7 +73,7 @@ struct ProjectKanban: View {
                     .lineLimit(2)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal, showsIndicators: true) {
                 HStack(alignment: .top, spacing: DS.Space.m) {
                     ForEach(columns) { column in
                         KanbanColumnView(
@@ -72,6 +89,30 @@ struct ProjectKanban: View {
                     }
                 }
                 .padding(.bottom, DS.Space.xs)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: BoardContentWidthKey.self, value: proxy.size.width)
+                    }
+                }
+            }
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { viewportWidth = proxy.size.width }
+                        .onChange(of: proxy.size.width) { _, width in viewportWidth = width }
+                }
+            }
+            .onPreferenceChange(BoardContentWidthKey.self) { contentWidth = $0 }
+            .overlay(alignment: .trailing) {
+                if hasOverflow {
+                    LinearGradient(
+                        colors: [DS.ColorToken.backgroundApp.opacity(0), DS.ColorToken.backgroundApp.opacity(0.55)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 28)
+                    .allowsHitTesting(false)
+                }
             }
         }
     }

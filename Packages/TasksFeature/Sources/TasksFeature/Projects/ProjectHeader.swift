@@ -3,10 +3,6 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
-/// Spec `docs/07_MODULE_PROJECTS.md` §Header: "Progress bar 68%" rides in a
-/// fixed-width trailing block so the serif title keeps the headline width.
-private let headerProgressWidth: CGFloat = 220
-
 /// Project Execution header (spec §Header): breadcrumb `Projects › name`,
 /// identity glyph + serif display name + editable status chip, the canonical
 /// note's first line as the description, real created/updated dates, and the
@@ -75,10 +71,10 @@ struct ProjectHeader: View {
                         .lineLimit(1)
                 }
 
-                Spacer(minLength: DS.Space.m)
-
-                progressBlock
+                Spacer(minLength: 0)
             }
+
+            progressBlock
         }
     }
 
@@ -166,7 +162,7 @@ struct ProjectHeader: View {
     // MARK: - Progress
 
     private var progressBlock: some View {
-        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             HStack {
                 Text("Progress")
                     .font(DS.FontToken.caption)
@@ -178,7 +174,7 @@ struct ProjectHeader: View {
             }
             LiquidProgressLine(value: progress)
         }
-        .frame(width: headerProgressWidth)
+        .padding(.top, DS.Space.xs)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Progress \(Int((progress * 100).rounded())) percent")
     }
