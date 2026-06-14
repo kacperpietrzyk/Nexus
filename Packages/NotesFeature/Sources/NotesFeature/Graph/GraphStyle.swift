@@ -25,6 +25,7 @@ enum GraphStyle {
         case .agentMemory: return "brain.head.profile"
         case .scheduledBlock: return "calendar.badge.clock"
         case .attachment: return "paperclip"
+        case .organization: return "building.2"
         }
     }
 

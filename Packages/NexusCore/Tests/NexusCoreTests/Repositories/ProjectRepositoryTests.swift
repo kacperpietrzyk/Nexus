@@ -226,4 +226,118 @@ struct ProjectRepositoryTests {
         #expect(project.archivedAt == nil)
         #expect(project.updatedAt == current)
     }
+
+    // MARK: - Scaffold context (Project + Section schema)
+
+    @MainActor
+    private func makeScaffoldContext() throws -> ModelContext {
+        let schema = Schema([Project.self, Section.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        return ModelContext(try ModelContainer(for: schema, configurations: [config]))
+    }
+
+    @MainActor
+    @Test("create with implementation type seeds default sections")
+    func createSeedsSections() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+
+        let project = try repo.create(name: "AKMF", type: .implementation)
+
+        #expect(project.type == .implementation)
+        let sections = try context.fetch(
+            FetchDescriptor<Section>(predicate: #Predicate { $0.deletedAt == nil })
+        ).sorted { $0.orderIndex < $1.orderIndex }
+        #expect(sections.map(\.name) == ["Deliverables", "Environment", "Risks"])
+        #expect(sections.allSatisfy { $0.projectID == project.id })
+    }
+
+    @MainActor
+    @Test("create with generic type seeds no sections (current behavior)")
+    func createGenericNoScaffold() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+
+        _ = try repo.create(name: "Blank", type: .generic)
+
+        let sections = try context.fetch(FetchDescriptor<Section>())
+        #expect(sections.isEmpty)
+    }
+
+    // MARK: - setStage / setType
+
+    @MainActor
+    @Test("setStage validates membership and syncs coarse status")
+    func setStageSyncsStatus() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "Sale", type: .sales)
+
+        try repo.setStage(.proposal, on: project)
+        #expect(project.stage == .proposal)
+        #expect(project.status == .active)
+
+        try repo.setStage(.won, on: project)
+        #expect(project.status == .completed)
+    }
+
+    @MainActor
+    @Test("setStage rejects a stage not in the project's type preset")
+    func setStageRejectsForeignStage() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "Sale", type: .sales)
+
+        #expect(throws: ProjectStageError.self) {
+            try repo.setStage(.kickoff, on: project)
+        }
+    }
+
+    @MainActor
+    @Test("setType clears a now-invalid stage")
+    func setTypeClampsStage() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "P", type: .sales)
+        try repo.setStage(.proposal, on: project)
+
+        try repo.setType(.audit, on: project)
+        #expect(project.type == .audit)
+        #expect(project.stage == nil)
+    }
+
+    // MARK: - client / vendor / customField setters
+
+    @MainActor
+    @Test("setClient / setVendor / setCustomField persist and bump updatedAt")
+    func fieldSetters() throws {
+        let stamp = Date(timeIntervalSince1970: 1_800_000_000)
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context, now: { stamp })
+        let project = try repo.create(name: "AKMF", type: .implementation)
+        let clientID = UUID()
+
+        try repo.setClient(clientID, on: project)
+        try repo.setVendor("Proofpoint DLP", on: project)
+        try repo.setCustomField(key: "dealValue", value: "690891 PLN", on: project)
+        try repo.setCustomField(key: "competitor", value: "Apius", on: project)
+
+        #expect(project.clientID == clientID)
+        #expect(project.vendor == "Proofpoint DLP")
+        #expect(project.customFields["dealValue"] == "690891 PLN")
+        #expect(project.customFields["competitor"] == "Apius")
+        #expect(project.updatedAt == stamp)
+    }
+
+    @MainActor
+    @Test("setCustomField with nil value removes the key")
+    func removeCustomField() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "P", type: .sales)
+        try repo.setCustomField(key: "k", value: "v", on: project)
+
+        try repo.setCustomField(key: "k", value: nil, on: project)
+        #expect(project.customFields["k"] == nil)
+    }
 }

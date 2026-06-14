@@ -361,7 +361,7 @@ struct NexusiOSApp: App {
             do {
                 try await index.rebuild(
                     from: context,
-                    types: TaskItem.self, Note.self, Label.self, Person.self
+                    types: TaskItem.self, Note.self, Label.self, Person.self, Organization.self
                 )
             } catch {
                 print("SearchIndex.rebuild failed on launch: \(error)")

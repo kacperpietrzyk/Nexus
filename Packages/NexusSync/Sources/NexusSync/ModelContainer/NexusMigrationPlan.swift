@@ -44,6 +44,11 @@ import SwiftData
 ///   and need no schema change.
 /// - V13 -> V14 lightweight (additive schema: `AttachmentAsset` metadata entity
 ///   for durable note image attachments). Pure additive — no data move, no backfill.
+/// - V14 -> V15 lightweight (additive schema: `Organization` + `ProjectKeyDate`
+///   entities + additive defaulted/optional `Project` columns `typeRaw`/`stageRaw`/
+///   `clientID`/`vendor`/`customFieldsJSON`; universal project types). Pure additive —
+///   no data move, no backfill. The new `ItemKind.organization` raw case rides the
+///   existing `String`-backed `Link`/`kind` columns and needs no schema change.
 ///
 /// WHY the body -> Note move is NOT a `.custom` migration stage (a deliberate
 /// deviation from the spec's "custom stage" wording, forced by this codebase's
@@ -80,6 +85,7 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             NexusSchemaV12.self,
             NexusSchemaV13.self,
             NexusSchemaV14.self,
+            NexusSchemaV15.self,
         ]
     }
 
@@ -136,6 +142,10 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             MigrationStage.lightweight(
                 fromVersion: NexusSchemaV13.self,
                 toVersion: NexusSchemaV14.self
+            ),
+            MigrationStage.lightweight(
+                fromVersion: NexusSchemaV14.self,
+                toVersion: NexusSchemaV15.self
             ),
         ]
     }
