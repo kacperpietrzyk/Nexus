@@ -18,12 +18,27 @@ import SwiftUI
 // glass-selected wash; the agent's turn stays flat on the shell glass with
 // its tool cluster on a soft glass tier. Tool names keep a monospaced face
 // (code identifiers, not prose).
+//
+// Task 5: when `block.proposal` is non-nil (agent block only), a
+// `ProposalConfirmCard` is rendered below the text body. Accept/reject are
+// routed through `AgentChatViewModel` via the injected `onAccept`/`onReject`
+// closures — the view itself stays stateless.
 
 struct MessageBubbleView: View {
     let block: AgentMessageBlock
+    /// Called when the user taps "Apply" on a confirm card.
+    var onAcceptProposal: ((UUID) async -> Void)?
+    /// Called when the user taps "Discard" on a confirm card.
+    var onRejectProposal: ((UUID) -> Void)?
 
-    init(block: AgentMessageBlock) {
+    init(
+        block: AgentMessageBlock,
+        onAcceptProposal: ((UUID) async -> Void)? = nil,
+        onRejectProposal: ((UUID) -> Void)? = nil
+    ) {
         self.block = block
+        self.onAcceptProposal = onAcceptProposal
+        self.onRejectProposal = onRejectProposal
     }
 
     var body: some View {
@@ -134,10 +149,31 @@ struct MessageBubbleView: View {
                         .strokeBorder(DS.ColorToken.strokeHairline, lineWidth: 1)
                 }
             }
+
+            if let proposal = block.proposal {
+                proposalCard(for: proposal)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    @MainActor
+    private func proposalCard(for proposal: Proposal) -> some View {
+        let messageID = block.id
+        let cardModel = ProposalConfirmCardModel(
+            title: "Proposed changes",
+            rationale: proposal.rationale,
+            previews: proposal.previews.map(\.summary),
+            onAccept: { [onAcceptProposal] in
+                await onAcceptProposal?(messageID)
+            },
+            onReject: { [onRejectProposal] in
+                onRejectProposal?(messageID)
+            }
+        )
+        return ProposalConfirmCard(model: cardModel)
     }
 
     // Oracle tool row. §10: the oracle row is

@@ -197,7 +197,8 @@ public struct AgentChatView: View {
     private var blocks: [AgentMessageBlock] {
         AgentMessageGrouping.blocks(
             from: viewModel.messages,
-            isThinking: viewModel.isThinking
+            isThinking: viewModel.isThinking,
+            proposals: viewModel.pendingProposals
         )
     }
 
@@ -217,7 +218,15 @@ public struct AgentChatView: View {
             // the content area).
             LazyVStack(alignment: .leading, spacing: 24) {
                 ForEach(blocks) { block in
-                    MessageBubbleView(block: block)
+                    MessageBubbleView(
+                        block: block,
+                        onAcceptProposal: { id in
+                            try? await viewModel.acceptProposal(messageID: id)
+                        },
+                        onRejectProposal: { id in
+                            viewModel.rejectProposal(messageID: id)
+                        }
+                    )
                 }
 
                 if let lastError = viewModel.lastError {
