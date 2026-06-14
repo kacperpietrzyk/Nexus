@@ -33,11 +33,12 @@ public struct AgentEmptyStateView: View {
     public var body: some View {
         VStack(spacing: 0) {
             // Invitation tone glyph: bare `sparkles`, NO circle, NO
-            // background (oracle `LabEmptyState.glyphView` `.invitation`).
+            // background. Sized up from the oracle's 21 pt / tertiary so it
+            // carries as the hero anchor of the fresh-thread screen.
             Image(systemName: "sparkles")
-                .font(.system(size: 21))
-                .foregroundStyle(DS.ColorToken.textTertiary)
-                .frame(height: 38)
+                .font(.system(size: 28))
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .frame(height: 44)
                 .padding(.bottom, DS.Space.l)
                 .accessibilityHidden(true)
 

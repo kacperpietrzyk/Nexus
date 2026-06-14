@@ -153,15 +153,14 @@ public struct AgentChatView: View {
         // substrate; the §5 error row uses a primary foreground token).
         HStack(alignment: .top, spacing: 0) {
             mainPane
-                .frame(maxWidth: .infinity, alignment: .top)
-                .padding(.top, 160)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             // Omitted-as-unit until the first §10-reachable tool call lands:
             // a floating "No activity" glass box over an empty canvas reads
             // as orphaned chrome, not as a calm empty state.
             if let rows = recentToolRows, !rows.isEmpty {
                 railPanel(rows)
-                    .padding(.top, 150)
+                    .padding(.top, 20)
                     .padding(.trailing, 26)
             }
         }
@@ -170,13 +169,24 @@ public struct AgentChatView: View {
     @ViewBuilder
     private var mainPane: some View {
         if viewModel.currentThreadID == nil {
+            // Fresh-thread invitation, vertically centered in the content area.
+            // `AgentEmptyStateView` self-centers (`maxWidth: 380` then
+            // `maxWidth/maxHeight: .infinity`). The prior `.padding(.top, 160)`
+            // + `height: 480` were carried 1:1 from the removed Lab oracle
+            // canvas and floated "Ask Nexus" below optical center on the tall
+            // Mac window.
             AgentEmptyStateView { sample in
                 viewModel.createThread(title: sample)
             }
-            .frame(maxWidth: 520)
-            .frame(height: 480)
         } else {
+            // The stream is top-anchored with a small breathing inset so the
+            // history fills the full available height. (The prior 160 pt top
+            // inset — carried 1:1 from the removed Lab oracle canvas — left a
+            // ~quarter-height empty band at the top, so the conversation only
+            // occupied the lower ~3/4 of the pane.)
             messageList
+                .frame(maxWidth: .infinity, alignment: .top)
+                .padding(.top, 20)
         }
     }
 

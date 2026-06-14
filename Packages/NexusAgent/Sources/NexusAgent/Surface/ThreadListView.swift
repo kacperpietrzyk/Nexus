@@ -2,6 +2,30 @@ import Foundation
 import NexusUI
 import SwiftUI
 
+#if os(macOS)
+/// Selected thread-row corner radius — matches the main sidebar nav row
+/// (`LiquidSidebarNavRow`, `docs/03_COMPONENTS.md` §Sidebar: "nav row radius:
+/// 10 pt") so the Agent rail's active marker reads as the same rounded glass
+/// pill, not a full-bleed rectangle.
+private let threadRowCornerRadius: CGFloat = 10
+#endif
+
+/// Relative date buckets for the macOS thread rail. Newest first; only
+/// non-empty buckets render a header.
+public enum ThreadDateBucket: String, CaseIterable, Hashable, Sendable {
+    case today
+    case yesterday
+    case earlier
+
+    public var title: String {
+        switch self {
+        case .today: return "Today"
+        case .yesterday: return "Yesterday"
+        case .earlier: return "Earlier"
+        }
+    }
+}
+
 public struct ThreadListView: View {
     public let threads: [AgentThread]
     public let currentThreadID: UUID?
@@ -21,6 +45,70 @@ public struct ThreadListView: View {
     }
 
     public var body: some View {
+        #if os(macOS)
+        macList
+        #else
+        iosList
+        #endif
+    }
+
+    // MARK: - macOS (Liquid rail)
+
+    #if os(macOS)
+    /// macOS rail: a `ScrollView` of date-grouped rows (eyebrow header per
+    /// bucket) over the shell's glass content panel. The `List`/`.sidebar`
+    /// path is iOS-only — on macOS it forced a full-bleed rectangular row
+    /// background for the selection; this gives the active thread a rounded
+    /// glass pill with depth, matching `LiquidSidebarNavRow`.
+    private var macList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 1) {
+                ForEach(Self.bucketed(threads: threads, now: Date()), id: \.bucket) { group in
+                    bucketHeader(group.bucket.title)
+                    ForEach(group.threads, id: \.id) { thread in
+                        Button {
+                            onSelect(thread.id)
+                        } label: {
+                            ThreadRow(thread: thread, isSelected: thread.id == currentThreadID)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                onArchive(thread.id)
+                            } label: {
+                                Label("Archive", systemImage: "archivebox")
+                            }
+                        }
+                        .accessibilityAddTraits(thread.id == currentThreadID ? .isSelected : [])
+                    }
+                }
+            }
+            .padding(.horizontal, DS.Space.xs)
+            .padding(.top, DS.Space.xs)
+            .padding(.bottom, DS.Space.m)
+        }
+        .scrollIndicators(.never)
+    }
+
+    /// Tracked-caption date eyebrow (Today / Yesterday / Earlier) — the same
+    /// idiom as the chat's "Recent tools" rail header.
+    private func bucketHeader(_ title: String) -> some View {
+        Text(title)
+            .font(DS.FontToken.caption)
+            .tracking(1.2)
+            .textCase(.uppercase)
+            .foregroundStyle(DS.ColorToken.textTertiary)
+            .padding(.horizontal, DS.Space.xs)
+            .padding(.top, DS.Space.s)
+            .padding(.bottom, DS.Space.xxs)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    #endif
+
+    // MARK: - iOS (native split sidebar)
+
+    #if os(iOS)
+    private var iosList: some View {
         List(Self.sorted(threads: Self.filterActive(threads: threads)), id: \.id) { thread in
             Button {
                 onSelect(thread.id)
@@ -43,19 +131,15 @@ public struct ThreadListView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(containerBackground)
+        .background(NexusColor.Background.panel)
     }
 
-    /// Liquid re-skin (container level): transparent on macOS so the thread
-    /// rail sits on the shell's glass content panel instead of an opaque
-    /// graphite slab; iOS keeps the Linear panel surface under its own shell.
-    private var containerBackground: Color {
-        #if os(macOS)
-        return Color.clear
-        #else
-        return NexusColor.Background.panel
-        #endif
+    private func rowBackground(for thread: AgentThread) -> Color {
+        thread.id == currentThreadID ? NexusColor.Background.raised : NexusColor.Background.panel
     }
+    #endif
+
+    // MARK: - Pure ordering / bucketing
 
     nonisolated public static func sorted(threads: [AgentThread]) -> [AgentThread] {
         threads.sorted { lhs, rhs in
@@ -70,15 +154,35 @@ public struct ThreadListView: View {
         threads.filter { $0.archivedAt == nil }
     }
 
-    private func rowBackground(for thread: AgentThread) -> Color {
-        // Liquid re-skin (macOS): rows are transparent over the shell's glass;
-        // the selected row uses the DS glass-selected overlay. iOS keeps the
-        // Linear panel/raised pairing under its own opaque shell.
-        #if os(macOS)
-        return thread.id == currentThreadID ? DS.ColorToken.glassSelected : Color.clear
-        #else
-        return thread.id == currentThreadID ? NexusColor.Background.raised : NexusColor.Background.panel
-        #endif
+    /// Active threads, newest first, grouped into Today / Yesterday / Earlier.
+    /// Only non-empty buckets are returned, in display order.
+    nonisolated public static func bucketed(
+        threads: [AgentThread],
+        now: Date,
+        calendar: Calendar = .current
+    ) -> [(bucket: ThreadDateBucket, threads: [AgentThread])] {
+        let active = sorted(threads: filterActive(threads: threads))
+        // "Yesterday" is resolved against the injected `now` (not the wall
+        // clock) so the bucketing is fully deterministic and testable —
+        // `Calendar.isDateInYesterday` would silently compare against the real
+        // current date instead.
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now) ?? now
+        var grouped: [ThreadDateBucket: [AgentThread]] = [:]
+        for thread in active {
+            let bucket: ThreadDateBucket
+            if calendar.isDate(thread.updatedAt, inSameDayAs: now) {
+                bucket = .today
+            } else if calendar.isDate(thread.updatedAt, inSameDayAs: yesterday) {
+                bucket = .yesterday
+            } else {
+                bucket = .earlier
+            }
+            grouped[bucket, default: []].append(thread)
+        }
+        return ThreadDateBucket.allCases.compactMap { bucket in
+            guard let rows = grouped[bucket], !rows.isEmpty else { return nil }
+            return (bucket, rows)
+        }
     }
 }
 
@@ -90,8 +194,6 @@ private struct ThreadRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            selectedIndicator
-
             VStack(alignment: .leading, spacing: 4) {
                 Text(Self.displayTitle(for: thread))
                     .font(isSelected ? DS.FontToken.bodyStrong : DS.FontToken.body)
@@ -109,15 +211,7 @@ private struct ThreadRow: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, DS.Space.xs)
-        .background {
-            // Hover wash one step below the glass-selected row background the
-            // List supplies for the active thread (macOS only — `hovering`
-            // never flips elsewhere).
-            if hovering && !isSelected {
-                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                    .fill(Color.white.opacity(0.04))
-            }
-        }
+        .background { rowBackground }
         .contentShape(Rectangle())
         #if os(macOS)
         .onHover { value in
@@ -127,15 +221,52 @@ private struct ThreadRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var selectedIndicator: some View {
-        // Liquid active-selection: a 2pt accent glow line on the leading edge
-        // of the selected row (03_COMPONENTS §SidebarNavRow idiom).
-        Capsule()
-            .fill(DS.ColorToken.accentPrimary)
-            .frame(width: 3, height: 28)
-            .opacity(isSelected ? 1 : 0)
-            .accessibilityHidden(true)
+    @ViewBuilder
+    private var rowBackground: some View {
+        #if os(macOS)
+        // Rounded glass pill matching `LiquidSidebarNavRow`: selected rows take
+        // the glass-selected fill + a faint accent tint, a top-leading sheen,
+        // a hairline stroke and a soft accent glow (depth); hover rows take a
+        // one-step-lighter wash. iOS keeps its `listRowBackground` pairing.
+        RoundedRectangle(cornerRadius: threadRowCornerRadius, style: .continuous)
+            .fill(selectionFill)
+            .overlay {
+                if isSelected {
+                    ZStack {
+                        DS.ColorToken.accentPrimary.opacity(0.060)
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.10), Color.white.opacity(0.026), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: threadRowCornerRadius, style: .continuous))
+                }
+            }
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: threadRowCornerRadius, style: .continuous)
+                        .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+                }
+            }
+            .shadow(
+                color: isSelected ? DS.ColorToken.accentPrimary.opacity(0.08) : .clear,
+                radius: 8,
+                x: 0,
+                y: 0
+            )
+        #else
+        EmptyView()
+        #endif
     }
+
+    #if os(macOS)
+    private var selectionFill: Color {
+        if isSelected { return Color.white.opacity(0.052) }
+        if hovering { return Color.white.opacity(0.04) }
+        return .clear
+    }
+    #endif
 
     nonisolated private static func displayTitle(for thread: AgentThread) -> String {
         let trimmed = thread.title.trimmingCharacters(in: .whitespacesAndNewlines)
