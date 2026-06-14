@@ -5,11 +5,11 @@ Nexus is a native Swift/SwiftUI productivity app for the Apple ecosystem
 AI-augmented (on-device first, cloud opt-in). Single-user by design.
 
 ## Architecture (5 layers, top→bottom)
-1. **Apps** (`Apps/NexusMac|NexusiOS|NexusWatch`) — thin shells: composition root + platform glue. No logic.
+1. **Apps** (`Apps/` — main shells `NexusMac|NexusiOS|NexusWatch` plus helper/extension targets: MCPSidecar, MeetingsHelper, Widgets, Share, DigestExtension, WatchComplications) — thin shells: composition root + platform glue. No logic.
 2. **Feature modules** (`Packages/TasksFeature`, …) — independent; communicate only via the `Link` graph in core. No cross-module imports.
 3. **Core** (`Packages/NexusCore`) — pure domain: `Link`, repos, search index, scheduler, exporter. Zero UIKit/AppKit, fully testable.
 4. **Persistence + Sync** (`Packages/NexusSync`) — SwiftData + CloudKit mirror; owns the schema + migration plan + model container.
-5. **Adapters** (`Packages/NexusAI|NexusUI|NexusSearch`) — providers behind protocols.
+5. **Adapters** (`Packages/NexusAI|NexusUI|NexusSearch|NexusAgentTools`, …) — providers behind protocols.
 
 See `docs/architecture.md` for the full picture.
 
