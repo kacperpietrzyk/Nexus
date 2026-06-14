@@ -22,6 +22,11 @@ public struct ProjectEditorSheet: View {
     @State private var customFields: [String: String]
     @State private var newFieldKey = ""
     @State private var newFieldValue = ""
+    @State var keyDates: [ProjectExecutionModel.KeyDateDraft] = []
+    @State var newAnchorKey = ""
+    @State var newKeyDateLabel = ""
+    @State var newKeyDate = Date.now
+    @State var newKeyDateContractual = false
     @State private var error: String?
 
     public init(project: Project? = nil, onSave: (() -> Void)? = nil) {
@@ -135,6 +140,8 @@ public struct ProjectEditorSheet: View {
 
             customFieldsSection
 
+            keyDatesSection
+
             ForEach(ProjectEditorAccessorySection.sections(for: project), id: \.self) { section in
                 switch section {
                 case .labels(let projectID):
@@ -181,7 +188,12 @@ public struct ProjectEditorSheet: View {
         .padding(24)
         .frame(minWidth: 360)
         .background(NexusColor.Background.panel)
-        .task { refreshClientName() }
+        .task {
+            refreshClientName()
+            if let project {
+                loadKeyDates(context: modelContext, projectID: project.id)
+            }
+        }
     }
 
     private var header: some View {
@@ -362,6 +374,7 @@ public struct ProjectEditorSheet: View {
                 for (k, v) in customFields {
                     try repository.setCustomField(key: k, value: v, on: created)
                 }
+                try applyKeyDateDiff(projectID: created.id, context: modelContext)
             }
             onSave?()
             dismiss()
@@ -408,6 +421,7 @@ public struct ProjectEditorSheet: View {
             try repository.setClient(clientID, on: project)
         }
         try applyCustomFieldDiff(from: project.customFields, to: customFields, on: project, using: repository)
+        try applyKeyDateDiff(projectID: project.id, context: modelContext)
     }
 
     @MainActor

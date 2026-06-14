@@ -353,6 +353,49 @@ public enum ProjectExecutionModel {
         }
     }
 
+    // MARK: - Key-date diff
+
+    /// Value-type snapshot of one editor key-date row. Equatable over all four
+    /// fields so the diff can detect any change without per-field comparisons.
+    public struct KeyDateDraft: Equatable, Sendable {
+        public let anchorKey: String
+        public let label: String
+        public let date: Date
+        public let isContractual: Bool
+
+        public init(anchorKey: String, label: String, date: Date, isContractual: Bool) {
+            self.anchorKey = anchorKey
+            self.label = label
+            self.date = date
+            self.isContractual = isContractual
+        }
+    }
+
+    /// Diffs the editor's desired key dates against the currently-persisted set.
+    ///
+    /// - Parameters:
+    ///   - current: Drafts built from the persisted `ProjectKeyDate` rows.
+    ///   - desired: Drafts currently held in the editor's `@State`.
+    /// - Returns:
+    ///   - `upserts`: Drafts that are new (anchorKey absent in `current`) or whose
+    ///     label/date/isContractual changed. No-op entries (identical) are omitted.
+    ///   - `deletions`: Anchor keys present in `current` but absent from `desired`.
+    public static func keyDateDiff(
+        current: [KeyDateDraft],
+        desired: [KeyDateDraft]
+    ) -> (upserts: [KeyDateDraft], deletions: [String]) {
+        let currentByKey = Dictionary(uniqueKeysWithValues: current.map { ($0.anchorKey, $0) })
+        let desiredByKey = Dictionary(uniqueKeysWithValues: desired.map { ($0.anchorKey, $0) })
+
+        let upserts = desired.filter { draft in
+            currentByKey[draft.anchorKey] != draft
+        }
+        let deletions = current.compactMap { existing in
+            desiredByKey[existing.anchorKey] == nil ? existing.anchorKey : nil
+        }
+        return (upserts: upserts, deletions: deletions)
+    }
+
     // MARK: - Shared predicates
 
     /// Defensive soft-delete filter; callers are expected to pass live rows.
