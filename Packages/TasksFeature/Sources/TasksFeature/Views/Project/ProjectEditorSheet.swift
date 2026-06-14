@@ -16,6 +16,9 @@ public struct ProjectEditorSheet: View {
     @State private var type: ProjectType
     @State private var stage: ProjectStage?
     @State private var vendor: String
+    @State private var clientID: UUID?
+    @State private var clientName: String = ""
+    @State private var clientPickerPresented = false
     @State private var error: String?
 
     public init(project: Project? = nil, onSave: (() -> Void)? = nil) {
@@ -27,6 +30,7 @@ public struct ProjectEditorSheet: View {
         self._type = State(initialValue: project?.type ?? .generic)
         self._stage = State(initialValue: project?.stage)
         self._vendor = State(initialValue: project?.vendor ?? "")
+        self._clientID = State(initialValue: project?.clientID)
     }
 
     public var body: some View {
@@ -97,6 +101,34 @@ public struct ProjectEditorSheet: View {
                         .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
                 }
 
+            Button {
+                clientPickerPresented = true
+            } label: {
+                HStack {
+                    Text("Client")
+                        .nexusType(.body)
+                        .foregroundStyle(NexusColor.Text.muted)
+                    Spacer()
+                    Text(clientName.isEmpty ? "None" : clientName)
+                        .nexusType(.body)
+                        .foregroundStyle(NexusColor.Text.primary)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+                .overlay {
+                    RoundedRectangle(cornerRadius: NexusRadius.r2)
+                        .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $clientPickerPresented) {
+                OrganizationPickerSheet { selected in
+                    clientID = selected
+                    refreshClientName()
+                }
+            }
+
             ForEach(ProjectEditorAccessorySection.sections(for: project), id: \.self) { section in
                 switch section {
                 case .labels(let projectID):
@@ -143,6 +175,7 @@ public struct ProjectEditorSheet: View {
         .padding(24)
         .frame(minWidth: 360)
         .background(NexusColor.Background.panel)
+        .task { refreshClientName() }
     }
 
     private var header: some View {
@@ -163,6 +196,13 @@ public struct ProjectEditorSheet: View {
 
     private var trimmedVendor: String {
         vendor.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    @MainActor
+    private func refreshClientName() {
+        guard let clientID else { clientName = ""; return }
+        clientName =
+            (try? OrganizationRepository(context: modelContext).find(id: clientID))?.name ?? ""
     }
 
     /// Project lifecycle picker (Projects tier, spec §4.1). Persisted via
@@ -257,6 +297,9 @@ public struct ProjectEditorSheet: View {
                 if (project.vendor ?? "") != trimmedVendor {
                     try repository.setVendor(trimmedVendor.isEmpty ? nil : trimmedVendor, on: project)
                 }
+                if project.clientID != clientID {
+                    try repository.setClient(clientID, on: project)
+                }
             } else {
                 let created = try repository.create(name: cleanedName, color: colorToken, type: type)
                 if status != .backlog {
@@ -267,6 +310,9 @@ public struct ProjectEditorSheet: View {
                 }
                 if !trimmedVendor.isEmpty {
                     try repository.setVendor(trimmedVendor, on: created)
+                }
+                if let clientID {
+                    try repository.setClient(clientID, on: created)
                 }
             }
             onSave?()
