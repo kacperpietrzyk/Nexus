@@ -313,7 +313,9 @@ struct MeetingDetailPane: View {
     /// its summary markdown.
     private func notesCard(_ meeting: Meeting) -> some View {
         LiquidGlassCard("Notes") {
-            SummaryView(meetingID: meeting.id, repository: composition.meetingRepository)
+            SummaryView(
+                meetingID: meeting.id, repository: composition.meetingRepository, style: .liquid
+            )
                 // Load-bearing identity pin: without it SwiftUI reuses the
                 // child's @StateObject across selection changes and keeps
                 // showing the first meeting (same fix as MeetingDetailView).
@@ -338,6 +340,7 @@ struct MeetingDetailPane: View {
         TranscriptView(
             meetingID: meeting.id,
             repository: composition.meetingRepository,
+            style: .liquid,
             peopleLinker: composition.peopleLinker,
             personRepository: composition.personRepository,
             attendeeSeedProvider: { await composition.calendarAttendeeCandidates(for: $0) }
