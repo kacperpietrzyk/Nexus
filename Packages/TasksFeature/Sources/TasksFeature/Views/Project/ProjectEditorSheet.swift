@@ -19,6 +19,9 @@ public struct ProjectEditorSheet: View {
     @State private var clientID: UUID?
     @State private var clientName: String = ""
     @State private var clientPickerPresented = false
+    @State private var customFields: [String: String]
+    @State private var newFieldKey = ""
+    @State private var newFieldValue = ""
     @State private var error: String?
 
     public init(project: Project? = nil, onSave: (() -> Void)? = nil) {
@@ -31,6 +34,7 @@ public struct ProjectEditorSheet: View {
         self._stage = State(initialValue: project?.stage)
         self._vendor = State(initialValue: project?.vendor ?? "")
         self._clientID = State(initialValue: project?.clientID)
+        self._customFields = State(initialValue: project?.customFields ?? [:])
     }
 
     public var body: some View {
@@ -128,6 +132,8 @@ public struct ProjectEditorSheet: View {
                     refreshClientName()
                 }
             }
+
+            customFieldsSection
 
             ForEach(ProjectEditorAccessorySection.sections(for: project), id: \.self) { section in
                 switch section {
@@ -261,6 +267,72 @@ public struct ProjectEditorSheet: View {
         .accessibilityLabel(shapeLabel)
     }
 
+    private var customFieldsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Custom fields")
+                .nexusType(.eyebrow)
+                .foregroundStyle(NexusColor.Text.muted)
+
+            ForEach(customFields.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
+                HStack {
+                    Text(key)
+                        .nexusType(.body)
+                        .foregroundStyle(NexusColor.Text.muted)
+                    Spacer()
+                    Text(value)
+                        .nexusType(.body)
+                        .foregroundStyle(NexusColor.Text.primary)
+                    Button {
+                        customFields[key] = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(NexusColor.Text.tertiary)
+                }
+            }
+
+            HStack {
+                TextField("key", text: $newFieldKey)
+                    .textFieldStyle(.plain)
+                    .nexusType(.body)
+                    .foregroundStyle(NexusColor.Text.primary)
+                    .padding(.horizontal, 8)
+                    .frame(height: 30, alignment: .leading)
+                    .frame(maxWidth: 140)
+                    .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: NexusRadius.r2)
+                            .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                    }
+
+                TextField("value", text: $newFieldValue)
+                    .textFieldStyle(.plain)
+                    .nexusType(.body)
+                    .foregroundStyle(NexusColor.Text.primary)
+                    .padding(.horizontal, 8)
+                    .frame(height: 30)
+                    .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: NexusRadius.r2)
+                            .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                    }
+
+                Button {
+                    let k = newFieldKey.trimmingCharacters(in: .whitespaces)
+                    guard !k.isEmpty else { return }
+                    customFields[k] = newFieldValue
+                    newFieldKey = ""
+                    newFieldValue = ""
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(NexusColor.Text.primary)
+            }
+        }
+    }
+
     @MainActor
     private func save() {
         let cleanedName = trimmedName
@@ -269,37 +341,7 @@ public struct ProjectEditorSheet: View {
         let repository = ProjectRepository(context: modelContext)
         do {
             if let project {
-                if project.name != cleanedName {
-                    try repository.rename(project, to: cleanedName)
-                }
-                if project.color != colorToken {
-                    try repository.recolor(project, to: colorToken)
-                }
-                if project.status != status {
-                    try repository.setStatus(status, on: project)
-                }
-                if project.type != type {
-                    try repository.setType(type, on: project)
-                }
-                if project.stage != stage {
-                    if let stage {
-                        try repository.setStage(stage, on: project)
-                    } else {
-                        // No repo clearStage(): clear directly, but re-anchor statusRaw to the
-                        // Status picker's chosen value so the coarse status set by the prior
-                        // stage's coarseStatus doesn't linger stale.
-                        project.stage = nil
-                        project.statusRaw = status.rawValue
-                        project.updatedAt = .now
-                        try modelContext.save()
-                    }
-                }
-                if (project.vendor ?? "") != trimmedVendor {
-                    try repository.setVendor(trimmedVendor.isEmpty ? nil : trimmedVendor, on: project)
-                }
-                if project.clientID != clientID {
-                    try repository.setClient(clientID, on: project)
-                }
+                try updateProject(project, cleanedName: cleanedName, using: repository)
             } else {
                 let created = try repository.create(name: cleanedName, color: colorToken, type: type)
                 if status != .backlog {
@@ -314,11 +356,67 @@ public struct ProjectEditorSheet: View {
                 if let clientID {
                     try repository.setClient(clientID, on: created)
                 }
+                for (k, v) in customFields {
+                    try repository.setCustomField(key: k, value: v, on: created)
+                }
             }
             onSave?()
             dismiss()
         } catch {
             self.error = String(describing: error)
+        }
+    }
+
+    @MainActor
+    private func updateProject(
+        _ project: Project,
+        cleanedName: String,
+        using repository: ProjectRepository
+    ) throws {
+        if project.name != cleanedName {
+            try repository.rename(project, to: cleanedName)
+        }
+        if project.color != colorToken {
+            try repository.recolor(project, to: colorToken)
+        }
+        if project.status != status {
+            try repository.setStatus(status, on: project)
+        }
+        if project.type != type {
+            try repository.setType(type, on: project)
+        }
+        if project.stage != stage {
+            if let stage {
+                try repository.setStage(stage, on: project)
+            } else {
+                // No repo clearStage(): clear directly, but re-anchor statusRaw to the
+                // Status picker's chosen value so the coarse status set by the prior
+                // stage's coarseStatus doesn't linger stale.
+                project.stage = nil
+                project.statusRaw = status.rawValue
+                project.updatedAt = .now
+                try modelContext.save()
+            }
+        }
+        if (project.vendor ?? "") != trimmedVendor {
+            try repository.setVendor(trimmedVendor.isEmpty ? nil : trimmedVendor, on: project)
+        }
+        if project.clientID != clientID {
+            try repository.setClient(clientID, on: project)
+        }
+        try applyCustomFieldDiff(from: project.customFields, to: customFields, on: project, using: repository)
+    }
+
+    @MainActor
+    private func applyCustomFieldDiff(
+        from current: [String: String],
+        to updated: [String: String],
+        on project: Project,
+        using repository: ProjectRepository
+    ) throws {
+        guard current != updated else { return }
+        for key in Set(current.keys).union(updated.keys) where current[key] != updated[key] {
+            try repository.setCustomField(key: key, value: updated[key], on: project)
         }
     }
 }
