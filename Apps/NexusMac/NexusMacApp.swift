@@ -127,6 +127,7 @@ struct NexusMacApp: App {
         TaskIntentRuntime.configure(parser: self.taskParser, repository: self.taskRepository)
         let agentRouter = self.aiRouter
         let agentLifecycle = self.aiGraph.mlxLifecycle
+        let meetingsRepo = self.meetingsComposition.meetingRepository
         self.agentComposition = Self.makeAgentComposition(
             modelContext: made.mainContext,
             router: self.aiRouter,
@@ -136,6 +137,18 @@ struct NexusMacApp: App {
             heroBriefService: heroBriefService,
             meetingTools: self.meetingsComposition.agentTools(),
             ocrPipeline: self.aiGraph.ocrPipeline,
+            meetingCandidatesProvider: {
+                let meetings = (try? meetingsRepo.allChronological()) ?? []
+                let eligible = meetings.filter { $0.deletedAt == nil && !$0.summaryText.isEmpty }
+
+                return eligible.map { m in
+                    MeetingDecomposeCandidate(
+                        id: m.id,
+                        summary: m.summaryText,
+                        actionItemIDs: m.actionItemIDs
+                    )
+                }
+            },
             // Lazy-warm the assigned chat model when the agent surface opens, so
             // an assigned local model serves chat even with "preload on launch"
             // off. Guarded to an assigned, on-disk, not-yet-loaded model (same
@@ -325,6 +338,9 @@ struct NexusMacApp: App {
                 .environment(\.agentActivityLog, agentActivityLog)
                 .environment(\.agentChatViewModel, agentComposition.chatViewModel)
                 .environment(\.agentBriefService, agentComposition.briefService)
+                .environment(\.pendingInsightStore, agentComposition.pendingInsightStore)
+                .environment(\.insightProposalCoordinator, agentComposition.proposalCoordinator)
+                .environment(\.insightCooldownStore, agentComposition.insightCooldownStore)
                 .environment(\.meetingsComposition, meetingsComposition)
                 .environment(\.meetingNavigationRouter, meetingNavigationRouter)
                 .environment(\.focusModeState, focusModeState)
@@ -379,11 +395,15 @@ struct NexusMacApp: App {
                 .task {
                     if scenePhase == .active {
                         agentComposition.runActiveMaintenance(context: container.mainContext)
+                        await agentComposition.insightCoordinator.runDueInsights(now: .now)
                     }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     agentComposition.runActiveMaintenance(context: container.mainContext)
+                    _Concurrency.Task { @MainActor in
+                        await agentComposition.insightCoordinator.runDueInsights(now: .now)
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
                     syncAgentListener(
@@ -703,6 +723,7 @@ struct NexusMacApp: App {
         heroBriefService: HeroBriefService,
         meetingTools: [any AgentTool],
         ocrPipeline: OCRPipeline,
+        meetingCandidatesProvider: (@MainActor () -> [MeetingDecomposeCandidate])? = nil,
         warmChatModel: @escaping @MainActor () async -> Void
     ) -> AgentComposition {
         let additionalTools =
@@ -729,6 +750,15 @@ struct NexusMacApp: App {
                 ocrPipeline: ocrPipeline,
                 warmChatModel: warmChatModel,
                 chatReadiness: chatReadiness,
+                eventsProvider: {
+                    let end = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
+                    return
+                        (try? await EventKitCalendarProvider.shared.eventsBetween(
+                            start: .now,
+                            end: end
+                        )) ?? []
+                },
+                meetingCandidatesProvider: meetingCandidatesProvider,
                 legacyBrief: makeLegacyBrief(using: heroBriefService)
             )
         } catch {

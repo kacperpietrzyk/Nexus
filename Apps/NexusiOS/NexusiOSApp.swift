@@ -113,6 +113,7 @@ struct NexusiOSApp: App {
             taskRepository: self.taskRepository
         )
         let heroBriefService = HeroBriefService(router: self.aiRouter)
+        let meetingsRepo = self.meetingsComposition.meetingRepository
         let agentComposition = Self.makeAgentComposition(
             dependencies: .init(
                 modelContext: made.mainContext,
@@ -122,7 +123,19 @@ struct NexusiOSApp: App {
                 heroBriefService: heroBriefService,
                 meetingTools: self.meetingsComposition.agentTools() + CalendarAgentTools.tools(provider: EventKitCalendarProvider.shared),
                 ocrPipeline: graph.ocrPipeline,
-                mlxLifecycle: graph.mlxLifecycle
+                mlxLifecycle: graph.mlxLifecycle,
+                meetingCandidatesProvider: {
+                    let meetings = (try? meetingsRepo.allChronological()) ?? []
+                    let eligible = meetings.filter { $0.deletedAt == nil && !$0.summaryText.isEmpty }
+
+                    return eligible.map { m in
+                        MeetingDecomposeCandidate(
+                            id: m.id,
+                            summary: m.summaryText,
+                            actionItemIDs: m.actionItemIDs
+                        )
+                    }
+                }
             )
         )
         self.agentComposition = agentComposition
@@ -262,6 +275,7 @@ struct NexusiOSApp: App {
         let meetingTools: [any AgentTool]
         let ocrPipeline: OCRPipeline
         let mlxLifecycle: MLXLifecycleController
+        var meetingCandidatesProvider: (@MainActor () -> [MeetingDecomposeCandidate])?
     }
 
     /// Background callback. `task.expirationHandler` cancels the work if the system reclaims the
@@ -418,6 +432,15 @@ struct NexusiOSApp: App {
                 chatModelAvailability: Self.makeChatModelAvailabilityProbe(
                     lifecycle: dependencies.mlxLifecycle
                 ),
+                eventsProvider: {
+                    let end = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
+                    return
+                        (try? await EventKitCalendarProvider.shared.eventsBetween(
+                            start: .now,
+                            end: end
+                        )) ?? []
+                },
+                meetingCandidatesProvider: dependencies.meetingCandidatesProvider,
                 legacyBrief: makeLegacyBrief(using: dependencies.heroBriefService)
             )
         } catch {
@@ -642,6 +665,9 @@ private struct NexusiOSRootView: View {
             .environment(\.notificationScheduler, notificationScheduler)
             .environment(\.agentChatViewModel, agentComposition.chatViewModel)
             .environment(\.agentBriefService, agentComposition.briefService)
+            .environment(\.pendingInsightStore, agentComposition.pendingInsightStore)
+            .environment(\.insightProposalCoordinator, agentComposition.proposalCoordinator)
+            .environment(\.insightCooldownStore, agentComposition.insightCooldownStore)
             .environment(\.meetingsComposition, meetingsComposition)
             .environment(\.focusModeState, focusModeState)
             #if canImport(EventKit) && !os(watchOS)
@@ -752,6 +778,7 @@ private struct AgentLifecycleModifier: ViewModifier {
                 if scenePhase == .active {
                     agentComposition.runActiveMaintenance(context: container.mainContext)
                     await iosAgentScheduler?.foregroundCatchUp()
+                    await agentComposition.insightCoordinator.runDueInsights(now: .now)
                 }
             }
             .onChange(of: scenePhase) { _, phase in
@@ -759,6 +786,7 @@ private struct AgentLifecycleModifier: ViewModifier {
                 agentComposition.runActiveMaintenance(context: container.mainContext)
                 _Concurrency.Task { @MainActor in
                     await iosAgentScheduler?.foregroundCatchUp()
+                    await agentComposition.insightCoordinator.runDueInsights(now: .now)
                 }
             }
     }
