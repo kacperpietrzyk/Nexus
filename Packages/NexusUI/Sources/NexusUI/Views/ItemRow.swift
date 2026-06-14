@@ -76,6 +76,7 @@ public struct ItemRow: View {
         case .person: return "person.crop.circle"
         case .cycle: return "arrow.triangle.2.circlepath"
         case .attachment: return "paperclip"
+        case .organization: return "building.2"
         }
     }
 

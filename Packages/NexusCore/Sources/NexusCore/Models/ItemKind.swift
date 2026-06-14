@@ -26,6 +26,9 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
     /// App-managed file metadata. Not `Linkable`; notes derive graph edges to
     /// this kind from image attachment blocks.
     case attachment
+    /// A client/account record (`Organization`, universal-types extension). A graph
+    /// endpoint: contacts (`Person`) link to it; `Project.clientID` points at it by raw id.
+    case organization
 
     public var displayName: String {
         switch self {
@@ -42,6 +45,7 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
         case .person: return "Person"
         case .cycle: return "Cycle"
         case .attachment: return "Attachment"
+        case .organization: return "Organization"
         }
     }
 }
