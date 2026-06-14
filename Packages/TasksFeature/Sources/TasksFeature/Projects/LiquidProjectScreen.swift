@@ -32,6 +32,7 @@ enum ProjectScreenTab: String, CaseIterable, Identifiable {
 enum ProjectsPickerMode: String, CaseIterable, Identifiable {
     case grid
     case roadmap
+    case pipeline
 
     var id: String { rawValue }
 
@@ -39,6 +40,7 @@ enum ProjectsPickerMode: String, CaseIterable, Identifiable {
         switch self {
         case .grid: return "Grid"
         case .roadmap: return "Roadmap"
+        case .pipeline: return "Pipeline"
         }
     }
 }
@@ -125,19 +127,38 @@ public struct LiquidProjectScreen: View {
 
     // MARK: - Picker list
 
+    @ViewBuilder
     private var pickerList: some View {
-        ScrollView {
-            Group {
-                switch pickerMode {
-                case .grid:
-                    pickerGridMode
-                        .frame(maxWidth: pickerMaxWidth, alignment: .topLeading)
-                case .roadmap:
-                    pickerRoadmapMode
-                }
+        switch pickerMode {
+        case .grid:
+            ScrollView {
+                pickerGridMode
+                    .frame(maxWidth: pickerMaxWidth, alignment: .topLeading)
+                    .padding(DS.Space.l)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        case .roadmap:
+            ScrollView {
+                pickerRoadmapMode
+                    .padding(DS.Space.l)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        case .pipeline:
+            pickerPipelineMode
+        }
+    }
+
+    private var pickerPipelineMode: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+                pickerHeader
+                pickerLoadError
             }
             .padding(DS.Space.l)
             .frame(maxWidth: .infinity, alignment: .topLeading)
+            ProjectPipelineView(projects: model.projects) { project in
+                select(project)
+            }
         }
     }
 
