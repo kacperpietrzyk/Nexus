@@ -33,12 +33,14 @@ struct OrganizationPickerSheet: View {
                     .font(.caption)
                     // MP-2 burned: error text renders via primary ink
                     .foregroundStyle(NexusColor.Text.primary)
-            } else if candidates.isEmpty && !trimmedSearch.isEmpty {
-                Text("No organizations found.")
-                    .font(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
+                    if candidates.isEmpty && !showCreateButton {
+                        Text("No organizations found.")
+                            .font(.caption)
+                            .foregroundStyle(NexusColor.Text.tertiary)
+                    }
+
                     ForEach(candidates, id: \.id) { org in
                         Button {
                             onSelected(org.id)
