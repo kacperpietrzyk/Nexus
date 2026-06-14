@@ -16,6 +16,7 @@ enum InMemoryAgentContext {
             Link.self, DebugItem.self, QuotaLog.self, TaskItem.self, Project.self,
             Section.self, Comment.self, Note.self, ScheduledBlock.self, Label.self,
             Person.self, Cycle.self, ActivityEntry.self, SavedFilter.self,
+            Organization.self, ProjectKeyDate.self,
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])

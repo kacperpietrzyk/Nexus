@@ -80,6 +80,16 @@ public struct AgentContext: Sendable {
         PersonRepository(context: modelContext.context, now: now)
     }
 
+    /// On-demand `OrganizationRepository` backed by the same `ModelContext`.
+    @MainActor public var organizationRepository: OrganizationRepository {
+        OrganizationRepository(context: modelContext.context, now: now)
+    }
+
+    /// On-demand `ProjectKeyDateRepository` backed by the same `ModelContext`.
+    @MainActor public var projectKeyDateRepository: ProjectKeyDateRepository {
+        ProjectKeyDateRepository(context: modelContext.context, now: now)
+    }
+
     /// TasksFeature-specific helpers (NL parser + hero brief). Only populated when
     /// the consumer links `NexusAgentToolsExtras`. Tools that need these check non-nil.
     public let nlParser: AnyNLParserRef?
