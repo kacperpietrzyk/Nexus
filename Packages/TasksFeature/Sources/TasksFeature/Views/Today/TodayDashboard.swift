@@ -55,7 +55,7 @@ enum TodayDashboardContentRoute: Equatable {
     ///
     /// Audit B3 — user decision "global but refined": the DAY rail
     /// stays the single global right rail on routes that have no right
-    /// column of their own (`today`, `productivity`, `settings`),
+    /// column of their own (`today`, `settings`),
     /// but `inbox` (owns `InboxReaderPane`, fixed 380) and `meetings` (owns
     /// the meeting-detail pane) already render their own right pane, so
     /// also mounting the 320pt rail there produced a competing double-rail.
@@ -63,11 +63,14 @@ enum TodayDashboardContentRoute: Equatable {
     /// Linear redesign: `.tasks` joins the false group too — the Today-only
     /// DAY timeline is always empty here and crushed the list; the freed
     /// column is capped + hugged left at the `.tasks` route case instead.
+    /// Polish pass: `.productivity` (Stats) also drops the rail — a today's-
+    /// schedule column is contextually wrong on a 30-day analytics screen and
+    /// read empty; the cards + charts take the full width instead.
     var showsEmbeddedTimelineRail: Bool {
         switch self {
-        case .today, .productivity, .settings:
+        case .today, .settings:
             return true
-        case .tasks, .inbox, .meetings:
+        case .tasks, .productivity, .inbox, .meetings:
             return false
         }
     }
