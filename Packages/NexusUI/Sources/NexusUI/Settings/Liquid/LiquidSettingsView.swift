@@ -46,6 +46,13 @@ public struct LiquidSettingsView: View {
                 .frame(maxWidth: 720, alignment: .topLeading)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
+            // The `NavigationStack` (needed so embedded NavigationLinks push)
+            // otherwise occludes the shell wallpaper, so the `.card` glass —
+            // which samples *within-window* content — had nothing live behind
+            // it and read as a flat dark slab. Re-establish the aurora backdrop
+            // locally (the same LiquidWallpaper the shell uses; it scales its
+            // glow to the view) so cards regain depth, matching Stats/Today.
+            .background(LiquidWallpaper())
         }
     }
 

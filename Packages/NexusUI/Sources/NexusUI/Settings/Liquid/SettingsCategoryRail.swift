@@ -25,7 +25,11 @@ public struct SettingsCategoryRail: View {
             }
         }
         .padding(DS.Space.m)
-        .frame(width: 200, alignment: .leading)
+        .padding(.top, DS.Space.s)
+        // Top-anchored: the rail list reads from the top (aligned with the
+        // detail header), not floated in the vertical centre of the column.
+        .frame(width: 200)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
