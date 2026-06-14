@@ -216,6 +216,7 @@ public struct ModelRowExpandable: View {
                     Text(String(format: "%.1f GB", manifest.sizeGB))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
         }
@@ -338,8 +339,11 @@ public struct ModelRowExpandable: View {
                     Button("Assign as Embedder") { onAssignEmbedder() }
                         .foregroundStyle(.secondary)
                 case .download:
-                    Button("Download") { onDownload() }
-                        .buttonStyle(.borderedProminent)
+                    NexusButton(
+                        variant: .primary, size: .sm, action: { onDownload() },
+                        label: {
+                            Text("Download")
+                        })
                 case .reDownload:
                     Button("Re-download") { onReDownload() }
                 case .delete:
