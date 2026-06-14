@@ -715,6 +715,7 @@ struct NexusMacApp: App {
             nlParser: nlParser,
             heroBriefService: heroBriefService
         )
+        let chatReadiness = makeChatReadinessProbe()
         do {
             return try AgentComposition.make(
                 platform: .mac,
@@ -727,11 +728,25 @@ struct NexusMacApp: App {
                 additionalTools: additionalTools,
                 ocrPipeline: ocrPipeline,
                 warmChatModel: warmChatModel,
+                chatReadiness: chatReadiness,
                 legacyBrief: makeLegacyBrief(using: heroBriefService)
             )
         } catch {
             fatalError("Failed to compose Nexus Agent: \(error)")
         }
+    }
+
+    @MainActor
+    private static func makeChatReadinessProbe() -> @MainActor () -> AssistantReadiness {
+        guard let catalog = try? ModelCatalog.loadDefault() else {
+            return { .ready }
+        }
+        let manifestID = DefaultHardcodedModelPolicy(catalog: catalog).resolve().chatManifestID
+        let resolver = AssistantReadinessResolver(
+            localStateStore: ModelManifestLocalState.Store(),
+            chatManifestID: manifestID
+        )
+        return { resolver.readiness(progress: nil) }
     }
 
     private static func makeLegacyBrief(

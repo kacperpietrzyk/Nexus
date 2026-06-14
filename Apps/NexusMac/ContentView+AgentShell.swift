@@ -1,3 +1,4 @@
+import NexusAI
 import NexusAgent
 import NexusUI
 import SwiftUI
@@ -38,6 +39,19 @@ import SwiftUI
 struct AgentTopControl: View {
     @ObservedObject var viewModel: AgentChatViewModel
 
+    private var readinessLabel: String {
+        switch viewModel.assistantReadiness() {
+        case .ready:
+            return "ready"
+        case .downloading(let progress):
+            return "preparing \(Int(progress * 100))%"
+        case .notDownloaded:
+            return "model not downloaded"
+        case .failed:
+            return "unavailable"
+        }
+    }
+
     private var threadLabel: String {
         guard let currentID = viewModel.currentThreadID else {
             return "New thread"
@@ -64,7 +78,7 @@ struct AgentTopControl: View {
                     .foregroundStyle(DS.ColorToken.textPrimary)
             }
 
-            Text("ready")
+            Text(readinessLabel)
                 .font(DS.FontToken.metadata)
                 .foregroundStyle(DS.ColorToken.textSecondary)
                 .padding(.horizontal, DS.Space.s)

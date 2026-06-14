@@ -76,6 +76,7 @@ public struct AgentComposition {
         ocrPipeline: OCRPipeline? = nil,
         chatModelAvailability: (@MainActor () -> Bool)? = nil,
         warmChatModel: (@MainActor () async -> Void)? = nil,
+        chatReadiness: (@MainActor () -> AssistantReadiness)? = nil,
         legacyBrief: @escaping @Sendable (AgentBriefRequest) async -> String
     ) throws -> AgentComposition {
         let stores = AgentStores(context: context)
@@ -127,6 +128,7 @@ public struct AgentComposition {
             dispatcher: embedding.dispatcher,
             index: embedding.index
         )
+        let chatCoordinator = ProposalCoordinator(dispatcher: toolDispatcher)
         let chatViewModel = AgentChatViewModel(
             runtime: runtime,
             threadStore: stores.threadStore,
@@ -134,7 +136,10 @@ public struct AgentComposition {
             memoryStore: stores.memoryStore,
             voiceCapture: .live(router: router),
             chatModelAvailability: chatModelAvailability,
-            warmChatModel: warmChatModel
+            warmChatModel: warmChatModel,
+            chatConfig: platform == .mac ? .mac : .iOS,
+            proposalCoordinator: chatCoordinator,
+            readinessProbe: chatReadiness
         )
         let settingsContext = AgentSettingsContext(
             memoryStore: stores.memoryStore,
