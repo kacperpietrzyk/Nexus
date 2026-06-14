@@ -13,6 +13,9 @@ public struct ProjectEditorSheet: View {
     @State private var name: String
     @State private var colorToken: String
     @State private var status: ProjectStatus
+    @State private var type: ProjectType
+    @State private var stage: ProjectStage?
+    @State private var vendor: String
     @State private var error: String?
 
     public init(project: Project? = nil, onSave: (() -> Void)? = nil) {
@@ -21,6 +24,9 @@ public struct ProjectEditorSheet: View {
         self._name = State(initialValue: project?.name ?? "")
         self._colorToken = State(initialValue: project?.color ?? ProjectColorToken.defaultName)
         self._status = State(initialValue: project?.status ?? .backlog)
+        self._type = State(initialValue: project?.type ?? .generic)
+        self._stage = State(initialValue: project?.stage)
+        self._vendor = State(initialValue: project?.vendor ?? "")
     }
 
     public var body: some View {
@@ -58,6 +64,38 @@ public struct ProjectEditorSheet: View {
             }
 
             statusSection
+
+            Picker("Type", selection: $type) {
+                ForEach(ProjectType.allCases, id: \.self) { t in
+                    Text(t.displayName).tag(t)
+                }
+            }
+            .pickerStyle(.menu)
+            .onChange(of: type) { _, newType in
+                if let s = stage, !newType.stages.contains(s) { stage = nil }
+            }
+
+            if !type.stages.isEmpty {
+                Picker("Stage", selection: $stage) {
+                    Text("—").tag(ProjectStage?.none)
+                    ForEach(type.stages, id: \.self) { s in
+                        Text(s.displayName).tag(ProjectStage?.some(s))
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            TextField("Vendor / product", text: $vendor)
+                .textFieldStyle(.plain)
+                .nexusType(.body)
+                .foregroundStyle(NexusColor.Text.primary)
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r2))
+                .overlay {
+                    RoundedRectangle(cornerRadius: NexusRadius.r2)
+                        .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
+                }
 
             ForEach(ProjectEditorAccessorySection.sections(for: project), id: \.self) { section in
                 switch section {
@@ -121,6 +159,10 @@ public struct ProjectEditorSheet: View {
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedVendor: String {
+        vendor.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Project lifecycle picker (Projects tier, spec §4.1). Persisted via
@@ -196,10 +238,35 @@ public struct ProjectEditorSheet: View {
                 if project.status != status {
                     try repository.setStatus(status, on: project)
                 }
+                if project.type != type {
+                    try repository.setType(type, on: project)
+                }
+                if project.stage != stage {
+                    if let stage {
+                        try repository.setStage(stage, on: project)
+                    } else {
+                        // No repo clearStage(): clear directly, but re-anchor statusRaw to the
+                        // Status picker's chosen value so the coarse status set by the prior
+                        // stage's coarseStatus doesn't linger stale.
+                        project.stage = nil
+                        project.statusRaw = status.rawValue
+                        project.updatedAt = .now
+                        try modelContext.save()
+                    }
+                }
+                if (project.vendor ?? "") != trimmedVendor {
+                    try repository.setVendor(trimmedVendor.isEmpty ? nil : trimmedVendor, on: project)
+                }
             } else {
-                let created = try repository.create(name: cleanedName, color: colorToken)
+                let created = try repository.create(name: cleanedName, color: colorToken, type: type)
                 if status != .backlog {
                     try repository.setStatus(status, on: created)
+                }
+                if let stage {
+                    try repository.setStage(stage, on: created)
+                }
+                if !trimmedVendor.isEmpty {
+                    try repository.setVendor(trimmedVendor, on: created)
                 }
             }
             onSave?()
