@@ -63,10 +63,14 @@ struct ProjectOverview: View {
             AINextStepsCard()
         }
 
+        // `minWidth` gives the two-column row a definite minimum so
+        // `ViewThatFits` falls back to the stacked layout once the available
+        // width can't host two readable columns (flexible cards otherwise always
+        // "fit" by shrinking, and the second column would clip off-window).
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: DS.Space.l) {
-                left.frame(maxWidth: .infinity, alignment: .top)
-                right.frame(maxWidth: .infinity, alignment: .top)
+                left.frame(minWidth: overviewColumnMinWidth, maxWidth: .infinity, alignment: .top)
+                right.frame(minWidth: overviewColumnMinWidth, maxWidth: .infinity, alignment: .top)
             }
             VStack(spacing: DS.Space.l) {
                 left
@@ -75,6 +79,10 @@ struct ProjectOverview: View {
         }
     }
 }
+
+/// Minimum width per Overview dashboard column; below ~2× this the two-column
+/// grid collapses to a single stacked column (see `cardGrid`).
+private let overviewColumnMinWidth: CGFloat = 330
 
 private struct ProjectStatTile: View {
     let value: String
