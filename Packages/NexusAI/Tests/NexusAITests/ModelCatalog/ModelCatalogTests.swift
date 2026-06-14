@@ -6,25 +6,25 @@ import Testing
 
 @testable import NexusAI
 
+// NOTE: Task 11 (2026-06-14) — catalog updated to 2 Gemma chat entries only.
+// All assertions updated from Qwen counts/IDs to Gemma equivalents.
+
 @MainActor
 @Test func defaultCatalogParsesFromBundle() throws {
     let catalog = try ModelCatalog.loadDefault()
     #expect(catalog.version == 1)
-    #expect(catalog.chat.count >= 4)
+    #expect(catalog.chat.count >= 2)
     #expect(catalog.embedders.count >= 1)
 
-    let qwen9b = catalog.chat.first { $0.id == "qwen3.5-9b-4bit" }
-    #expect(qwen9b != nil)
-    #expect(qwen9b?.hfPath == "mlx-community/Qwen3.5-9B-4bit")
-    #expect(qwen9b?.family == "qwen3.5")
-    #expect(qwen9b?.sizeGB == 6.0)
-    #expect(qwen9b?.recommendedRAMGB == 16)
-    #expect(qwen9b?.supportsTools == true)
+    let gemma12b = catalog.chat.first { $0.id == "gemma-4.5-12b-1m" }
+    #expect(gemma12b != nil)
+    #expect(gemma12b?.hfPath == "mlx-community/gemma-4.5-12b-it-1m-4bit")
+    #expect(gemma12b?.family == "gemma4")
+    #expect(gemma12b?.sizeGB == 7.0)
+    #expect(gemma12b?.recommendedRAMGB == 24)
+    #expect(gemma12b?.supportsTools == true)
 
-    // Regression guard: the fictional `Qwen3.5-*-Instruct-4bit` repos (HTTP 401)
-    // that PR #15 wrongly "fixed" by downgrading the whole family to Qwen2.5 must
-    // not return. The real Qwen3.5 repos drop the `-Instruct` suffix and use the
-    // 4B/9B/27B size lineup; Qwen2.5 must be fully gone from the catalog.
+    // Regression guard: no qwen2.5 family, no capital-I "Instruct" in hfPath.
     #expect(!catalog.chat.contains { $0.family == "qwen2.5" })
     #expect(!catalog.chat.contains { $0.hfPath.contains("Instruct") })
 }
@@ -37,19 +37,16 @@ import Testing
     let ctx = ModelContext(container)
     try ModelCatalog.bootstrap.seed(into: ctx)
     let manifests = try ctx.fetch(FetchDescriptor<ModelManifest>())
-    #expect(manifests.count >= 5)  // 4 chat + 1 embedder
-    #expect(manifests.contains { $0.id == "qwen3.5-27b-4bit" })
-    #expect(manifests.contains { $0.id == "gemma-4-e4b-it-4bit" })
+    #expect(manifests.count >= 3)  // 2 Gemma chat + 1 embedder
+    #expect(manifests.contains { $0.id == "gemma-4.5-12b-1m" })
+    #expect(manifests.contains { $0.id == "gemma-4-e4b" })
     #expect(manifests.contains { $0.id == "multilingual-e5-large" })
 }
 
-/// Upgrade path: when an app update swaps the model lineup (Qwen2.5 → Qwen3.5),
+/// Upgrade path: when an app update swaps the model lineup (Qwen → Gemma),
 /// re-seeding must REMOVE catalog rows that are no longer in `DefaultCatalog.json`,
 /// not just insert the new ones. Without pruning, a user who seeded the old
-/// lineup would see both sets stacked in Manage Models (the stale Qwen2.5 rows
-/// even point at real, downloadable repos, so they wouldn't visibly error — they
-/// would just sit there as phantom extras). `makeInMemory()` is a fresh store, so
-/// this seeds a stale row by hand to stand in for the prior version's state.
+/// lineup would see both sets stacked in Manage Models.
 @MainActor
 @Test func bootstrapSeedPrunesEntriesAbsentFromCatalog() throws {
     let container = try NexusModelContainer.makeInMemory()
@@ -79,9 +76,9 @@ import Testing
         !ids.contains("qwen2.5-7b-instruct-4bit"),
         "A row absent from DefaultCatalog.json must be pruned on re-seed.")
     #expect(
-        manifests.filter { $0.purpose == "chat" }.count == 4,
-        "Exactly the 3 Qwen3.5 + Gemma chat entries should remain.")
-    #expect(ids.contains("qwen3.5-9b-4bit"))
+        manifests.filter { $0.purpose == "chat" }.count == 2,
+        "Exactly the 2 Gemma chat entries should remain.")
+    #expect(ids.contains("gemma-4-e4b"))
 }
 
 @MainActor
@@ -98,8 +95,7 @@ import Testing
 /// Single-source enforcement (LabKit 1l#3): the fallback embedder ID used by
 /// `MLXLifecycleController.embedderFolderURL()` / `TierDetector` must stay a
 /// real catalog entry. If `DefaultCatalog.json` renames the embedder without
-/// updating `ModelCatalog.defaultEmbedderID`, this fails — that is the whole
-/// point of replacing the bare string literal.
+/// updating `ModelCatalog.defaultEmbedderID`, this fails.
 @MainActor
 @Test func defaultEmbedderIDMatchesACatalogEntry() throws {
     let catalog = try ModelCatalog.loadDefault()

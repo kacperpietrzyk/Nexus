@@ -1,11 +1,31 @@
 {
   "version": 1,
-  "lastUpdated": "2026-05-31",
+  "lastUpdated": "2026-06-14",
   "chat": [
-    { "id": "qwen3.5-27b-4bit", "hfPath": "mlx-community/Qwen3.5-27B-4bit", "family": "qwen3.5", "displayName": "Qwen 3.5 27B", "sizeGB": 16.1, "recommendedRAMGB": 32, "contextLength": 32768, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es", "it", "pt", "zh", "ja"] },
-    { "id": "qwen3.5-9b-4bit", "hfPath": "mlx-community/Qwen3.5-9B-4bit", "family": "qwen3.5", "displayName": "Qwen 3.5 9B", "sizeGB": 6.0, "recommendedRAMGB": 16, "contextLength": 32768, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es", "it", "pt", "zh", "ja"] },
-    { "id": "qwen3.5-4b-4bit", "hfPath": "mlx-community/Qwen3.5-4B-4bit", "family": "qwen3.5", "displayName": "Qwen 3.5 4B", "sizeGB": 3.1, "recommendedRAMGB": 8, "contextLength": 32768, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es", "it", "pt", "zh", "ja"] },
-    { "id": "gemma-4-e4b-it-4bit", "hfPath": "mlx-community/gemma-4-e4b-it-4bit", "family": "gemma4", "displayName": "Gemma 4 E4B (mobile-optimized)", "sizeGB": 5.2, "recommendedRAMGB": 8, "contextLength": 8192, "supportsTools": true, "supportsVision": false, "supportedLocales": ["en", "pl", "de", "fr", "es"] }
+    {
+      "id": "gemma-4.5-12b-1m",
+      "hfPath": "mlx-community/gemma-4.5-12b-it-1m-4bit",
+      "family": "gemma4",
+      "displayName": "Gemma 4.5 12B (1M)",
+      "sizeGB": 7.0,
+      "recommendedRAMGB": 24,
+      "contextLength": 1048576,
+      "supportsTools": true,
+      "supportsVision": false,
+      "supportedLocales": ["pl", "en", "de", "fr", "es"]
+    },
+    {
+      "id": "gemma-4-e4b",
+      "hfPath": "mlx-community/gemma-4-e4b-it-4bit",
+      "family": "gemma4",
+      "displayName": "Gemma 4 E4B",
+      "sizeGB": 4.5,
+      "recommendedRAMGB": 8,
+      "contextLength": 32768,
+      "supportsTools": false,
+      "supportsVision": false,
+      "supportedLocales": ["pl", "en", "de", "fr", "es"]
+    }
   ],
   "embedders": [
     { "id": "multilingual-e5-large", "hfPath": "mlx-community/multilingual-e5-large-mlx", "family": "e5", "displayName": "multilingual-e5-large", "sizeGB": 1.1, "recommendedRAMGB": 4, "contextLength": 512, "supportsTools": false, "supportsVision": false, "supportedLocales": ["pl", "en", "de", "fr", "es", "it", "pt", "zh", "ja"] }
