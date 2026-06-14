@@ -123,6 +123,12 @@ public struct TodayDashboard: View {
     // `FocusModeEnvironment` contract. No new behaviour invented.
     // Internal (not `private`): read from the `+EmbeddedToday` extension.
     @Environment(\.focusModeState) var focusModeState
+    // Internal (not `private`): read from the `+Insights` extension file.
+    @Environment(\.pendingInsightStore) var pendingInsightStore
+    // Internal (not `private`): read from the `+Insights` extension file.
+    @Environment(\.insightProposalCoordinator) var insightProposalCoordinator
+    // Internal (not `private`): read from the `+Insights` extension file.
+    @Environment(\.insightCooldownStore) var insightCooldownStore
     @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass

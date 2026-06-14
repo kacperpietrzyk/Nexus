@@ -246,6 +246,7 @@ extension TodayDashboard {
                 embeddedErrorRow(embeddedError)
             }
             deadlineRiskBanner()  // spec §19.1 D1; see +EmbeddedAlerts
+            insightBanner()  // proactive insights; see +Insights
 
             if !embeddedTodayTasks.isEmpty {
                 embeddedSection(eyebrow: "TODAY", count: embeddedTodayTasks.count) {
