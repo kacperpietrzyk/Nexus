@@ -10,31 +10,28 @@ public struct MeetingsImportSettingsView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader("Import")
-            NexusSettingsCard {
-                VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-                    #if os(macOS)
-                    Button("Import from Circleback…") { pickFolder() }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(NexusColor.Text.primary)
-                        .font(NexusType.bodySmall.weight(.medium))
-                    Text(
-                        "Pick the folder produced by the Nexus Circleback MCP-dump "
-                            + "(manifest.json + meetings/ + transcripts/ + action-items.json). "
-                            + "Re-runs are safe — duplicates are skipped."
-                    )
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
-                    #else
-                    Text("Circleback import runs on Mac. Imported meetings will sync to this device via iCloud.")
-                        .font(NexusType.caption)
-                        .foregroundStyle(NexusColor.Text.muted)
-                    #endif
+        LiquidGlassCard("Import") {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+                #if os(macOS)
+                NexusButton(variant: .default, size: .sm) {
+                    pickFolder()
+                } label: {
+                    Text("Import from Circleback…")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(NexusSpacing.s4)
+                Text(
+                    "Pick the folder produced by the Nexus Circleback MCP-dump "
+                        + "(manifest.json + meetings/ + transcripts/ + action-items.json). "
+                        + "Re-runs are safe — duplicates are skipped."
+                )
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
+                #else
+                Text("Circleback import runs on Mac. Imported meetings will sync to this device via iCloud.")
+                    .font(DS.FontToken.caption)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                #endif
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .sheet(
             item: Binding(

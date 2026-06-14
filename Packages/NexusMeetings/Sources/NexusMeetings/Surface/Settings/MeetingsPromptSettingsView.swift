@@ -17,33 +17,27 @@ public struct MeetingsPromptSettingsView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader("Summary prompt (custom)")
-            NexusSettingsCard {
-                VStack(alignment: .leading, spacing: NexusSpacing.s4) {
-                    TextEditor(text: $prompt)
-                        .scrollContentBackground(.hidden)
-                        .frame(minHeight: 160)
+        LiquidGlassCard("Summary prompt (custom)") {
+            VStack(alignment: .leading, spacing: DS.Space.l) {
+                TextEditor(text: $prompt)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 160)
 
-                    HStack(spacing: NexusSpacing.s3) {
-                        Button("Save") {
-                            save()
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(NexusColor.Text.primary)
-                        .font(NexusType.bodySmall.weight(.medium))
+                HStack(spacing: DS.Space.m) {
+                    NexusButton(variant: .primary, size: .sm) {
+                        save()
+                    } label: {
+                        Text("Save")
+                    }
 
-                        Button("Reset to default", role: .destructive) {
-                            reset()
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(NexusColor.Text.secondary)
-                        .font(NexusType.bodySmall.weight(.medium))
+                    NexusButton(variant: .default, size: .sm) {
+                        reset()
+                    } label: {
+                        Text("Reset to default")
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(NexusSpacing.s4)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .onAppear(perform: load)
         .alert(item: $alert) { alert in

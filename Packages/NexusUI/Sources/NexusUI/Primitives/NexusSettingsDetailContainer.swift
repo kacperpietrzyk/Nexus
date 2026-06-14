@@ -45,9 +45,7 @@ public struct NexusSettingsDetailContainer<Content: View>: View {
                         .padding(NexusSpacing.s5)
                 }
             }
-            // Liquid re-skin (container level): DS app background (was the Linear
-            // `Background.base`; near-identical value, family-correct token).
-            .background(DS.ColorToken.backgroundApp)
+            .background(NexusColor.Background.base)
             .modifier(HiddenNativeChrome())
         }
     }

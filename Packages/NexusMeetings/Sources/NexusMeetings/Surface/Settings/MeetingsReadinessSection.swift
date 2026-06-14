@@ -6,7 +6,7 @@ import SwiftUI
 /// Settings section showing the readiness status of the Meetings system.
 ///
 /// Renders each `ReadinessSection` from `MeetingsReadinessViewModel` as a
-/// `NexusSettingsCard` block with one `NexusSettingsRow` per `ReadinessRow`.
+/// `LiquidGlassCard` block with one Liquid row per `ReadinessRow`.
 /// Each row shows a status icon on the left and an optional action button
 /// (`NexusButton(.outline, .sm)`) on the right. Refresh is triggered on
 /// `.onAppear`.
@@ -19,16 +19,14 @@ public struct MeetingsReadinessSection: View {
 
     public var body: some View {
         ForEach(viewModel.sections) { section in
-            VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-                nexusSettingsCardSectionHeader(section.title)
-                NexusSettingsCard {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(section.rows.enumerated()), id: \.element.id) { index, row in
-                            if index > 0 {
-                                NexusSettingsDivider()
-                            }
-                            rowView(row)
+            LiquidGlassCard(section.title) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(section.rows.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 {
+                            Divider()
+                                .overlay(DS.ColorToken.strokeHairline)
                         }
+                        rowView(row)
                     }
                 }
             }
@@ -49,12 +47,16 @@ public struct MeetingsReadinessSection: View {
 
     @ViewBuilder
     private func rowView(_ row: ReadinessRow) -> some View {
-        NexusSettingsRow(row.title) {
-            HStack(spacing: NexusSpacing.s3) {
+        HStack {
+            Text(row.title)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+            Spacer()
+            HStack(spacing: DS.Space.m) {
                 if let detail = row.detail {
                     Text(detail)
-                        .font(NexusType.caption)
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .font(DS.FontToken.caption)
+                        .foregroundStyle(DS.ColorToken.textMuted)
                 }
                 if let action = row.action, let label = actionLabel(action) {
                     NexusButton(variant: .outline, size: .sm) {
@@ -66,6 +68,7 @@ public struct MeetingsReadinessSection: View {
                 statusIcon(row.state)
             }
         }
+        .frame(minHeight: 44)
     }
 
     @ViewBuilder
@@ -73,20 +76,20 @@ public struct MeetingsReadinessSection: View {
         switch state {
         case .ok:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(NexusColor.Status.success)
+                .foregroundStyle(DS.ColorToken.statusSuccess)
         case .warning:
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(DS.ColorToken.textMuted)
         case .error:
             Image(systemName: "xmark.octagon.fill")
-                .foregroundStyle(NexusColor.Status.danger)
+                .foregroundStyle(DS.ColorToken.statusDanger)
         case .info:
             Image(systemName: "info.circle")
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(DS.ColorToken.textMuted)
         case .inProgress:
             ProgressView()
                 .controlSize(.small)
-                .tint(NexusColor.Text.secondary)
+                .tint(DS.ColorToken.textSecondary)
         }
     }
 

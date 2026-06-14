@@ -23,7 +23,7 @@ public struct MeetingsStorageUsageView: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(NexusColor.Status.danger)
+                    .foregroundStyle(DS.ColorToken.statusDanger)
             }
 
             ForEach(rows) { row in
