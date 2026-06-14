@@ -13,6 +13,8 @@ struct ProjectOverview: View {
     let model: LiquidProjectsModel
     let onOpenTask: (TaskItem) -> Void
 
+    @Environment(\.modelContext) private var modelContext
+
     private var reference: LiquidProjectsReferenceData.Snapshot? {
         LiquidReferenceMode.isEnabled ? LiquidProjectsReferenceData.snapshot(now: .now) : nil
     }
@@ -25,21 +27,62 @@ struct ProjectOverview: View {
         let activity = reference?.activity ?? model.activity
         let milestones = reference?.milestones ?? model.milestones
         let stats = ProjectExecutionModel.stats(tasks: tasks, now: .now)
+        let projectType = model.selectedProject?.type ?? .generic
 
         VStack(alignment: .leading, spacing: DS.Space.l) {
-            statRow(stats)
+            statRow(stats, type: projectType, project: model.selectedProject)
             MilestoneStrip(milestones: milestones)
             cardGrid(health: health, progress: progress, risks: risks, tasks: tasks, activity: activity)
         }
     }
 
-    private func statRow(_ stats: ProjectExecutionModel.ProjectStats) -> some View {
-        // Progress % is intentionally omitted here — it already reads on the
-        // header bar and the health gauge; a third copy was redundant.
+    // Progress % is intentionally omitted here — it already reads on the
+    // header bar and the health gauge; a third copy was redundant.
+    private func statRow(
+        _ stats: ProjectExecutionModel.ProjectStats,
+        type: ProjectType,
+        project: Project?
+    ) -> some View {
         HStack(spacing: DS.Space.m) {
-            ProjectStatTile(value: "\(stats.open)", label: "Open")
-            ProjectStatTile(value: "\(stats.done)", label: "Done")
-            ProjectStatTile(value: "\(stats.overdue)", label: "Overdue")
+            ForEach(ProjectExecutionModel.kpiLabels(for: type), id: \.self) { label in
+                ProjectStatTile(value: statValue(label, stats), label: label)
+            }
+            if let tile = typeExtraTile(type: type, project: project) {
+                ProjectStatTile(value: tile.value, label: tile.label)
+            }
+        }
+    }
+
+    private func statValue(_ label: String, _ stats: ProjectExecutionModel.ProjectStats) -> String {
+        switch label {
+        case "Open": return "\(stats.open)"
+        case "Done": return "\(stats.done)"
+        case "Overdue": return "\(stats.overdue)"
+        default: return "—"
+        }
+    }
+
+    @MainActor private func typeExtraTile(
+        type: ProjectType,
+        project: Project?
+    ) -> (value: String, label: String)? {
+        guard let project else { return nil }
+        switch type {
+        case .sales:
+            if let deal = project.customFields["dealValue"] { return (deal, "Deal") }
+            return nil
+        case .implementation:
+            let dates =
+                (try? ProjectKeyDateRepository(context: modelContext).list(projectID: project.id)) ?? []
+            if let poDate = dates.first(where: { $0.anchorKey == "PO" }) {
+                return (
+                    "\(ProjectExecutionModel.daysRemaining(to: poDate.date, from: .now))d",
+                    "To PO"
+                )
+            }
+            return nil
+        default:
+            return nil
         }
     }
 
