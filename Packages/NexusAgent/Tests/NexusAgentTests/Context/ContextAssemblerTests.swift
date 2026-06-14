@@ -1,8 +1,9 @@
 import Foundation
+import NexusAgentTools
+import NexusCore
 import SwiftData
 import Testing
-import NexusCore
-import NexusAgentTools
+
 @testable import NexusAgent
 
 @MainActor
@@ -48,8 +49,11 @@ import NexusAgentTools
     @Test func overBudgetTrimsRagHitsFirst() async throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let (agentContext, _) = try makeAgentContext(now: now)
-        let bigHits = (0..<20).map { RagHit(itemID: UUID(), kind: "note", title: "N\($0)",
-                                            snippet: String(repeating: "x", count: 400), score: 1) }
+        let bigHits = (0..<20).map {
+            RagHit(
+                itemID: UUID(), kind: "note", title: "N\($0)",
+                snippet: String(repeating: "x", count: 400), score: 1)
+        }
         let assembler = ContextAssembler(agentContext: agentContext, retriever: StubRetriever(hits: bigHits))
         let recipe = ContextRecipe(ragQuery: RagQuerySpec(query: "x", limit: 20), tokenBudget: 300)
         let result = await assembler.assemble(recipe, focus: ContextFocus(), now: now)

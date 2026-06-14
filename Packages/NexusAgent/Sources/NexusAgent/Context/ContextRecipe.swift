@@ -2,7 +2,7 @@ import Foundation
 
 public struct ContextFocus: Sendable, Equatable {
     public let primaryID: UUID?
-    public let kind: String?       // ItemKind raw value, e.g. "meeting", "project"
+    public let kind: String?  // ItemKind raw value, e.g. "meeting", "project"
     public let freeText: String?
     public init(primaryID: UUID? = nil, kind: String? = nil, freeText: String? = nil) {
         self.primaryID = primaryID; self.kind = kind; self.freeText = freeText
@@ -30,8 +30,10 @@ public struct ContextRecipe: Sendable, Equatable {
     public let repoSlices: [RepoSlice]
     public let ragQuery: RagQuerySpec?
     public let tokenBudget: Int
-    public init(includeEntity: Bool = false, linkGraphDepth: Int = 0,
-                repoSlices: [RepoSlice] = [], ragQuery: RagQuerySpec? = nil, tokenBudget: Int = 2_000) {
+    public init(
+        includeEntity: Bool = false, linkGraphDepth: Int = 0,
+        repoSlices: [RepoSlice] = [], ragQuery: RagQuerySpec? = nil, tokenBudget: Int = 2_000
+    ) {
         self.includeEntity = includeEntity; self.linkGraphDepth = linkGraphDepth
         self.repoSlices = repoSlices; self.ragQuery = ragQuery; self.tokenBudget = tokenBudget
     }
