@@ -223,9 +223,66 @@ struct NexusMacApp: App {
         }
     }
 
+    // In-shell Settings (Task 9): the typed bundle the legacy `Settings {}`
+    // scene assembled inline is lifted into `MacSettingsDependencies` and
+    // injected through the environment so `LiquidSettingsView` renders as the
+    // `.settings` destination. Every field mirrors the value the old scene
+    // passed; the 4 `AnyView` thunks wrap the same composed sub-views, and
+    // `ExternalAccessSection` is built directly (no `ExternalAccessConfig`
+    // intermediary) from the same sidecar path + activity log. The old
+    // `Settings {}` scene stays in place for now (removed in a later task).
+    // Computed (not an inline `let` in `body`) so the multi-scene
+    // `@SceneBuilder` body stays intact — `@State`-projected bindings
+    // ($quietHoursState) and stored props are member-accessible here.
+    private var macSettings: MacSettingsDependencies {
+        MacSettingsDependencies(
+            cloudKitEnabled: environment.cloudKitEnabled,
+            cloudKitContainerIdentifier: environment.cloudKitContainerIdentifier,
+            notificationsAuthorized: permissionState.status != .denied,
+            quietHoursStart: $quietHoursState.startTime,
+            quietHoursEnd: $quietHoursState.endTime,
+            onExportRequested: { exportPickerPresented = true },
+            manageModelsContent: {
+                AnyView(
+                    ManageModelsSection(
+                        localStateStore: ModelManifestLocalState.Store(),
+                        downloadManager: welcomeMLXDownloads.manager,
+                        lifecycle: aiGraph.mlxLifecycle,
+                        onChatReassigned: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
+                        onEmbedderReassigned: { [aiRouter] in
+                            try? await aiRouter.reloadMLXEmbedder()
+                        }
+                    )
+                )
+            },
+            agentSettingsContent: {
+                AnyView(AgentSettingsView(context: agentComposition.settingsContext))
+            },
+            meetingsSettingsContent: {
+                AnyView(
+                    MeetingsSettingsSection(
+                        composition: meetingsComposition,
+                        helperViewModel: MeetingsHelperSettingsViewModel()
+                    )
+                )
+            },
+            externalAccessContent: {
+                AnyView(
+                    ExternalAccessSection(
+                        sidecarPath: Bundle.main.bundleURL
+                            .appendingPathComponent("Contents/MacOS/nexus-mcp")
+                            .path,
+                        activityLog: agentActivityLog
+                    )
+                )
+            }
+        )
+    }
+
     var body: some Scene {
         Window("Nexus", id: "main") {
             ContentView()
+                .environment(\.macSettingsDependencies, macSettings)
                 .environment(\.searchSubsystem, search)
                 .environment(\.aiRouter, aiRouter)
                 .environment(\.taskParser, taskParser)

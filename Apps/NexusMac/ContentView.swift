@@ -327,9 +327,15 @@ struct ContentView: View {
         } else if selection == .people {
             // People / Contacts surface (spec §6); owns its own NavigationStack.
             PeopleListView()
+        } else if selection == .settings {
+            // Native two-pane in-shell Settings (Task 9): reads the
+            // `MacSettingsDependencies` bundle NexusMacApp injects into the
+            // environment. Replaces the old separate `Settings {}` window.
+            LiquidSettingsView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            // Inbox / Tasks / Stats / Settings routes inside
-            // `TodayDashboard` (embedded chrome).
+            // Inbox / Tasks / Stats routes inside `TodayDashboard`
+            // (embedded chrome).
             dashboardContent
         }
     }
