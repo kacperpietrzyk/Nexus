@@ -131,7 +131,7 @@ public final class AgentChatViewModel: ObservableObject {
                     attachments: attachments,
                     contextPrefix: contextPrefix,
                     scope: "global",
-                    toolAllowlist: chatConfig.toolNames.isEmpty ? nil : chatConfig.toolNames,
+                    toolAllowlist: chatConfig.toolNames,
                     systemPromptOverride: chatConfig.systemPrompt
                 )
             )
