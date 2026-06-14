@@ -1,8 +1,9 @@
 import Foundation
+import NexusAgentTools
+import NexusCore
 import SwiftData
 import Testing
-import NexusCore
-import NexusAgentTools
+
 @testable import NexusAgent
 
 @MainActor
@@ -11,8 +12,9 @@ import NexusAgentTools
         // Build a dispatcher with a real tasks.create tool over an in-memory store.
         let harness = try ProposalHarness.make()
         let mutation = PendingMutation(toolName: "tasks.create", arguments: .object(["title": .string("From proposal")]))
-        let proposal = Proposal(rationale: "test", mutations: [mutation],
-                                previews: [ProposalPreview(summary: "Create: From proposal")])
+        let proposal = Proposal(
+            rationale: "test", mutations: [mutation],
+            previews: [ProposalPreview(summary: "Create: From proposal")])
         let coordinator = ProposalCoordinator(dispatcher: harness.dispatcher)
         let results = try await coordinator.accept(proposal, threadID: nil)
         #expect(results.count == 1)
@@ -23,9 +25,10 @@ import NexusAgentTools
     @Test func rejectHasNoSideEffects() async throws {
         let harness = try ProposalHarness.make()
         let coordinator = ProposalCoordinator(dispatcher: harness.dispatcher)
-        let proposal = Proposal(rationale: "x",
-                                mutations: [PendingMutation(toolName: "tasks.create", arguments: .object(["title": .string("Nope")]))],
-                                previews: [])
+        let proposal = Proposal(
+            rationale: "x",
+            mutations: [PendingMutation(toolName: "tasks.create", arguments: .object(["title": .string("Nope")]))],
+            previews: [])
         coordinator.reject(proposal)
         #expect(try harness.context.fetch(FetchDescriptor<TaskItem>()).isEmpty)
     }

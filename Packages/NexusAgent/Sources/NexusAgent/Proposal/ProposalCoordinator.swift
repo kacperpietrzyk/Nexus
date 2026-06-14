@@ -18,5 +18,5 @@ public final class ProposalCoordinator {
     }
 
     /// Discard — zero side effects.
-    public func reject(_ proposal: Proposal) { /* intentionally empty */ }
+    public func reject(_ proposal: Proposal) { /* intentionally empty */  }
 }
