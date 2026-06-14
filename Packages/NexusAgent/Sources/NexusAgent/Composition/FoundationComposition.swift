@@ -121,6 +121,34 @@ public struct FoundationComposition {
         let assembler = ContextAssembler(agentContext: agentContext, retriever: EmptyRetriever())
         return SkillRunner(inference: RouterSkillInference(router: router), assembler: assembler)
     }
+
+    /// Builds a `ToolDispatcher` + `ProposalCoordinator` for in-view panel accept
+    /// calls inside `TasksFeature`. Registers `tasks.create` and `tasks.update` so
+    /// refine/breakdown/suggest-due proposals are audited and undoable.
+    /// Must be called on `@MainActor` (Ref-box inits require it).
+    public static func makeLocalDispatcher(
+        modelContext: ModelContext,
+        now: @escaping @Sendable () -> Date = { .now }
+    ) -> ProposalCoordinator {
+        let repo = TaskItemRepository(
+            context: modelContext,
+            scheduler: RRuleScheduler(),
+            now: now
+        )
+        let agentContext = AgentContext(
+            modelContext: ModelContextRef(modelContext),
+            taskRepository: TaskItemRepositoryRef(repo),
+            searchIndex: SearchIndex(),
+            now: now
+        )
+        let registry = ToolRegistry(tools: [TasksCreateTool(), TasksUpdateTool()])
+        let dispatcher = ToolDispatcher(
+            registry: registry,
+            modelContext: modelContext,
+            agentContext: agentContext
+        )
+        return ProposalCoordinator(dispatcher: dispatcher)
+    }
 }
 
 // MARK: - Private stubs (Sources-safe; no test types)
