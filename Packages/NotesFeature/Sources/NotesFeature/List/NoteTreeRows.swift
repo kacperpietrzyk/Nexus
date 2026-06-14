@@ -46,12 +46,15 @@ struct NoteTreeLeaf: View {
 
 /// A recursive Library folder node using `DisclosureGroup`.
 /// Each folder shows its name, nested sub-folders, and leaf notes.
-struct NoteFolderDisclosure: View {
+struct NoteFolderDisclosure<Menu: View>: View {
     let node: NoteTreeModel.FolderNode
     let selection: UUID?
     let isExpanded: (String) -> Bool
     let setExpanded: (String, Bool) -> Void
     let onSelect: (UUID) -> Void
+    /// Per-note context menu, supplied by the owner so Library notes share the
+    /// same Move / Convert / Delete actions as the flat-section leaves.
+    @ViewBuilder let noteMenu: (Note) -> Menu
 
     var body: some View {
         DisclosureGroup(
@@ -66,7 +69,8 @@ struct NoteFolderDisclosure: View {
                     selection: selection,
                     isExpanded: isExpanded,
                     setExpanded: setExpanded,
-                    onSelect: onSelect
+                    onSelect: onSelect,
+                    noteMenu: noteMenu
                 )
                 .padding(.leading, DS.Space.m)
             }
@@ -78,6 +82,7 @@ struct NoteFolderDisclosure: View {
                 )
                 .padding(.leading, DS.Space.m)
                 .onTapGesture { onSelect(note.id) }
+                .contextMenu { noteMenu(note) }
             }
         } label: {
             Label(node.name, systemImage: "folder")

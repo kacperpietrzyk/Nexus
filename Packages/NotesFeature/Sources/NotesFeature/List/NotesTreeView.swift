@@ -8,9 +8,16 @@ import SwiftUI
 /// macOS knowledge-base navigator (spec §4): in-panel header + a sectioned,
 /// nested tree (Unfiled / Projects / Library / Journal / Templates). Selecting a
 /// note drives the shared `NavigationStack` into the existing block editor.
-/// Read/navigate only — mutations (new folder, move) come in Task 4.
+/// Selecting a note navigates; a per-note context menu and the header New Folder
+/// button drive mutations (new folder, move, convert-to-task).
 struct NotesTreeView: View {
     @Environment(\.noteRepository) private var noteRepository
+    @Environment(\.notesTaskRepository) private var taskRepository
+
+    @State private var newFolderText = ""
+    @State private var showNewFolderAlert = false
+    @State private var moveTarget: Note?
+    @State private var moveFolderText = ""
 
     @Query(filter: #Predicate<Note> { $0.deletedAt == nil }, sort: \Note.updatedAt, order: .reverse)
     private var notes: [Note]
@@ -57,6 +64,30 @@ struct NotesTreeView: View {
                     .padding(DS.Space.s)
             }
         }
+        .alert("New folder", isPresented: $showNewFolderAlert) {
+            TextField("Folder name", text: $newFolderText)
+            Button("Create") {
+                createNote(in: NoteFolderPath.normalize(newFolderText))
+                newFolderText = ""
+            }
+            Button("Cancel", role: .cancel) { newFolderText = "" }
+        }
+        .alert(
+            "Move to folder",
+            isPresented: Binding(
+                get: { moveTarget != nil },
+                set: { if !$0 { moveTarget = nil } }
+            )
+        ) {
+            TextField("Folder path (blank = Unfiled)", text: $moveFolderText)
+            Button("Move") {
+                if let target = moveTarget {
+                    try? noteRepository?.setFolderPath(target, NoteFolderPath.normalize(moveFolderText))
+                }
+                moveTarget = nil
+            }
+            Button("Cancel", role: .cancel) { moveTarget = nil }
+        }
     }
 
     // MARK: - Header
@@ -78,8 +109,9 @@ struct NotesTreeView: View {
                 systemImage: "folder.badge.plus",
                 accessibilityLabel: "New folder"
             ) {
-                // Task 4 wires folder creation
+                showNewFolderAlert = true
             }
+            .disabled(noteRepository == nil)
             .help("New folder")
             LiquidIconButton(
                 systemImage: "square.and.pencil",
@@ -119,7 +151,8 @@ struct NotesTreeView: View {
                         selection: selection,
                         isExpanded: { !collapsed.contains($0) },
                         setExpanded: { setCollapsed($0, !$1) },
-                        onSelect: select
+                        onSelect: select,
+                        noteMenu: noteContextMenu
                     )
                 }
             }
@@ -172,6 +205,21 @@ struct NotesTreeView: View {
             isSelected: note.id == selection
         )
         .onTapGesture { select(note.id) }
+        .contextMenu { noteContextMenu(note) }
+    }
+
+    /// Shared per-note context menu used by both the flat-section leaves and the
+    /// recursive Library `NoteFolderDisclosure`. Not offered on canonical project
+    /// pages (Convert/Delete on a project's page would be wrong).
+    @ViewBuilder private func noteContextMenu(_ note: Note) -> some View {
+        Button("Move to folder…") {
+            moveFolderText = note.folderPath ?? ""
+            moveTarget = note
+        }
+        Button("Convert to Task") { convertToTask(note) }
+            .disabled(taskRepository == nil)
+        Divider()
+        Button("Delete", role: .destructive) { deleteNote(note) }
     }
 
     @ViewBuilder private func treeSection<Content: View>(
@@ -222,6 +270,27 @@ struct NotesTreeView: View {
             }
             select(created.id)
         }
+    }
+
+    private func convertToTask(_ note: Note) {
+        guard let taskRepository else { return }
+        let draft = NoteTaskConversion.draft(from: note)
+        let task = TaskItem(title: draft.title, body: draft.body)
+        // Gate the delete on a successful insert: with two independent `try?`s the
+        // note would be soft-deleted even when the task insert throws — silent data
+        // loss, since the tree `@Query` filters out `deletedAt != nil` notes.
+        do {
+            try taskRepository.insert(task)
+            try noteRepository?.delete(note)
+            if path.last == note.id { path = [] }  // selection is derived from path.last
+        } catch {
+            // Insert failed: leave the note intact rather than destroy it.
+        }
+    }
+
+    private func deleteNote(_ note: Note) {
+        try? noteRepository?.delete(note)
+        if path.last == note.id { path = [] }  // selection is derived from path.last
     }
 }
 

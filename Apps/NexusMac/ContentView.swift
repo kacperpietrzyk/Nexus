@@ -318,6 +318,7 @@ struct ContentView: View {
             // Notes content layer (spec §5): list + block editor; owns its own
             // NavigationStack.
             NotesListView()
+                .environment(\.notesTaskRepository, taskRepository)
         } else if selection == .calendar {
             // Liquid Calendar / Week Planning (Task 6): custom week grid +
             // scheduling strip; Day/Month re-mount the existing grids. See
