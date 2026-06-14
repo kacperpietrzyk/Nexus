@@ -9,8 +9,8 @@ public enum ProjectType: String, Codable, Sendable, CaseIterable {
     case implementation
     case sales
     case audit
-    case internalDev   // `internal` is a Swift keyword
-    case generic       // fallback + all pre-V15 projects
+    case internalDev  // `internal` is a Swift keyword
+    case generic  // fallback + all pre-V15 projects
 
     public var displayName: String {
         switch self {

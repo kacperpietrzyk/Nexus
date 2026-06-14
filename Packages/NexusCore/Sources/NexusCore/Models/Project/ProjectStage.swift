@@ -53,8 +53,8 @@ public enum ProjectStage: String, Codable, Sendable, CaseIterable {
         case .lead, .qualifying, .auditPlan, .planning:
             return .planned
         case .proposal, .tender, .kickoff, .deliveryDocs, .softwareDelivery,
-             .installation, .asBuiltDocs, .auditExecution, .building, .reviewing,
-             .support, .training, .acceptance:
+            .installation, .asBuiltDocs, .auditExecution, .building, .reviewing,
+            .support, .training, .acceptance:
             return .active
         case .won, .auditReport, .shipped, .closed:
             return .completed
