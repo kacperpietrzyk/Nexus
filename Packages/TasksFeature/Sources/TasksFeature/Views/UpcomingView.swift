@@ -206,7 +206,8 @@ public struct UpcomingView: View {
             } else {
                 try TaskCompletionAction.complete(item, repository: repository)
             }
-            reload()
+            // Animate the row leaving the list on completion (see TaskListView).
+            withAnimation(NexusMotion.standard) { reload() }
         } catch let error as TaskItemRepositoryError {
             if case .parentHasOpenSubtasks(let parentID, let openCount) = error, parentID == item.id {
                 cascadePrompt = CascadeCompletionPrompt(task: item, openCount: openCount)
@@ -223,7 +224,7 @@ public struct UpcomingView: View {
         guard let repository else { return }
         do {
             try TaskCompletionAction.cascadeComplete(prompt.task, repository: repository)
-            reload()
+            withAnimation(NexusMotion.standard) { reload() }
         } catch {
             self.error = String(describing: error)
         }

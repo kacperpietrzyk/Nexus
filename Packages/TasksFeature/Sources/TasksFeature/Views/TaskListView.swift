@@ -389,7 +389,10 @@ public struct TaskListView: View {
             } else {
                 try TaskCompletionAction.complete(item, repository: repository)
             }
-            reload()
+            // Animate the row leaving/changing the list — completion is the
+            // most-triggered mutation and must not pop. Load/filter reloads stay
+            // unwrapped so the per-row `.nexusAppear` stagger owns those.
+            withAnimation(NexusMotion.standard) { reload() }
         } catch let error as TaskItemRepositoryError {
             if case .parentHasOpenSubtasks(let parentID, let openCount) = error, parentID == item.id {
                 cascadePrompt = CascadeCompletionPrompt(task: item, openCount: openCount)
@@ -406,7 +409,7 @@ public struct TaskListView: View {
         guard let repository else { return }
         do {
             try TaskCompletionAction.cascadeComplete(prompt.task, repository: repository)
-            reload()
+            withAnimation(NexusMotion.standard) { reload() }
         } catch {
             self.error = String(describing: error)
         }
@@ -447,7 +450,7 @@ public struct TaskListView: View {
         }
         do {
             try repository.snooze(item, until: until)
-            reload()
+            withAnimation(NexusMotion.standard) { reload() }
         } catch {
             self.error = String(describing: error)
         }
