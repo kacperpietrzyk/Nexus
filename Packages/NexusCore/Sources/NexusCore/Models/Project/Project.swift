@@ -17,6 +17,21 @@ public final class Project: Searchable {
     /// Orthogonal to `archivedAt` (a completed/cancelled project may or may not
     /// be archived). Additive — defaulted so it flows into V9/V10 as lightweight.
     public var statusRaw: String = ProjectStatus.backlog.rawValue
+    /// High-level project type (universal types extension). Raw `ProjectType`;
+    /// existing/pre-V15 rows default to `.generic`. Drives stage preset + default
+    /// sections + which fields the UI surfaces. Additive/defaulted ⇒ lightweight migration.
+    public var typeRaw: String = ProjectType.generic.rawValue
+    /// Current granular stage within this type's preset (raw `ProjectStage`). nil =
+    /// not placed on the pipeline. Kept in sync with `statusRaw` via the repository.
+    public var stageRaw: String?
+    /// Client/account this project is for (→ `Organization.id`). nil for internal/dev.
+    public var clientID: UUID?
+    /// Vendor / product line, free text for v1 (e.g. "Proofpoint DLP").
+    public var vendor: String?
+    /// JSON-encoded `[String:String]` custom-field bag (long-tail metadata: dealValue,
+    /// sku, competitor, scopeSource). CloudKit-safe (String). NOTE: bag values are not
+    /// queryable/sortable — promote to first-class fields later if reporting needs it.
+    public var customFieldsJSON: String?
     /// Pointer to the project's canonical page `Note` (`role == .projectPage`).
     /// nil = no page yet (Notes content layer, spec §4.2). Additive/optional.
     public var canonicalNoteRef: UUID?
@@ -30,7 +45,8 @@ public final class Project: Searchable {
         name: String,
         color: String = "azure",
         parentProjectID: UUID? = nil,
-        status: ProjectStatus = .backlog
+        status: ProjectStatus = .backlog,
+        type: ProjectType = .generic
     ) {
         self.id = id
         self.kind = .project
@@ -38,6 +54,7 @@ public final class Project: Searchable {
         self.color = color
         self.parentProjectID = parentProjectID
         self.statusRaw = status.rawValue
+        self.typeRaw = type.rawValue
         self.archivedAt = nil
         let now = Date.now
         self.createdAt = now
@@ -54,6 +71,35 @@ public final class Project: Searchable {
     /// `backlog` for an unknown stored raw.
     public var status: ProjectStatus {
         ProjectStatus(rawValue: statusRaw) ?? .backlog
+    }
+
+    /// Read/write view over `typeRaw`. Unknown stored raw ⇒ `.generic`.
+    public var type: ProjectType {
+        get { ProjectType(rawValue: typeRaw) ?? .generic }
+        set { typeRaw = newValue.rawValue }
+    }
+
+    /// Read/write view over `stageRaw`. nil when not placed on the pipeline.
+    public var stage: ProjectStage? {
+        get { stageRaw.flatMap(ProjectStage.init(rawValue:)) }
+        set { stageRaw = newValue?.rawValue }
+    }
+
+    /// Read/write view over `customFieldsJSON`. Decode failure ⇒ empty dict.
+    public var customFields: [String: String] {
+        get {
+            guard let data = customFieldsJSON?.data(using: .utf8),
+                let decoded = try? JSONDecoder().decode([String: String].self, from: data)
+            else { return [:] }
+            return decoded
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else {
+                customFieldsJSON = nil
+                return
+            }
+            customFieldsJSON = String(data: data, encoding: .utf8)
+        }
     }
 
     public var searchableText: String { name }
