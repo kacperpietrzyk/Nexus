@@ -72,12 +72,11 @@ public struct ManageModelsSection: View {
 
     public var body: some View {
         // Shared chrome: the container supplies the "Manage Models" title and
-        // the back affordance (kept — this view is still pushed as a
-        // NavigationLink from the legacy macOS Settings and from iOS). Inside,
-        // each logical group is a Liquid `LiquidGlassCard` (was a Linear
-        // `nexusSettingsCardSectionHeader` + `NexusSettingsCard` pair); the
-        // card title replaces the standalone eyebrow header and the glass
-        // carries its own elevation + edge padding.
+        // the back affordance (kept — this view is pushed as a NavigationLink
+        // from iOS Settings and embedded in the macOS in-shell AI & Models
+        // panel). Inside, each logical group is a Liquid `LiquidGlassCard(title:)`
+        // whose title carries the section header and whose glass supplies its
+        // own elevation + edge padding.
         NexusSettingsDetailContainer(title: "Manage Models") {
             VStack(alignment: .leading, spacing: DS.Space.l) {
                 storageSection
