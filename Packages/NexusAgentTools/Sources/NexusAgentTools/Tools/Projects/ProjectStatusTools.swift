@@ -148,6 +148,55 @@ public struct ProjectsSetStatusTool: AgentTool {
     }
 }
 
+// MARK: - projects.set_stage
+
+public struct ProjectsSetStageTool: AgentTool {
+    public let name = "projects.set_stage"
+    public let description = """
+        Sets a project's granular pipeline stage (must belong to the project's type preset). \
+        Also syncs the coarse status. Stage values depend on type: implementation \
+        (kickoff…closed), sales (lead…lost), audit (auditPlan…auditReport), internalDev \
+        (planning…shipped). Generic projects have no pipeline stages, so this tool always \
+        fails on them — use projects.set_status instead.
+        """
+    public let inputSchema: JSONSchema = .object(
+        properties: [
+            "project_id": .string(description: "Project UUID."),
+            "stage": .string(
+                enumValues: ProjectStage.allCases.map(\.rawValue),
+                description: "New ProjectStage (must be in the project type's preset)."
+            ),
+        ],
+        required: ["project_id", "stage"]
+    )
+
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let id = try TasksToolArguments.requiredUUID(args["project_id"], field: "project_id")
+        let stageText = try TasksToolArguments.requiredString(args["stage"], field: "stage")
+        guard let stage = ProjectStage(rawValue: stageText) else {
+            throw AgentError.validation(
+                "Invalid stage '\(stageText)'. Expected one of: "
+                    + ProjectStage.allCases.map(\.rawValue).joined(separator: ", ")
+            )
+        }
+        let project = try ProjectsToolSupport.liveProject(id: id, context: context)
+        do {
+            try context.projectRepository.setStage(stage, on: project)
+        } catch let error as ProjectStageError {
+            switch error {
+            case .stageNotInTypePreset(let stage, let type):
+                throw AgentError.validation(
+                    "Stage '\(stage.rawValue)' is not valid for project type '\(type.rawValue)'."
+                )
+            }
+        }
+        return try TasksToolJSON.encode(ProjectDTO(from: project))
+    }
+}
+
 // MARK: - projects.list
 
 public struct ProjectsListTool: AgentTool {

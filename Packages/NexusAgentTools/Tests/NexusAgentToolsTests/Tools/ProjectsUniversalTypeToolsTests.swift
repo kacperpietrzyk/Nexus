@@ -134,4 +134,38 @@ struct ProjectsUniversalTypeToolsTests {
         )
         #expect(result["client_id"] == nil || result["client_id"] == .null)
     }
+
+    @MainActor
+    @Test("projects.set_stage sets stage and syncs status")
+    func setStageSyncsStatus() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = try fixture.context.projectRepository.create(name: "Sale", type: .sales)
+        let tool = try #require(ToolRegistry(tools: CoreTaskTools.all()).tool(named: "projects.set_stage"))
+        let result = try await tool.call(
+            args: .object([
+                "project_id": .string(project.id.uuidString),
+                "stage": .string("won"),
+            ]),
+            context: fixture.context
+        )
+        #expect(result["stage"]?.stringValue == "won")
+        #expect(result["status"]?.stringValue == "completed")
+    }
+
+    @MainActor
+    @Test("projects.set_stage rejects a stage outside the type preset")
+    func setStageRejectsForeign() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = try fixture.context.projectRepository.create(name: "Sale", type: .sales)
+        let tool = try #require(ToolRegistry(tools: CoreTaskTools.all()).tool(named: "projects.set_stage"))
+        await #expect(throws: AgentError.self) {
+            _ = try await tool.call(
+                args: .object([
+                    "project_id": .string(project.id.uuidString),
+                    "stage": .string("kickoff"),
+                ]),
+                context: fixture.context
+            )
+        }
+    }
 }

@@ -89,6 +89,7 @@ public enum CoreTaskTools {
             SectionsCreateTool(),
             ProjectsGetTool(),
             ProjectsSetStatusTool(),
+            ProjectsSetStageTool(),
             ProjectsListTool(),
             ProjectsUpdateTool(),
             ProjectsArchiveTool(),
