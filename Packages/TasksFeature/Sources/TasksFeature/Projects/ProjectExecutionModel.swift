@@ -384,8 +384,10 @@ public enum ProjectExecutionModel {
         current: [KeyDateDraft],
         desired: [KeyDateDraft]
     ) -> (upserts: [KeyDateDraft], deletions: [String]) {
-        let currentByKey = Dictionary(uniqueKeysWithValues: current.map { ($0.anchorKey, $0) })
-        let desiredByKey = Dictionary(uniqueKeysWithValues: desired.map { ($0.anchorKey, $0) })
+        // `uniquingKeysWith` (not `uniqueKeysWithValues`) so a corrupt import with two
+        // rows sharing an anchorKey can't trap; the last one wins, matching repo upsert.
+        let currentByKey = Dictionary(current.map { ($0.anchorKey, $0) }, uniquingKeysWith: { _, latest in latest })
+        let desiredByKey = Dictionary(desired.map { ($0.anchorKey, $0) }, uniquingKeysWith: { _, latest in latest })
 
         let upserts = desired.filter { draft in
             currentByKey[draft.anchorKey] != draft

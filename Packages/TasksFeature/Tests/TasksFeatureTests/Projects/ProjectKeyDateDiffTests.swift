@@ -119,4 +119,23 @@ struct ProjectKeyDateDiffTests {
         #expect(upsertKeys == ["T0", "DECISION"])
         #expect(result.deletions == ["KICK"])
     }
+
+    // MARK: - Crash safety
+
+    @Test("Duplicate anchorKey in current does not trap (hardened dictionary build)")
+    func duplicateAnchorKeyDoesNotTrap() {
+        // A corrupt import could yield two rows sharing an anchorKey; the diff must
+        // not crash building its keyed lookup. The last duplicate wins.
+        let current = [
+            draft(key: "PO", label: "First"),
+            draft(key: "PO", label: "Second"),
+        ]
+        let desired = [draft(key: "PO", label: "Second")]
+
+        let result = ProjectExecutionModel.keyDateDiff(current: current, desired: desired)
+
+        // Desired matches the last-wins current entry, so no upsert; nothing deleted.
+        #expect(result.upserts.isEmpty)
+        #expect(result.deletions.isEmpty)
+    }
 }

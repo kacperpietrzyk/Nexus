@@ -46,7 +46,7 @@ extension ProjectEditorSheet {
 
             // Compact add row: key | label | date | contractual | plus
             HStack {
-                TextField("key", text: $newAnchorKey)
+                TextField("key", text: $newAnchorKey, prompt: Text("e.g. PO, T0"))
                     .textFieldStyle(.plain)
                     .nexusType(.body)
                     .foregroundStyle(NexusColor.Text.primary)
