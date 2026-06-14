@@ -8,12 +8,6 @@ import SwiftUI
 /// just a subtle fill.
 private let personRowHoverFill = Color.white.opacity(0.04)
 
-#if os(macOS)
-/// Readable single-column width for the directory on the wide Mac content
-/// panel — visual calibration (no DS column token); the list centers inside it.
-private let peopleColumnMaxWidth: CGFloat = 720
-#endif
-
 /// The People surface (spec §6): a searchable list of all live `Person` contact
 /// records with a "New Person" affordance and navigation into the profile. Mac +
 /// iOS; the Watch projection is out of scope (slim Watch).
@@ -81,26 +75,42 @@ public struct PeopleListView: View {
 
     #if os(macOS)
     private var platformContent: some View {
-        VStack(spacing: DS.Space.m) {
-            header
-
+        Group {
             if people.isEmpty {
-                Spacer(minLength: 0)
-                LiquidEmptyState(
-                    systemImage: "person.crop.circle",
-                    message: "No people yet. Add a contact, or they appear automatically from meetings."
-                ) {
-                    LiquidPrimaryButton("New Person", systemImage: "person.badge.plus") {
-                        createPerson()
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    LiquidEmptyState(
+                        systemImage: "person.crop.circle",
+                        message: "No people yet. Add a contact, or they appear automatically from meetings."
+                    ) {
+                        LiquidPrimaryButton("New Person", systemImage: "person.badge.plus") {
+                            createPerson()
+                        }
                     }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             } else {
-                macList
+                directoryPanel
             }
         }
         .padding(DS.Space.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// The directory sits in one contained glass pane — the same idiom as the
+    /// Liquid Meetings list pane (`.liquidGlass(.sidebar)`) — centered to a
+    /// readable measure on the wide content panel rather than floating row by
+    /// row on the bare substrate. `Person` records are sparse (avatar · name ·
+    /// meeting count), so a full-width row band would expose dead space
+    /// mid-row; a bounded, contained column reads as deliberate.
+    private var directoryPanel: some View {
+        VStack(spacing: DS.Space.m) {
+            header
+            macList
+        }
+        .padding(DS.Space.m)
+        .liquidGlass(.sidebar, radius: DS.Radius.l)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// In-panel header: live search + New Person. Window-toolbar items are
@@ -116,7 +126,6 @@ public struct PeopleListView: View {
             }
             .disabled(personRepository == nil)
         }
-        .frame(maxWidth: peopleColumnMaxWidth)
     }
 
     /// Same live-search idiom as the Liquid Meetings list pane.
@@ -156,10 +165,9 @@ public struct PeopleListView: View {
 
                 macFromMeetingsSection
             }
-            .frame(maxWidth: peopleColumnMaxWidth)
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, DS.Space.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.never)
     }
 
     private func personButton(_ person: Person) -> some View {
@@ -218,7 +226,7 @@ public struct PeopleListView: View {
             .kerning(0.6)
             .foregroundStyle(DS.ColorToken.textMuted)
             .padding(.horizontal, DS.Space.xs)
-            .padding(.top, DS.Space.s)
+            .padding(.top, DS.Space.xs)
             .padding(.bottom, DS.Space.xxs)
     }
 
