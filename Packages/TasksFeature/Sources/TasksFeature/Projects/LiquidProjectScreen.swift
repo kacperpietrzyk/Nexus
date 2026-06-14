@@ -251,7 +251,7 @@ public struct LiquidProjectScreen: View {
 
     // MARK: - Execution screen
 
-    @MainActor private func clientName(for project: Project) -> String? {
+    private func clientName(for project: Project) -> String? {
         guard let clientID = project.clientID else { return nil }
         return (try? OrganizationRepository(context: modelContext).find(id: clientID))?.name
     }
