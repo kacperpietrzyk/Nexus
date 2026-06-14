@@ -26,4 +26,34 @@ struct ProjectsUniversalTypeToolsTests {
         #expect(json["vendor"]?.stringValue == "Proofpoint DLP")
         #expect(json["custom_fields"]?["dealValue"]?.stringValue == "690891 PLN")
     }
+
+    @MainActor
+    @Test("projects.create accepts type/client_id/vendor")
+    func createAcceptsTypeFields() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let tool = try #require(ToolRegistry(tools: CoreTaskTools.all()).tool(named: "projects.create"))
+        let clientID = UUID()
+        let result = try await tool.call(
+            args: .object([
+                "name": .string("AKMF"),
+                "type": .string("implementation"),
+                "client_id": .string(clientID.uuidString),
+                "vendor": .string("Proofpoint DLP"),
+            ]),
+            context: fixture.context
+        )
+        #expect(result["type"]?.stringValue == "implementation")
+        #expect(result["client_id"]?.stringValue == clientID.uuidString)
+        #expect(result["vendor"]?.stringValue == "Proofpoint DLP")
+    }
+
+    @MainActor
+    @Test("projects.create rejects an invalid type")
+    func createRejectsBadType() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let tool = try #require(ToolRegistry(tools: CoreTaskTools.all()).tool(named: "projects.create"))
+        await #expect(throws: AgentError.self) {
+            _ = try await tool.call(args: .object(["name": .string("X"), "type": .string("bogus")]), context: fixture.context)
+        }
+    }
 }

@@ -11,6 +11,12 @@ public struct ProjectsCreateTool: AgentTool {
             "name": .string(description: "Project name."),
             "glyph": .string(description: "Optional achromatic glyph key. Defaults to azure."),
             "parent_project_id": .string(description: "Optional parent project UUID."),
+            "type": .string(
+                enumValues: ProjectType.allCases.map(\.rawValue),
+                description: "Optional ProjectType. Defaults to generic."
+            ),
+            "client_id": .string(description: "Optional client Organization UUID."),
+            "vendor": .string(description: "Optional vendor/product line."),
         ],
         required: ["name"]
     )
@@ -28,7 +34,28 @@ public struct ProjectsCreateTool: AgentTool {
         if let parentID {
             _ = try ProjectsToolSupport.liveProject(id: parentID, context: context)
         }
-        let project = try context.projectRepository.create(name: name, color: glyph, parentProjectID: parentID)
+        let projectType: ProjectType
+        if let typeText = try ProjectsToolSupport.optionalTrimmedString(args["type"], field: "type") {
+            guard let parsed = ProjectType(rawValue: typeText) else {
+                throw AgentError.validation(
+                    "Invalid type '\(typeText)'. Expected one of: "
+                        + ProjectType.allCases.map(\.rawValue).joined(separator: ", ")
+                )
+            }
+            projectType = parsed
+        } else {
+            projectType = .generic
+        }
+        let clientID = try TasksStructuredCreateArguments.optionalUUID(args["client_id"], field: "client_id")
+        let vendor = try ProjectsToolSupport.optionalTrimmedString(args["vendor"], field: "vendor")
+        let project = try context.projectRepository.create(
+            name: name,
+            color: glyph,
+            parentProjectID: parentID,
+            type: projectType
+        )
+        if let clientID { try context.projectRepository.setClient(clientID, on: project) }
+        if let vendor { try context.projectRepository.setVendor(vendor, on: project) }
         return try TasksToolJSON.encode(ProjectDTO(from: project))
     }
 }
