@@ -16,6 +16,8 @@ struct ProjectHeader: View {
     let project: Project
     let descriptionLine: String?
     let progress: Double
+    var stage: ProjectStage?
+    var clientName: String?
     let onBack: () -> Void
     let onEdit: () -> Void
 
@@ -40,6 +42,10 @@ struct ProjectHeader: View {
 
                 statusMenu
 
+                if let stage {
+                    LiquidPill(stage.displayName, color: DS.ColorToken.statusNeutral, filled: false)
+                }
+
                 Spacer(minLength: DS.Space.m)
 
                 LiquidIconButton(
@@ -63,6 +69,24 @@ struct ProjectHeader: View {
                 )
                 .font(DS.FontToken.metadata)
                 .foregroundStyle(DS.ColorToken.textTertiary)
+
+                if let clientName, !clientName.isEmpty {
+                    Text("·")
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
+                    Text(clientName)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                }
+
+                if let vendor = project.vendor, !vendor.isEmpty {
+                    Text("·")
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
+                    Text(vendor)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                }
 
                 if let statusError {
                     Text(statusError)

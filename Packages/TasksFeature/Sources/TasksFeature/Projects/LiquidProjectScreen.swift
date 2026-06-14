@@ -251,6 +251,11 @@ public struct LiquidProjectScreen: View {
 
     // MARK: - Execution screen
 
+    @MainActor private func clientName(for project: Project) -> String? {
+        guard let clientID = project.clientID else { return nil }
+        return (try? OrganizationRepository(context: modelContext).find(id: clientID))?.name
+    }
+
     private func executionScreen(_ project: Project) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DS.Space.l) {
@@ -258,6 +263,8 @@ public struct LiquidProjectScreen: View {
                     project: project,
                     descriptionLine: model.descriptionLine,
                     progress: model.progress,
+                    stage: project.stage,
+                    clientName: clientName(for: project),
                     onBack: { select(nil) },
                     onEdit: { editingProject = project }
                 )
