@@ -29,9 +29,9 @@ func projectHealthLabel(_ health: ProjectExecutionModel.ProjectHealth) -> String
 /// Receives already-resolved values via init — no awareness of reference mode.
 public struct ProjectHealthCard: View {
 
-    private let health: ProjectExecutionModel.ProjectHealth
-    private let progress: Double
-    private let detail: String
+    let health: ProjectExecutionModel.ProjectHealth
+    let progress: Double
+    let detail: String
 
     public init(
         health: ProjectExecutionModel.ProjectHealth,
@@ -99,9 +99,9 @@ public struct ProjectHealthCard: View {
 /// Standalone "Delivery Risk" card for the Overview tab.
 public struct DeliveryRiskCard: View {
 
-    private let risks: [ProjectExecutionModel.ProjectRisk]
-    private let tasks: [TaskItem]
-    private let onOpenTask: (TaskItem) -> Void
+    let risks: [ProjectExecutionModel.ProjectRisk]
+    let tasks: [TaskItem]
+    let onOpenTask: (TaskItem) -> Void
 
     public init(
         risks: [ProjectExecutionModel.ProjectRisk],
@@ -184,7 +184,7 @@ public struct DeliveryRiskCard: View {
 /// Standalone "Recent Activity" card for the Overview tab.
 public struct RecentActivityCard: View {
 
-    private let activity: [ProjectExecutionModel.ActivityEntry]
+    let activity: [ProjectExecutionModel.ActivityEntry]
 
     public init(activity: [ProjectExecutionModel.ActivityEntry]) {
         self.activity = activity
