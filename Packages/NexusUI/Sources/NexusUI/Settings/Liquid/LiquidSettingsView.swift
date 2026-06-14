@@ -31,15 +31,21 @@ public struct LiquidSettingsView: View {
     // MARK: - Detail pane
 
     private var detailPane: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DS.Space.l) {
-                detailHeader(for: selected)
-                detailContent(for: selected)
+        // Wrapped in a `NavigationStack` so embedded sub-views (ManageModels'
+        // `NavigationLink("System prompt…")`) have a push ancestor. At the stack
+        // root with nothing below it macOS shows no back button, so no extra
+        // chrome leaks; a push (System prompt) gets a native back affordance.
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: DS.Space.l) {
+                    detailHeader(for: selected)
+                    detailContent(for: selected)
+                }
+                .padding(DS.Space.l)
+                .frame(maxWidth: 720, alignment: .topLeading)
             }
-            .padding(DS.Space.l)
-            .frame(maxWidth: 720, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Header (serif, Stats-idiom)
@@ -71,9 +77,7 @@ public struct LiquidSettingsView: View {
         case .tasks:
             TasksPanel()
         case .aiModels:
-            LiquidGlassCard("AI & Models") {
-                EmptyView()
-            }
+            AIModelsPanel()
         case .meetings:
             LiquidGlassCard("Meetings") {
                 EmptyView()

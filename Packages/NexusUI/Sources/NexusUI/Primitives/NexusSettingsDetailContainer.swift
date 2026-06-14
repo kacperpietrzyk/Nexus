@@ -13,6 +13,7 @@ public struct NexusSettingsDetailContainer<Content: View>: View {
     @ViewBuilder public let content: () -> Content
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.settingsDetailEmbedded) private var embedded
 
     public init(
         title: String,
@@ -23,19 +24,32 @@ public struct NexusSettingsDetailContainer<Content: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            NexusSettingsDivider()
-            ScrollView {
-                content()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(NexusSpacing.s5)
+        if embedded {
+            // Embedded inside a host detail pane (Liquid two-pane macOS Settings)
+            // that already supplies the back affordance, scrolling, and wallpaper.
+            // Render the bare content: no custom header, no own `ScrollView`, no
+            // opaque background (let the host glass/wallpaper show through), and no
+            // `HiddenNativeChrome` (the host's `NavigationStack` owns chrome — see
+            // `LiquidSettingsView`). Padding is preserved so the embedded sub-views
+            // align with the host's surrounding cards.
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(NexusSpacing.s5)
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                NexusSettingsDivider()
+                ScrollView {
+                    content()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(NexusSpacing.s5)
+                }
             }
+            // Liquid re-skin (container level): DS app background (was the Linear
+            // `Background.base`; near-identical value, family-correct token).
+            .background(DS.ColorToken.backgroundApp)
+            .modifier(HiddenNativeChrome())
         }
-        // Liquid re-skin (container level): DS app background (was the Linear
-        // `Background.base`; near-identical value, family-correct token).
-        .background(DS.ColorToken.backgroundApp)
-        .modifier(HiddenNativeChrome())
     }
 
     private var header: some View {
@@ -74,6 +88,22 @@ private struct HiddenNativeChrome: ViewModifier {
         content
             .toolbar(.hidden)
         #endif
+    }
+}
+
+/// When `true`, `NexusSettingsDetailContainer` renders its content chromeless —
+/// without the custom back-button header or its own `ScrollView` — for embedding
+/// inside a host detail pane that already scrolls and supplies navigation chrome
+/// (the Liquid two-pane macOS Settings). Default `false` preserves the standalone
+/// pushed-screen behaviour on iOS / legacy paths.
+private struct SettingsDetailEmbeddedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    public var settingsDetailEmbedded: Bool {
+        get { self[SettingsDetailEmbeddedKey.self] }
+        set { self[SettingsDetailEmbeddedKey.self] = newValue }
     }
 }
 
