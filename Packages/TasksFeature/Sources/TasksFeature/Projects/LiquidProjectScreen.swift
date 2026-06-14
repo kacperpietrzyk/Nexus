@@ -7,13 +7,15 @@ import SwiftUI
 /// list used (no spec value; the execution screen itself is full-width).
 private let pickerMaxWidth: CGFloat = 720
 
-/// Tabs (spec §Tabs). Only surfaces that really exist ship: Overview (the
-/// milestones + board + table scroll) and List (the table full-height). The
-/// mockup's Timeline/Milestones/Files/Settings tabs have no backing surface
-/// and Notes would require a cross-feature import (NotesFeature) the
-/// architecture forbids — all intentionally omitted, no dead tabs.
+/// Tabs (spec §Tabs). Three focused, non-duplicating surfaces ship:
+/// Overview (dashboard — stats + milestones + health/risk/activity),
+/// Board (full Kanban), and List (full task table). The mockup's
+/// Timeline/Files/Notes/Settings tabs have no backing surface and Notes
+/// would require a cross-feature import (NotesFeature) the architecture
+/// forbids — all intentionally omitted, no dead tabs.
 enum ProjectScreenTab: String, CaseIterable, Identifiable {
     case overview
+    case board
     case list
 
     var id: String { rawValue }
@@ -21,6 +23,7 @@ enum ProjectScreenTab: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .overview: return "Overview"
+        case .board: return "Board"
         case .list: return "List"
         }
     }
@@ -272,9 +275,9 @@ public struct LiquidProjectScreen: View {
 
                 switch tab {
                 case .overview:
-                    MilestoneStrip(milestones: model.milestones)
+                    ProjectOverview(model: model, onOpenTask: onOpenTask)
+                case .board:
                     board(project)
-                    table
                 case .list:
                     table
                 }
@@ -301,7 +304,8 @@ public struct LiquidProjectScreen: View {
 
                 switch tab {
                 case .overview:
-                    MilestoneStrip(milestones: snapshot.milestones)
+                    ProjectOverview(model: model, onOpenTask: onOpenTask)
+                case .board:
                     ProjectKanban(
                         projectID: snapshot.project.id,
                         tasks: snapshot.tasks,
@@ -310,12 +314,6 @@ public struct LiquidProjectScreen: View {
                         subtaskCounts: snapshot.subtaskCountsByTask,
                         onSelect: onOpenTask,
                         onChanged: {}
-                    )
-                    ProjectTaskTable(
-                        tasks: snapshot.tasks,
-                        sectionNames: snapshot.sectionNamesByID,
-                        now: .now,
-                        onSelect: onOpenTask
                     )
                 case .list:
                     ProjectTaskTable(
