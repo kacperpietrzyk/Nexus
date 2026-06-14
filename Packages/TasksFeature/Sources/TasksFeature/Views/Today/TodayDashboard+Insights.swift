@@ -119,6 +119,7 @@ extension TodayDashboard {
                 cooldown: insightCooldownStore
             )
             InsightBannerRow(model: model, extraCount: max(0, store.count - 1))
+                .id(entry.id)
         }
     }
 }
