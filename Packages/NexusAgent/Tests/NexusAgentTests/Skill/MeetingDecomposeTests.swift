@@ -1,8 +1,8 @@
 import Foundation
+import NexusAgentTools
+import NexusCore
 import SwiftData
 import Testing
-import NexusCore        // TaskItem, RRuleScheduler, SearchIndex
-import NexusAgentTools  // AgentContext, ModelContextRef, TaskItemRepositoryRef
 @testable import NexusAgent
 
 @MainActor

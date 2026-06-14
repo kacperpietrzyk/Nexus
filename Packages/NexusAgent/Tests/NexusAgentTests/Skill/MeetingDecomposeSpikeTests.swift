@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 import NexusAI
+import Testing
 @testable import NexusAgent
 
 @MainActor

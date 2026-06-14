@@ -16,10 +16,9 @@ public enum MeetingDecomposeSkill {
         schemaDescription: #"{"tasks":[{"title":string,"estMinutes":int,"suggestedDay"?:"YYYY-MM-DD"}]}"#
     ) { text in
         // Tolerate fenced code blocks the model may add.
-        let cleaned = text
-            .replacingOccurrences(of: "```json", with: "")
-            .replacingOccurrences(of: "```", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let step1 = text.replacingOccurrences(of: "```json", with: "")
+        let step2 = step1.replacingOccurrences(of: "```", with: "")
+        let cleaned = step2.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let data = cleaned.data(using: .utf8) else {
             throw OutputContractError.invalid(reason: "expected JSON matching the tasks contract")
         }
@@ -36,9 +35,9 @@ public enum MeetingDecomposeSkill {
         AssistantSkill(
             id: "meeting.decompose",
             systemPrompt: """
-            You decompose a meeting summary into concrete candidate tasks for a personal task manager.
-            Extract only actionable items. Estimate minutes conservatively. Do not invent dates.
-            """,
+                You decompose a meeting summary into concrete candidate tasks for a personal task manager.
+                Extract only actionable items. Estimate minutes conservatively. Do not invent dates.
+                """,
             contextRecipe: recipe,
             output: outputContract,
             maxIterations: 1,
