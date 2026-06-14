@@ -100,6 +100,17 @@ public struct ProjectsDeleteKeyDateTool: AgentTool {
 // MARK: - Shared helpers
 
 enum ProjectKeyDateTools {
+    /// Shared output formatter. `ISO8601DateFormatter` is expensive to construct, and
+    /// `list_key_dates` encodes N rows per call — a single reused instance avoids that
+    /// churn. `nonisolated(unsafe)` is safe: the formatter is configured once and only
+    /// read thereafter (`string(from:)` on a fixed-options ISO8601 formatter is
+    /// thread-safe in practice; matches `NoteDTO.isoFormatter`).
+    nonisolated(unsafe) private static let outputFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
     /// Parses a required ISO8601 date argument.
     static func requiredDate(_ value: JSONValue?, field: String) throws -> Date {
         guard let text = value?.stringValue else {
@@ -111,14 +122,16 @@ enum ProjectKeyDateTools {
         return date
     }
 
-    /// Encodes a `ProjectKeyDate` to a `JSONValue` object.
+    /// Encodes a `ProjectKeyDate` to a `JSONValue` object. The returned shape
+    /// intentionally omits the row `id` and `project_id`: the agent identifies a key
+    /// date by `(project_id, anchor_key)` (the upsert key it already knows), and the
+    /// plan spec defines this minimal DTO. `date` is always emitted with fractional
+    /// seconds, so a round-tripped input may gain `.000` — semantically identical.
     static func encode(_ kd: ProjectKeyDate) -> JSONValue {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return .object([
+        .object([
             "anchor_key": .string(kd.anchorKey),
             "label": .string(kd.label),
-            "date": .string(formatter.string(from: kd.date)),
+            "date": .string(outputFormatter.string(from: kd.date)),
             "is_contractual": .bool(kd.isContractual),
         ])
     }
