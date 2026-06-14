@@ -348,7 +348,8 @@ public enum ProjectExecutionModel {
     public static func kpiLabels(for type: ProjectType) -> [String] {
         switch type {
         case .sales: return ["Open", "Done"]
-        default: return ["Open", "Done", "Overdue"]
+        case .implementation, .audit, .internalDev, .generic:
+            return ["Open", "Done", "Overdue"]
         }
     }
 
