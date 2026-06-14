@@ -199,6 +199,8 @@ final class ScriptedAgentAIProvider: AIProvider, @unchecked Sendable {
     private var scripts: [Script]
     private(set) var callCount = 0
     private(set) var prompts: [String] = []
+    /// Tool specs received in the most-recent `generate` call.
+    private(set) var lastToolSpecs: [AIToolSpec] = []
 
     init(
         scripts: [Script],
@@ -217,6 +219,7 @@ final class ScriptedAgentAIProvider: AIProvider, @unchecked Sendable {
     func generate(_ request: AIRequest) async throws -> AIResponse {
         callCount += 1
         prompts.append(request.prompt)
+        lastToolSpecs = request.tools ?? []
         let script = scripts.isEmpty ? .text("") : scripts.removeFirst()
         switch script {
         case .text(let text):
