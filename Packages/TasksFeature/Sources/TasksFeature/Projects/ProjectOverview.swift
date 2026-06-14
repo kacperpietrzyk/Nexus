@@ -34,8 +34,9 @@ struct ProjectOverview: View {
     }
 
     private func statRow(_ stats: ProjectExecutionModel.ProjectStats) -> some View {
+        // Progress % is intentionally omitted here — it already reads on the
+        // header bar and the health gauge; a third copy was redundant.
         HStack(spacing: DS.Space.m) {
-            ProjectStatTile(value: "\(Int((stats.progress * 100).rounded()))%", label: "Progress")
             ProjectStatTile(value: "\(stats.open)", label: "Open")
             ProjectStatTile(value: "\(stats.done)", label: "Done")
             ProjectStatTile(value: "\(stats.overdue)", label: "Overdue")
