@@ -185,12 +185,20 @@ public struct ProjectsListTool: AgentTool {
 
 public struct ProjectsUpdateTool: AgentTool {
     public let name = "projects.update"
-    public let description = "Renames and/or recolors (glyph) a project. Returns the updated project DTO."
+    public let description = """
+        Updates a project's name, glyph, type, client, vendor, or a custom field. \
+        Returns the updated project DTO.
+        """
     public let inputSchema: JSONSchema = .object(
         properties: [
             "project_id": .string(description: "Project UUID."),
             "name": .string(description: "Optional new name."),
             "glyph": .string(description: "Optional new achromatic glyph key."),
+            "type": .string(enumValues: ProjectType.allCases.map(\.rawValue), description: "Optional new ProjectType."),
+            "client_id": .string(description: "Optional client Organization UUID (empty string clears)."),
+            "vendor": .string(description: "Optional vendor/product line (empty string clears)."),
+            "custom_field_key": .string(description: "Optional custom-field key to set or remove."),
+            "custom_field_value": .string(description: "Value for custom_field_key; null/omitted removes the key."),
         ],
         required: ["project_id"]
     )
@@ -206,6 +214,35 @@ public struct ProjectsUpdateTool: AgentTool {
         }
         if let glyph = try ProjectsToolSupport.optionalTrimmedString(args["glyph"], field: "glyph") {
             try context.projectRepository.recolor(project, to: glyph)
+        }
+        if let typeText = try ProjectsToolSupport.optionalTrimmedString(args["type"], field: "type") {
+            guard let type = ProjectType(rawValue: typeText) else {
+                throw AgentError.validation(
+                    "Invalid type '\(typeText)'. Expected one of: "
+                        + ProjectType.allCases.map(\.rawValue).joined(separator: ", ")
+                )
+            }
+            try context.projectRepository.setType(type, on: project)
+        }
+        if case .string(let raw)? = args["client_id"] {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                try context.projectRepository.setClient(nil, on: project)
+            } else {
+                guard let clientID = UUID(uuidString: trimmed) else {
+                    throw AgentError.validation("client_id must be a valid UUID")
+                }
+                try context.projectRepository.setClient(clientID, on: project)
+            }
+        }
+        if case .string(let raw)? = args["vendor"] {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            try context.projectRepository.setVendor(trimmed.isEmpty ? nil : trimmed, on: project)
+        }
+        if let key = try ProjectsToolSupport.optionalTrimmedString(args["custom_field_key"], field: "custom_field_key") {
+            let value: String?
+            if case .string(let v)? = args["custom_field_value"] { value = v } else { value = nil }
+            try context.projectRepository.setCustomField(key: key, value: value, on: project)
         }
         return try TasksToolJSON.encode(ProjectDTO(from: project))
     }

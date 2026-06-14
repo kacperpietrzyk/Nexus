@@ -56,4 +56,82 @@ struct ProjectsUniversalTypeToolsTests {
             _ = try await tool.call(args: .object(["name": .string("X"), "type": .string("bogus")]), context: fixture.context)
         }
     }
+
+    @MainActor
+    @Test("projects.update sets type/vendor and a custom field")
+    func updateSetsFields() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = try fixture.context.projectRepository.create(name: "P")
+        let tool = try #require(ToolRegistry(tools: CoreTaskTools.all()).tool(named: "projects.update"))
+        let result = try await tool.call(
+            args: .object([
+                "project_id": .string(project.id.uuidString),
+                "type": .string("sales"),
+                "vendor": .string("CrowdStrike Falcon"),
+                "custom_field_key": .string("competitor"),
+                "custom_field_value": .string("Apius"),
+            ]),
+            context: fixture.context
+        )
+        #expect(result["type"]?.stringValue == "sales")
+        #expect(result["vendor"]?.stringValue == "CrowdStrike Falcon")
+        #expect(result["custom_fields"]?["competitor"]?.stringValue == "Apius")
+    }
+
+    @MainActor
+    @Test("projects.update with null custom_field_value removes the key")
+    func updateRemovesCustomField() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = try fixture.context.projectRepository.create(name: "P")
+        try fixture.context.projectRepository.setCustomField(key: "k", value: "v", on: project)
+        let tool = try #require(ToolRegistry(tools: CoreTaskTools.all()).tool(named: "projects.update"))
+        let result = try await tool.call(
+            args: .object([
+                "project_id": .string(project.id.uuidString),
+                "custom_field_key": .string("k"),
+                "custom_field_value": .null,
+            ]),
+            context: fixture.context
+        )
+        #expect(result["custom_fields"]?["k"] == nil)
+    }
+
+    @MainActor
+    @Test("projects.update rejects a malformed client_id instead of silently clearing it")
+    func updateRejectsBadClientID() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let clientID = UUID()
+        let project = try fixture.context.projectRepository.create(name: "P")
+        try fixture.context.projectRepository.setClient(clientID, on: project)
+        let tool = try #require(ToolRegistry(tools: CoreTaskTools.all()).tool(named: "projects.update"))
+        await #expect(throws: AgentError.self) {
+            _ = try await tool.call(
+                args: .object([
+                    "project_id": .string(project.id.uuidString),
+                    "client_id": .string("not-a-uuid"),
+                ]),
+                context: fixture.context
+            )
+        }
+        // The bad input must not have wiped the existing association.
+        let reloaded = try #require(try fixture.context.projectRepository.find(id: project.id))
+        #expect(reloaded.clientID == clientID)
+    }
+
+    @MainActor
+    @Test("projects.update with an empty client_id clears the association")
+    func updateClearsClientWithEmptyString() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = try fixture.context.projectRepository.create(name: "P")
+        try fixture.context.projectRepository.setClient(UUID(), on: project)
+        let tool = try #require(ToolRegistry(tools: CoreTaskTools.all()).tool(named: "projects.update"))
+        let result = try await tool.call(
+            args: .object([
+                "project_id": .string(project.id.uuidString),
+                "client_id": .string(""),
+            ]),
+            context: fixture.context
+        )
+        #expect(result["client_id"] == nil || result["client_id"] == .null)
+    }
 }
