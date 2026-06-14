@@ -107,6 +107,41 @@ public enum ProjectExecutionModel {
         return Double(tasks.count(where: { $0.status == .done })) / Double(tasks.count)
     }
 
+    // MARK: - Stats
+
+    /// KPI snapshot for the Overview header row. All counts over live tasks;
+    /// `overdue` counts only open (not-done) tasks whose `dueAt` is behind `now`
+    /// (same "overdue" notion as `health`). `progress` matches `progress(tasks:)`.
+    public struct ProjectStats: Equatable, Sendable {
+        public let total: Int
+        public let open: Int
+        public let done: Int
+        public let overdue: Int
+        public let progress: Double
+
+        public init(total: Int, open: Int, done: Int, overdue: Int, progress: Double) {
+            self.total = total
+            self.open = open
+            self.done = done
+            self.overdue = overdue
+            self.progress = progress
+        }
+    }
+
+    public static func stats(tasks: [TaskItem], now: Date) -> ProjectStats {
+        let live = live(tasks)
+        let done = live.count(where: { $0.status == .done })
+        let open = live.count - done
+        let overdue = live.count(where: { $0.status != .done && isOverdue($0, now: now) })
+        return ProjectStats(
+            total: live.count,
+            open: open,
+            done: done,
+            overdue: overdue,
+            progress: progress(tasks: live)
+        )
+    }
+
     // MARK: - Health
 
     /// Health gauge classification (spec: On Track / At Risk / Off Track).

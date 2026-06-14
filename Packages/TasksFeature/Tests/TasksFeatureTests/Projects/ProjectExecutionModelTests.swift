@@ -380,4 +380,50 @@ struct ProjectExecutionModelTests {
         #expect(entries.count == 2)
         #expect(Set(entries.map(\.id)).count == 2)
     }
+
+    // MARK: - Stats
+
+    @Test("stats counts open/done/overdue and progress over live tasks")
+    @MainActor
+    func projectStatsCountsAndProgress() throws {
+        let context = try makeContext()
+        let done = makeTask(context, title: "done", status: .done)
+        let openFuture = makeTask(context, title: "future", dueAt: Self.now.addingTimeInterval(Self.hours(1)))
+        let openOverdue = makeTask(context, title: "overdue", dueAt: Self.now.addingTimeInterval(-Self.hours(1)))
+        let deleted = makeTask(context, title: "deleted", deletedAt: Self.now)
+
+        let stats = ProjectExecutionModel.stats(tasks: [done, openFuture, openOverdue, deleted], now: Self.now)
+
+        #expect(stats.total == 3)
+        #expect(stats.done == 1)
+        #expect(stats.open == 2)
+        #expect(stats.overdue == 1)
+        #expect(abs(stats.progress - 1.0 / 3.0) < 0.0001)
+    }
+
+    @Test("stats on an empty project is all zeros")
+    @MainActor
+    func projectStatsEmpty() throws {
+        let stats = ProjectExecutionModel.stats(tasks: [], now: Self.now)
+        #expect(stats.total == 0)
+        #expect(stats.open == 0)
+        #expect(stats.done == 0)
+        #expect(stats.overdue == 0)
+        #expect(stats.progress == 0)
+    }
+
+    @Test("a done task that is past due is not counted as overdue")
+    @MainActor
+    func projectStatsDonePastDueNotOverdue() throws {
+        let context = try makeContext()
+        let donePastDue = makeTask(
+            context,
+            title: "done late",
+            status: .done,
+            dueAt: Self.now.addingTimeInterval(-Self.hours(1))
+        )
+        let stats = ProjectExecutionModel.stats(tasks: [donePastDue], now: Self.now)
+        #expect(stats.overdue == 0)
+        #expect(stats.done == 1)
+    }
 }
