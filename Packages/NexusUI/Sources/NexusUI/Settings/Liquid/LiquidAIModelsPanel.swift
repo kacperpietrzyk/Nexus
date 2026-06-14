@@ -58,7 +58,7 @@ struct AIModelsPanel: View {
                 Divider()
                     .overlay(DS.ColorToken.strokeHairline)
 
-                Text("Phase 1l-MLX adds a local LLM for longer-context work.")
+                Text("A downloadable local model handles longer-context work.")
                     .font(DS.FontToken.caption)
                     .foregroundStyle(DS.ColorToken.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
