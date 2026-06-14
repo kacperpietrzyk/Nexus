@@ -4,10 +4,10 @@ import Foundation
 /// Includes `tasks.*`, `comments.*`, `activity.*`, `note.*`, the Projects-tier `projects.*`,
 /// `labels.*`, `agents.*`, `blocks.*` tools (spec §10), the People/Contacts
 /// `people.*` tools (spec §7), `cycles.*`, `search.*`, the `saved_filters.*` tools,
-/// the `calendar.preferences.*` tools, and the `stats.*` tools.
+/// the `calendar.preferences.*` tools, the `stats.*` tools, and `organizations.*` tools.
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
-        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats + export
+        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats + export + organizations
     }
 
     /// `export.*` tools — anti-lock-in Markdown export. `export.item` renders one
@@ -112,6 +112,17 @@ public enum CoreTaskTools {
             BlocksListTool(),
             BlocksAddTool(),
             BlocksRemoveTool(),
+        ]
+    }
+
+    /// `organizations.*` tools — client/account Organizations (universal-types extension).
+    private static var organizations: [any AgentTool] {
+        [
+            OrganizationsCreateTool(),
+            OrganizationsListTool(),
+            OrganizationsGetTool(),
+            OrganizationsUpdateTool(),
+            OrganizationsLinkPersonTool(),
         ]
     }
 
