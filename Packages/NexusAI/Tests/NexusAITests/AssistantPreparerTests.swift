@@ -7,8 +7,13 @@ import Testing
 @Suite struct AssistantPreparerTests {
     final class RecordingFetcher: ModelFileFetching, @unchecked Sendable {
         var fetched: [String] = []
-        func fetch(hfPath: String, toFile destination: URL, startingAtByte: Int64,
-                   totalBytes: Int64, onProgress: @escaping @Sendable (Int64) -> Void) async throws {
+        func fetch(
+            hfPath: String,
+            toFile destination: URL,
+            startingAtByte: Int64,
+            totalBytes: Int64,
+            onProgress: @escaping @Sendable (Int64) -> Void
+        ) async throws {
             fetched.append(hfPath)
             onProgress(totalBytes)
         }
