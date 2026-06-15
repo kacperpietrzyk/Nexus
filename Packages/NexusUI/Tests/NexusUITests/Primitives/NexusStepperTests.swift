@@ -3,6 +3,10 @@ import Testing
 
 @testable import NexusUI
 
+// `NexusStepper`'s static helpers are @MainActor-isolated (it is a SwiftUI
+// View); `formatted`'s `Optional.map` closure trips a runtime isolation check
+// when invoked from a nonisolated test context. Pin the suite to the main actor.
+@MainActor
 @Suite("NexusStepper")
 struct NexusStepperTests {
     @Test("Increment steps up and clamps to the upper bound")

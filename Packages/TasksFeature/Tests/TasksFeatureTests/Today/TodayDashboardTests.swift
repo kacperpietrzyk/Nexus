@@ -77,10 +77,12 @@ struct TodayDashboardTests {
         // railed. Linear redesign: `.tasks` now joins the false group too —
         // the DAY timeline is always empty on Tasks and crushed the list, so
         // the redesign frees the column (capped reading measure applied at
-        // the `.tasks` route case instead). Lock every corner.
+        // the `.tasks` route case instead). Polish pass: `.productivity` (Stats)
+        // also drops the rail — a today's-schedule column reads empty and is
+        // contextually wrong on a 30-day analytics screen. Lock every corner.
         #expect(TodayDashboardContentRoute.today.showsEmbeddedTimelineRail == true)
         #expect(TodayDashboardContentRoute.tasks.showsEmbeddedTimelineRail == false)
-        #expect(TodayDashboardContentRoute.productivity.showsEmbeddedTimelineRail == true)
+        #expect(TodayDashboardContentRoute.productivity.showsEmbeddedTimelineRail == false)
         #expect(TodayDashboardContentRoute.settings.showsEmbeddedTimelineRail == true)
         #expect(TodayDashboardContentRoute.inbox.showsEmbeddedTimelineRail == false)
         #expect(TodayDashboardContentRoute.meetings.showsEmbeddedTimelineRail == false)
