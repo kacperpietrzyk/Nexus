@@ -21,4 +21,11 @@ struct ToolRegistryManifestTests {
     func suggestDuplicatesToolRegistered() {
         #expect(Set(CoreTaskTools.all().map(\.name)).contains("people.suggest_duplicates"))
     }
+
+    @Test("items trash tools are registered in the core task tools")
+    func trashToolsRegistered() {
+        let names = Set(CoreTaskTools.all().map(\.name))
+        #expect(names.contains("items.restore"))
+        #expect(names.contains("items.list_deleted"))
+    }
 }

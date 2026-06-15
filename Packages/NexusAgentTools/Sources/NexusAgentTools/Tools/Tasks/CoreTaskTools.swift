@@ -8,7 +8,16 @@ import Foundation
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
         tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats + export
-            + organizations + linkEnumeration
+            + organizations + linkEnumeration + trash
+    }
+
+    /// `items.*` trash tools — kind-polymorphic `items.list_deleted` (fetch soft-deleted
+    /// rows of a kind) and `items.restore` (undelete via the generic `LinkableRepository`).
+    private static var trash: [any AgentTool] {
+        [
+            ItemsListDeletedTool(),
+            ItemsRestoreTool(),
+        ]
     }
 
     /// `links.*` tools — read-only enumeration of the polymorphic `Link` graph

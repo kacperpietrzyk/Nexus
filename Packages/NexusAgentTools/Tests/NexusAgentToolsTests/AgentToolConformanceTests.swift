@@ -40,8 +40,8 @@ struct AgentToolConformanceTests {
     func registryCount() {
         let registry = ToolRegistry(tools: CoreTaskTools.all())
 
-        #expect(registry.tools.count == 92)
-        #expect(registry.manifest().tools.count == 92)
+        #expect(registry.tools.count == 94)
+        #expect(registry.manifest().tools.count == 94)
     }
 
     // MARK: - Calendar / schedule tools (injected at app level, so otherwise
@@ -77,7 +77,7 @@ struct AgentToolConformanceTests {
         let knownNamespaces: Set<Substring> = [
             "tasks", "comments", "note", "schedule", "calendar",
             "projects", "agents", "labels", "blocks", "people", "activity", "cycles", "search",
-            "saved_filters", "stats", "export", "organizations", "links",
+            "saved_filters", "stats", "export", "organizations", "links", "items",
         ]
         guard parts.count >= 2, let first = parts.first, knownNamespaces.contains(first) else { return false }
         return parts.allSatisfy { part in
