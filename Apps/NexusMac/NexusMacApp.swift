@@ -257,11 +257,12 @@ struct NexusMacApp: App {
             quietHoursEnd: $quietHoursState.endTime,
             onExportRequested: { exportPickerPresented = true },
             manageModelsContent: {
-                if let reconciler = Self.makeModelReconciler() {
+                if let inputs = Self.makeModelStorageInputs() {
                     return AnyView(
                         AssistantStorageContainer(
-                            reconciler: reconciler,
-                            readinessProvider: Self.makeChatReadinessProbe(),
+                            reconciler: inputs.reconciler,
+                            resolvedSet: inputs.resolvedSet,
+                            tier: inputs.tier,
                             onReloadChat: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
                             onReloadEmbedder: { [aiRouter] in
                                 try? await aiRouter.reloadMLXEmbedder()
@@ -805,6 +806,21 @@ struct NexusMacApp: App {
             canonical: DefaultHardcodedModelPolicy(catalog: catalog).resolve(),
             whisperVariant: WhisperKitProvider.modelVariantPublic
         )
+    }
+
+    /// Reconciler + resolved set + device tier for the assistant-readiness checklist.
+    @MainActor
+    private static func makeModelStorageInputs() -> ModelStorageInputs? {
+        guard let catalog = try? ModelCatalog.loadDefault() else { return nil }
+        let tier = TierDetector.detectCurrent()
+        let resolvedSet = DefaultHardcodedModelPolicy(catalog: catalog, tier: tier).resolve()
+        let reconciler = ModelStoreReconciler(
+            roots: .production(),
+            store: ModelManifestLocalState.Store(),
+            canonical: resolvedSet,
+            whisperVariant: WhisperKitProvider.modelVariantPublic
+        )
+        return ModelStorageInputs(reconciler: reconciler, resolvedSet: resolvedSet, tier: tier)
     }
 
     private static func makeLegacyBrief(

@@ -234,17 +234,19 @@ struct NexusiOSApp: App {
         )
     }
 
+    /// Reconciler + resolved set + device tier for the assistant-readiness checklist.
     @MainActor
-    fileprivate static func makeChatReadinessProbe() -> @MainActor () -> AssistantReadiness {
-        guard let catalog = try? ModelCatalog.loadDefault() else {
-            return { .ready }
-        }
-        let manifestID = DefaultHardcodedModelPolicy(catalog: catalog).resolve().chatManifestID
-        let resolver = AssistantReadinessResolver(
-            localStateStore: ModelManifestLocalState.Store(),
-            chatManifestID: manifestID
+    fileprivate static func makeModelStorageInputs() -> ModelStorageInputs? {
+        guard let catalog = try? ModelCatalog.loadDefault() else { return nil }
+        let tier = TierDetector.detectCurrent()
+        let resolvedSet = DefaultHardcodedModelPolicy(catalog: catalog, tier: tier).resolve()
+        let reconciler = ModelStoreReconciler(
+            roots: .production(),
+            store: ModelManifestLocalState.Store(),
+            canonical: resolvedSet,
+            whisperVariant: WhisperKitProvider.modelVariantPublic
         )
-        return { resolver.readiness(progress: nil) }
+        return ModelStorageInputs(reconciler: reconciler, resolvedSet: resolvedSet, tier: tier)
     }
 
     var body: some Scene {
@@ -708,11 +710,12 @@ private struct NexusiOSRootView: View {
             permissionState: permissionState,
             agentSettingsContext: agentComposition.settingsContext,
             manageModelsContent: {
-                if let reconciler = Self.makeModelReconciler() {
+                if let inputs = NexusiOSApp.makeModelStorageInputs() {
                     return AnyView(
                         AssistantStorageContainer(
-                            reconciler: reconciler,
-                            readinessProvider: Self.makeChatReadinessProbe(),
+                            reconciler: inputs.reconciler,
+                            resolvedSet: inputs.resolvedSet,
+                            tier: inputs.tier,
                             onReloadChat: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
                             onReloadEmbedder: { [aiRouter] in try? await aiRouter.reloadMLXEmbedder() }
                         ))
