@@ -8,7 +8,30 @@ import Foundation
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
         tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats + export
-            + organizations + linkEnumeration
+            + organizations + linkEnumeration + trash + attachments
+    }
+
+    // TODO: surface a configurable ingest root in Settings (v1 defaults to home dir).
+    // TODO: add `attachments.add_to_task` once a task attachment surface exists.
+    //
+    /// `attachments.*` tools — path/URL handoff for local image files (spec §7).
+    /// `add_to_note` ingests a host-filesystem path behind `AttachmentIngestPolicy`
+    /// and appends an image block; `list`/`remove` manage the asset rows.
+    private static var attachments: [any AgentTool] {
+        [
+            AttachmentsAddToNoteTool(),
+            AttachmentsListTool(),
+            AttachmentsRemoveTool(),
+        ]
+    }
+
+    /// `items.*` trash tools — kind-polymorphic `items.list_deleted` (fetch soft-deleted
+    /// rows of a kind) and `items.restore` (undelete via the generic `LinkableRepository`).
+    private static var trash: [any AgentTool] {
+        [
+            ItemsListDeletedTool(),
+            ItemsRestoreTool(),
+        ]
     }
 
     /// `links.*` tools — read-only enumeration of the polymorphic `Link` graph
@@ -155,6 +178,7 @@ public enum CoreTaskTools {
             PeopleAggregateTool(),
             PeopleLinkTool(),
             PeopleMergeTool(),
+            PeopleSuggestDuplicatesTool(),
             CyclesListTool(),
             CyclesAssignTool(),
             CyclesCreateTool(),

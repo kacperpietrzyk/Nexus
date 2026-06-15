@@ -20,6 +20,9 @@ public enum MeetingsAgentTools {
                 taskRepository: taskRepository,
                 linkRepository: linkRepository
             ),
+            MeetingsCreateTool(repository: meetingRepository),
+            MeetingsUpdateTool(repository: meetingRepository),
+            MeetingsDeleteTool(repository: meetingRepository),
         ]
     }
 }
