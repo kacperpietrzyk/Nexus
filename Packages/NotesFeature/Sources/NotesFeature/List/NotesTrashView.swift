@@ -5,9 +5,10 @@ import SwiftUI
 
 /// The Notes trash (spec §8): a list of soft-deleted notes (`deletedAt != nil`)
 /// with a per-row Restore action wired to `NoteRepository.restore`. Recovery was
-/// otherwise MCP-only (`items.restore`); this surfaces it in-app. Mirrors
-/// `NotesListView` styling — same `NoteListRow`, same plain list — minus grouping
-/// and the backlink count (tombstones carry no live edges).
+/// otherwise MCP-only (`items.restore`); this surfaces it in-app. Uses a small
+/// self-contained tombstone row (title + one-line preview) so it stays
+/// cross-platform — the main list's `LiquidNoteRow`/`NoteListRow` are
+/// platform-gated and carry open/delete affordances a trash list doesn't want.
 struct NotesTrashView: View {
     /// Passed explicitly from the presenter (not read from `\.noteRepository` in the
     /// environment): the sheet-presenting precedent in this package — `LinkPickerView`
@@ -53,7 +54,7 @@ struct NotesTrashView: View {
     private var list: some View {
         List {
             ForEach(deleted) { note in
-                NoteListRow(note: note, backlinkCount: 0)
+                TrashNoteRow(note: note)
                     .swipeActions(edge: .trailing) {
                         restoreButton(note)
                     }
@@ -77,5 +78,38 @@ struct NotesTrashView: View {
 
     private func restore(_ note: Note) {
         try? noteRepository?.restore(note)
+    }
+}
+
+/// Minimal tombstone row: role-agnostic title + one-line preview from the
+/// denormalized `plainText` cache (never the block blob — spec §4.1).
+private struct TrashNoteRow: View {
+    let note: Note
+
+    private var displayTitle: String {
+        note.title.isEmpty ? "Untitled" : note.title
+    }
+
+    private var preview: String {
+        note.plainText
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(displayTitle)
+                .nexusType(.body)
+                .fontWeight(.medium)
+                .foregroundStyle(NexusColor.Text.primary)
+                .lineLimit(1)
+            if !preview.isEmpty {
+                Text(preview)
+                    .nexusType(.bodySmall)
+                    .foregroundStyle(NexusColor.Text.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
