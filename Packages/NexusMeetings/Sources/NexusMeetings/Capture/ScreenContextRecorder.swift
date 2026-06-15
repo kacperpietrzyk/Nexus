@@ -55,19 +55,46 @@ public final class ScreenContextRecorder {
                 } catch is CancellationError {
                     return
                 } catch {
-                    // A *thrown* capture means the capture path itself failed
-                    // (Screen-Recording permission denied, or no display) rather
-                    // than merely "no text found" (which returns nil). Surface it
-                    // and stop the loop instead of silently re-prompting every
-                    // cadence — screen-OCR is optional enrichment, never
-                    // load-bearing for the transcript.
+                    // A *thrown* capture means the capture path itself failed.
+                    // Surface it via the handler either way, then decide whether
+                    // to keep going. Screen-OCR is optional enrichment, never
+                    // load-bearing for the transcript, so a single bad frame must
+                    // not kill OCR for the whole meeting.
                     onCaptureError(error)
-                    return
+                    if Self.isFatalCaptureError(error) {
+                        // Unrecoverable (no capture path on this platform, or the
+                        // Screen-Recording TCC grant was declined): stopping is
+                        // correct — retrying every cadence would only re-prompt /
+                        // re-fail forever.
+                        return
+                    }
+                    // Transient (display momentarily unshareable, OCR hiccup):
+                    // fall through to the cadence sleep and try the next frame.
                 }
                 if Task.isCancelled { return }
                 try? await Task.sleep(for: cadence)
             }
         }
+    }
+
+    /// Distinguish a truly unrecoverable capture failure (where stopping the loop
+    /// is correct) from a transient per-frame error (where the next cadence tick
+    /// may succeed). The only unrecoverable case here is `unsupportedPlatform`
+    /// (non-macOS — no capture path will ever exist). Everything else is treated
+    /// as transient so OCR survives a bad frame: a momentarily unshareable display
+    /// (`noShareableContent`), an OCR/Vision hiccup, and even a denied
+    /// Screen-Recording grant (macOS won't re-prompt after the first denial, so
+    /// retrying is harmless and lets OCR recover if the user grants mid-meeting).
+    private static func isFatalCaptureError(_ error: any Error) -> Bool {
+        if let captureError = error as? ScreenContextCaptureError {
+            switch captureError {
+            case .unsupportedPlatform:
+                return true
+            case .noShareableContent:
+                return false
+            }
+        }
+        return false
     }
 
     /// Stop the capture loop. Idempotent.

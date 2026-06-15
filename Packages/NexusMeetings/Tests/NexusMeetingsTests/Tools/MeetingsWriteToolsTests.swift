@@ -42,6 +42,42 @@ struct MeetingsWriteToolsTests {
         #expect(stored.durationSec == 1800)
     }
 
+    @Test("create rejects ended_at before started_at")
+    func createRejectsEndedBeforeStarted() async throws {
+        let context = try MeetingsTestSupport.makeContext()
+        let repo = MeetingRepository(context: context)
+        let args = JSONValue.object([
+            "title": .string("Backwards"),
+            "started_at": .string("2026-06-15T09:00:00.000Z"),
+            "ended_at": .string("2026-06-15T08:30:00.000Z"),
+        ])
+        await #expect(throws: AgentError.self) {
+            _ = try await MeetingsCreateTool(repository: repo)
+                .call(args: args, context: agentContext(modelContext: context))
+        }
+        // Nothing was persisted (no negative-duration row).
+        #expect(try repo.recent(limit: 10).isEmpty)
+    }
+
+    @Test("update rejects ended_at before started_at")
+    func updateRejectsEndedBeforeStarted() async throws {
+        let context = try MeetingsTestSupport.makeContext()
+        let repo = MeetingRepository(context: context)
+        let start = MeetingsToolFormatters.date(from: "2026-06-15T09:00:00.000Z")!
+        let m = MeetingsTestSupport.meeting(title: "Keep", startedAt: start)
+        try repo.insert(m)
+        let args = JSONValue.object([
+            "meeting_id": .string(m.id.uuidString),
+            "ended_at": .string("2026-06-15T08:30:00.000Z"),
+        ])
+        await #expect(throws: AgentError.self) {
+            _ = try await MeetingsUpdateTool(repository: repo)
+                .call(args: args, context: agentContext(modelContext: context))
+        }
+        let stored = try #require(try repo.find(id: m.id))
+        #expect(stored.durationSec >= 0)
+    }
+
     @Test("update patches the title only")
     func updates() async throws {
         let context = try MeetingsTestSupport.makeContext()

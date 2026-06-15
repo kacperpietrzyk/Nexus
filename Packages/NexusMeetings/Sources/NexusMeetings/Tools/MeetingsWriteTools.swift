@@ -40,6 +40,9 @@ public struct MeetingsCreateTool: AgentTool {
         let title = try MeetingsToolArguments.requiredString(args["title"], field: "title")
         let startedAt = try MeetingsToolArguments.requiredDate(args["started_at"], field: "started_at")
         let endedAt = try MeetingsWriteSupport.optionalDate(args["ended_at"], field: "ended_at")
+        if let endedAt, endedAt < startedAt {
+            throw AgentError.validation("ended_at must not be before started_at")
+        }
         let meeting = Meeting(
             title: title,
             startedAt: startedAt,
@@ -91,6 +94,9 @@ public struct MeetingsUpdateTool: AgentTool {
         if let summary = args["summary"]?.stringValue { meeting.summaryText = summary }
         if let transcript = args["transcript"]?.stringValue { meeting.transcriptText = transcript }
         if let ended = try MeetingsWriteSupport.optionalDate(args["ended_at"], field: "ended_at") {
+            guard ended >= meeting.startedAt else {
+                throw AgentError.validation("ended_at must not be before started_at")
+            }
             meeting.endedAt = ended
             meeting.durationSec = Int(ended.timeIntervalSince(meeting.startedAt))
         }

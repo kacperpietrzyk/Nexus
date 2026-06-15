@@ -36,12 +36,47 @@ private actor CountingScreenContextCapture: ScreenContextCapturing {
     }
 }
 
-private actor ThrowingScreenContextCapture: ScreenContextCapturing {
+/// Throws a transient error for the first `failures` captures, then succeeds.
+/// Used to prove a single bad frame does not kill OCR for the whole meeting.
+private actor TransientThenSucceedCapture: ScreenContextCapturing {
+    private(set) var captureCount = 0
+    private let failures: Int
+    private let expected: Int
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(failures: Int, expected: Int) {
+        self.failures = failures
+        self.expected = expected
+    }
+
+    func captureText() async throws -> String? {
+        captureCount += 1
+        let current = captureCount
+        if current >= expected, let cont = continuation {
+            continuation = nil
+            cont.resume()
+        }
+        if current <= failures {
+            throw ScreenContextCaptureError.noShareableContent
+        }
+        return "ok"
+    }
+
+    func waitForExpected() async {
+        if captureCount >= expected { return }
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            continuation = cont
+        }
+    }
+}
+
+/// Throws an unrecoverable error (no capture path on this platform) on every call.
+private actor FatalThrowingScreenContextCapture: ScreenContextCapturing {
     private(set) var captureCount = 0
 
     func captureText() async throws -> String? {
         captureCount += 1
-        throw ScreenContextCaptureError.noShareableContent
+        throw ScreenContextCaptureError.unsupportedPlatform
     }
 }
 
@@ -125,10 +160,38 @@ struct ScreenContextRecorderTests {
         #expect(ScreenContextStore().combinedText(folder: folder) == "Board: 3 in progress")
     }
 
-    @Test func thrownCaptureErrorIsSurfacedAndStopsLoop() async throws {
+    @Test func transientCaptureErrorIsSurfacedButLoopContinues() async throws {
         let folder = makeFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
-        let spy = ThrowingScreenContextCapture()
+        // First frame throws a transient error, the loop must recover and a
+        // later frame must succeed and write the sidecar. `expected: 3` leaves a
+        // full cadence after the first success frame so its `store.append`
+        // settles before the waiter resumes.
+        let spy = TransientThenSucceedCapture(failures: 1, expected: 3)
+        let stage = ScreenContextStage(capture: spy, isEnabled: { true })
+        let errorBox = ErrorBox()
+        let recorder = ScreenContextRecorder(
+            stage: stage,
+            cadence: .milliseconds(5),
+            isEnabled: { true },
+            onCaptureError: { error in errorBox.record(error) }
+        )
+
+        recorder.start(folder: folder)
+        await spy.waitForExpected()
+        recorder.stop()
+
+        // The transient error was surfaced, but a single bad frame did not kill
+        // OCR for the meeting: the loop kept going and produced text.
+        #expect(errorBox.count >= 1)
+        await #expect(spy.captureCount >= 2)
+        #expect(ScreenContextStore().combinedText(folder: folder) == "ok")
+    }
+
+    @Test func fatalCaptureErrorIsSurfacedAndStopsLoop() async throws {
+        let folder = makeFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let spy = FatalThrowingScreenContextCapture()
         let stage = ScreenContextStage(capture: spy, isEnabled: { true })
         let errorBox = ErrorBox()
         let recorder = ScreenContextRecorder(
@@ -144,7 +207,7 @@ struct ScreenContextRecorderTests {
         // Allow any (incorrectly continued) loop iterations to fire.
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        // A thrown capture is reported once and halts the loop (no silent retry).
+        // An unrecoverable capture is reported once and halts the loop.
         #expect(errorBox.count == 1)
         await #expect(spy.captureCount == 1)
     }

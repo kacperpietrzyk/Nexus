@@ -1,3 +1,4 @@
+import CoreData
 import NexusCore
 import NexusUI
 import SwiftData
@@ -81,6 +82,16 @@ public struct LiquidMeetingsScreen: View {
         .task(id: router.selectedMeetingID) { reload() }
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
             reload()
+        }
+        // The MeetingsHelper records into a SEPARATE persistent container, so its
+        // writes never post this process's `ModelContext.didSave`; the only
+        // cross-process signal is the store-level `NSPersistentStoreRemoteChange`
+        // (also how CloudKit imports arrive). Observe it too so the Cancel card /
+        // processing state refreshes instead of going stale. This notification is
+        // posted on the coordinator's background queue, so hop to the main actor
+        // before touching the @MainActor model.
+        .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
+            Task { @MainActor in reload() }
         }
     }
 
