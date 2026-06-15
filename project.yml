@@ -326,6 +326,9 @@ targets:
     dependencies:
       - package: NexusCore
       - package: NexusSync
+      # NexusUI for the design-system priority palette (DS.ColorToken.accent*),
+      # so complications match the app's priority colours instead of system reds.
+      - package: NexusUI
 
   NexusMeetingsHelper:
     type: application

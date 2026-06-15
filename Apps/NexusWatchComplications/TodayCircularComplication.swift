@@ -1,4 +1,5 @@
 import NexusCore
+import NexusUI
 import SwiftUI
 import WidgetKit
 
@@ -86,15 +87,18 @@ struct TodayCircularView: View {
         entry.snapshot.overdueCount > 0 ? "late" : "today"
     }
 
+    // Design-system priority palette (matches `TopPrioritiesCard.color(for:)` and
+    // the app's priority pills) instead of system reds/oranges, so the watchface
+    // reads as Nexus, not generic.
     private var priorityColor: Color {
         if entry.snapshot.overdueCount > 0 {
-            return .red
+            return DS.ColorToken.accentRed
         }
         switch entry.snapshot.firstUpcomingPriority ?? .none {
-        case .high: return .red
-        case .medium: return .orange
-        case .low: return .yellow
-        case .none: return .primary
+        case .high: return DS.ColorToken.accentRed
+        case .medium: return DS.ColorToken.accentAmber
+        case .low: return DS.ColorToken.accentBlue
+        case .none: return DS.ColorToken.textTertiary
         }
     }
 }
