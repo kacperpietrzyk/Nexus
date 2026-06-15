@@ -6,7 +6,14 @@ public struct TasksCompleteTool: AgentTool {
     public let description =
         "Mark a task as done. Recurring tasks may create their next occurrence."
     public let inputSchema: JSONSchema = .object(
-        properties: ["task_id": .string(description: "Task UUID to complete.")],
+        properties: [
+            "task_id": .string(description: "Task UUID to complete."),
+            "mode": .string(
+                enumValues: ["default", "strict", "cascade"],
+                description:
+                    "default = complete; strict = error if open subtasks; cascade = complete subtree."
+            ),
+        ],
         required: ["task_id"]
     )
 
@@ -16,8 +23,15 @@ public struct TasksCompleteTool: AgentTool {
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let id = try TasksToolArguments.requiredUUID(args["task_id"], field: "task_id")
         let task = try TasksMutationToolSupport.liveTask(id: id, context: context)
+        let mode = args["mode"]?.stringValue ?? "default"
         if task.status != .done {
-            try completeOrCascade(task, repository: context.taskRepository.repository)
+            let repository = context.taskRepository.repository
+            switch mode {
+            case "default": try completeOrCascade(task, repository: repository)
+            case "strict": try repository.markDoneStrict(task)
+            case "cascade": try repository.cascadeComplete(task)
+            default: throw AgentError.validation("Invalid mode: \(mode)")
+            }
         }
 
         for row in try TasksMutationToolSupport.allTasks(in: context) where row.deletedAt == nil {
