@@ -9,19 +9,22 @@ public final class RecordingStateSnapshot: NSObject, NSSecureCoding {
     public let elapsedSec: Int
     public let micLevel: Float
     public let othersLevel: Float
+    public let isPaused: Bool
 
     public init(
         isRecording: Bool,
         meetingID: UUID?,
         elapsedSec: Int,
         micLevel: Float,
-        othersLevel: Float
+        othersLevel: Float,
+        isPaused: Bool = false
     ) {
         self.isRecording = isRecording
         self.meetingID = meetingID
         self.elapsedSec = elapsedSec
         self.micLevel = micLevel
         self.othersLevel = othersLevel
+        self.isPaused = isPaused
     }
 
     public init?(coder: NSCoder) {
@@ -34,6 +37,7 @@ public final class RecordingStateSnapshot: NSObject, NSSecureCoding {
         elapsedSec = coder.decodeInteger(forKey: "elapsed")
         micLevel = coder.decodeFloat(forKey: "mic")
         othersLevel = coder.decodeFloat(forKey: "others")
+        isPaused = coder.decodeBool(forKey: "paused")
     }
 
     public func encode(with coder: NSCoder) {
@@ -42,5 +46,6 @@ public final class RecordingStateSnapshot: NSObject, NSSecureCoding {
         coder.encode(elapsedSec, forKey: "elapsed")
         coder.encode(micLevel, forKey: "mic")
         coder.encode(othersLevel, forKey: "others")
+        coder.encode(isPaused, forKey: "paused")
     }
 }

@@ -5,14 +5,17 @@ import SwiftUI
 public struct MeetingsTabView: View {
     @ObservedObject private var router: MeetingNavigationRouter
     private let composition: MeetingsComposition
+    private let helperControl: (any MeetingHelperControlling)?
     @State private var hasVisibleMeetings = false
 
     public init(
         router: MeetingNavigationRouter,
-        composition: MeetingsComposition
+        composition: MeetingsComposition,
+        helperControl: (any MeetingHelperControlling)? = nil
     ) {
         self.router = router
         self.composition = composition
+        self.helperControl = helperControl
     }
 
     public var body: some View {
@@ -33,7 +36,8 @@ public struct MeetingsTabView: View {
                     composition: composition,
                     onDeleted: {
                         router.selectedMeetingID = nil
-                    }
+                    },
+                    helperControl: helperControl
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {

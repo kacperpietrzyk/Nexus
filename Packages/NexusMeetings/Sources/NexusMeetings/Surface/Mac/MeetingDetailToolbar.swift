@@ -9,21 +9,27 @@ public struct MeetingDetailToolbar: ToolbarContent {
     private let meetingID: UUID
     private let composition: MeetingsComposition
     private let onDeleted: (() -> Void)?
+    private let helperControl: (any MeetingHelperControlling)?
 
     public init(
         meetingID: UUID,
         composition: MeetingsComposition,
-        onDeleted: (() -> Void)? = nil
+        onDeleted: (() -> Void)? = nil,
+        helperControl: (any MeetingHelperControlling)? = nil
     ) {
         self.meetingID = meetingID
         self.composition = composition
         self.onDeleted = onDeleted
+        self.helperControl = helperControl
     }
 
     public var body: some ToolbarContent {
         ToolbarItem {
             Menu {
                 Button("Re-process", action: reprocess)
+                if helperControl != nil, isProcessing {
+                    Button("Cancel processing", action: cancelProcessing)
+                }
                 Button("Export as Markdown", action: exportMarkdown)
                 Button("Export as JSON", action: exportJSON)
                 Divider()
@@ -32,6 +38,23 @@ public struct MeetingDetailToolbar: ToolbarContent {
                 Label("More", systemImage: "ellipsis.circle")
             }
         }
+    }
+
+    private var isProcessing: Bool {
+        guard let status = try? composition.meetingRepository.find(id: meetingID)?.processingStatus else {
+            return false
+        }
+        switch MeetingProcessingStatus(rawValue: status) {
+        case .queued, .processingVAD, .processingASR, .processingDiarization,
+            .processingMerge, .processingSummary, .processingActions:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func cancelProcessing() {
+        helperControl?.cancelProcessing(meetingID: meetingID)
     }
 
     private func reprocess() {

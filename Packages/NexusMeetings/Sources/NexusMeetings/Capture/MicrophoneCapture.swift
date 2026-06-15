@@ -20,6 +20,8 @@ public final class MicrophoneCapture: @unchecked Sendable {
     private var lastError: (any Error)?
     private let onError: (@Sendable (any Error) -> Void)?
     private let levelSink: (@Sendable (Float) -> Void)?
+    private let pausedLock = NSLock()
+    private var paused = false
 
     public init(
         writer: AudioFileWriter,
@@ -66,7 +68,23 @@ public final class MicrophoneCapture: @unchecked Sendable {
         return error
     }
 
+    /// Suspend/resume writing without removing the engine tap: while paused the
+    /// incoming buffers are dropped (the file gets a silent gap), so resuming
+    /// continues the same file.
+    public func setPaused(_ paused: Bool) {
+        pausedLock.lock()
+        self.paused = paused
+        pausedLock.unlock()
+    }
+
+    private var isPaused: Bool {
+        pausedLock.lock()
+        defer { pausedLock.unlock() }
+        return paused
+    }
+
     public func handle(rawBuffer: AVAudioPCMBuffer) throws {
+        guard isPaused == false else { return }
         levelSink?(meter.rmsLevel(rawBuffer))
         try converterQueue.sync {
             try convertAndWrite(rawBuffer)
@@ -74,6 +92,7 @@ public final class MicrophoneCapture: @unchecked Sendable {
     }
 
     private func enqueue(rawBuffer: AVAudioPCMBuffer) {
+        guard isPaused == false else { return }
         levelSink?(meter.rmsLevel(rawBuffer))
         do {
             let queuedBuffer = CaptureAudioQueuedBuffer(try rawBuffer.copyForCaptureQueue())

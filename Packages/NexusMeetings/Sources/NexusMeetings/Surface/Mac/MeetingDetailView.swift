@@ -7,6 +7,7 @@ public struct MeetingDetailView: View {
     private let meetingID: UUID
     private let composition: MeetingsComposition
     private let onDeleted: (() -> Void)?
+    private let helperControl: (any MeetingHelperControlling)?
 
     @State private var meeting: Meeting?
     @State private var selectedTab: Tab = .transcript
@@ -22,11 +23,13 @@ public struct MeetingDetailView: View {
     public init(
         meetingID: UUID,
         composition: MeetingsComposition,
-        onDeleted: (() -> Void)? = nil
+        onDeleted: (() -> Void)? = nil,
+        helperControl: (any MeetingHelperControlling)? = nil
     ) {
         self.meetingID = meetingID
         self.composition = composition
         self.onDeleted = onDeleted
+        self.helperControl = helperControl
     }
 
     public var body: some View {
@@ -41,7 +44,8 @@ public struct MeetingDetailView: View {
             MeetingDetailToolbar(
                 meetingID: meetingID,
                 composition: composition,
-                onDeleted: onDeleted
+                onDeleted: onDeleted,
+                helperControl: helperControl
             )
         }
         .onAppear {

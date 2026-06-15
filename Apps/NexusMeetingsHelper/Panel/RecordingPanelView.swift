@@ -7,18 +7,27 @@ final class RecordingPanelState: ObservableObject {
     @Published var elapsedSec: Int
     @Published var micLevel: Float
     @Published var othersLevel: Float
+    @Published var isPaused: Bool
 
-    init(title: String, elapsedSec: Int = 0, micLevel: Float = 0, othersLevel: Float = 0) {
+    init(
+        title: String,
+        elapsedSec: Int = 0,
+        micLevel: Float = 0,
+        othersLevel: Float = 0,
+        isPaused: Bool = false
+    ) {
         self.title = title
         self.elapsedSec = elapsedSec
         self.micLevel = micLevel
         self.othersLevel = othersLevel
+        self.isPaused = isPaused
     }
 
     func apply(_ snapshot: RecordingStateSnapshot) {
         elapsedSec = snapshot.elapsedSec
         micLevel = snapshot.micLevel
         othersLevel = snapshot.othersLevel
+        isPaused = snapshot.isPaused
     }
 }
 
@@ -32,10 +41,15 @@ struct RecordingPanelView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(.red)
+                    .fill(state.isPaused ? Color.orange : Color.red)
                     .frame(width: 10, height: 10)
                 Text(formatTime(state.elapsedSec))
                     .font(.title3.monospacedDigit())
+                if state.isPaused {
+                    Text("Paused")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
                 Spacer(minLength: 12)
                 Text(state.title)
                     .font(.headline)
@@ -44,7 +58,7 @@ struct RecordingPanelView: View {
             levelRow(title: "Mic", level: state.micLevel)
             levelRow(title: "Others", level: state.othersLevel)
             HStack {
-                Button("Pause", action: onPause)
+                Button(state.isPaused ? "Resume" : "Pause", action: onPause)
                 Button(action: onStop) {
                     Text("Stop").bold()
                 }

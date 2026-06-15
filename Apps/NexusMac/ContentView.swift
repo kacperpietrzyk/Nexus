@@ -25,6 +25,7 @@ struct ContentView: View {
     @Environment(\.agentChatViewModel) private var agentViewModel
     @Environment(\.meetingsComposition) private var meetingsComposition
     @Environment(\.meetingNavigationRouter) private var meetingNavigationRouter
+    @Environment(\.meetingHelperControl) private var meetingHelperControl
 
     @State private var selection: TodayNavSelection = .today
     // Internal: read from the `ContentView+CaptureAndPeek` extension.
@@ -525,7 +526,8 @@ struct ContentView: View {
             AnyView(
                 MeetingsTabView(
                     router: meetingNavigationRouter,
-                    composition: meetingsComposition
+                    composition: meetingsComposition,
+                    helperControl: meetingHelperControl
                 )
             )
         }

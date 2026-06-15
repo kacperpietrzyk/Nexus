@@ -5,6 +5,15 @@ public protocol MeetingRecordingStarting: AnyObject {
     func start(meetingID: UUID, pid: pid_t) throws -> RecordingHandle
     func stop() throws
     func currentHandle() -> RecordingHandle?
+    var isPaused: Bool { get }
+    func pause() throws
+    func resume() throws
+}
+
+extension MeetingRecordingStarting {
+    public var isPaused: Bool { false }
+    public func pause() throws {}
+    public func resume() throws {}
 }
 
 @MainActor
@@ -125,6 +134,29 @@ public final class MeetingRecordingService {
         try metadataStore.markRecordingStopped(meeting: meeting, folder: storage.folderURL, stoppedAt: endedAt)
 
         return StoppedMeetingRecording(meeting: meeting, audioFolder: storage.folderURL)
+    }
+
+    /// Pause the active recording, validating it is the requested meeting.
+    /// Idempotent: pausing an already-paused recording is a no-op.
+    public func pauseRecording(meetingID: UUID) throws {
+        try validateActive(meetingID: meetingID)
+        try recorder.pause()
+    }
+
+    /// Resume the active recording, validating it is the requested meeting.
+    /// Idempotent: resuming a running recording is a no-op.
+    public func resumeRecording(meetingID: UUID) throws {
+        try validateActive(meetingID: meetingID)
+        try recorder.resume()
+    }
+
+    private func validateActive(meetingID: UUID) throws {
+        guard let handle = recorder.currentHandle() else {
+            throw MeetingRecordingServiceError.recordingMissing
+        }
+        guard handle.meetingID == meetingID else {
+            throw MeetingRecordingServiceError.recordingMismatch
+        }
     }
 
     private func rollback(meetingID: UUID?, startedHandle: RecordingHandle?) {

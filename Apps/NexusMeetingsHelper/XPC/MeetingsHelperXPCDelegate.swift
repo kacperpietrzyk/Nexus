@@ -3,13 +3,9 @@ import NexusMeetings
 
 final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, MeetingsHelperXPCProtocol, @unchecked Sendable {
     private enum ErrorCode: Int {
-        case pickerUnavailable = -100
-        case pauseUnsupported = -200
-        case resumeUnsupported = -201
         case invalidMeetingID = -300
         case meetingMissing = -301
         case storageMissing = -302
-        case cancellationUnsupported = -303
         case recordingMissing = -304
         case recordingMismatch = -305
     }
@@ -24,6 +20,11 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
     private let recordingService: MeetingRecordingService
     private let connectionValidator: MeetingsHelperXPCConnectionValidator
     private let now: @MainActor () -> Date
+    // Recording-time screen-OCR driver (opt-in, spec §7). Self-gates on the OCR
+    // toggle, so when the feature is OFF it never reads the screen.
+    private let screenContextRecorder: ScreenContextRecorder
+    // System content-sharing picker for manual app-driven recording.
+    private let pickerPresenter: any ContentSharingPickerPresenting
 
     @MainActor
     init(
@@ -36,6 +37,8 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
         retentionPolicyProvider: @escaping @MainActor () -> MeetingAudioStorage.RetentionPolicy = {
             UserDefaultsMeetingRetentionPolicyStore.shared.load()
         },
+        screenContextRecorder: ScreenContextRecorder = MeetingsHelperXPCDelegate.makeScreenContextRecorder(),
+        pickerPresenter: any ContentSharingPickerPresenting = ContentSharingPickerCapture(),
         now: @escaping @MainActor () -> Date = Date.init
     ) {
         self.recorder = recorder
@@ -51,7 +54,17 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
             now: now
         )
         self.connectionValidator = connectionValidator
+        self.screenContextRecorder = screenContextRecorder
+        self.pickerPresenter = pickerPresenter
         self.now = now
+    }
+
+    /// Production screen-OCR driver: a ScreenCaptureKit + Vision capturer behind
+    /// the standard ``ScreenContextStage``. The helper is macOS-only, so both
+    /// frameworks are always available here.
+    @MainActor
+    static func makeScreenContextRecorder() -> ScreenContextRecorder {
+        ScreenContextRecorder(stage: ScreenContextStage(capture: ScreenshotScreenContextCapture()))
     }
 
     func listener(
@@ -86,6 +99,9 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
                     suggestedTitle: suggestedTitle,
                     pid: pid_t(pid)
                 )
+                // Begin recording-time screen OCR into the same folder (no-op
+                // unless the opt-in toggle is on).
+                screenContextRecorder.start(folder: URL(fileURLWithPath: payload.folderPath))
                 reply.send(payload, nil)
             } catch {
                 reply.send(nil, error)
@@ -94,7 +110,27 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
     }
 
     func startRecordingWithPicker(reply: @escaping (MeetingHandlePayload?, Error?) -> Void) {
-        reply(nil, Self.error(.pickerUnavailable, "Manual picker recording is not enabled yet."))
+        let reply = StartRecordingReply(reply)
+        Task { @MainActor in
+            do {
+                // Present the system content-sharing picker so the user chooses
+                // the app/window to record; the choice supplies the bundle + pid.
+                let selection = try await pickerPresenter.present()
+                let payload = try recordingService.startRecording(
+                    detectionSource: .manual,
+                    appBundleID: selection.bundleID,
+                    suggestedTitle: selection.displayName,
+                    pid: selection.pid
+                )
+                screenContextRecorder.start(folder: URL(fileURLWithPath: payload.folderPath))
+                reply.send(payload, nil)
+            } catch is CancellationError {
+                // User dismissed the picker — not an error, just no recording.
+                reply.send(nil, nil)
+            } catch {
+                reply.send(nil, error)
+            }
+        }
     }
 
     func stopRecording(meetingID: NSString, reply: @escaping (Error?) -> Void) {
@@ -103,8 +139,9 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
         Task { @MainActor in
             do {
                 let id = try Self.uuid(from: meetingID)
+                screenContextRecorder.stop()
                 let stoppedRecording = try recordingService.stopRecording(meetingID: id)
-                await pipelineQueue.enqueue { [pipeline] in
+                await pipelineQueue.enqueue(meetingID: id) { [pipeline] in
                     try? await pipeline.process(
                         meeting: stoppedRecording.meeting,
                         audioFolder: stoppedRecording.audioFolder
@@ -120,11 +157,39 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
     }
 
     func pauseRecording(meetingID: NSString, reply: @escaping (Error?) -> Void) {
-        reply(Self.error(.pauseUnsupported, "Pause is not supported by this helper build."))
+        let meetingID = meetingID as String
+        let reply = ErrorReply(reply)
+        Task { @MainActor in
+            do {
+                let id = try Self.uuid(from: meetingID)
+                try recordingService.pauseRecording(meetingID: id)
+                screenContextRecorder.stop()
+                reply.send(nil)
+            } catch let error as MeetingRecordingServiceError {
+                reply.send(Self.error(from: error))
+            } catch {
+                reply.send(error)
+            }
+        }
     }
 
     func resumeRecording(meetingID: NSString, reply: @escaping (Error?) -> Void) {
-        reply(Self.error(.resumeUnsupported, "Resume is not supported by this helper build."))
+        let meetingID = meetingID as String
+        let reply = ErrorReply(reply)
+        Task { @MainActor in
+            do {
+                let id = try Self.uuid(from: meetingID)
+                try recordingService.resumeRecording(meetingID: id)
+                if let folder = recorder.currentHandle()?.folder {
+                    screenContextRecorder.start(folder: folder)
+                }
+                reply.send(nil)
+            } catch let error as MeetingRecordingServiceError {
+                reply.send(Self.error(from: error))
+            } catch {
+                reply.send(error)
+            }
+        }
     }
 
     func currentRecordingState(reply: @escaping (RecordingStateSnapshot) -> Void) {
@@ -150,7 +215,8 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
             meetingID: handle?.meetingID,
             elapsedSec: elapsedSec,
             micLevel: levels.micLevel,
-            othersLevel: levels.othersLevel
+            othersLevel: levels.othersLevel,
+            isPaused: recorder.isPaused
         )
     }
 
@@ -170,7 +236,7 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
                 }
 
                 let folder = storage.folderURL
-                await pipelineQueue.enqueue { [pipeline] in
+                await pipelineQueue.enqueue(meetingID: id) { [pipeline] in
                     try? await pipeline.process(meeting: meeting, audioFolder: folder)
                 }
                 reply.send(nil)
@@ -181,7 +247,19 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
     }
 
     func cancelProcessing(meetingID: NSString, reply: @escaping (Error?) -> Void) {
-        reply(Self.error(.cancellationUnsupported, "Pipeline cancellation is not implemented yet."))
+        let meetingID = meetingID as String
+        let reply = ErrorReply(reply)
+        Task { @MainActor in
+            do {
+                let id = try Self.uuid(from: meetingID)
+                // Drops the meeting's queued job and cooperatively cancels it if it
+                // is the one currently running (stops at the next stage boundary).
+                await pipelineQueue.cancelProcessing(meetingID: id)
+                reply.send(nil)
+            } catch {
+                reply.send(error)
+            }
+        }
     }
 
     private static func uuid(from value: String) throws -> UUID {
