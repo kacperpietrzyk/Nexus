@@ -1,6 +1,7 @@
 import CalendarFeature
 import CommandPaletteShell
 import InboxShell
+import NexusAI
 import NexusAgent
 import NexusCore
 import NexusMeetings
@@ -31,6 +32,7 @@ struct ContentView: View {
     @Environment(\.meetingNavigationRouter) var meetingNavigationRouter
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     @AppStorage(NexusPreferences.Keys.agentEnabled) var agentEnabled = true
+    @Environment(\.modelDownloadManager) private var modelDownloadManager
 
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     @State var selection: TodayNavSelection = .today
@@ -67,6 +69,11 @@ struct ContentView: View {
     // Quick Capture draft, hoisted (not inspector @State) so a half-typed capture
     // survives destination switches (the inspector slot unmounts off-Today).
     @State var todayCaptureText = ""
+    // Session-stable dismiss flag for the AssistantUpdateBand: hoisted here so
+    // "Later" survives destination switches (the agent destination unmounts/remounts).
+    // Internal (not `private`): passed as @Binding into AgentContentBand in the
+    // ContentView+AgentShell extension.
+    @State var assistantBandDismissed = false
 
     var body: some View {
         Group {
@@ -297,6 +304,15 @@ struct ContentView: View {
             // keeps its established placement padding (it carries its own
             // background + hairline — never re-wrapped in chrome).
             VStack(spacing: 0) {
+                // AssistantUpdateBand: shown only when the model is not yet
+                // downloaded and the user hasn't dismissed it this session.
+                // Rendered in a reactive @ObservedObject wrapper so it hides
+                // automatically once the download transitions readiness state.
+                AgentContentBand(
+                    viewModel: agentViewModel,
+                    downloadManager: modelDownloadManager,
+                    bandDismissed: $assistantBandDismissed
+                )
                 AgentThreadRail(viewModel: agentViewModel)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 AgentBottomInput(viewModel: agentViewModel)

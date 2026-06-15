@@ -341,6 +341,7 @@ struct NexusMacApp: App {
                 .environment(\.notificationScheduler, notificationScheduler)
                 .environment(\.agentActivityLog, agentActivityLog)
                 .environment(\.agentChatViewModel, agentComposition.chatViewModel)
+                .environment(\.modelDownloadManager, welcomeMLXDownloads.manager)
                 .environment(\.agentBriefService, agentComposition.briefService)
                 .environment(\.pendingInsightStore, agentComposition.pendingInsightStore)
                 .environment(\.insightProposalCoordinator, agentComposition.proposalCoordinator)
@@ -838,6 +839,17 @@ private struct MeetingNavigationInfrastructure {
     let xpcClient: MeetingsHelperXPCClient
     let router: MeetingNavigationRouter
     let bridge: HelperToastBridge
+}
+
+private struct ModelDownloadManagerKey: EnvironmentKey {
+    static let defaultValue: ModelDownloadManager? = nil
+}
+
+extension EnvironmentValues {
+    var modelDownloadManager: ModelDownloadManager? {
+        get { self[ModelDownloadManagerKey.self] }
+        set { self[ModelDownloadManagerKey.self] = newValue }
+    }
 }
 
 private struct SearchSubsystemKey: EnvironmentKey {

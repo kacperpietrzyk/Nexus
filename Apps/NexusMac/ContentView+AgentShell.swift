@@ -172,3 +172,54 @@ struct AgentBottomInput: View {
         )
     }
 }
+
+/// Reactive banner shown above the agent chat content when the on-device model
+/// is not yet downloaded. Uses `@ObservedObject` (not `@Environment`) for the
+/// same reason `AgentTopControl` / `AgentBottomInput` do: `@Environment` does
+/// not subscribe to `@Published` changes on a reference-type value, so the band
+/// would not hide itself reactively once readiness flips to `.downloading`.
+///
+/// `bandDismissed` is a `@Binding` hoisted to `ContentView` so "Later" survives
+/// navigation (the agent destination unmounts when the user switches rails).
+struct AgentContentBand: View {
+    @ObservedObject var viewModel: AgentChatViewModel
+    let downloadManager: ModelDownloadManager?
+    @Binding var bandDismissed: Bool
+
+    var body: some View {
+        bandContent
+    }
+
+    @ViewBuilder
+    private var bandContent: some View {
+        if let context = bandContext {
+            AssistantUpdateBand(
+                modelName: context.set.chatManifestID,
+                sizeGB: context.set.chatSizeGB,
+                onDownload: {
+                    let preparer = AssistantPreparer(
+                        resolvedSet: context.set,
+                        downloadManager: context.manager,
+                        localStateStore: ModelManifestLocalState.Store()
+                    )
+                    Task { try? await preparer.prepareIfNeeded() }
+                },
+                onLater: { bandDismissed = true }
+            )
+            .padding(.horizontal, DS.Space.xl)
+            .padding(.top, DS.Space.m)
+        }
+    }
+
+    /// Returns the resolved model set + download manager when the band should be
+    /// shown: model not yet downloaded, not dismissed, manager available, catalog
+    /// decodable. `nil` means the band is hidden.
+    private var bandContext: (set: ResolvedModelSet, manager: ModelDownloadManager)? {
+        guard case .notDownloaded = viewModel.assistantReadiness() else { return nil }
+        guard !bandDismissed else { return nil }
+        guard let manager = downloadManager else { return nil }
+        guard let catalog = try? ModelCatalog.loadDefault() else { return nil }
+        let set = DefaultHardcodedModelPolicy(catalog: catalog).resolve()
+        return (set, manager)
+    }
+}
