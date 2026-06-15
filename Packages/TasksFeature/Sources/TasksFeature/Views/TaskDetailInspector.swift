@@ -29,6 +29,9 @@ public struct TaskDetailInspector: View {
     @State private var saveTask: _Concurrency.Task<Void, Never>?
     @State private var notesDraft: String
     @State private var notesSaveTask: _Concurrency.Task<Void, Never>?
+    /// Editable estimate (minutes string) bound by `+Estimate`; persists to
+    /// `estimatedDurationSeconds`. Internal so the extension can render it.
+    @State var estimateMinutesDraft: String
     @State var outgoingBlockedTasks: [TaskItem] = []
     @State var incomingBlockerTasks: [TaskItem] = []
     @State var blockSearchText: String = ""
@@ -53,6 +56,7 @@ public struct TaskDetailInspector: View {
         )
         self._customRRule = State(initialValue: task.recurrenceRule ?? "")
         self._notesDraft = State(initialValue: task.body)
+        self._estimateMinutesDraft = State(initialValue: Self.minutesString(fromSeconds: task.estimatedDurationSeconds))
     }
 
     /// Re-derives the editor's `@State` from the current `task`. Mirrors the
@@ -63,6 +67,7 @@ public struct TaskDetailInspector: View {
         allDay = task.startAt == nil
         recurrenceChoice = RecurrenceChoice.from(rrule: task.recurrenceRule)
         customRRule = task.recurrenceRule ?? ""
+        estimateMinutesDraft = Self.minutesString(fromSeconds: task.estimatedDurationSeconds)
     }
 
     public var body: some View {
@@ -204,6 +209,8 @@ public struct TaskDetailInspector: View {
                         .foregroundStyle(NexusColor.Text.tertiary)
                 }
             }
+
+            estimateRow
         }
     }
 
@@ -380,19 +387,6 @@ public struct TaskDetailInspector: View {
         )
     }
 
-    private var durationLabel: String? {
-        guard let startAt = task.startAt, let endAt = task.endAt, endAt > startAt else {
-            return nil
-        }
-
-        let formatter = DateComponentsFormatter()
-        formatter.allowedUnits = [.hour, .minute]
-        formatter.unitsStyle = .abbreviated
-        formatter.maximumUnitCount = 2
-        formatter.zeroFormattingBehavior = .dropAll
-        return formatter.string(from: endAt.timeIntervalSince(startAt))
-    }
-
     private var priorityBinding: Binding<TaskPriority> {
         Binding(
             get: { task.priority },
@@ -415,7 +409,7 @@ public struct TaskDetailInspector: View {
     }
 
     @MainActor
-    private func save() {
+    func save() {
         guard let repository else { return }
         try? repository.update(task) { _ in }
     }

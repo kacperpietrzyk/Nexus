@@ -51,6 +51,13 @@ public struct TasksUpdateTool: AgentTool {
                         [.string(description: "RFC 5545 RRULE subset, e.g. FREQ=DAILY."), .null(description: "Clear recurrence.")],
                         description: "RFC 5545 RRULE subset, e.g. FREQ=DAILY; null to clear."
                     ),
+                    "estimated_duration_minutes": .anyOf(
+                        [
+                            .integer(minimum: 1, description: "Estimate in minutes (>0)."),
+                            .null(description: "Clear the duration estimate."),
+                        ],
+                        description: "User estimate in minutes (>0), stored as seconds with an explicit source; null to clear."
+                    ),
                     "reminders": .anyOf(
                         [
                             .array(
@@ -198,6 +205,7 @@ private struct TasksUpdatePatch {
     let tags: [String]??
     let parentID: UUID??
     let recurrenceRule: String??
+    let estimatedDurationSeconds: Int??
     let reminders: [ReminderRule]??
 
     static func parse(_ patch: [String: JSONValue]) throws -> Self {
@@ -220,6 +228,7 @@ private struct TasksUpdatePatch {
             tags: try nullableTags(patch["tags"]),
             parentID: try nullableUUID(patch["parent_id"], field: "parent_id"),
             recurrenceRule: try nullableRecurrenceRule(patch["recurrence_rule"]),
+            estimatedDurationSeconds: try nullableEstimatedDurationSeconds(patch["estimated_duration_minutes"]),
             reminders: try nullableReminders(patch["reminders"])
         )
     }
@@ -246,6 +255,12 @@ private struct TasksUpdatePatch {
         }
         if let recurrenceRule {
             task.recurrenceRule = recurrenceRule
+        }
+        // Estimate + provenance move in lockstep: a value sets an explicit
+        // estimate; a present null clears BOTH the seconds and the source.
+        if let estimatedDurationSeconds {
+            task.estimatedDurationSeconds = estimatedDurationSeconds
+            task.durationSourceRaw = estimatedDurationSeconds == nil ? nil : DurationSource.explicit.rawValue
         }
         if let reminders {
             task.reminders = reminders ?? []
@@ -311,6 +326,14 @@ private struct TasksUpdatePatch {
             throw AgentError.validation("\(field) must be a valid UUID")
         }
         return .some(id)
+    }
+
+    private static func nullableEstimatedDurationSeconds(_ value: JSONValue?) throws -> Int?? {
+        guard let value else { return nil }
+        if value == .null {
+            return .some(nil)
+        }
+        return .some(try TasksStructuredCreateArguments.optionalEstimatedDurationSeconds(value))
     }
 
     private static func nullableRecurrenceRule(_ value: JSONValue?) throws -> String?? {
