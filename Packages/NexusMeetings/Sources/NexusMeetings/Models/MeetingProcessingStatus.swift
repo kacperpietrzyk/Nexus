@@ -22,4 +22,12 @@ public enum MeetingProcessingStatus: String, Sendable, Codable, CaseIterable {
         guard raw.hasPrefix("failed:") else { return nil }
         return String(raw.dropFirst("failed:".count))
     }
+
+    /// True while the helper is actively working a meeting's pipeline (queued
+    /// or any `processing-*` stage) — i.e. a cancellable in-flight job. Used to
+    /// gate the in-app "Cancel processing" control, which drives the helper's
+    /// `PipelineQueue` over XPC.
+    public static func isInFlight(_ raw: String) -> Bool {
+        raw == queued.rawValue || raw.hasPrefix("processing-")
+    }
 }

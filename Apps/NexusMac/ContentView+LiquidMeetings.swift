@@ -73,7 +73,13 @@ extension ContentView {
                 navigate(to: .projects)
             },
             openPeople: { navigate(to: .people) },
-            openSettings: { navigate(to: .settings) }
+            openSettings: { navigate(to: .settings) },
+            // Re-homed from the deleted pre-Liquid MeetingDetailToolbar: drive the
+            // helper's cross-process PipelineQueue cancel over XPC. `nil` when no
+            // helper control is injected, which hides the Cancel affordance.
+            cancelProcessing: meetingHelperControl.map { control in
+                { meetingID in control.cancelProcessing(meetingID: meetingID) }
+            }
         )
     }
 }

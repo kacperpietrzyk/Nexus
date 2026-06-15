@@ -15,19 +15,25 @@ public struct LiquidMeetingsNavigation {
     public let openProject: (UUID) -> Void
     public let openPeople: () -> Void
     public let openSettings: () -> Void
+    /// Cancel the helper's in-flight processing for a meeting. The host app
+    /// backs this with the XPC helper control; `nil` (tests/previews, or no
+    /// helper available) hides the in-app Cancel affordance entirely.
+    public let cancelProcessing: ((UUID) -> Void)?
 
     public init(
         openTask: @escaping (TaskItem) -> Void,
         openNotes: @escaping () -> Void,
         openProject: @escaping (UUID) -> Void,
         openPeople: @escaping () -> Void,
-        openSettings: @escaping () -> Void
+        openSettings: @escaping () -> Void,
+        cancelProcessing: ((UUID) -> Void)? = nil
     ) {
         self.openTask = openTask
         self.openNotes = openNotes
         self.openProject = openProject
         self.openPeople = openPeople
         self.openSettings = openSettings
+        self.cancelProcessing = cancelProcessing
     }
 }
 

@@ -36,6 +36,11 @@ public struct MeetingActionsInspector: View {
         ScrollView(showsIndicators: false) {
             // 04_LAYOUT_SYSTEM.md: inspector cards stack vertically, spacing 12.
             VStack(spacing: DS.Space.m) {
+                if let meeting = model.meeting,
+                    navigation.cancelProcessing != nil,
+                    MeetingProcessingStatus.isInFlight(meeting.processingStatus) {
+                    cancelProcessingCard(meeting)
+                }
                 if model.meeting != nil {
                     followUpCard
                     sendSummaryCard
@@ -59,6 +64,24 @@ public struct MeetingActionsInspector: View {
         // a stale confirmation for a summary that was never copied.
         .onChange(of: router.selectedMeetingID) { _, _ in
             copiedFeedback = false
+        }
+    }
+
+    // MARK: - Cancel processing
+
+    /// Shown only while the selected meeting is in-flight in the helper's
+    /// pipeline (queued or a `processing-*` stage). Drives the helper's
+    /// `PipelineQueue` over XPC via the host-provided `cancelProcessing` seam —
+    /// the in-app surface for a cross-process cancel that an in-app queue can't
+    /// reach.
+    @ViewBuilder
+    private func cancelProcessingCard(_ meeting: Meeting) -> some View {
+        LiquidGlassCard("Processing") {
+            VStack(spacing: DS.Space.xs) {
+                actionRow(systemImage: "xmark.circle", title: "Cancel processing") {
+                    navigation.cancelProcessing?(meeting.id)
+                }
+            }
         }
     }
 
