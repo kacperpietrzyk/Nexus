@@ -98,10 +98,11 @@ struct WeekGrid: View {
             hourAxis
         }
         .clipShape(RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous))
-        // The grid uses the SAME glass recipe as every card (material +
-        // dark-navy tint), not a flat near-black sunken fill — that lone flat
-        // panel read darker/blacker than the rest of the app and clashed.
-        .liquidGlass(.card, radius: DS.Radius.m)
+        // The grid uses the SAME light card surface as every other card
+        // (`liquidLightCard`), so the week canvas reads as airy glass instead of
+        // a darker slab clashing with the lightened cards around it. The subtle
+        // hairline grid lines + colored event blocks still read on the lighter fill.
+        .liquidLightCard(cornerRadius: DS.Radius.m)
     }
 
     // MARK: - Header (weekday + day number)

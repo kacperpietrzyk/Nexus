@@ -20,8 +20,16 @@ public struct FocusView: View {
 
     public var body: some View {
         ZStack(alignment: .topTrailing) {
+            #if os(macOS)
+            // Liquid backdrop: focus mode is a full-screen takeover, so it owns
+            // its own aurora wallpaper for the glass column below to sample.
+            // iOS keeps the opaque base until the touch Liquid pass.
+            LiquidWallpaper()
+                .ignoresSafeArea()
+            #else
             NexusColor.Background.base
                 .ignoresSafeArea()
+            #endif
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
@@ -40,10 +48,25 @@ public struct FocusView: View {
 
                     actionRow
                 }
+                #if os(macOS)
+                // Liquid re-skin: the committed-task column floats as a glass
+                // panel on the aurora backdrop instead of sitting flat on the
+                // opaque base. `.strong` (not `.card`): the column is text-heavy
+                // over a full-screen aurora that brightens at the edges, so the
+                // deeper glaze protects legibility — and it matches the verified
+                // welcome hero. iOS keeps the bare centred column.
+                .padding(36)
+                .frame(maxWidth: 720, alignment: .leading)
+                .liquidGlass(.strong, radius: DS.Radius.xl)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 72)
+                #else
                 .frame(maxWidth: 720, alignment: .leading)
                 .padding(.horizontal, 32)
                 .padding(.vertical, 96)
                 .frame(maxWidth: .infinity, alignment: .center)
+                #endif
             }
             .scrollIndicators(.hidden)
 

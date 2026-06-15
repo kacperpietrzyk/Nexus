@@ -45,7 +45,7 @@ struct LiquidMonthGrid: View {
         }
         .padding(DS.Space.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .liquidGlass(.card, radius: DS.Radius.m)
+        .liquidLightCard(cornerRadius: DS.Radius.m)
     }
 
     private var weekdayHeader: some View {

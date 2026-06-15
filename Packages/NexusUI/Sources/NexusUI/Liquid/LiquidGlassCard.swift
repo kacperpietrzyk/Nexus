@@ -42,7 +42,9 @@ public struct LiquidGlassCard<Content: View, Trailing: View>: View {
             content()
         }
         .padding(DS.Space.l)
-        .liquidGlass(.card, radius: DS.Radius.l, isHovering: hovering)
+        // Unified light card surface (`liquidLightCard` is macOS-only internally;
+        // iOS falls back to `.liquidGlass(.card)`). Radius matches Today (12).
+        .liquidLightCard(cornerRadius: DS.Radius.m, isHovering: hovering)
         #if os(macOS)
         .onHover { value in
             withAnimation(DS.Motion.hover) { hovering = value }

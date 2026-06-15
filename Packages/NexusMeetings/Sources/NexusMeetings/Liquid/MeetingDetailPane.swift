@@ -348,7 +348,7 @@ struct MeetingDetailPane: View {
         // Same load-bearing identity pin as the notes card.
         .id(meeting.id)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .liquidGlass(.card, radius: DS.Radius.l)
+        .liquidLightCard(cornerRadius: DS.Radius.l)
     }
 }
 

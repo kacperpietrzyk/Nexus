@@ -144,7 +144,7 @@ private struct ProjectStatTile: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(DS.Space.m)
-        .liquidGlass(.card, radius: DS.Radius.m)
+        .liquidLightCard(cornerRadius: DS.Radius.m)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label): \(value)")
     }

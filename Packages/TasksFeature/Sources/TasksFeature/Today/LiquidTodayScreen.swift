@@ -213,7 +213,7 @@ public struct LiquidTodayScreen: View {
         }
         .padding(DS.Space.s)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .liquidGlass(.card, radius: DS.Radius.m)
+        .liquidLightCard(cornerRadius: DS.Radius.m)
     }
 
     // MARK: - Data + actions

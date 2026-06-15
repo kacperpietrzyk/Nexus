@@ -20,8 +20,17 @@ public struct WelcomeFlowView: View {
 
     public var body: some View {
         ZStack(alignment: .topTrailing) {
+            #if os(macOS)
+            // Liquid backdrop: the welcome sheet is a detached surface, so the
+            // glass card below needs a live wallpaper to sample — without it the
+            // `.card` material renders as a flat slab (the Settings detail-pane
+            // lesson). iOS keeps the opaque base until the touch Liquid pass.
+            LiquidWallpaper()
+                .ignoresSafeArea()
+            #else
             NexusColor.Background.base
                 .ignoresSafeArea()
+            #endif
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -88,7 +97,12 @@ public struct WelcomeFlowView: View {
             currentScreen
                 .frame(width: 360)
                 .padding(26)
-                .nexusGlass(.regular, in: RoundedRectangle(cornerRadius: NexusRadius.r5))
+                // Liquid re-skin: the welcome card is a hero modal of the same
+                // class as the command palette / capture overlay, so it adopts
+                // their `.strong` glass recipe (+ DS.Radius.xl) for a luminous
+                // floating-glass presence, replacing the flat `nexusGlass`
+                // /NexusGlassMaterial slab.
+                .liquidGlass(.strong, radius: DS.Radius.xl)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             #else
             currentScreen

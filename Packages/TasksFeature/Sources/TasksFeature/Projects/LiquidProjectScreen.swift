@@ -431,7 +431,7 @@ private struct ProjectPickerRow: View {
             .padding(DS.Space.l)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .liquidGlass(.card, radius: DS.Radius.l, isHovering: hovering)
+            .liquidLightCard(cornerRadius: DS.Radius.l, isHovering: hovering)
         }
         .buttonStyle(.plain)
         #if os(macOS)

@@ -206,7 +206,7 @@ public struct LiquidWeekScreen: View {
             }
         }
         .padding(DS.Space.s)
-        .liquidGlass(.card, radius: DS.Radius.m)
+        .liquidLightCard(cornerRadius: DS.Radius.m)
     }
 
     private func errorRow(_ message: String) -> some View {
@@ -222,7 +222,7 @@ public struct LiquidWeekScreen: View {
             Spacer(minLength: 0)
         }
         .padding(DS.Space.s)
-        .liquidGlass(.card, radius: DS.Radius.m)
+        .liquidLightCard(cornerRadius: DS.Radius.m)
     }
 
     /// M1 non-blocking conflict affordance (mirrors `errorRow` chrome):
@@ -247,7 +247,7 @@ public struct LiquidWeekScreen: View {
             )
         }
         .padding(DS.Space.s)
-        .liquidGlass(.card, radius: DS.Radius.m)
+        .liquidLightCard(cornerRadius: DS.Radius.m)
     }
 
     // MARK: - Content per scope

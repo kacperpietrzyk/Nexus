@@ -117,7 +117,13 @@ struct MeetingListPane: View {
         .frame(height: 30)
         .background {
             RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                // macOS: a light translucent inset so the field reads as glass,
+                // not a near-black slab on the light pane. iOS keeps the sunken fill.
+                #if os(macOS)
+                .fill(Color.white.opacity(0.06))
+                #else
                 .fill(DS.ColorToken.backgroundSunken.opacity(0.6))
+                #endif
         }
         .overlay {
             RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)

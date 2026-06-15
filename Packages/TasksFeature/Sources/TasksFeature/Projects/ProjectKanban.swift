@@ -360,7 +360,7 @@ private struct KanbanCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(DS.Space.s)
-            .liquidGlass(.card, radius: DS.Radius.s, isHovering: hovering)
+            .liquidLightCard(cornerRadius: DS.Radius.s, isHovering: hovering)
         }
         .buttonStyle(.plain)
         #if os(macOS)
