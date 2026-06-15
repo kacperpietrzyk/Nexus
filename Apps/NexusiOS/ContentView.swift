@@ -22,7 +22,7 @@ import UIKit
 struct ContentView: View {
 
     fileprivate enum NexusTab: Hashable {
-        case today, inbox, tasks, notes, calendar, people, meetings, agent, settings
+        case today, inbox, tasks, projects, notes, calendar, people, meetings, agent, stats, settings
     }
 
     let cloudKitEnabled: Bool
@@ -45,6 +45,9 @@ struct ContentView: View {
     @AppStorage(NexusPreferences.Keys.agentEnabled) var agentEnabled = true
 
     @State var liquidTodayModel = LiquidTodayModel()
+    // Liquid Projects (ported from macOS): one shared model drives the Projects
+    // screen + its Overview dashboard, the same sharing shape as Liquid Today.
+    @State var liquidProjectsModel = LiquidProjectsModel()
     @State private var selectedTab: NexusTab = ContentView.initialTab()
 
     /// DEBUG-only: lets the screenshot/QA loop deep-open a specific tab via the
@@ -54,11 +57,14 @@ struct ContentView: View {
         #if DEBUG
         switch ProcessInfo.processInfo.environment["NEXUS_INITIAL_TAB"] {
         case "tasks": return .tasks
+        case "projects": return .projects
         case "notes": return .notes
         case "inbox": return .inbox
         case "agent": return .agent
         case "calendar": return .calendar
         case "people": return .people
+        case "meetings": return .meetings
+        case "stats": return .stats
         case "settings": return .settings
         default: return .today
         }
@@ -259,6 +265,13 @@ struct ContentView: View {
             )
             .tag(NexusTab.tasks)
             .tabItem { Label("Tasks", systemImage: "checkmark.square") }
+            ProjectsTab(
+                onOpenCapture: { openCapture(mode: $0) },
+                onOpenCommandPalette: { commandPalettePresented = true },
+                content: { liquidProjectsMain }
+            )
+            .tag(NexusTab.projects)
+            .tabItem { Label("Projects", systemImage: "square.stack.3d.up") }
             NotesListView()
                 .tag(NexusTab.notes)
                 .tabItem { Label("Notes", systemImage: "note.text") }
@@ -548,6 +561,9 @@ extension ContentView {
                 onOpenCommandPalette: { commandPalettePresented = true },
                 showsToolbarActions: false
             )
+        case .projects:
+            liquidProjectsMain
+                .background(Color.clear)
         case .notes:
             NotesListView()
         case .calendar:
@@ -564,6 +580,9 @@ extension ContentView {
                 ContentUnavailableView("Meetings unavailable", systemImage: "person.wave.2")
                     .foregroundStyle(NexusColor.Text.secondary)
             }
+        case .stats:
+            ProductivityDashboardView()
+                .background(Color.clear)
         case .settings:
             settingsTab
         }
@@ -610,6 +629,7 @@ extension ContentView {
             RegularNavigationItem(tab: .today, title: "Today", systemImage: "circle.dotted"),
             RegularNavigationItem(tab: .inbox, title: "Inbox", systemImage: "tray"),
             RegularNavigationItem(tab: .tasks, title: "Tasks", systemImage: "checkmark.square"),
+            RegularNavigationItem(tab: .projects, title: "Projects", systemImage: "square.stack.3d.up"),
             RegularNavigationItem(tab: .notes, title: "Notes", systemImage: "note.text"),
             RegularNavigationItem(tab: .calendar, title: "Calendar", systemImage: "calendar"),
             RegularNavigationItem(tab: .people, title: "People", systemImage: "person.crop.circle"),
@@ -620,6 +640,9 @@ extension ContentView {
                 RegularNavigationItem(tab: .meetings, title: "Meetings", systemImage: "person.wave.2")
             )
         }
+        // Stats is an analytics surface: a sidebar row on iPad (parity with the
+        // macOS ⌘6 destination). iPhone keeps it as a Settings link (no tab).
+        items.append(RegularNavigationItem(tab: .stats, title: "Stats", systemImage: "chart.bar"))
         items.append(RegularNavigationItem(tab: .settings, title: "Settings", systemImage: "gearshape"))
         return items
     }
@@ -664,20 +687,37 @@ extension ContentView {
         )
     }
 
-    /// Routes the Today cards' navigation intents to the iOS tab switch. iOS has
-    /// no dedicated Projects/Stats tabs → route those to Tasks.
+    /// Routes the Today cards' navigation intents to the iOS tab switch. Projects
+    /// is now a dedicated tab (compact + iPad sidebar). Stats is an iPad sidebar
+    /// destination only — on compact iPhone it has no tab, so route it to Tasks.
     func navigateToday(_ selection: TodayNavSelection) {
         switch selection {
         case .today: selectedTab = .today
         case .inbox: selectedTab = .inbox
         case .meetings: selectedTab = .meetings
-        case .tasks, .projects, .stats: selectedTab = .tasks
+        case .tasks: selectedTab = .tasks
+        case .projects: selectedTab = .projects
+        case .stats: selectedTab = isRegularWidth ? .stats : .tasks
         case .notes: selectedTab = .notes
         case .calendar: selectedTab = .calendar
         case .people: selectedTab = .people
         case .agent: selectedTab = .agent
         case .settings: selectedTab = .settings
         }
+    }
+
+    /// The shared Liquid Projects screen — mounted by the compact `ProjectsTab`
+    /// and the iPad regular-split detail. Opening a card/row routes through the
+    /// same `selectedTask` seam as the rest of the shell (inspector ⊥ Agent
+    /// invariant preserved). Defined here because `NexusTab` is fileprivate.
+    var liquidProjectsMain: some View {
+        LiquidProjectScreen(
+            model: liquidProjectsModel,
+            onOpenTask: { selectedTask = $0 }
+        )
+        // Pin structural identity so detail-branch re-evaluations never tear down
+        // the screen's internal @State (selected project, tab, picker mode).
+        .id(NexusTab.projects)
     }
 
     /// Adapts the shared `AgentBriefService` seam to the Liquid screen's
