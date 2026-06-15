@@ -1,5 +1,18 @@
 import Foundation
 
+/// Outcome of a reclaim pass.
+public struct ReclaimResult: Sendable, Equatable {
+    /// A single removal failure, surfaced — never swallowed.
+    public struct Failure: Sendable, Equatable {
+        public let path: URL
+        public let message: String
+    }
+
+    public var freedBytes: Int64
+    /// Paths whose removal failed, with the error description.
+    public var failures: [Failure]
+}
+
 /// Disk-truth model-store reconciler: classifies every directory under the known
 /// roots against the current `ResolvedModelSet`, so it can both report real sizes
 /// to the UI and reclaim orphans without ever touching the actively-loaded model.
@@ -108,6 +121,33 @@ public struct ModelStoreReconciler: @unchecked Sendable {
         return ModelStoreEntry(
             id: ".hf-cache", path: roots.stagingCache, sizeBytes: size, kind: .unknown,
             classification: anyDownloading ? .inFlight : .orphan)
+    }
+
+    // MARK: Reclaim
+
+    /// Removes every `orphan` directory, verifying each removal by re-checking the
+    /// filesystem. `canonical`, `inFlight`, and `staleButActive` are never touched.
+    @discardableResult
+    public func reclaimOrphans() -> ReclaimResult {
+        var freed: Int64 = 0
+        var failures: [ReclaimResult.Failure] = []
+        for entry in scan() where entry.classification == .orphan {
+            do {
+                try fileManager.removeItem(at: entry.path)
+                if fileManager.fileExists(atPath: entry.path.path) {
+                    failures.append(
+                        ReclaimResult.Failure(
+                            path: entry.path, message: "still present after removeItem"))
+                } else {
+                    freed += entry.sizeBytes
+                }
+            } catch {
+                failures.append(
+                    ReclaimResult.Failure(
+                        path: entry.path, message: error.localizedDescription))
+            }
+        }
+        return ReclaimResult(freedBytes: freed, failures: failures)
     }
 
     // MARK: Helpers

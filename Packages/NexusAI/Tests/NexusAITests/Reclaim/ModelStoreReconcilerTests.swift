@@ -99,4 +99,65 @@ import Testing
 
         #expect(byID["gemma-e4b"] == .inFlight)
     }
+
+    @Test func reclaimOrphansRemovesOnlyOrphans() throws {
+        let (roots, tmp) = try Self.makeRoots()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let defaults = UserDefaults(suiteName: "reclaim-\(UUID().uuidString)")!
+        let store = ModelManifestLocalState.Store(defaults: defaults)
+
+        try Self.seedModelDir(roots.managedModels, "gemma-e4b")  // canonical
+        try Self.seedModelDir(roots.managedModels, "qwen3.5-27b-4bit")  // orphan (new present)
+        try Self.seedModelDir(roots.hubCache, "models--mlx-community--Qwen3.5-27B-4bit")  // orphan
+        store.save(
+            manifestID: "gemma-e4b",
+            state: ModelManifestLocalState(status: .downloaded, assignedAsChat: true))
+
+        let reconciler = ModelStoreReconciler(
+            roots: roots, store: store,
+            canonical: Self.resolvedSet(chat: "gemma-e4b", embedder: "bge-small"),
+            whisperVariant: "openai_whisper-base")
+        let result = reconciler.reclaimOrphans()
+
+        #expect(result.failures.isEmpty)
+        #expect(result.freedBytes == 2)  // two 1-byte orphan files
+        #expect(FileManager.default.fileExists(atPath: roots.managedModels.appending(path: "gemma-e4b").path))
+        #expect(!FileManager.default.fileExists(atPath: roots.managedModels.appending(path: "qwen3.5-27b-4bit").path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: roots.hubCache.appending(path: "models--mlx-community--Qwen3.5-27B-4bit").path))
+    }
+
+    @Test func migrationProtectsOldChatUntilNewDownloaded() throws {
+        let (roots, tmp) = try Self.makeRoots()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let defaults = UserDefaults(suiteName: "reclaim-\(UUID().uuidString)")!
+        let store = ModelManifestLocalState.Store(defaults: defaults)
+
+        try Self.seedModelDir(roots.managedModels, "qwen3.5-27b-4bit")
+        store.save(
+            manifestID: "qwen3.5-27b-4bit",
+            state: ModelManifestLocalState(status: .downloaded, assignedAsChat: true))
+
+        let reconciler = ModelStoreReconciler(
+            roots: roots, store: store,
+            canonical: Self.resolvedSet(chat: "gemma-e4b", embedder: "bge-small"),
+            whisperVariant: "openai_whisper-base")
+
+        // New chat NOT downloaded ⇒ old chat survives.
+        _ = reconciler.reclaimOrphans()
+        #expect(
+            FileManager.default.fileExists(
+                atPath: roots.managedModels.appending(path: "qwen3.5-27b-4bit").path))
+
+        // New chat downloaded ⇒ next sweep reclaims the old chat.
+        try Self.seedModelDir(roots.managedModels, "gemma-e4b")
+        store.save(
+            manifestID: "gemma-e4b",
+            state: ModelManifestLocalState(status: .downloaded, assignedAsChat: true))
+        _ = reconciler.reclaimOrphans()
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: roots.managedModels.appending(path: "qwen3.5-27b-4bit").path))
+    }
 }
