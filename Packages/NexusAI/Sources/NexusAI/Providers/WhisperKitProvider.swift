@@ -31,6 +31,9 @@ public final class WhisperKitProvider: AIProvider {
     /// quality/speed multilingual tradeoff (Polish meetings) on Apple silicon.
     public static let modelVariant = "openai_whisper-large-v3-v20240930_turbo"
 
+    /// The canonical WhisperKit variant the app downloads — exposed for the model-store reconciler.
+    public static var modelVariantPublic: String { modelVariant }
+
     /// UserDefaults key holding the on-disk path of the downloaded variant
     /// folder. Written by ``WhisperKitModelDownloadCoordinator`` on success and
     /// read by every no-arg `WhisperKitProvider()` (the composition graph and

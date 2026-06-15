@@ -8,6 +8,7 @@ import NexusSearch
 import NexusSync
 import NexusUI
 import NotesFeature
+import OSLog
 import PeopleFeature
 import SwiftData
 import SwiftUI
@@ -220,6 +221,17 @@ struct NexusiOSApp: App {
             return store.currentChatAssignment() != nil
                 && FileManager.default.fileExists(atPath: lifecycle.chatFolderURL().path)
         }
+    }
+
+    @MainActor
+    fileprivate static func makeModelReconciler() -> ModelStoreReconciler? {
+        guard let catalog = try? ModelCatalog.loadDefault() else { return nil }
+        return ModelStoreReconciler(
+            roots: .production(),
+            store: ModelManifestLocalState.Store(),
+            canonical: DefaultHardcodedModelPolicy(catalog: catalog).resolve(),
+            whisperVariant: WhisperKitProvider.modelVariantPublic
+        )
     }
 
     var body: some Scene {
@@ -713,6 +725,18 @@ private struct TombstonePurgeLifecycleModifier: ViewModifier {
                 await scheduler.register(DailyRolloverJob.makeJob(containerProvider: { madeContainer }))
                 await scheduler.runDue()
                 NexusiOSApp.scheduleNextBGTask()
+            }
+            .task {
+                guard let reconciler = NexusiOSApp.makeModelReconciler() else { return }
+                await Task.detached(priority: .utility) {
+                    let result = reconciler.reclaimOrphans()
+                    if !result.failures.isEmpty {
+                        Logger(subsystem: "com.kacperpietrzyk.Nexus", category: "ai.reclaim")
+                            .error(
+                                "model reclaim failures: \(result.failures.map(\.path.lastPathComponent), privacy: .public)"
+                            )
+                    }
+                }.value
             }
     }
 }

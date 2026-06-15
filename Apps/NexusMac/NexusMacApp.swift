@@ -10,6 +10,7 @@ import NexusSearch
 import NexusSync
 import NexusUI
 import NotesFeature
+import OSLog
 import PeopleFeature
 import SwiftData
 import SwiftUI
@@ -398,6 +399,18 @@ struct NexusMacApp: App {
                         await agentComposition.insightCoordinator.runDueInsights(now: .now)
                     }
                 }
+                .task {
+                    guard let reconciler = Self.makeModelReconciler() else { return }
+                    await Task.detached(priority: .utility) {
+                        let result = reconciler.reclaimOrphans()
+                        if !result.failures.isEmpty {
+                            Logger(subsystem: "com.kacperpietrzyk.Nexus", category: "ai.reclaim")
+                                .error(
+                                    "model reclaim failures: \(result.failures.map(\.path.lastPathComponent), privacy: .public)"
+                                )
+                        }
+                    }.value
+                }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     agentComposition.runActiveMaintenance(context: container.mainContext)
@@ -777,6 +790,17 @@ struct NexusMacApp: App {
             chatManifestID: manifestID
         )
         return { resolver.readiness(progress: nil) }
+    }
+
+    @MainActor
+    private static func makeModelReconciler() -> ModelStoreReconciler? {
+        guard let catalog = try? ModelCatalog.loadDefault() else { return nil }
+        return ModelStoreReconciler(
+            roots: .production(),
+            store: ModelManifestLocalState.Store(),
+            canonical: DefaultHardcodedModelPolicy(catalog: catalog).resolve(),
+            whisperVariant: WhisperKitProvider.modelVariantPublic
+        )
     }
 
     private static func makeLegacyBrief(
