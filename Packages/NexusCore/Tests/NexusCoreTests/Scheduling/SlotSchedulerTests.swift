@@ -41,4 +41,43 @@ import Testing
         #expect(slot != nil)
         #expect(cal.component(.day, from: slot!.start) == 16)
     }
+
+    @Test func eveningInvocationPastWorkdayEndReturnsNilWithoutTrapping() {
+        var cal = Calendar(identifier: .iso8601); cal.timeZone = TimeZone(identifier: "UTC")!
+        let sched = SlotScheduler(calendar: cal)
+        var prefs = CalendarPreferences.default
+        prefs.workdayStart = DateComponents(hour: 9, minute: 0)
+        prefs.workdayEnd = DateComponents(hour: 17, minute: 0)
+        let day1 = at("2026-06-15T00:00:00Z")
+        // `after` is 22:00, well past the 17:00 workday end: max(start, after) > end
+        // would trap when constructing the clamped DateInterval. Must skip the day
+        // and return nil instead of crashing.
+        let slot = sched.slot(
+            durationMinutes: 60, within: [day1],
+            events: [], prefs: prefs, after: at("2026-06-15T22:00:00Z"))
+        #expect(slot == nil)
+    }
+
+    @Test func zeroAndNegativeDurationReturnEmptyWithoutHanging() {
+        var cal = Calendar(identifier: .iso8601); cal.timeZone = TimeZone(identifier: "UTC")!
+        let sched = SlotScheduler(calendar: cal)
+        let workday = DateInterval(start: at("2026-06-15T09:00:00Z"), end: at("2026-06-15T17:00:00Z"))
+        // A non-positive minimum never advances the chunk cursor -> would spin
+        // forever. Both must short-circuit to [].
+        #expect(sched.freeSlots(events: [], within: workday, minimumMinutes: 0, maximumMinutes: 0).isEmpty)
+        #expect(sched.freeSlots(events: [], within: workday, minimumMinutes: -30, maximumMinutes: 0).isEmpty)
+        #expect(
+            sched.freeSlots(
+                events: [], within: workday, minimumDuration: 0, maximumDuration: .infinity
+            ).isEmpty)
+
+        // And `slot()` with a non-positive duration safely returns nil (no hang).
+        var prefs = CalendarPreferences.default
+        prefs.workdayStart = DateComponents(hour: 9, minute: 0)
+        prefs.workdayEnd = DateComponents(hour: 17, minute: 0)
+        let result = sched.slot(
+            durationMinutes: 0, within: [at("2026-06-15T00:00:00Z")],
+            events: [], prefs: prefs, after: at("2026-06-15T08:00:00Z"))
+        #expect(result == nil)
+    }
 }

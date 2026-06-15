@@ -17,10 +17,13 @@ public final class AttachmentAssetRepository {
     }
 
     public func find(id: UUID) throws -> AttachmentAsset? {
-        var descriptor = FetchDescriptor<AttachmentAsset>(
+        // No `fetchLimit`: on a synced store a soft-deleted CloudKit twin can share
+        // the id and sort first, so a `fetchLimit = 1` + in-memory filter would
+        // return nil for a LIVE asset. Fetch all rows for the id and pick the live
+        // (non-deleted) one. (Twin volume is bounded; single-user scale is fine.)
+        let descriptor = FetchDescriptor<AttachmentAsset>(
             predicate: #Predicate { $0.id == id }
         )
-        descriptor.fetchLimit = 1
         return try context.fetch(descriptor).first { $0.deletedAt == nil }
     }
 

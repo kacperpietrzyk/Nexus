@@ -27,6 +27,11 @@ public struct SlotScheduler: Sendable {
         events: [CalendarEvent], within workday: DateInterval,
         minimumDuration minSec: TimeInterval, maximumDuration maxSec: TimeInterval
     ) -> [DateInterval] {
+        // A non-positive minimum duration is meaningless: a chunk of length 0
+        // never advances `start` (chunkEnd == start when minSec <= 0 and the gap
+        // is exhausted), so the chunking loop would spin forever. Bail early; this
+        // also makes `slot(durationMinutes:)` with a non-positive duration return nil.
+        guard minSec > 0 else { return [] }
         // Busy spans clipped to the workday, merged.
         // Pre-filter to only events that actually overlap the workday window before clipping
         // (prevents end < start in DateInterval when an event ends before the window starts).
@@ -73,7 +78,12 @@ public struct SlotScheduler: Sendable {
         let needSec = TimeInterval(durationMinutes * 60)
         for rawDay in days.sorted() {
             guard let window = workdayWindow(for: rawDay, prefs: prefs) else { continue }
-            let clamped = DateInterval(start: max(window.start, after), end: window.end)
+            // An evening invocation (`after` past the workday end) makes the clamped
+            // start exceed `window.end`; constructing a DateInterval with end < start
+            // traps. Clamp the start, then skip windows that have no room left.
+            let clampStart = max(window.start, after)
+            guard clampStart < window.end else { continue }
+            let clamped = DateInterval(start: clampStart, end: window.end)
             guard clamped.duration >= needSec else { continue }
             let free = freeSlots(
                 events: events, within: clamped,

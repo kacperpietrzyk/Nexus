@@ -107,13 +107,19 @@ public struct AttachmentImportService {
 
     static func sanitizedFilename(_ filename: String, fallbackExtension: String) -> String {
         let base = filename.isEmpty ? "attachment" : filename
-        let cleaned =
+        var cleaned =
             base
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: "\\", with: "-")
             .replacingOccurrences(of: " ", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Defense-in-depth: collapse any `..` so a crafted/synced filename like
+        // `../secret` cannot redirect the on-disk `attachments/<id>/` write even
+        // after the separators above are neutralized.
+        while cleaned.contains("..") {
+            cleaned = cleaned.replacingOccurrences(of: "..", with: "_")
+        }
         let safe = cleaned.isEmpty ? "attachment" : cleaned
         if safe.contains(".") || fallbackExtension.isEmpty {
             return safe

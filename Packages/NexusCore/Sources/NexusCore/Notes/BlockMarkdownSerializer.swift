@@ -100,14 +100,31 @@ public enum BlockMarkdownSerializer {
     }
 
     private static func rowMarkdown(_ row: TableRow) -> String {
-        "| " + row.cells.map { inlineMarkdown($0) }.joined(separator: " | ") + " |"
+        "| " + row.cells.map { tableCellMarkdown($0) }.joined(separator: " | ") + " |"
+    }
+
+    /// One table cell, serialized to stay on a single `| … |` line and not
+    /// mis-split columns:
+    /// - run text is pipe-escaped (`|` → `\|`) so a literal pipe in re-parsed run
+    ///   text survives the cell split (mirrored by the parser's escape-aware
+    ///   `cellStrings` + inline `\|` unescape);
+    /// - any newline in the assembled cell (incl. one inside a code-span run, which
+    ///   `escapeInline` never sees) collapses to a space so the line-based parser
+    ///   reads the cell as one row.
+    private static func tableCellMarkdown(_ runs: [InlineRun]) -> String {
+        let rendered = runs.map { inlineMarkdown($0, inTableCell: true) }.joined()
+        return
+            rendered
+            .replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
     }
 
     private static func inlineMarkdown(_ runs: [InlineRun]) -> String {
-        runs.map(inlineMarkdown(_:)).joined()
+        runs.map { inlineMarkdown($0, inTableCell: false) }.joined()
     }
 
-    private static func inlineMarkdown(_ run: InlineRun) -> String {
+    private static func inlineMarkdown(_ run: InlineRun, inTableCell: Bool) -> String {
         let marks = run.marks
         // Code spans and links/wikilinks are read back BYTE-LITERALLY by the
         // parser (their content is not re-inline-parsed), so their text must NOT
@@ -117,7 +134,7 @@ public enum BlockMarkdownSerializer {
         let isLiteralContext =
             marks.contains(.code)
             || marks.contains { if case .link = $0 { return true } else { return false } }
-        var text = isLiteralContext ? run.text : escapeInline(run.text)
+        var text = isLiteralContext ? run.text : escapeInline(run.text, inTableCell: inTableCell)
         // Links wrap the (already mark-decorated) text. Apply emphasis markers
         // inner→outer in a fixed order so the same run always serializes the same
         // way: code innermost, then strike, italic, bold; link outermost.
@@ -158,12 +175,20 @@ public enum BlockMarkdownSerializer {
     /// literal `\ * ` ~ [` in re-parsed run text survives the round-trip instead of
     /// being read back as emphasis/code/link delimiters. Mirrored by the parser's
     /// `\X` unescape. Backslash is escaped first (it is the escape char itself).
-    private static func escapeInline(_ text: String) -> String {
+    /// In a table cell `|` is also escaped (`|` → `\|`): an unescaped pipe in a
+    /// re-parsed cell run would mis-split the columns on parse. Pipe is NOT escaped
+    /// in other contexts — doing so would rewrite `a | b` in every paragraph/heading
+    /// and break the fixpoint there. (The parser's `isEscapable` already accepts `|`,
+    /// and its table cell-split is escape-aware, so `\|` round-trips.)
+    private static func escapeInline(_ text: String, inTableCell: Bool = false) -> String {
         var out = ""
         out.reserveCapacity(text.count)
         for character in text {
             switch character {
             case "\\", "*", "`", "~", "[":
+                out.append("\\")
+                out.append(character)
+            case "|" where inTableCell:
                 out.append("\\")
                 out.append(character)
             default:

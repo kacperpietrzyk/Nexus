@@ -249,8 +249,32 @@ public enum MarkdownBlockParser {
     }
 
     /// Split `| a | b |` into `["a", "b"]` (drops the leading/trailing empties).
+    /// Escape-aware: a `\|` is a literal pipe inside a cell (the serializer escapes
+    /// it that way), so it must NOT split a column. The `\|` is kept verbatim in the
+    /// cell substring and decoded back to `|` by `parseInline`'s inline unescape.
     private static func cellStrings(_ line: String) -> [String] {
-        var parts = line.components(separatedBy: "|")
+        var parts: [String] = []
+        var current = ""
+        let scalars = Array(line)
+        var index = 0
+        while index < scalars.count {
+            if scalars[index] == "\\", index + 1 < scalars.count {
+                // Preserve the escape sequence so inline unescaping can reverse it.
+                current.append(scalars[index])
+                current.append(scalars[index + 1])
+                index += 2
+                continue
+            }
+            if scalars[index] == "|" {
+                parts.append(current)
+                current = ""
+                index += 1
+                continue
+            }
+            current.append(scalars[index])
+            index += 1
+        }
+        parts.append(current)
         if parts.first?.trimmingCharacters(in: .whitespaces).isEmpty == true {
             parts.removeFirst()
         }

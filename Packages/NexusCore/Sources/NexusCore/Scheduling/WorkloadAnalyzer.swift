@@ -28,14 +28,23 @@ public struct WorkloadAnalyzer: Sendable {
     public func analyze(tasks: [ScheduledItem], events: [CalendarEvent], days: [Date], capacity: CapacityModel) -> [DayLoad] {
         days.map { rawDay in
             let sod = calendar.startOfDay(for: rawDay)
+            let dayEnd = calendar.date(byAdding: .day, value: 1, to: sod) ?? sod
             let taskMin =
                 tasks
                 .filter { calendar.isDate($0.day, inSameDayAs: sod) }
                 .reduce(0) { $0 + $1.durationMinutes }
+            // A multi-day event must contribute only the portion that falls within
+            // THIS day — counting its full duration on the start day (and nothing on
+            // later days) both overcounts the start day and drops the later slices,
+            // feeding a false "overloaded" signal to AI. Clip each event to the day
+            // boundaries; non-overlapping days contribute 0.
             let eventMin =
                 events
-                .filter { !$0.isAllDay && calendar.isDate($0.start, inSameDayAs: sod) }
-                .reduce(0) { $0 + Int($1.end.timeIntervalSince($1.start) / 60) }
+                .filter { !$0.isAllDay && $0.start < dayEnd && $0.end > sod }
+                .reduce(0) { partial, event in
+                    let overlap = min(event.end, dayEnd).timeIntervalSince(max(event.start, sod))
+                    return partial + Int(max(0, overlap) / 60)
+                }
             return DayLoad(day: sod, scheduledMinutes: taskMin + eventMin, capacityMinutes: capacity.dailyCapacityMinutes)
         }
     }

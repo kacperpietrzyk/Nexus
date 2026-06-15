@@ -196,18 +196,25 @@ public enum MarkdownExporter {
         in environment: ExportEnvironment,
         noteBodyCache: inout [UUID: String]
     ) -> String {
+        // Image links are emitted relative to the DOCUMENT being written, i.e. the
+        // `item`'s own export directory — NOT the body note's `folderPath`. A
+        // TaskItem/Project transcluding a foldered note still writes its `.md` at
+        // the item's location (root for non-Note types), so the link depth must come
+        // from `relativeDirectory(for: item)`, not the referenced note.
+        let documentDepth = directoryDepth(relativeDirectory(for: item))
         let noteRef: UUID?
         switch item {
         case let task as TaskItem: noteRef = task.noteRef
         case let project as Project: noteRef = project.canonicalNoteRef
         case let note as Note:
-            return markdownBody(of: note, in: environment)
+            return markdownBody(of: note, documentDepth: documentDepth, in: environment)
         default: noteRef = nil
         }
         guard let noteRef else { return "" }
         if let cached = noteBodyCache[noteRef] { return cached }
         let body = resolveNoteBody(
             id: noteRef,
+            documentDepth: documentDepth,
             in: environment
         )
         noteBodyCache[noteRef] = body
@@ -217,6 +224,7 @@ public enum MarkdownExporter {
     @MainActor
     private static func resolveNoteBody(
         id: UUID,
+        documentDepth: Int,
         in environment: ExportEnvironment
     ) -> String {
         var descriptor = FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })
@@ -224,12 +232,13 @@ public enum MarkdownExporter {
         guard let note = try? environment.context.fetch(descriptor).first, note.deletedAt == nil else {
             return ""
         }
-        return markdownBody(of: note, in: environment)
+        return markdownBody(of: note, documentDepth: documentDepth, in: environment)
     }
 
     @MainActor
     private static func markdownBody(
         of note: Note,
+        documentDepth: Int,
         in environment: ExportEnvironment
     ) -> String {
         guard var blocks = try? NoteContentCoder.decode(note.contentData) else { return "" }
@@ -240,7 +249,8 @@ public enum MarkdownExporter {
                     request: AttachmentExportRequest(
                         id: ref,
                         fallbackAsset: fallbackAsset,
-                        noteID: note.id
+                        noteID: note.id,
+                        folderDepth: documentDepth
                     ),
                     environment: environment
                 )
@@ -265,7 +275,13 @@ public enum MarkdownExporter {
         let filename = sanitizedPathComponent(
             asset.originalFilename.isEmpty ? asset.id.uuidString : asset.originalFilename
         )
+        // The asset is copied to the export ROOT's `_assets/<id>/…`, but a foldered
+        // note's `.md` lives at `<dir>/<id>.md`. The link is resolved relative to the
+        // note's directory, so prepend one `../` per directory level so a foldered
+        // note still resolves to the root `_assets`. The COPY destination stays at
+        // the root (`relativePath`); only the returned LINK gets the prefix.
         let relativePath = "_assets/\(request.noteID.uuidString)/\(filename)"
+        let linkPath = String(repeating: "../", count: request.folderDepth) + relativePath
         guard let attachmentRoot = environment.attachmentRoot else {
             return request.fallbackAsset ?? asset.storagePath
         }
@@ -284,7 +300,14 @@ public enum MarkdownExporter {
             try FileManager.default.removeItem(at: destination)
         }
         try FileManager.default.copyItem(at: source, to: destination)
-        return relativePath
+        return linkPath
+    }
+
+    /// Number of directory levels a relative export directory is nested below the
+    /// root (the SANITIZED path where the `.md` actually lands), so an image link
+    /// can climb back to the root `_assets` with that many `../`.
+    private static func directoryDepth(_ relativeDirectory: String) -> Int {
+        relativeDirectory.isEmpty ? 0 : relativeDirectory.split(separator: "/").count
     }
 
     // MARK: - Note organization frontmatter (Tranche 2 Plan E)
@@ -353,14 +376,25 @@ public enum MarkdownExporter {
             .joined(separator: "/")
     }
 
-    /// Filesystem-safe folder component: `:` → `-` (HFS/APFS separator legacy),
-    /// `.`/`..` → `_` (no directory traversal), trimmed.
+    /// Filesystem-safe single path component: `:` → `-` (HFS/APFS separator
+    /// legacy), path separators `/`/`\` → `-` (a synced `originalFilename` like
+    /// `../secret` or `a/b` must not escape or redirect the note's `_assets/<id>/`
+    /// folder on export), and any remaining `..` sequence collapsed (not just an
+    /// exact-match component — `..secret` or `a..b` must not carry a traversal
+    /// fragment). Trimmed. A single dot (file extension, `file.png`) survives.
     static func sanitizedPathComponent(_ component: String) -> String {
-        let cleaned =
+        var cleaned =
             component
             .replacingOccurrences(of: ":", with: "-")
-            .trimmingCharacters(in: .whitespaces)
-        if cleaned == "." || cleaned == ".." { return "_" }
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: "\\", with: "-")
+        // Collapse every run of two-or-more dots to a single underscore so no
+        // `..` traversal fragment can survive anywhere in the name.
+        while cleaned.contains("..") {
+            cleaned = cleaned.replacingOccurrences(of: "..", with: "_")
+        }
+        cleaned = cleaned.trimmingCharacters(in: .whitespaces)
+        if cleaned == "." { return "_" }
         return cleaned
     }
 
@@ -381,5 +415,8 @@ public enum MarkdownExporter {
         let id: UUID
         let fallbackAsset: String?
         let noteID: UUID
+        /// Directory levels the note's `.md` sits below the export root; the image
+        /// link is prefixed with this many `../` to reach the root `_assets`.
+        let folderDepth: Int
     }
 }

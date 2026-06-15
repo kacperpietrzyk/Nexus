@@ -198,6 +198,109 @@ private func makeTempExportFolder() throws -> URL {
     #expect(FileManager.default.fileExists(atPath: expected.path))
 }
 
+@Test func sanitizedPathComponent_neutralizesTraversalAndSeparators() {
+    // A CloudKit-synced `originalFilename` like `../secret` or `a/b` must not be
+    // able to escape or redirect the export folder: no `/`, `\`, or `..` may survive.
+    for hostile in ["../secret", "a/b", "..\\secret", "a..b", "..", "...."] {
+        let cleaned = MarkdownExporter.sanitizedPathComponent(hostile)
+        #expect(!cleaned.contains("/"), "‘\(hostile)’ -> ‘\(cleaned)’ still has /")
+        #expect(!cleaned.contains("\\"), "‘\(hostile)’ -> ‘\(cleaned)’ still has \\")
+        #expect(!cleaned.contains(".."), "‘\(hostile)’ -> ‘\(cleaned)’ still has ..")
+    }
+    // A single dot (file extension) must survive untouched.
+    #expect(MarkdownExporter.sanitizedPathComponent("diagram.png") == "diagram.png")
+}
+
+@MainActor
+@Test func markdownExporter_folderedNote_imageLinkClimbsToRootAssets() async throws {
+    let schema = Schema([Note.self, Link.self, AttachmentAsset.self])
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+    let container = try ModelContainer(for: schema, configurations: [config])
+    let context = ModelContext(container)
+
+    let attachmentRoot = try makeTempExportFolder()
+    defer { try? FileManager.default.removeItem(at: attachmentRoot) }
+    let exportRoot = try makeTempExportFolder()
+    defer { try? FileManager.default.removeItem(at: exportRoot) }
+
+    let assetID = UUID()
+    let storagePath = "attachments/\(assetID.uuidString)/diagram.png"
+    let sourceFile = attachmentRoot.appendingPathComponent(storagePath)
+    try FileManager.default.createDirectory(
+        at: sourceFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data([1, 2, 3]).write(to: sourceFile)
+    let asset = AttachmentAsset(
+        id: assetID, originalFilename: "diagram.png", mimeType: "image/png",
+        byteCount: 3, sha256: "hash", storagePath: storagePath)
+    let note = Note(
+        title: "Deep with image",
+        contentData: try NoteContentCoder.encode([Block(kind: .image(ref: assetID, asset: storagePath))]))
+    note.folderPath = "area/sub"  // 2 levels deep -> link needs `../../`
+    context.insert(asset)
+    context.insert(note)
+    try context.save()
+
+    _ = try await MarkdownExporter.export(
+        container: container, types: Note.self, to: exportRoot, attachmentRoot: attachmentRoot)
+
+    let markdown = try String(
+        contentsOf: exportRoot.appendingPathComponent("area/sub/\(note.id.uuidString).md"),
+        encoding: .utf8)
+    // The note's .md lives 2 dirs deep, the asset is copied to the ROOT _assets, so
+    // the link must climb two levels to resolve.
+    let expectedLink = "../../_assets/\(note.id.uuidString)/diagram.png"
+    #expect(markdown.contains("![](\(expectedLink))"))
+    // The asset is still copied to the export ROOT (not nested under area/sub).
+    let copiedAt = exportRoot.appendingPathComponent("_assets/\(note.id.uuidString)/diagram.png")
+    #expect(FileManager.default.fileExists(atPath: copiedAt.path))
+}
+
+@MainActor
+@Test func markdownExporter_transcludedFolderedNote_imageLinkIsRelativeToTheItem() async throws {
+    // A TaskItem (written at the ROOT) transcluding a foldered note's body must
+    // emit the image link relative to the TASK's location (root), NOT the note's
+    // folderPath — the asset is copied to the root `_assets`, so a `../` prefix
+    // here would climb above the export root and break.
+    let schema = Schema([TaskItem.self, Note.self, Link.self, AttachmentAsset.self])
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+    let container = try ModelContainer(for: schema, configurations: [config])
+    let context = ModelContext(container)
+
+    let attachmentRoot = try makeTempExportFolder()
+    defer { try? FileManager.default.removeItem(at: attachmentRoot) }
+    let exportRoot = try makeTempExportFolder()
+    defer { try? FileManager.default.removeItem(at: exportRoot) }
+
+    let assetID = UUID()
+    let storagePath = "attachments/\(assetID.uuidString)/diagram.png"
+    let sourceFile = attachmentRoot.appendingPathComponent(storagePath)
+    try FileManager.default.createDirectory(
+        at: sourceFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data([1, 2, 3]).write(to: sourceFile)
+    let asset = AttachmentAsset(
+        id: assetID, originalFilename: "diagram.png", mimeType: "image/png",
+        byteCount: 3, sha256: "hash", storagePath: storagePath)
+    let note = Note(
+        title: "Foldered body",
+        contentData: try NoteContentCoder.encode([Block(kind: .image(ref: assetID, asset: storagePath))]))
+    note.folderPath = "area/sub"  // note is deep, but the TASK is at root
+    let task = TaskItem(title: "Has a note", noteRef: note.id)
+    context.insert(asset)
+    context.insert(note)
+    context.insert(task)
+    try context.save()
+
+    _ = try await MarkdownExporter.export(
+        container: container, types: TaskItem.self, to: exportRoot, attachmentRoot: attachmentRoot)
+
+    let markdown = try String(
+        contentsOf: exportRoot.appendingPathComponent("\(task.id.uuidString).md"),
+        encoding: .utf8)
+    // Task lives at root -> link is root-relative, NO `../`.
+    #expect(markdown.contains("![](_assets/\(note.id.uuidString)/diagram.png)"))
+    #expect(!markdown.contains("../"))
+}
+
 @MainActor
 @Test func markdownExporter_exportIsByteDeterministicAcrossRuns() async throws {
     let container = try makeNoteContainer()
