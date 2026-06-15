@@ -189,6 +189,58 @@ final class WatchPhoneBridge: NSObject {
         }
     }
 
+    /// Request the most recent meetings from the iPhone (the Watch has no
+    /// `Meeting` type — NexusMeetings has no watchOS platform). On a reachable
+    /// session the iPhone replies with a JSON `WatchMeetingGlanceSnapshot` which
+    /// is cached locally; when unreachable this is a no-op and the glance simply
+    /// reads the last cached snapshot.
+    func sendRecentMeetingsQuery() {
+        guard let session, session.isReachable else { return }
+        let message: [String: Any] = [
+            WatchPayload.typeKey: WatchPayload.meetingsRecentQueryType,
+            WatchPayload.idKey: UUID().uuidString,
+        ]
+        session.sendMessage(
+            message,
+            replyHandler: { reply in
+                Self.cacheMeetingsReply(reply)
+            },
+            errorHandler: { _ in }
+        )
+    }
+
+    /// Decode a `meetings-recent-query` reply and persist it. The iPhone relay
+    /// answers via `WatchReplyHandler` (status/message/text), so the JSON
+    /// snapshot rides the `text` field — only decode on `status == "ok"`,
+    /// otherwise keep the existing cache.
+    nonisolated private static func cacheMeetingsReply(_ reply: [String: Any]) {
+        guard
+            (reply["status"] as? String) == "ok",
+            let json = reply["text"] as? String,
+            let data = json.data(using: .utf8),
+            let snapshot = try? JSONDecoder().decode(WatchMeetingGlanceSnapshot.self, from: data)
+        else { return }
+        _Concurrency.Task { @MainActor in
+            if let store = WatchMeetingGlanceStore() {
+                do {
+                    try store.save(snapshot)
+                } catch {
+                    watchBridgeLogger.error(
+                        "Meeting glance save failed: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+            } else {
+                watchBridgeLogger.error(
+                    "Meeting glance store unavailable — App Group entitlement missing?"
+                )
+            }
+            NotificationCenter.default.post(
+                name: .watchMeetingGlancesUpdated,
+                object: nil
+            )
+        }
+    }
+
     func sendAction(type: String, taskID: UUID) async throws {
         let message: [String: Any] = [
             WatchPayload.typeKey: type,
@@ -266,6 +318,7 @@ extension WatchPhoneBridge: WCSessionDelegate {
 
 extension Notification.Name {
     static let watchNotifSnapshotUpdated = Notification.Name("nexus.watch.notif.snapshot.updated")
+    static let watchMeetingGlancesUpdated = Notification.Name("nexus.watch.meeting.glances.updated")
 }
 
 extension WatchPhoneBridge: WatchReachabilityProbing, WatchIPhonePresenceProbing {

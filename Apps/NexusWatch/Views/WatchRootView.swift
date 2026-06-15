@@ -9,6 +9,7 @@ struct WatchRootView: View {
     @State private var captureSheetPresented = false
     @State private var askNexusSheetPresented = false
     @State private var notesSheetPresented = false
+    @State private var meetingsSheetPresented = false
     @State private var customSnoozeTaskID: UUID?
 
     let actionHandler: WatchNotificationActionHandler?
@@ -48,6 +49,14 @@ struct WatchRootView: View {
                         Label("Notes", systemImage: "note.text")
                     }
                 }
+
+                ToolbarItem(placement: .bottomBar) {
+                    Button {
+                        meetingsSheetPresented = true
+                    } label: {
+                        Label("Meetings", systemImage: "person.2.wave.2")
+                    }
+                }
             }
             .sheet(isPresented: $captureSheetPresented) {
                 WatchCaptureView()
@@ -55,6 +64,11 @@ struct WatchRootView: View {
             .sheet(isPresented: $notesSheetPresented) {
                 NavigationStack {
                     WatchNotesView()
+                }
+            }
+            .sheet(isPresented: $meetingsSheetPresented) {
+                NavigationStack {
+                    WatchMeetingsView()
                 }
             }
             .sheet(isPresented: $askNexusSheetPresented) {

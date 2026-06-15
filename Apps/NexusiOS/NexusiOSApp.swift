@@ -653,7 +653,8 @@ private struct NexusiOSRootView: View {
                     watchRelay: $watchRelay,
                     taskParser: taskParser,
                     taskRepository: taskRepository,
-                    agentComposition: agentComposition
+                    agentComposition: agentComposition,
+                    meetingsComposition: meetingsComposition
                 )
             )
             .modifier(WidgetTimelineReloadModifier())
@@ -891,6 +892,13 @@ private struct WatchRelayLifecycleModifier: ViewModifier {
     let taskParser: CompositeNLParser
     let taskRepository: TaskItemRepository
     let agentComposition: AgentComposition
+    let meetingsComposition: MeetingsComposition
+
+    /// Recent-meeting glance cap + snippet length. The reply rides the
+    /// WatchConnectivity reply payload, which has a practical size ceiling, so
+    /// the iPhone tops the list and truncates each summary before encoding.
+    private static let recentMeetingsLimit = 10
+    private static let snippetCharLimit = 180
 
     func body(content: Content) -> some View {
         content
@@ -900,7 +908,8 @@ private struct WatchRelayLifecycleModifier: ViewModifier {
                     parser: taskParser,
                     repository: taskRepository,
                     agentPromptHandler: watchAgentPromptHandler,
-                    blockAcceptHandler: watchBlockAcceptHandler
+                    blockAcceptHandler: watchBlockAcceptHandler,
+                    meetingsGlanceProvider: watchMeetingsGlanceProvider
                 )
                 let relay = WatchConnectivityRelay(handler: handler)
                 relay.activate()
@@ -913,6 +922,34 @@ private struct WatchRelayLifecycleModifier: ViewModifier {
         return { prompt in
             (try await watchHandler.handle(prompt: prompt)).text
         }
+    }
+
+    /// Map the most recent meetings to glance DTOs for the Watch. NexusMeetings
+    /// has no watchOS platform, so the `Meeting` type cannot cross the bridge —
+    /// the iPhone (which imports both) does the projection here.
+    private var watchMeetingsGlanceProvider: WatchMeetingsGlanceProviding {
+        let repository = meetingsComposition.meetingRepository
+        return {
+            let meetings = (try? repository.recent(limit: Self.recentMeetingsLimit)) ?? []
+            return meetings.map { meeting in
+                WatchMeetingGlance(
+                    id: meeting.id,
+                    title: meeting.title,
+                    summarySnippet: Self.snippet(from: meeting.summaryText),
+                    actionItemCount: meeting.actionItemIDs.count,
+                    startedAt: meeting.startedAt
+                )
+            }
+        }
+    }
+
+    private static func snippet(from summary: String) -> String {
+        let trimmed = summary
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > snippetCharLimit else { return trimmed }
+        let endIndex = trimmed.index(trimmed.startIndex, offsetBy: snippetCharLimit)
+        return String(trimmed[..<endIndex]).trimmingCharacters(in: .whitespaces) + "…"
     }
 
     /// Accept a proposed block relayed from the Watch (spec §7 / §11): the iPhone
