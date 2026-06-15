@@ -8,7 +8,21 @@ import Foundation
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
         tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats + export
-            + organizations + linkEnumeration + trash
+            + organizations + linkEnumeration + trash + attachments
+    }
+
+    // TODO: surface a configurable ingest root in Settings (v1 defaults to home dir).
+    // TODO: add `attachments.add_to_task` once a task attachment surface exists.
+    //
+    /// `attachments.*` tools — path/URL handoff for local image files (spec §7).
+    /// `add_to_note` ingests a host-filesystem path behind `AttachmentIngestPolicy`
+    /// and appends an image block; `list`/`remove` manage the asset rows.
+    private static var attachments: [any AgentTool] {
+        [
+            AttachmentsAddToNoteTool(),
+            AttachmentsListTool(),
+            AttachmentsRemoveTool(),
+        ]
     }
 
     /// `items.*` trash tools — kind-polymorphic `items.list_deleted` (fetch soft-deleted

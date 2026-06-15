@@ -28,4 +28,12 @@ struct ToolRegistryManifestTests {
         #expect(names.contains("items.restore"))
         #expect(names.contains("items.list_deleted"))
     }
+
+    @Test("attachments tools are registered in the core task tools")
+    func attachmentToolsRegistered() {
+        let names = Set(CoreTaskTools.all().map(\.name))
+        #expect(names.contains("attachments.add_to_note"))
+        #expect(names.contains("attachments.list"))
+        #expect(names.contains("attachments.remove"))
+    }
 }
