@@ -248,15 +248,22 @@ public struct TaskDetailInspector: View {
         _ title: String,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        NexusCard(.elev2, padding: 18) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(title.uppercased())
-                    .font(NexusType.eyebrow)
-                    .foregroundStyle(NexusColor.Text.tertiary)
-                content()
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        let inner = VStack(alignment: .leading, spacing: 12) {
+            Text(title.uppercased())
+                .font(NexusType.eyebrow)
+                .foregroundStyle(NexusColor.Text.tertiary)
+            content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Liquid re-skin: macOS flattens the inspector — the modal host is one
+        // light glass panel and each section is a borderless labeled group
+        // (eyebrow + content), so there is no dark "card in a card". iOS keeps the
+        // legacy `NexusCard(.elev2)` slab until the touch Liquid pass.
+        #if os(macOS)
+        return inner
+        #else
+        return NexusCard(.elev2, padding: 18) { inner }
+        #endif
     }
 
     private var priorityStatusChip: some View {
