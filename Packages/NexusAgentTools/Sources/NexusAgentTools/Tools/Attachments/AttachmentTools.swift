@@ -123,7 +123,9 @@ public struct AttachmentsListTool: AgentTool {
 /// `attachments.remove` — soft-delete an attachment asset by UUID.
 public struct AttachmentsRemoveTool: AgentTool {
     public let name = "attachments.remove"
-    public let description = "Soft-delete an attachment asset by UUID."
+    public let description =
+        "Soft-delete an attachment asset by UUID. Hides the asset record only; "
+        + "the on-disk file and any note image block remain."
     public let inputSchema: JSONSchema = .object(
         properties: [
             "attachment_id": .string(description: "AttachmentAsset UUID.")

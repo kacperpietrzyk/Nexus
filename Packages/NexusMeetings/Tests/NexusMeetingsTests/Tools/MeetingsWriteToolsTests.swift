@@ -56,6 +56,21 @@ struct MeetingsWriteToolsTests {
         #expect(stored.summaryText == "Keep me")
     }
 
+    @Test("update rejects a blank title")
+    func updateRejectsBlankTitle() async throws {
+        let context = try MeetingsTestSupport.makeContext()
+        let repo = MeetingRepository(context: context)
+        let m = MeetingsTestSupport.meeting(title: "Keep", summary: "Keep me")
+        try repo.insert(m)
+        let args = JSONValue.object(["meeting_id": .string(m.id.uuidString), "title": .string("   ")])
+        await #expect(throws: AgentError.self) {
+            _ = try await MeetingsUpdateTool(repository: repo)
+                .call(args: args, context: agentContext(modelContext: context))
+        }
+        let stored = try #require(try repo.find(id: m.id))
+        #expect(stored.title == "Keep")
+    }
+
     @Test("update of a missing meeting throws notFound")
     func updateMissingThrows() async throws {
         let context = try MeetingsTestSupport.makeContext()

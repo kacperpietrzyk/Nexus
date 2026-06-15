@@ -81,7 +81,13 @@ public struct MeetingsUpdateTool: AgentTool {
         let id = try MeetingsToolArguments.requiredUUID(args["meeting_id"], field: "meeting_id")
         let repo = MeetingRepository(context: contextRef.context)
         let meeting = try repo.existingMeeting(id: id)
-        if let title = args["title"]?.stringValue { meeting.title = title }
+        if let rawTitle = args["title"]?.stringValue {
+            let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard title.isEmpty == false else {
+                throw AgentError.validation("title must not be empty")
+            }
+            meeting.title = title
+        }
         if let summary = args["summary"]?.stringValue { meeting.summaryText = summary }
         if let transcript = args["transcript"]?.stringValue { meeting.transcriptText = transcript }
         if let ended = try MeetingsWriteSupport.optionalDate(args["ended_at"], field: "ended_at") {
