@@ -86,6 +86,9 @@ struct WeekGrid: View {
     /// `@MainActor` so the async `NSItemProvider` load in the drop delegate can
     /// hop back to the main actor with a `Sendable` closure (Swift 6).
     let onDropTask: @MainActor (UUID, Date) -> Void
+    /// Tapping an empty slot in a day column: opens a new-event editor seeded at
+    /// the snapped slot time (nil ⇒ no create affordance on the grid body).
+    var onCreateAt: ((Date) -> Void)?
 
     @State private var dropSlot: WeekDropSlot?
 
@@ -237,6 +240,10 @@ struct WeekGrid: View {
         GeometryReader { proxy in
             ZStack(alignment: .topLeading) {
                 gridLines
+                    // Empty-slot tap = new event at the snapped time. Sits
+                    // BELOW the event blocks, so taps on a block hit the block's
+                    // own button instead (only bare grid creates).
+                    .modifier(EmptySlotTapModifier(day: day, calendar: calendar, onCreateAt: onCreateAt))
                 eventBlocks(positioned, columnWidth: proxy.size.width)
                 if let slot = dropSlot, calendar.isDate(slot.day, inSameDayAs: day) {
                     dropHighlight(slot)
@@ -406,5 +413,36 @@ private struct WeekColumnDropDelegate: DropDelegate {
 
     private func updateSlot(_ info: DropInfo) {
         slot = WeekDropSlot(day: day, minutes: WeekGridMath.snappedMinutes(forY: info.location.y))
+    }
+}
+
+/// Turns a tap inside a day column's grid background into a "create at this
+/// slot" call, mapping the local y to a 15-min-snapped date via `WeekGridMath`.
+/// Applied to the grid-lines layer (below the event blocks) so only taps on
+/// bare grid create — block taps still hit the block's own button. Inert when
+/// `onCreateAt` is nil (e.g. the reference snapshot).
+private struct EmptySlotTapModifier: ViewModifier {
+    let day: Date
+    let calendar: Calendar
+    let onCreateAt: ((Date) -> Void)?
+
+    func body(content: Content) -> some View {
+        if let onCreateAt {
+            content
+                .contentShape(Rectangle())
+                .gesture(
+                    SpatialTapGesture(coordinateSpace: .local)
+                        .onEnded { value in
+                            let start = WeekGridMath.snappedDate(
+                                forY: value.location.y,
+                                day: day,
+                                calendar: calendar
+                            )
+                            onCreateAt(start)
+                        }
+                )
+        } else {
+            content
+        }
     }
 }

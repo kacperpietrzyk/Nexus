@@ -3,41 +3,96 @@ import NexusCore
 import NexusUI
 import SwiftUI
 
-/// An external event opened in the existing editor (shared by the main column
-/// and the inspector — each presents its own sheet over the same seam).
+/// An event opened in the shared editor — either an existing external event
+/// (edit/delete) or a brand-new draft (create). Shared by the main column and
+/// the inspector, each presenting its own sheet over the same seam.
 struct WeekEditorTarget: Identifiable, Equatable {
-    let eventID: String
-    var id: String { eventID }
+    enum Mode: Equatable {
+        /// A new event; `seed` pre-fills its start/end when the user opened the
+        /// editor from a specific empty slot (nil ⇒ the editor's own defaults).
+        case create(seed: EventDraft?)
+        case edit(eventID: String)
+    }
+
+    let mode: Mode
+
+    /// Stable identity per presentation: the event id for edits, a fresh token
+    /// per create so re-tapping "+" reliably re-presents the sheet.
+    let id: String
+
+    static func edit(_ eventID: String) -> WeekEditorTarget {
+        WeekEditorTarget(mode: .edit(eventID: eventID), id: "edit-\(eventID)")
+    }
+
+    static func create(seed: EventDraft? = nil) -> WeekEditorTarget {
+        WeekEditorTarget(mode: .create(seed: seed), id: "create-\(UUID().uuidString)")
+    }
+
+    /// Pure seam (unit-tested): the seed draft for "create at this slot" — the
+    /// tapped start plus a default-duration end, on no system calendar yet
+    /// (the editor's calendar picker, seeded from `preferredCalendarID`, owns
+    /// the target). Title is left blank for the user to fill in.
+    static func createSeed(
+        at start: Date,
+        duration: TimeInterval = WeekGridMetrics.defaultBlockDuration
+    ) -> EventDraft {
+        EventDraft(
+            calendarID: nil,
+            title: "",
+            start: start,
+            end: start.addingTimeInterval(duration)
+        )
+    }
 }
 
 extension View {
-    /// The existing event-editor seam (`EventEditorView` over
-    /// `CalendarViewModel.draft/updateEvent/deleteEvent`), packaged so both
-    /// `LiquidWeekScreen` and `SchedulingInspector` mount identical wiring.
+    /// The shared event-editor seam (`EventEditorView` over
+    /// `CalendarViewModel.createEvent/draft/updateEvent/deleteEvent`), packaged
+    /// so both `LiquidWeekScreen` and `SchedulingInspector` mount identical
+    /// wiring for create and edit.
     func weekEventEditorSheet(
         target: Binding<WeekEditorTarget?>,
         viewModel: CalendarViewModel,
         calendars: [CalendarInfo]
     ) -> some View {
         sheet(item: target) { editorTarget in
-            EventEditorView(
-                mode: .edit(eventID: editorTarget.eventID),
-                calendars: calendars,
-                initial: viewModel.draft(forEventID: editorTarget.eventID, calendars: calendars),
-                onSave: { draft, span in
-                    _Concurrency.Task { @MainActor in
-                        await viewModel.updateEvent(id: editorTarget.eventID, draft: draft, span: span)
-                        target.wrappedValue = nil
-                    }
-                },
-                onDelete: { span in
-                    _Concurrency.Task { @MainActor in
-                        await viewModel.deleteEvent(id: editorTarget.eventID, span: span)
-                        target.wrappedValue = nil
-                    }
-                },
-                onCancel: { target.wrappedValue = nil }
-            )
+            switch editorTarget.mode {
+            case .create(let seed):
+                EventEditorView(
+                    mode: .create,
+                    calendars: calendars,
+                    initial: seed,
+                    // #7: seed the new event's calendar from the configured
+                    // write target (same as the iOS create path).
+                    preferredCalendarID: viewModel.preferences.writeCalendarID,
+                    onSave: { draft, _ in
+                        _Concurrency.Task { @MainActor in
+                            _ = await viewModel.createEvent(draft)
+                            target.wrappedValue = nil
+                        }
+                    },
+                    onCancel: { target.wrappedValue = nil }
+                )
+            case .edit(let eventID):
+                EventEditorView(
+                    mode: .edit(eventID: eventID),
+                    calendars: calendars,
+                    initial: viewModel.draft(forEventID: eventID, calendars: calendars),
+                    onSave: { draft, span in
+                        _Concurrency.Task { @MainActor in
+                            await viewModel.updateEvent(id: eventID, draft: draft, span: span)
+                            target.wrappedValue = nil
+                        }
+                    },
+                    onDelete: { span in
+                        _Concurrency.Task { @MainActor in
+                            await viewModel.deleteEvent(id: eventID, span: span)
+                            target.wrappedValue = nil
+                        }
+                    },
+                    onCancel: { target.wrappedValue = nil }
+                )
+            }
         }
     }
 }
@@ -143,6 +198,16 @@ public struct LiquidWeekScreen: View {
                     accessibilityLabel: "Next \(viewModel.scope.label.lowercased())",
                     action: { viewModel.step(1) }
                 )
+                // Matches the iOS `CalendarView` pattern: the create affordance
+                // only shows once access is granted (the access banner already
+                // drives the grant prompt otherwise).
+                if viewModel.hasCalendarAccess {
+                    LiquidIconButton(
+                        systemImage: "plus",
+                        accessibilityLabel: "New event",
+                        action: { editorTarget = .create() }
+                    )
+                }
             }
         }
     }
@@ -276,6 +341,10 @@ public struct LiquidWeekScreen: View {
                 onDropTask: { taskID, start in
                     guard reference == nil else { return }
                     _Concurrency.Task { await schedule(taskID: taskID, at: start) }
+                },
+                onCreateAt: { start in
+                    guard reference == nil else { return }
+                    createEvent(at: start)
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -330,6 +399,10 @@ public struct LiquidWeekScreen: View {
                 onDropTask: { taskID, start in
                     guard dayReference == nil else { return }
                     _Concurrency.Task { await schedule(taskID: taskID, at: start) }
+                },
+                onCreateAt: { start in
+                    guard dayReference == nil else { return }
+                    createEvent(at: start)
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -373,7 +446,16 @@ public struct LiquidWeekScreen: View {
     /// block accept/reject stays on the Day grid's inline controls.
     private func handleTap(_ item: TimelineItem) {
         guard item.kind == .event else { return }
-        editorTarget = WeekEditorTarget(eventID: String(item.id.dropFirst("event-".count)))
+        editorTarget = .edit(String(item.id.dropFirst("event-".count)))
+    }
+
+    /// Empty-slot tap (Day/Week grid): open the editor on a new event seeded at
+    /// the tapped 15-min slot, routing through `createEvent` on save. Gated on
+    /// access (matches the iOS create path) so an empty-slot tap can't lead to a
+    /// guaranteed permission failure while the access banner is still prompting.
+    private func createEvent(at start: Date) {
+        guard viewModel.hasCalendarAccess else { return }
+        editorTarget = .create(seed: WeekEditorTarget.createSeed(at: start))
     }
 
     // MARK: - Scheduling actions (existing manual-block seam)

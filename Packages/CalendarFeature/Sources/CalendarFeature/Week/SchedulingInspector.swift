@@ -273,7 +273,7 @@ public struct SchedulingInspector: View {
     /// Tapping a conflict opens the existing event editor on its first event.
     private func conflictRow(_ conflict: SchedulingIntelligence.EventConflict) -> some View {
         Button {
-            editorTarget = WeekEditorTarget(eventID: conflict.first.id)
+            editorTarget = .edit(conflict.first.id)
         } label: {
             HStack(alignment: .top, spacing: DS.Space.s) {
                 Circle()
