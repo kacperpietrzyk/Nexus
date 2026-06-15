@@ -385,6 +385,7 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
                 Button("Numbered list") { model.insert(.numbered, after: lastBlockID) }
                 Button("Quote") { model.insert(.quote, after: lastBlockID) }
                 Button("Code") { model.insert(.code, after: lastBlockID) }
+                Button("Table") { model.insert(.table, after: lastBlockID) }
                 Button("Divider") { model.insert(.divider, after: lastBlockID) }
                 Divider()
                 Button("Link to…") {

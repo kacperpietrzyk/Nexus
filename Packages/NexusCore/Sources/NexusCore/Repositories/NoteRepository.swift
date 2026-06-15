@@ -329,6 +329,28 @@ public final class NoteRepository {
         }
     }
 
+    /// Every soft-deleted note (tombstones), most-recently-deleted first. Backs the
+    /// in-app Trash UI (recovery is otherwise MCP-only). The cross-object mirror
+    /// (`Link`/`TaskItem.noteRef`/`Project.canonicalNoteRef`) was already detached by
+    /// `delete`; restoring re-creates content edges lazily on the next reconcile.
+    public func fetchDeleted() throws -> [Note] {
+        try context.fetch(FetchDescriptor<Note>())
+            .filter { $0.deletedAt != nil }
+            .sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
+    }
+
+    /// Restore a soft-deleted note: clear its tombstone, reconcile (re-mirrors the
+    /// note's own `containsTask`/`mentions` edges from its surviving blocks), save,
+    /// and re-index. Inverse of `delete` for the note row itself; incoming links that
+    /// other objects dropped are not resurrected (their owners repair those).
+    public func restore(_ note: Note) throws {
+        note.deletedAt = nil
+        note.updatedAt = now()
+        try reconciler.reconcile(note)
+        try context.save()
+        broadcastUpsert(for: note)
+    }
+
     // MARK: - Checkbox → Task seam (§7)
 
     /// Editor edits the text of a checkbox: writes BOTH `TaskItem.title` (truth)

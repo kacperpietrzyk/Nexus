@@ -43,7 +43,7 @@ struct BlockView: View {
         case .embed(let ref, let kind):
             EmbedBlockView(ref: ref, kind: kind, model: model, onOpen: onOpenRef)
         case .table(let rows):
-            TableBlockView(rows: rows.map(\.cells))
+            TableBlockView(block: block, model: model, rows: rows.map(\.cells))
         case .html(let raw):
             HTMLBlockView(block: block, model: model, raw: raw)
         }
@@ -72,25 +72,41 @@ private struct TextBlockEditor: View {
     let font: Font
     let role: TextRole
     @State private var draft: String = ""
+    @State private var trigger: InlineLinkInsertion.Trigger?
 
     var body: some View {
         Group {
             if model.canEdit {
-                // Document content (not form chrome): keep the plain field carrying
-                // the block's semantic font — a tile-boxed NexusTextField would read
-                // as a form and flatten the heading/paragraph hierarchy.
-                TextField(placeholder, text: $draft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(font)
-                    .foregroundStyle(NexusColor.Text.primary)
-                    .onAppear { draft = InlineRunRendering.plainText(runs) }
-                    .onChange(of: block.id) { _, _ in draft = InlineRunRendering.plainText(runs) }
-                    .onSubmit { commit() }
-                    .submitLabel(.return)
+                editor
             } else {
                 Text(InlineRunRendering.attributed(runs))
                     .font(font)
                     .foregroundStyle(NexusColor.Text.primary)
+            }
+        }
+    }
+
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField(placeholder, text: $draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(font)
+                .foregroundStyle(NexusColor.Text.primary)
+                .onAppear { draft = InlineRunRendering.plainText(runs) }
+                .onChange(of: block.id) { _, _ in
+                    draft = InlineRunRendering.plainText(runs)
+                    trigger = nil
+                }
+                .onChange(of: draft) { _, newValue in
+                    // Detect a typed `[[query` trigger (spec §9, GAP #6).
+                    trigger = InlineLinkInsertion.detectTrigger(in: newValue)
+                }
+                .onSubmit { commit() }
+                .submitLabel(.return)
+            if let trigger {
+                InlineLinkAutocomplete(query: trigger.query, excludingNoteID: model.noteID) { candidate in
+                    pickLink(candidate, trigger: trigger)
+                }
             }
         }
     }
@@ -100,6 +116,17 @@ private struct TextBlockEditor: View {
     private func commit() {
         guard draft != InlineRunRendering.plainText(runs) else { return }
         model.setPlainText(draft, forBlock: block.id)
+    }
+
+    /// On pick: splice the `.link` run through the model AND sync the local draft to
+    /// the flattened plain text. The model write keeps the run (so it persists +
+    /// mirrors a `mentions` edge); the local `draft` sync keeps the TextField from
+    /// re-showing the now-replaced `[[query` token (same block id → no reset fires).
+    private func pickLink(_ candidate: LinkCandidate, trigger: InlineLinkInsertion.Trigger) {
+        model.insertInlineLink(to: candidate, trigger: trigger, draft: draft, forBlock: block.id)
+        let spliced = InlineLinkInsertion.splice(draft: draft, trigger: trigger, candidate: candidate)
+        draft = InlineRunRendering.plainText(spliced)
+        self.trigger = nil
     }
 }
 
@@ -309,31 +336,132 @@ private struct ImageBlockView: View {
     }
 }
 
-// MARK: - Table (read-only render)
+// MARK: - Table (render + edit, GAP #5)
 
 private struct TableBlockView: View {
+    let block: Block
+    let model: NoteEditorModel
     /// Each row is a list of cells; each cell a list of inline runs. Passed as
     /// nested arrays (not `NexusCore.TableRow`) to avoid the SwiftUI `TableRow`
-    /// name collision at this call site.
+    /// name collision at this call site. Structural edits route back through `model`
+    /// by `block.id` + indices.
     let rows: [[[InlineRun]]]
 
+    private var columnCount: Int { rows.first?.count ?? 0 }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            grid
+            if model.canEdit {
+                controls
+            }
+        }
+    }
+
+    private var grid: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
                 HStack(spacing: 0) {
-                    ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                        Text(InlineRunRendering.attributed(cell))
-                            .nexusType(.bodySmall)
-                            .foregroundStyle(NexusColor.Text.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(6)
-                            .overlay(
-                                Rectangle().stroke(NexusColor.Line.strong, lineWidth: 0.5)
-                            )
+                    ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, cell in
+                        cellView(cell, row: rowIndex, column: columnIndex)
                     }
                 }
             }
         }
         .background(NexusColor.Background.control, in: RoundedRectangle(cornerRadius: NexusRadius.r1))
+    }
+
+    @ViewBuilder private func cellView(_ cell: [InlineRun], row: Int, column: Int) -> some View {
+        Group {
+            if model.canEdit {
+                TableCellEditor(
+                    block: block,
+                    model: model,
+                    runs: cell,
+                    row: row,
+                    column: column,
+                    isHeader: row == 0
+                )
+            } else {
+                Text(InlineRunRendering.attributed(cell))
+                    .nexusType(.bodySmall)
+                    .foregroundStyle(NexusColor.Text.primary)
+                    .fontWeight(row == 0 ? .semibold : .regular)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(6)
+            }
+        }
+        .overlay(Rectangle().stroke(NexusColor.Line.strong, lineWidth: 0.5))
+    }
+
+    /// Add/remove row + column. Removal floors at one row / one column (kept in
+    /// `BlockListOps`); the buttons disable at that floor to make the limit legible.
+    private var controls: some View {
+        HStack(spacing: 14) {
+            tableButton("Add row", systemImage: "plus.rectangle.portrait") {
+                model.addTableRow(forBlock: block.id)
+            }
+            tableButton("Remove row", systemImage: "minus.rectangle.portrait") {
+                model.removeTableRow(forBlock: block.id)
+            }
+            .disabled(rows.count <= 1)
+
+            Divider().frame(height: 14)
+
+            tableButton("Add column", systemImage: "plus.rectangle") {
+                model.addTableColumn(forBlock: block.id)
+            }
+            tableButton("Remove column", systemImage: "minus.rectangle") {
+                model.removeTableColumn(forBlock: block.id)
+            }
+            .disabled(columnCount <= 1)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func tableButton(
+        _ label: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: systemImage)
+                .labelStyle(.iconOnly)
+                .font(.system(size: 13))
+                .foregroundStyle(NexusColor.Text.tertiary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(label))
+    }
+}
+
+/// A single editable table cell. Staged plain-text editing (mirrors the other
+/// text-bearing block editors): the draft binds to the cell's flattened text and
+/// commits a single unmarked run back through the model on submit.
+private struct TableCellEditor: View {
+    let block: Block
+    let model: NoteEditorModel
+    let runs: [InlineRun]
+    let row: Int
+    let column: Int
+    let isHeader: Bool
+    @State private var draft: String = ""
+
+    var body: some View {
+        TextField(isHeader ? "Header" : "Cell", text: $draft, axis: .vertical)
+            .textFieldStyle(.plain)
+            .nexusType(.bodySmall)
+            .fontWeight(isHeader ? .semibold : .regular)
+            .foregroundStyle(NexusColor.Text.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(6)
+            .onAppear { draft = InlineRunRendering.plainText(runs) }
+            .onChange(of: block.id) { _, _ in draft = InlineRunRendering.plainText(runs) }
+            .onSubmit { commit() }
+    }
+
+    private func commit() {
+        guard draft != InlineRunRendering.plainText(runs) else { return }
+        model.setTableCell(draft, row: row, column: column, forBlock: block.id)
     }
 }

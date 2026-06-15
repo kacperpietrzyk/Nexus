@@ -49,6 +49,7 @@ public struct NotesListView: View {
     @State private var folderRenameText = ""
     @State private var moveToNewFolderNote: Note?
     @State private var newFolderText = ""
+    @State private var showingTrash = false
 
     public init() {}
 
@@ -203,6 +204,16 @@ public struct NotesListView: View {
                         accessibilityLabel: "Group by"
                     )
                 }
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showingTrash = true
+                    } label: {
+                        Label("Trash", systemImage: "trash")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingTrash) {
+                NotesTrashView(noteRepository: noteRepository)
             }
         #endif
     }
