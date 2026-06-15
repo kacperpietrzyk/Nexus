@@ -51,6 +51,10 @@ public struct TasksUpdateTool: AgentTool {
                         [.string(description: "RFC 5545 RRULE subset, e.g. FREQ=DAILY."), .null(description: "Clear recurrence.")],
                         description: "RFC 5545 RRULE subset, e.g. FREQ=DAILY; null to clear."
                     ),
+                    "recurrence_anchor": .string(
+                        enumValues: ["due_date", "completion"],
+                        description: "Recurrence anchor: due_date (default) or completion (repeat from completion date)."
+                    ),
                     "reminders": .anyOf(
                         [
                             .array(
@@ -218,9 +222,13 @@ private struct TasksUpdatePatch {
     let tags: [String]??
     let parentID: UUID??
     let recurrenceRule: String??
+    let recurrenceAnchorIsCompletion: Bool?
     let reminders: [ReminderRule]??
 
     static func parse(_ patch: [String: JSONValue]) throws -> Self {
+        let anchorIsCompletion = try TasksStructuredCreateArguments.optionalRecurrenceAnchorIsCompletion(
+            patch["recurrence_anchor"]
+        )
         _ = try TasksStructuredCreateArguments.optionalString(patch["due_string"], field: "due_string")
         // project_id and section_id are resolved in call() after the update closure. Validate non-null
         // UUIDs early here so we fail fast with a clear error before touching anything.
@@ -240,6 +248,7 @@ private struct TasksUpdatePatch {
             tags: try nullableTags(patch["tags"]),
             parentID: try nullableUUID(patch["parent_id"], field: "parent_id"),
             recurrenceRule: try nullableRecurrenceRule(patch["recurrence_rule"]),
+            recurrenceAnchorIsCompletion: anchorIsCompletion,
             reminders: try nullableReminders(patch["reminders"])
         )
     }
@@ -264,8 +273,24 @@ private struct TasksUpdatePatch {
         if let parentID {
             task.parentTaskID = parentID
         }
-        if let recurrenceRule {
-            task.recurrenceRule = recurrenceRule
+        // Resolve recurrence rule + anchor together. The new rule string (if
+        // present) wins over the existing one; a present null clears it.
+        // recurrence_anchor then re-anchors the effective rule, with the
+        // explicit field overriding any inline ANCHOR= token. Anchoring a
+        // nil/cleared rule is a no-op — there is nothing to anchor.
+        if recurrenceRule != nil || recurrenceAnchorIsCompletion != nil {
+            // Effective rule: an explicit `recurrence_rule` arg (including null)
+            // replaces the existing value; otherwise keep the stored rule.
+            var effective: String?
+            if let recurrenceRule {
+                effective = recurrenceRule
+            } else {
+                effective = task.recurrenceRule
+            }
+            if let recurrenceAnchorIsCompletion, let rule = effective {
+                effective = RRuleAnchorToken.applying(completionAnchor: recurrenceAnchorIsCompletion, to: rule)
+            }
+            task.recurrenceRule = effective
         }
         if let reminders {
             task.reminders = reminders ?? []
