@@ -6,10 +6,59 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-15
+The big redesign-and-intelligence release (PR #78). A new design system across every platform,
+the on-device AI assistant, and an expanded MCP server. The AI is experimental.
+
+### Added
+- **On-device AI assistant** (experimental) — daily brief, task assist, a tool-using agent
+  chat, and insights, running on local Gemma-class models via MLX with a propose-confirm
+  flow; cloud calls remain opt-in and quota-gated.
+- **MCP server** expanded to 100+ tools across tasks, notes, meetings, projects, calendar
+  and people (links, reorder, complete modes, duplicate suggestions, restore/trash,
+  meetings CRUD, attachments, recurrence anchors).
+- **Projects** universal types — sections, cycles, stages, and key dates.
+- **Notes** — `[[wiki-links]]`, tables, and trash/restore.
+
+### Changed
+- New **Liquid** design system across Mac, iPhone, iPad and Watch.
+- iPhone, iPad and Watch brought up to feature parity with macOS.
+
+### Fixed
+- Release-only export crash, MLX idle recovery, and model-catalog IDs (#58).
+- MCP sidecar sandbox launch and agent-tools socket transport (#64, #67).
+- Production APNs entitlements for Release builds on Mac and Watch (#41, #43, #44).
+
+## [0.2.0] - 2026-06-09
+Nexus grows beyond Tasks: the Calendar, Meetings, Notes, Projects and People modules join
+the app, alongside a Linear-inspired redesign and a broad correctness pass.
+
+### Added
+- **Calendar** — events with recurrence and alarms, day planning, and a deadline-risk
+  signal surfaced in Today and the task inspector.
+- **Meetings** — capture, transcription, summaries, and action items, with guided
+  permissions and a model healthcheck (#74).
+- **Notes** — Markdown notes with task round-trip and daily-brief notes.
+- **Projects** — promote tasks into projects.
+- **People** — a lightweight personal CRM.
+- **Tasks** — Todoist write parity.
+
+### Changed
+- Linear-inspired redesign (#49); the app is pinned to dark mode across Mac and iOS.
+
+### Fixed
+- Broad correctness pass across calendar (recurrence, alarms, overlapping events, span
+  choices on edit/delete), the scheduler (capped backoff, only rolling genuinely overdue
+  tasks), the agent (no duplicate brief tasks, graph-edge validation), meetings (speaker
+  selection, diacritic-insensitive search), notes/export Markdown round-trips, search
+  indexing of notes/labels/people, and recurring-task occurrences.
+
 ## [0.1.0] - 2026-05-21
 ### Added
 - First TestFlight beta: tasks (quick capture ⌘N, Today, Inbox), Mac/iPhone/iPad/Watch,
   CloudKit sync, on-device AI assist, MCP external access (Mac).
 
-[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kacperpietrzyk/Nexus/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/kacperpietrzyk/Nexus/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kacperpietrzyk/Nexus/releases/tag/v0.1.0
