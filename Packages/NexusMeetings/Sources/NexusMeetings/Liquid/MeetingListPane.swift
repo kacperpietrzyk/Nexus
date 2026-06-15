@@ -120,9 +120,9 @@ struct MeetingListPane: View {
                 // macOS: a light translucent inset so the field reads as glass,
                 // not a near-black slab on the light pane. iOS keeps the sunken fill.
                 #if os(macOS)
-                .fill(Color.white.opacity(0.06))
+            .fill(Color.white.opacity(0.06))
                 #else
-                .fill(DS.ColorToken.backgroundSunken.opacity(0.6))
+            .fill(DS.ColorToken.backgroundSunken.opacity(0.6))
                 #endif
         }
         .overlay {

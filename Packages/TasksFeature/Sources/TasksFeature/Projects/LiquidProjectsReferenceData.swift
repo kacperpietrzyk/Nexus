@@ -18,6 +18,7 @@ enum LiquidProjectsReferenceData {
         let subtaskCountsByTask: [UUID: Int]
     }
 
+    // swiftlint:disable:next function_body_length
     static func snapshot(now: Date) -> Snapshot {
         let project = Project(name: "Product Roadmap", color: "spark", status: .active)
         project.createdAt = now.addingTimeInterval(-42 * 86_400)

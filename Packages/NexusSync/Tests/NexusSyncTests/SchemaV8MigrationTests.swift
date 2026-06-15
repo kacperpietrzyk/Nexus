@@ -2,6 +2,7 @@ import Foundation
 import NexusCore
 import SwiftData
 import Testing
+
 @testable import NexusSync
 
 @Suite struct SchemaV8MigrationTests {

@@ -3,6 +3,7 @@ import NexusAgentTools
 import NexusCore
 import SwiftData
 import Testing
+
 @testable import NexusAgent
 
 @MainActor

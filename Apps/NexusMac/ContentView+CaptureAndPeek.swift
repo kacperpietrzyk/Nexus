@@ -156,7 +156,9 @@ private struct WideTaskModalContent: View {
                 .frame(width: modalWidth)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
-                } action: { contentHeight = $0 }
+                } action: {
+                    contentHeight = $0
+                }
         }
         // No bounce until the content actually overflows the cap.
         .scrollBounceBehavior(.basedOnSize)

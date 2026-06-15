@@ -59,7 +59,7 @@ public struct ProposalConfirmCard: View {
                     .disabled(model.isApplying)
                     // `keyboardShortcut` is unavailable on watchOS.
                     #if !os(watchOS)
-                    .keyboardShortcut(.defaultAction)
+                .keyboardShortcut(.defaultAction)
                     #endif
             }
         }

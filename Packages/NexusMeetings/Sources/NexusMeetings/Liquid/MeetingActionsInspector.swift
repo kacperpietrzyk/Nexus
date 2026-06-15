@@ -36,9 +36,7 @@ public struct MeetingActionsInspector: View {
         ScrollView(showsIndicators: false) {
             // 04_LAYOUT_SYSTEM.md: inspector cards stack vertically, spacing 12.
             VStack(spacing: DS.Space.m) {
-                if let meeting = model.meeting,
-                    navigation.cancelProcessing != nil,
-                    MeetingProcessingStatus.isInFlight(meeting.processingStatus) {
+                if let meeting = model.meeting, shouldShowCancelCard(for: meeting) {
                     cancelProcessingCard(meeting)
                 }
                 if model.meeting != nil {
@@ -68,6 +66,11 @@ public struct MeetingActionsInspector: View {
     }
 
     // MARK: - Cancel processing
+
+    private func shouldShowCancelCard(for meeting: Meeting) -> Bool {
+        navigation.cancelProcessing != nil
+            && MeetingProcessingStatus.isInFlight(meeting.processingStatus)
+    }
 
     /// Shown only while the selected meeting is in-flight in the helper's
     /// pipeline (queued or a `processing-*` stage). Drives the helper's

@@ -944,7 +944,8 @@ private struct WatchRelayLifecycleModifier: ViewModifier {
     }
 
     private static func snippet(from summary: String) -> String {
-        let trimmed = summary
+        let trimmed =
+            summary
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > snippetCharLimit else { return trimmed }

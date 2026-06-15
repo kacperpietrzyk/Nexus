@@ -45,21 +45,21 @@ public struct NexusTextEditor: View {
                 .scrollContentBackground(.hidden)
             #endif
         }
-            .focused($isFocused)
-            .font(isMonospaced ? NexusType.mono : NexusType.body)
-            .foregroundStyle(NexusColor.Text.primary)
-            .tint(NexusColor.Accent.lime)
-            .padding(10)
-            .frame(minHeight: minHeight, alignment: .topLeading)
-            .background(
-                NexusColor.Background.control,
-                in: RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)
-                    .strokeBorder(isFocused ? NexusColor.Accent.lime : NexusColor.Line.hairline, lineWidth: 1)
-            )
-            .animation(.easeOut(duration: 0.12), value: isFocused)
+        .focused($isFocused)
+        .font(isMonospaced ? NexusType.mono : NexusType.body)
+        .foregroundStyle(NexusColor.Text.primary)
+        .tint(NexusColor.Accent.lime)
+        .padding(10)
+        .frame(minHeight: minHeight, alignment: .topLeading)
+        .background(
+            NexusColor.Background.control,
+            in: RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)
+                .strokeBorder(isFocused ? NexusColor.Accent.lime : NexusColor.Line.hairline, lineWidth: 1)
+        )
+        .animation(.easeOut(duration: 0.12), value: isFocused)
     }
 }
 

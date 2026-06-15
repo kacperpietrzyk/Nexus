@@ -316,19 +316,19 @@ struct MeetingDetailPane: View {
             SummaryView(
                 meetingID: meeting.id, repository: composition.meetingRepository, style: .liquid
             )
-                // Load-bearing identity pin: without it SwiftUI reuses the
-                // child's @StateObject across selection changes and keeps
-                // showing the first meeting (same fix as MeetingDetailView).
-                .id(meeting.id)
-                .frame(minHeight: 260)
-                .background {
-                    RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                        .fill(DS.ColorToken.backgroundSunken.opacity(0.55))
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                        .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
-                }
+            // Load-bearing identity pin: without it SwiftUI reuses the
+            // child's @StateObject across selection changes and keeps
+            // showing the first meeting (same fix as MeetingDetailView).
+            .id(meeting.id)
+            .frame(minHeight: 260)
+            .background {
+                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                    .fill(DS.ColorToken.backgroundSunken.opacity(0.55))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                    .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+            }
         }
     }
 

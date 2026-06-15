@@ -321,7 +321,8 @@ public struct LiquidWeekScreen: View {
     private var content: some View {
         switch viewModel.scope {
         case .week:
-            let reference = LiquidReferenceMode.isEnabled
+            let reference =
+                LiquidReferenceMode.isEnabled
                 ? LiquidWeekReferenceData.snapshot(days: viewModel.visibleDays, now: now(), calendar: calendar)
                 : nil
             WeekGrid(
@@ -379,7 +380,8 @@ public struct LiquidWeekScreen: View {
             // styling (glass card, hour axis, current-time line) instead of the
             // legacy NexusColor `DayGridView` (still used by the iOS
             // CalendarView, so left untouched).
-            let dayReference = LiquidReferenceMode.isEnabled
+            let dayReference =
+                LiquidReferenceMode.isEnabled
                 ? LiquidWeekReferenceData.snapshot(days: [viewModel.anchor], now: now(), calendar: calendar)
                 : nil
             WeekGrid(

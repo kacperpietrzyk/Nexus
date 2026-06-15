@@ -16,6 +16,7 @@ enum LiquidTodayReferenceData {
         let brief: String
     }
 
+    // swiftlint:disable:next function_body_length
     static func snapshot(now: Date) -> Snapshot {
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: now)
@@ -48,12 +49,24 @@ enum LiquidTodayReferenceData {
         )
 
         let agendaItems = [
-            LiquidAgendaItem(id: "deep-work", title: "Deep Work", subtitle: "Product Strategy", start: at(9), end: at(9, 50), isAllDay: false, kind: .focus),
-            LiquidAgendaItem(id: "one-one", title: "1:1 Meeting", subtitle: "Jamie Park", start: at(10), end: at(10, 50), isAllDay: false, kind: .meeting),
-            LiquidAgendaItem(id: "roadmap-review", title: "Product Roadmap Review", subtitle: "Conference Room B", start: at(11), end: at(12), isAllDay: false, kind: .project),
-            LiquidAgendaItem(id: "focus-time", title: "Focus Time", subtitle: "Design System Audit", start: at(13), end: at(14), isAllDay: false, kind: .focus),
-            LiquidAgendaItem(id: "marketing-sync", title: "Marketing Sync", subtitle: "Go-to-Market Plan", start: at(14, 30), end: at(15, 15), isAllDay: false, kind: .meeting),
-            LiquidAgendaItem(id: "leadership", title: "Leadership Update", subtitle: "Weekly Check-in", start: at(16), end: at(16, 45), isAllDay: false, kind: .personal),
+            LiquidAgendaItem(
+                id: "deep-work", title: "Deep Work", subtitle: "Product Strategy", start: at(9), end: at(9, 50), isAllDay: false,
+                kind: .focus),
+            LiquidAgendaItem(
+                id: "one-one", title: "1:1 Meeting", subtitle: "Jamie Park", start: at(10), end: at(10, 50), isAllDay: false, kind: .meeting
+            ),
+            LiquidAgendaItem(
+                id: "roadmap-review", title: "Product Roadmap Review", subtitle: "Conference Room B", start: at(11), end: at(12),
+                isAllDay: false, kind: .project),
+            LiquidAgendaItem(
+                id: "focus-time", title: "Focus Time", subtitle: "Design System Audit", start: at(13), end: at(14), isAllDay: false,
+                kind: .focus),
+            LiquidAgendaItem(
+                id: "marketing-sync", title: "Marketing Sync", subtitle: "Go-to-Market Plan", start: at(14, 30), end: at(15, 15),
+                isAllDay: false, kind: .meeting),
+            LiquidAgendaItem(
+                id: "leadership", title: "Leadership Update", subtitle: "Weekly Check-in", start: at(16), end: at(16, 45), isAllDay: false,
+                kind: .personal),
         ]
 
         let notes = [
@@ -76,7 +89,9 @@ enum LiquidTodayReferenceData {
                 title: "Product Roadmap Review",
                 occurredAt: at(11),
                 durationSec: 50 * 60,
-                summary: "Reviewed Q2 roadmap progress, confirmed priority bets, and aligned on resourcing for AI Assistant and mobile improvements.",
+                summary:
+                    // swiftlint:disable:next line_length
+                    "Reviewed Q2 roadmap progress, confirmed priority bets, and aligned on resourcing for AI Assistant and mobile improvements.",
                 decisions: ["Move AI Assistant to top priority", "Launch beta in early July"],
                 actionItemCount: 3,
                 statusLabel: "Processed"
@@ -88,7 +103,9 @@ enum LiquidTodayReferenceData {
                 design.id: design.name,
             ],
             focusSuggestion: DateInterval(start: at(14), end: at(16)),
-            brief: "Good morning. You have a busy day with 6 meetings and 3 priorities due today.\n\nProtect the 2h focus block and close the roadmap review follow-ups."
+            brief:
+                // swiftlint:disable:next line_length
+                "Good morning. You have a busy day with 6 meetings and 3 priorities due today.\n\nProtect the 2h focus block and close the roadmap review follow-ups."
         )
     }
 }

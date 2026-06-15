@@ -1,6 +1,7 @@
 import Foundation
 import NexusCore  // JSONValue
 import Testing
+
 @testable import NexusAgent
 
 @Suite struct ChatProposalParserTests {

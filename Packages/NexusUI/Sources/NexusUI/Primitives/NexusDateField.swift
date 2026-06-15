@@ -76,8 +76,8 @@ public struct NexusDateField: View {
         #else
         .popover(isPresented: $presented, arrowEdge: .bottom) {
             picker
-                .padding(12)
-                .frame(width: components.contains(.hourAndMinute) ? 320 : 260)
+            .padding(12)
+            .frame(width: components.contains(.hourAndMinute) ? 320 : 260)
         }
         #endif
     }

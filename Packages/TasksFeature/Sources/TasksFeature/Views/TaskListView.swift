@@ -59,9 +59,9 @@ public struct TaskListView: View {
         // margins. macOS keeps the shell-painted panel (no double card).
         .background {
             Color.clear
-                .liquidLightCard(cornerRadius: DS.Radius.l)
-                .padding(.horizontal, DS.Space.s)
-                .padding(.bottom, DS.Space.s)
+            .liquidLightCard(cornerRadius: DS.Radius.l)
+            .padding(.horizontal, DS.Space.s)
+            .padding(.bottom, DS.Space.s)
         }
         #endif
         .safeAreaInset(edge: .top, spacing: 0) {

@@ -74,6 +74,7 @@ enum LiquidWeekReferenceData {
         return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
     }
 
+    // swiftlint:disable:next function_body_length
     private static func referenceEvents(days: [Date], calendar: Calendar) -> [CalendarEvent] {
         [
             allDay(
@@ -208,6 +209,7 @@ enum LiquidWeekReferenceData {
         )
     }
 
+    // swiftlint:disable:next function_parameter_count
     private static func event(
         id: String,
         title: String,
@@ -256,8 +258,8 @@ enum LiquidWeekReferenceData {
     }
 }
 
-private extension Array {
-    subscript(safe index: Int) -> Element? {
+extension Array {
+    fileprivate subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
     }
 }

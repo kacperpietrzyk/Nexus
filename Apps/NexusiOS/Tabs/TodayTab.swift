@@ -17,46 +17,46 @@ struct TodayTab<Content: View>: View {
     var body: some View {
         NavigationStack {
             content
-            .navigationTitle("Today")
-            .navigationBarTitleDisplayMode(.inline)
-            // Translucent native nav bar so the aurora canvas reads to the top
-            // edge (the iOS half of the Liquid identity) instead of an opaque band.
-            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .preferredColorScheme(.dark)
-            .scrollContentBackground(.hidden)
-            .background(Color.clear)
-            .toolbar {
-                if showsToolbarActions {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button(action: onOpenCommandPalette) {
-                            Image(systemName: "command")
-                        }
-                        .accessibilityLabel("Open command palette")
-                    }
-
-                    ToolbarItem(placement: .topBarLeading) {
-                        if UIDevice.current.userInterfaceIdiom == .pad {
-                            Button(action: onOpenPencilCapture) {
-                                Image(systemName: "pencil.tip")
+                .navigationTitle("Today")
+                .navigationBarTitleDisplayMode(.inline)
+                // Translucent native nav bar so the aurora canvas reads to the top
+                // edge (the iOS half of the Liquid identity) instead of an opaque band.
+                .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbarColorScheme(.dark, for: .navigationBar)
+                .preferredColorScheme(.dark)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
+                .toolbar {
+                    if showsToolbarActions {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button(action: onOpenCommandPalette) {
+                                Image(systemName: "command")
                             }
-                            .accessibilityLabel("Pencil capture")
+                            .accessibilityLabel("Open command palette")
                         }
-                    }
 
-                    ToolbarItem(placement: .topBarTrailing) {
-                        if UIDevice.current.userInterfaceIdiom == .pad {
-                            Button {
-                                onOpenCapture(.task)
-                            } label: {
-                                Image(systemName: "plus")
+                        ToolbarItem(placement: .topBarLeading) {
+                            if UIDevice.current.userInterfaceIdiom == .pad {
+                                Button(action: onOpenPencilCapture) {
+                                    Image(systemName: "pencil.tip")
+                                }
+                                .accessibilityLabel("Pencil capture")
                             }
-                            .accessibilityLabel("Capture task")
+                        }
+
+                        ToolbarItem(placement: .topBarTrailing) {
+                            if UIDevice.current.userInterfaceIdiom == .pad {
+                                Button {
+                                    onOpenCapture(.task)
+                                } label: {
+                                    Image(systemName: "plus")
+                                }
+                                .accessibilityLabel("Capture task")
+                            }
                         }
                     }
                 }
-            }
         }
     }
 }

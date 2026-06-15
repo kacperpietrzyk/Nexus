@@ -74,9 +74,9 @@ public struct LiquidLightCardSurface: ViewModifier {
             // white wash to read as light glass rather than a dark slab. macOS
             // already reads light over the desktop, so it is excluded.
             #if os(iOS)
-            .overlay {
-                shape.fill(Color.white.opacity(isHovering ? 0.075 : 0.052))
-            }
+        .overlay {
+            shape.fill(Color.white.opacity(isHovering ? 0.075 : 0.052))
+        }
             #endif
     }
 

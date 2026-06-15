@@ -486,8 +486,8 @@ private struct TodayInspectorSection<Content: View, Trailing: View>: View {
     }
 }
 
-private extension TodayInspectorSection where Trailing == EmptyView {
-    init(_ title: String, @ViewBuilder content: @escaping () -> Content) {
+extension TodayInspectorSection where Trailing == EmptyView {
+    fileprivate init(_ title: String, @ViewBuilder content: @escaping () -> Content) {
         self.init(title, content: content, trailing: { EmptyView() })
     }
 }

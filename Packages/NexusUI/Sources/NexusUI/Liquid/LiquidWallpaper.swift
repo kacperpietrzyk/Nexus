@@ -68,21 +68,21 @@ public struct LiquidWallpaper: View {
             Color.black.opacity(0.085)
 
             RadialGradient(
-                    colors: [Color.white.opacity(Self.glowWhite), .clear],
+                colors: [Color.white.opacity(Self.glowWhite), .clear],
                 center: UnitPoint(x: 0.78, y: 0.22),
                 startRadius: 0,
                 endRadius: 460 * glowScale
             )
 
             RadialGradient(
-                    colors: [DS.ColorToken.accentPrimary.opacity(Self.glowAccent), .clear],
+                colors: [DS.ColorToken.accentPrimary.opacity(Self.glowAccent), .clear],
                 center: UnitPoint(x: 0.52, y: 0.46),
                 startRadius: 0,
                 endRadius: 900 * glowScale
             )
 
             LinearGradient(
-                    colors: [DS.ColorToken.accentBlue.opacity(Self.glowBlue), .clear],
+                colors: [DS.ColorToken.accentBlue.opacity(Self.glowBlue), .clear],
                 startPoint: .top,
                 endPoint: .center
             )

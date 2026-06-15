@@ -34,7 +34,7 @@ import Testing
 @Test func threadListBucketsByRelativeDayNewestFirst() {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "UTC")!
-    let now = Date(timeIntervalSince1970: 1_700_000_000) // fixed reference
+    let now = Date(timeIntervalSince1970: 1_700_000_000)  // fixed reference
     let todayEarlier = now.addingTimeInterval(-3600)
     let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
     let lastWeek = calendar.date(byAdding: .day, value: -6, to: now)!
