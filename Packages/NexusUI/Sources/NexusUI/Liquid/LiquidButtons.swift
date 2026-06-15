@@ -77,7 +77,7 @@ public struct LiquidPrimaryButton: View {
                 y: 6
             )
         }
-        .buttonStyle(NexusPressableButtonStyle())
+        .buttonStyle(LiquidPressButtonStyle())
         #if os(macOS)
         .onHover { value in
             withAnimation(DS.Motion.hover) { hovering = value }
@@ -145,7 +145,7 @@ public struct LiquidIconButton: View {
                     y: 0
                 )
         }
-        .buttonStyle(NexusPressableButtonStyle())
+        .buttonStyle(LiquidPressButtonStyle())
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         #if os(macOS)
         .onHover { value in

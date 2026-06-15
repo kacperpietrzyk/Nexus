@@ -14,6 +14,9 @@ private struct ShowcaseState: View {
     @State private var tabSelection = "open"
     @State private var checkedOn = true
     @State private var checkedOff = false
+    @State private var liquidSegment = "week"
+    @State private var liquidTab = "open"
+    @State private var liquidSelectValue = "doing"
 
     var body: some View {
         ScrollView {
@@ -23,6 +26,7 @@ private struct ShowcaseState: View {
                 #if !os(watchOS)
                 topBarSection
                 tabBarSection
+                liquidSelectionSection
                 #endif
                 statusPrioritySection
                 dayProgressSection
@@ -99,6 +103,42 @@ private struct ShowcaseState: View {
                 ],
                 active: $tabSelection
             )
+        }
+    }
+
+    private var liquidSelectionSection: some View {
+        section("Liquid Selection") {
+            VStack(alignment: .leading, spacing: 16) {
+                LiquidSegmentedControl(
+                    options: [
+                        LiquidSegmentOption("day", label: "Day"),
+                        LiquidSegmentOption("week", label: "Week"),
+                        LiquidSegmentOption("month", label: "Month"),
+                    ],
+                    selection: $liquidSegment
+                )
+                .frame(maxWidth: 320)
+
+                LiquidTabBar(
+                    items: [
+                        LiquidTabBarItem(id: "open", label: "Open", systemImage: "circle", count: 8),
+                        LiquidTabBarItem(id: "done", label: "Done", systemImage: "checkmark.circle", count: 4),
+                        LiquidTabBarItem(id: "blocked", label: "Blocked", systemImage: "minus.circle", count: 2),
+                    ],
+                    active: $liquidTab
+                )
+
+                LiquidSelect(
+                    [
+                        LiquidSelectOption(id: "todo", label: "To Do", systemImage: "circle"),
+                        LiquidSelectOption(id: "doing", label: "Doing", systemImage: "circle.dotted"),
+                        LiquidSelectOption(id: "done", label: "Done", systemImage: "checkmark.circle"),
+                    ],
+                    selection: $liquidSelectValue,
+                    placeholder: "Status"
+                )
+                .frame(maxWidth: 220)
+            }
         }
     }
     #endif

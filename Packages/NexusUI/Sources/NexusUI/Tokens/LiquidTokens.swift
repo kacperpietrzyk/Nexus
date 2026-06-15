@@ -1,5 +1,8 @@
 /// Tokens for the Liquid Productivity design system.
-/// Source of truth: liquid_productivity_design_system/docs/02_DESIGN_TOKENS.json
+/// These Swift tokens are the live source of truth; the docs JSON
+/// (liquid_productivity_design_system/docs/02_DESIGN_TOKENS.json) is the
+/// original reference and may differ — the shipped glass values have since
+/// intentionally diverged from it.
 import SwiftUI
 
 // MARK: - DS namespace
@@ -162,5 +165,9 @@ public enum DS {
         public static let press = Animation.easeOut(duration: 0.08)
         public static let panelReveal = Animation.easeInOut(duration: 0.20)
         public static let selection = Animation.easeInOut(duration: 0.16)
+        /// view/destination transition
+        public static let nav = Animation.smooth(duration: 0.28)
+        /// general state change
+        public static let standard = Animation.easeOut(duration: 0.22)
     }
 }
