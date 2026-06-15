@@ -319,6 +319,12 @@ struct ContentView: View {
         if selectedTab == .meetings && meetingsComposition == nil {
             selectedTab = .settings
         }
+        // `.stats` is an iPad-sidebar-only destination (no tab in the compact
+        // `TabView`); selecting it on compact width would otherwise show a blank
+        // screen, so route it to Tasks — same fallback as `navigateToday`.
+        if selectedTab == .stats && !isRegularWidth {
+            selectedTab = .tasks
+        }
     }
 
     @MainActor
