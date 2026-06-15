@@ -88,6 +88,47 @@ struct LiquidWeekTests {
         #expect(WeekGridMath.yOffset(forMinutes: 0, hourHeight: 60) == 0)
     }
 
+    // MARK: - WeekEditorTarget (Mac create path)
+
+    @Test("createSeed builds a default-duration draft on no system calendar")
+    func createSeedShape() {
+        let start = date(hours: 9)
+        let seed = WeekEditorTarget.createSeed(at: start)
+        #expect(seed.calendarID == nil)
+        #expect(seed.title.isEmpty)
+        #expect(seed.start == start)
+        #expect(seed.end == start.addingTimeInterval(WeekGridMetrics.defaultBlockDuration))
+        #expect(seed.recurrence == nil)
+    }
+
+    @Test("createSeed honors a custom duration")
+    func createSeedCustomDuration() {
+        let start = date(hours: 14)
+        let seed = WeekEditorTarget.createSeed(at: start, duration: 1800)
+        #expect(seed.end == start.addingTimeInterval(1800))
+    }
+
+    @Test("Create and edit targets carry distinct stable ids")
+    func editorTargetIdentity() {
+        let edit = WeekEditorTarget.edit("evt-42")
+        #expect(edit.id == "edit-evt-42")
+        #expect(edit.mode == .edit(eventID: "evt-42"))
+
+        // Each create presentation is uniquely identified so re-tapping "+"
+        // re-presents the sheet rather than being deduped by `sheet(item:)`.
+        let firstCreate = WeekEditorTarget.create()
+        let secondCreate = WeekEditorTarget.create()
+        #expect(firstCreate.id != secondCreate.id)
+        #expect(firstCreate.mode == .create(seed: nil))
+
+        let seeded = WeekEditorTarget.create(seed: WeekEditorTarget.createSeed(at: date(hours: 10)))
+        if case .create(let seed) = seeded.mode {
+            #expect(seed?.start == date(hours: 10))
+        } else {
+            Issue.record("Expected a create mode with a seed")
+        }
+    }
+
     // MARK: - WeekEventClassifier
 
     @Test("Grid items classify exactly like the Today agenda: events → meeting, blocks → focus")
