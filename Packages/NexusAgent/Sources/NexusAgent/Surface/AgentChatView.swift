@@ -90,11 +90,13 @@ public struct AgentChatView: View {
         }
     }
 
-    // Proactive nudge (iOS): the agent's on-device brain is an MLX chat model that may
-    // never have been downloaded (e.g. the Welcome download step was skipped or the
-    // `welcomeShown` flag was set by an earlier build). When absent, every turn fails
-    // silently — this banner points the user at Settings → Manage Models. Hidden when
-    // no availability probe was injected (Mac / tests), so it never renders there.
+    // Status notice (iOS): the agent's on-device brain is an MLX chat model that Nexus
+    // downloads and assigns automatically — there is no manual download control, so this
+    // banner must NOT instruct the user to download anything. Until that model is
+    // assigned and on disk the probe reports it as unavailable and every turn would fail
+    // silently; the banner explains that the model is being prepared automatically and
+    // that its readiness is shown in Settings. Hidden when no availability probe was
+    // injected (Mac / tests), so it never renders there.
     @ViewBuilder private var modelUnavailableBanner: some View {
         if !viewModel.isChatModelAvailable {
             HStack(alignment: .top, spacing: 10) {
@@ -104,13 +106,16 @@ public struct AgentChatView: View {
                     .frame(width: 18, height: 18)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("On-device model not downloaded")
+                    Text("On-device model not ready yet")
                         .font(DS.FontToken.bodyStrong)
                         .foregroundStyle(DS.ColorToken.textPrimary)
-                    Text("Nexus needs the on-device AI model to answer. Download it in Settings → Manage Models.")
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "Nexus prepares the on-device AI model automatically. "
+                            + "Its readiness is shown in Settings under Assistant models."
+                    )
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 0)
