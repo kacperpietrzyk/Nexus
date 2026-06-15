@@ -128,7 +128,11 @@ extension TodayDashboard {
 
 /// Banner row that mirrors `deadlineRiskBanner()` chrome but drives from
 /// `ProposalConfirmCardModel` so it's fully testable without SwiftUI rendering.
-private struct InsightBannerRow: View {
+///
+/// Internal (not `private`) so the shared `LiquidTodayScreen` can render the
+/// same banner — both Today surfaces drive it from the identical
+/// `TodayDashboard.insightCardModel(...)` mapper.
+struct InsightBannerRow: View {
     @State var model: ProposalConfirmCardModel
     let extraCount: Int
 

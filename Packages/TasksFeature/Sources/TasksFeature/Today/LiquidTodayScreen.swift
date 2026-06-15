@@ -1,3 +1,4 @@
+import NexusAgent
 import NexusCore
 import NexusUI
 import SwiftData
@@ -39,6 +40,14 @@ public struct LiquidTodayScreen: View {
     @Environment(\.taskRepository) private var taskRepository
     @Environment(\.calendarEventProvider) private var calendarProvider
     @Environment(\.scenePhase) private var scenePhase
+    // Proactive-insight stores (see `TodayDashboard+Insights`). Nil when the
+    // host hasn't wired the insight coordinator (previews, test beds) — the
+    // banner then no-ops. Read here so the shared Today screen surfaces
+    // insights on macOS AND iOS; the legacy `TodayDashboard` path that owned
+    // these reads no longer renders.
+    @Environment(\.pendingInsightStore) private var pendingInsightStore
+    @Environment(\.insightProposalCoordinator) private var insightProposalCoordinator
+    @Environment(\.insightCooldownStore) private var insightCooldownStore
     @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) private var calendarEventsEnabled = false
 
     private let model: LiquidTodayModel
@@ -131,6 +140,7 @@ public struct LiquidTodayScreen: View {
         VStack(alignment: .leading, spacing: DS.Space.l) {
             header
             errorRowIfNeeded
+            insightBanner()
 
             // Row height = the tallest card's intrinsic content (no magic
             // constant, no `.clipped()`): empty states stay compact instead of
@@ -188,6 +198,7 @@ public struct LiquidTodayScreen: View {
                 VStack(alignment: .leading, spacing: DS.Space.l) {
                     header
                     errorRowIfNeeded
+                    insightBanner()
                     iosCardGrid
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -198,6 +209,7 @@ public struct LiquidTodayScreen: View {
             VStack(alignment: .leading, spacing: DS.Space.l) {
                 header
                 errorRowIfNeeded
+                insightBanner()
                 iosCardGrid
                 inspectorColumn
             }
@@ -210,6 +222,7 @@ public struct LiquidTodayScreen: View {
         VStack(alignment: .leading, spacing: DS.Space.l) {
             header
             errorRowIfNeeded
+            insightBanner()
             iosCardGrid
             inspectorColumn
         }
@@ -231,6 +244,25 @@ public struct LiquidTodayScreen: View {
     private var errorRowIfNeeded: some View {
         if let error = actionError ?? model.loadError {
             errorRow(error)
+        }
+    }
+
+    /// Surfaces the top pending proactive insight as a ProposalConfirmCard-style
+    /// banner, reusing the exact dashboard wiring (`insightCardModel` mapper +
+    /// `InsightBannerRow`) so accept/dismiss behave identically to the legacy
+    /// `TodayDashboard` path. No-ops cleanly when no store is wired or there is
+    /// no pending insight.
+    @ViewBuilder
+    private func insightBanner() -> some View {
+        if let store = pendingInsightStore, let entry = store.pending.first {
+            let model = TodayDashboard.insightCardModel(
+                entry: entry,
+                pending: store,
+                coordinator: insightProposalCoordinator,
+                cooldown: insightCooldownStore
+            )
+            InsightBannerRow(model: model, extraCount: max(0, store.count - 1))
+                .id(entry.id)
         }
     }
 
