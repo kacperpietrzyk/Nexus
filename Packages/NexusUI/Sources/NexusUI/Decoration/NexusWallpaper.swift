@@ -47,9 +47,10 @@ public struct NexusWallpaper: View {
     public init() {}
 
     public var body: some View {
-        // Linear is flat: a single Pitch Black (#08090A) ground. No gradient,
-        // no radial glows — depth lives in the layered surfaces above.
-        NexusWallpaper.baseColor
-            .ignoresSafeArea()
+        // Liquid: the ambient organism behind standalone surfaces is the shared
+        // aurora canvas (same one the shell root paints), so every screen reads as
+        // the brand. The legacy Linear glow/gradient constants above are retained
+        // only as frozen-API guards (asserted by `NexusWallpaperTests`).
+        LiquidWallpaper()
     }
 }

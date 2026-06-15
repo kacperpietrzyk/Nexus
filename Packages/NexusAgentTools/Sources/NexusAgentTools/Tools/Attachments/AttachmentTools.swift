@@ -51,11 +51,21 @@ public struct AttachmentsAddToNoteTool: AgentTool {
     ///   - storageRoot: where copied bytes are written. `nil` resolves to the
     ///     production app-support attachment root at call time (matches the editor).
     public init(
-        allowedRoot: URL = FileManager.default.homeDirectoryForCurrentUser,
+        allowedRoot: URL = Self.defaultAllowedRoot,
         storageRoot: URL? = nil
     ) {
         self.allowedRoot = allowedRoot
         self.storageRoot = storageRoot
+    }
+
+    /// `homeDirectoryForCurrentUser` is macOS-only; on iOS the sandbox home
+    /// (`NSHomeDirectory()`) is the equivalent ingest allow-list root for v1.
+    public static var defaultAllowedRoot: URL {
+        #if os(macOS)
+        FileManager.default.homeDirectoryForCurrentUser
+        #else
+        URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+        #endif
     }
 
     @MainActor

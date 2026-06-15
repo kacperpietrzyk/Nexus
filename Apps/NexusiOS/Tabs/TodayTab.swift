@@ -4,26 +4,24 @@ import SwiftUI
 import TasksFeature
 import UIKit
 
-struct TodayTab: View {
-    let onOpenTask: (TaskItem) -> Void
+struct TodayTab<Content: View>: View {
     let onOpenCapture: (CapturePane.Mode) -> Void
     let onOpenCommandPalette: () -> Void
-    let onOpenAgent: () -> Void
     let onOpenPencilCapture: () -> Void
     var showsToolbarActions = true
+    /// The Today content — the ported `LiquidTodayScreen`, composed by the host
+    /// (`ContentView`) where the cross-module seams live. `TodayTab` only owns
+    /// the iOS navigation chrome (title + translucent nav bar + toolbar actions).
+    @ViewBuilder var content: Content
 
     var body: some View {
         NavigationStack {
-            TodayDashboard(
-                showsNavigationRail: false,
-                onOpenTask: onOpenTask,
-                onOpenCapture: onOpenCapture,
-                onOpenCommandPalette: onOpenCommandPalette,
-                onOpenAgent: onOpenAgent
-            )
+            content
             .navigationTitle("Today")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(NexusColor.Background.base, for: .navigationBar)
+            // Translucent native nav bar so the aurora canvas reads to the top
+            // edge (the iOS half of the Liquid identity) instead of an opaque band.
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .preferredColorScheme(.dark)

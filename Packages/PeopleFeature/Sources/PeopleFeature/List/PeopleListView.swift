@@ -277,6 +277,7 @@ public struct PeopleListView: View {
                         NavigationLink(value: person.id) {
                             PersonListRow(person: person, meetingCount: meetingCounts[person.id] ?? 0)
                         }
+                        .listRowBackground(Color.clear)
                     }
                     .onDelete { offsets in delete(from: section.people, at: offsets) }
                 } header: {
@@ -287,6 +288,8 @@ public struct PeopleListView: View {
             fromMeetingsSection
         }
         .listStyle(.plain)
+        // Liquid: transparent so the shell aurora reads behind the directory.
+        .scrollContentBackground(.hidden)
         .searchable(text: $searchText, prompt: "Search people")
     }
 

@@ -7,6 +7,22 @@ import SwiftUI
 /// "Today's Agenda — width ~380".
 private let agendaCardWidth: CGFloat = 380
 
+#if os(iOS)
+/// Measures the Today pane width so the iPad layout can place the inspector as a
+/// side column in landscape (wide) and stack it below in portrait (narrow) —
+/// `horizontalSizeClass` is `.regular` in both iPad orientations, so it can't
+/// distinguish them; the actual width can.
+private struct TodayPaneWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+/// At/above this pane width the inspector sits as a side column; below it stacks
+/// under the card grid (iPad portrait, narrow split).
+private let inspectorSideMinWidth: CGFloat = 820
+#endif
+
 /// The Liquid `Today / Command Center` main column (Task 5, spec
 /// `docs/05_MODULE_TODAY.md`): serif page header, then Agenda + Top
 /// Priorities on top and Projects / Notes / Meeting Intelligence as the
@@ -36,6 +52,15 @@ public struct LiquidTodayScreen: View {
     @State private var cascadePrompt: CascadeCompletionPrompt?
     @State private var actionError: String?
 
+    #if os(iOS)
+    // iOS reflows the macOS grid by size class and mounts the inspector inline
+    // (there is no `LiquidAppShell` inspector slot on iOS). The capture draft
+    // lives here because the iOS Today screen owns its own inspector.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var iosCaptureText = ""
+    @State private var paneWidth: CGFloat = 0
+    #endif
+
     public init(
         model: LiquidTodayModel,
         meetingIntelProvider: LiquidTodayMeetingIntelProvider?,
@@ -56,74 +81,22 @@ public struct LiquidTodayScreen: View {
 
     public var body: some View {
         ScrollView(showsIndicators: false) {
-            let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
-            VStack(alignment: .leading, spacing: DS.Space.l) {
-                header
-
-                if let error = actionError ?? model.loadError {
-                    errorRow(error)
-                }
-
-                // Row height = the tallest card's intrinsic content (no magic
-                // constant, no `.clipped()`): empty states stay compact instead
-                // of stretching to a fixed 420 pt, and dense cards grow rather
-                // than hard-truncating. `maxHeight: .infinity` makes the shorter
-                // card match the taller one so the row stays baseline-aligned.
-                HStack(alignment: .top, spacing: DS.Space.m) {
-                    TodayAgendaCard(
-                        items: reference?.agendaItems ?? model.agendaItems,
-                        now: .now,
-                        onOpenCalendar: { onNavigate(.calendar) }
-                    )
-                    .frame(width: agendaCardWidth)
-                    .frame(maxHeight: .infinity)
-
-                    TopPrioritiesCard(
-                        groups: reference?.priorityGroups ?? model.priorityGroups,
-                        now: .now,
-                        projectName: { projectID in
-                            reference?.projectNamesByID[projectID] ?? model.projectNamesByID[projectID]
-                        },
-                        onToggle: { task in
-                            guard !LiquidReferenceMode.isEnabled else { return }
-                            toggleDone(task)
-                        },
-                        onOpen: onOpenTask,
-                        onAddTask: { onOpenCapture(.task) },
-                        onViewAll: { onNavigate(.tasks) }
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-
-                HStack(alignment: .top, spacing: DS.Space.m) {
-                    TodayProjectsCard(
-                        projects: reference?.projects ?? model.projects,
-                        onOpenProjects: { onNavigate(.projects) }
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    TodayNotesCard(
-                        notes: reference?.notes ?? model.notes,
-                        onOpenNotes: { onNavigate(.notes) }
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    MeetingIntelCard(
-                        intel: reference?.meetingIntel ?? model.meetingIntel,
-                        onOpenMeetings: { onNavigate(.meetings) }
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(DS.Space.l)
+            content
+                .padding(DS.Space.l)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
             TodaySceneWash()
                 .allowsHitTesting(false)
         }
+        #if os(iOS)
+        .background {
+            GeometryReader { geo in
+                Color.clear.preference(key: TodayPaneWidthKey.self, value: geo.size.width)
+            }
+        }
+        .onPreferenceChange(TodayPaneWidthKey.self) { paneWidth = $0 }
+        #endif
         .task { await reload() }
         .task(id: calendarEventsEnabled) { await reload() }
         .reloadOnStoreChange { _Concurrency.Task { await reload() } }
@@ -134,6 +107,182 @@ public struct LiquidTodayScreen: View {
         .cascadeCompletionConfirmation($cascadePrompt) { prompt in
             confirmCascade(prompt)
         }
+    }
+
+    // MARK: - Layout (reflows per platform / size class)
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(iOS)
+        if horizontalSizeClass == .compact {
+            compactContent
+        } else {
+            regularContent
+        }
+        #else
+        gridContent
+        #endif
+    }
+
+    /// macOS + iPad-regular: the two-row card grid. On macOS the inspector is
+    /// mounted externally by `LiquidAppShell`; iPad mounts it alongside in
+    /// `regularContent` (iOS has no shell inspector slot).
+    private var gridContent: some View {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+            header
+            errorRowIfNeeded
+
+            // Row height = the tallest card's intrinsic content (no magic
+            // constant, no `.clipped()`): empty states stay compact instead of
+            // stretching to a fixed 420 pt, and dense cards grow rather than
+            // hard-truncating. `maxHeight: .infinity` makes the shorter card
+            // match the taller one so the row stays baseline-aligned.
+            HStack(alignment: .top, spacing: DS.Space.m) {
+                agendaCard
+                    .frame(width: agendaCardWidth)
+                    .frame(maxHeight: .infinity)
+                prioritiesCard
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+
+            HStack(alignment: .top, spacing: DS.Space.m) {
+                projectsCard
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                notesCard
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                meetingCard
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    #if os(iOS)
+    /// The five main cards as an ADAPTIVE grid (not the macOS fixed 380 + 3-column
+    /// row, which is wider than an iPad-11" pane and overflows). The grid picks the
+    /// column count that fits the available width — 1 on iPhone, 2 on a narrow iPad
+    /// pane, 3 on a wide one — so nothing truncates and there are no magic widths.
+    private var iosCardGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 240, maximum: .infinity), spacing: DS.Space.l, alignment: .top)],
+            alignment: .leading,
+            spacing: DS.Space.l
+        ) {
+            agendaCard
+            prioritiesCard
+            projectsCard
+            notesCard
+            meetingCard
+        }
+    }
+
+    /// iPad regular: adaptive card grid + the inspector. Landscape (wide pane) =
+    /// inspector as a right side column; portrait (narrow pane) = inspector stacked
+    /// below the grid so the cards keep a comfortable two-up width instead of being
+    /// squeezed to one column beside a fixed 300pt rail.
+    @ViewBuilder
+    private var regularContent: some View {
+        if paneWidth >= inspectorSideMinWidth {
+            HStack(alignment: .top, spacing: DS.Space.l) {
+                VStack(alignment: .leading, spacing: DS.Space.l) {
+                    header
+                    errorRowIfNeeded
+                    iosCardGrid
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                inspectorColumn
+                    .frame(width: 300)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: DS.Space.l) {
+                header
+                errorRowIfNeeded
+                iosCardGrid
+                inspectorColumn
+            }
+        }
+    }
+
+    /// iPhone compact: a single reflowed column (the adaptive grid collapses to one
+    /// column at phone width), with the inspector cards stacked below.
+    private var compactContent: some View {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+            header
+            errorRowIfNeeded
+            iosCardGrid
+            inspectorColumn
+        }
+    }
+
+    private var inspectorColumn: some View {
+        TodayInspector(
+            model: model,
+            captureText: $iosCaptureText,
+            onNavigate: onNavigate,
+            onOpenCapture: onOpenCapture
+        )
+    }
+    #endif
+
+    // MARK: - Cards
+
+    @ViewBuilder
+    private var errorRowIfNeeded: some View {
+        if let error = actionError ?? model.loadError {
+            errorRow(error)
+        }
+    }
+
+    private var agendaCard: some View {
+        let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
+        return TodayAgendaCard(
+            items: reference?.agendaItems ?? model.agendaItems,
+            now: .now,
+            onOpenCalendar: { onNavigate(.calendar) }
+        )
+    }
+
+    private var prioritiesCard: some View {
+        let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
+        return TopPrioritiesCard(
+            groups: reference?.priorityGroups ?? model.priorityGroups,
+            now: .now,
+            projectName: { projectID in
+                reference?.projectNamesByID[projectID] ?? model.projectNamesByID[projectID]
+            },
+            onToggle: { task in
+                guard !LiquidReferenceMode.isEnabled else { return }
+                toggleDone(task)
+            },
+            onOpen: onOpenTask,
+            onAddTask: { onOpenCapture(.task) },
+            onViewAll: { onNavigate(.tasks) }
+        )
+    }
+
+    private var projectsCard: some View {
+        let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
+        return TodayProjectsCard(
+            projects: reference?.projects ?? model.projects,
+            onOpenProjects: { onNavigate(.projects) }
+        )
+    }
+
+    private var notesCard: some View {
+        let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
+        return TodayNotesCard(
+            notes: reference?.notes ?? model.notes,
+            onOpenNotes: { onNavigate(.notes) }
+        )
+    }
+
+    private var meetingCard: some View {
+        let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
+        return MeetingIntelCard(
+            intel: reference?.meetingIntel ?? model.meetingIntel,
+            onOpenMeetings: { onNavigate(.meetings) }
+        )
     }
 
     // MARK: - Header

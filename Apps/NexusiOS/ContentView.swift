@@ -40,7 +40,11 @@ struct ContentView: View {
     @Environment(\.focusModeState) private var focusModeState
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
+    // Liquid Today (ported from macOS): shared model + the daily-brief seam.
+    @Environment(\.agentBriefService) var agentBriefService
+    @AppStorage(NexusPreferences.Keys.agentEnabled) var agentEnabled = true
 
+    @State var liquidTodayModel = LiquidTodayModel()
     @State private var selectedTab: NexusTab = ContentView.initialTab()
 
     /// DEBUG-only: lets the screenshot/QA loop deep-open a specific tab via the
@@ -100,7 +104,10 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            NexusColor.Background.base.ignoresSafeArea()
+            // Liquid aurora canvas at the shell root (was a flat fill). Native
+            // chrome (tab bar / split view) rides translucently over it so the
+            // brand wallpaper reads through — the iOS half of the macOS identity.
+            LiquidWallpaper()
             rootContent
             // Regular-width Quick Capture overlay sits at the window root (not the
             // detail pane) so its scrim dims the whole window — sidebar included —
@@ -229,11 +236,10 @@ struct ContentView: View {
     private var compactTabShell: some View {
         TabView(selection: $selectedTab) {
             TodayTab(
-                onOpenTask: { selectedTask = $0 },
                 onOpenCapture: { openCapture(mode: $0) },
                 onOpenCommandPalette: { commandPalettePresented = true },
-                onOpenAgent: { selectedTab = .agent },
-                onOpenPencilCapture: { pencilCapturePresented = true }
+                onOpenPencilCapture: { pencilCapturePresented = true },
+                content: { liquidTodayMain }
             )
             .tag(NexusTab.today)
             .tabItem { Label("Today", systemImage: "circle.dotted") }
@@ -417,10 +423,15 @@ extension ContentView {
         .padding(.horizontal, 14)
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(NexusColor.Background.panel)
+        // One continuous backdrop across the whole window (macOS parity): the
+        // shell aurora flows behind BOTH columns, and the sidebar is only a faint
+        // darkening scrim over that same canvas — not a separate material slab
+        // that seams against the detail pane. A barely-there hairline hints the
+        // split without cutting the window in two.
+        .background(Color.black.opacity(0.12))
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(NexusColor.Line.hairline)
+                .fill(NexusColor.Line.hairline.opacity(0.5))
                 .frame(width: 1)
         }
     }
@@ -505,62 +516,23 @@ extension ContentView {
     }
 
     fileprivate func regularNavigationButton(_ item: RegularNavigationItem) -> some View {
-        Button {
-            selectedTab = item.tab
-        } label: {
-            HStack(spacing: 0) {
-                // Lime left-bar indicator for active item (Linear nav rail idiom).
-                Rectangle()
-                    .fill(selectedTab == item.tab ? NexusColor.Accent.lime : Color.clear)
-                    .frame(width: 2)
-                    .cornerRadius(1)
-
-                HStack(spacing: 9) {
-                    Image(systemName: item.systemImage)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(
-                            selectedTab == item.tab ? NexusColor.Accent.lime : NexusColor.Text.tertiary
-                        )
-                        .frame(width: 20)
-
-                    Text(item.title)
-                        .nexusType(.bodySmall)
-                        .foregroundStyle(
-                            selectedTab == item.tab ? NexusColor.Text.primary : NexusColor.Text.secondary
-                        )
-
-                    Spacer(minLength: 8)
-                }
-                .padding(.horizontal, 10)
-            }
-            .frame(height: 36)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                if selectedTab == item.tab {
-                    RoundedRectangle(cornerRadius: NexusRadius.r2, style: .continuous)
-                        .fill(NexusColor.Background.controlHover)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(item.title)
+        // Mac-parity sidebar row: the shared `LiquidSidebarNavRow` — a soft pill
+        // highlight (white glass fill + hairline + faint accent glow) for the
+        // selected module, no left accent bar (the old Linear rail idiom).
+        LiquidSidebarNavRow(
+            item.title,
+            systemImage: item.systemImage,
+            isSelected: selectedTab == item.tab,
+            action: { selectedTab = item.tab }
+        )
     }
 
     @ViewBuilder
     fileprivate var regularDetail: some View {
         switch selectedTab {
         case .today:
-            TodayDashboard(
-                showsNavigationRail: false,
-                onOpenTask: { selectedTask = $0 },
-                onOpenCapture: { openCapture(mode: $0) },
-                onOpenCommandPalette: { commandPalettePresented = true },
-                onOpenAgent: { selectedTab = .agent },
-                forceCompactLayout: true,
-                showsCompactCaptureFAB: false
-            )
-            .background(Color.clear)
+            liquidTodayMain
+                .background(Color.clear)
         case .inbox:
             InboxTab(
                 onOpenItem: { openInboxItem($0) },
@@ -665,6 +637,91 @@ private struct RegularNavigationItem: Hashable {
     let tab: ContentView.NexusTab
     let title: String
     let systemImage: String
+}
+
+// MARK: - Liquid Today (ported from macOS)
+//
+// Mirrors `Apps/NexusMac/ContentView+LiquidToday.swift`: the Today card
+// composition (`LiquidTodayScreen`, reflowing per size class) is mounted on iOS
+// too, with cross-module content (daily brief, meeting intel, focus gaps)
+// composed here as plain values. Lives in this file because `NexusTab` /
+// `selectedTab` are fileprivate to it.
+extension ContentView {
+
+    /// The ported Liquid Today screen — one column on iPhone, grid + inspector
+    /// on iPad — shared by the compact tab and the regular split detail.
+    var liquidTodayMain: some View {
+        LiquidTodayScreen(
+            model: liquidTodayModel,
+            meetingIntelProvider: { fetchTodayMeetingIntel() },
+            briefProvider: dailyBriefProvider,
+            focusGapProvider: { events, window in
+                SchedulingIntelligence.suggestedFocusBlocks(events: events, within: window)
+            },
+            onNavigate: { navigateToday($0) },
+            onOpenTask: { selectedTask = $0 },
+            onOpenCapture: { openCapture(mode: $0) }
+        )
+    }
+
+    /// Routes the Today cards' navigation intents to the iOS tab switch. iOS has
+    /// no dedicated Projects/Stats tabs → route those to Tasks.
+    func navigateToday(_ selection: TodayNavSelection) {
+        switch selection {
+        case .today: selectedTab = .today
+        case .inbox: selectedTab = .inbox
+        case .meetings: selectedTab = .meetings
+        case .tasks, .projects, .stats: selectedTab = .tasks
+        case .notes: selectedTab = .notes
+        case .calendar: selectedTab = .calendar
+        case .people: selectedTab = .people
+        case .agent: selectedTab = .agent
+        case .settings: selectedTab = .settings
+        }
+    }
+
+    /// Adapts the shared `AgentBriefService` seam to the Liquid screen's
+    /// value-typed provider; `nil` → the Daily Brief card shows its empty state.
+    private var dailyBriefProvider: LiquidTodayBriefProvider? {
+        guard agentEnabled, let agentBriefService else { return nil }
+        return { input in
+            await agentBriefService.brief(
+                for: AgentBriefRequest(
+                    counts: AgentBriefCounts(
+                        overdue: input.overdue,
+                        today: input.today,
+                        noDate: input.noDate,
+                        awaiting: input.awaiting
+                    ),
+                    firstTitles: input.firstTitles,
+                    now: input.now
+                )
+            )
+        }
+    }
+
+    /// Most recent processed meeting as a plain value for the Meeting
+    /// Intelligence card (mirrors the macOS seam).
+    @MainActor
+    private func fetchTodayMeetingIntel() -> LiquidTodayMeetingIntel? {
+        var descriptor = FetchDescriptor<Meeting>(
+            predicate: #Predicate { $0.deletedAt == nil && $0.processedAt != nil },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        guard let meeting = try? modelContext.fetch(descriptor).first else { return nil }
+        let status = MeetingProcessingStatus(rawValue: meeting.processingStatus)
+        let decisions = MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
+        return LiquidTodayMeetingIntel(
+            title: meeting.title,
+            occurredAt: meeting.startedAt,
+            durationSec: meeting.durationSec,
+            summary: meeting.summaryText,
+            decisions: Array(decisions.prefix(3)),
+            actionItemCount: meeting.actionItemIDs.count,
+            statusLabel: status == .ready ? "Processed" : (status == .failed ? "Failed" : "Processing")
+        )
+    }
 }
 
 #Preview {

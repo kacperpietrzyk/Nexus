@@ -35,14 +35,22 @@ public struct NexusTextEditor: View {
     }
 
     public var body: some View {
-        TextEditor(text: $text)
+        // `TextEditor` is unavailable on watchOS; fall back to a vertically
+        // growing `TextField` there (system dictation is the only input path).
+        Group {
+            #if os(watchOS)
+            TextField("", text: $text, axis: .vertical)
+            #else
+            TextEditor(text: $text)
+                .scrollContentBackground(.hidden)
+            #endif
+        }
             .focused($isFocused)
             .font(isMonospaced ? NexusType.mono : NexusType.body)
             .foregroundStyle(NexusColor.Text.primary)
             .tint(NexusColor.Accent.lime)
-            .scrollContentBackground(.hidden)
             .padding(10)
-            .frame(minHeight: minHeight)
+            .frame(minHeight: minHeight, alignment: .topLeading)
             .background(
                 NexusColor.Background.control,
                 in: RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)

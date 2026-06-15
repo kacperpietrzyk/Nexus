@@ -45,7 +45,9 @@ public struct CalendarView: View {
             Divider().overlay(NexusColor.Line.hairline)
             content
         }
-        .background(NexusColor.Background.base)
+        // Liquid: transparent root so the shell aurora reads behind the calendar
+        // (internal day/event cells keep their own surfaces). Was opaque base.
+        .background(Color.clear)
         .task {
             await viewModel.load()
             availableCalendars = await viewModel.availableCalendars()

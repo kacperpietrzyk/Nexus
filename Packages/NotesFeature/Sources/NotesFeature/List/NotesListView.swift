@@ -248,6 +248,7 @@ public struct NotesListView: View {
                             NavigationLink(value: note.id) {
                                 NoteListRow(note: note, backlinkCount: backlinkCounts[note.id] ?? 0)
                             }
+                            .listRowBackground(Color.clear)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
                                     deleteNote(note)
@@ -262,10 +263,21 @@ public struct NotesListView: View {
                         }
                     } header: {
                         sectionHeader(group)
+                            .listRowBackground(Color.clear)
                     }
                 }
             }
             .listStyle(.plain)
+            // Touch Liquid pass: transparent list on a single light-glass panel
+            // over the shell aurora (mirrors Tasks + the `LiquidTodayScreen` card
+            // family), inset so the aurora reads at the margins.
+            .scrollContentBackground(.hidden)
+            .background {
+                Color.clear
+                    .liquidLightCard(cornerRadius: DS.Radius.l)
+                    .padding(.horizontal, DS.Space.s)
+                    .padding(.bottom, DS.Space.s)
+            }
         }
     }
 

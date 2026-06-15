@@ -52,6 +52,18 @@ public struct TaskListView: View {
             }
         }
         .background(containerBackground)
+        #if os(iOS)
+        // Touch Liquid pass: the transparent list sits on a single light-glass
+        // panel over the shell aurora (mirrors the macOS shell content card and
+        // the `LiquidTodayScreen` card family), inset so the aurora reads at the
+        // margins. macOS keeps the shell-painted panel (no double card).
+        .background {
+            Color.clear
+                .liquidLightCard(cornerRadius: DS.Radius.l)
+                .padding(.horizontal, DS.Space.s)
+                .padding(.bottom, DS.Space.s)
+        }
+        #endif
         .safeAreaInset(edge: .top, spacing: 0) {
             TaskListFilterBar(refinement: $refinement, availableLabels: refinementLabels)
         }

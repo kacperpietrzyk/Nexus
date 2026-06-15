@@ -69,6 +69,15 @@ public struct LiquidLightCardSurface: ViewModifier {
                     )
                     .blendMode(.screen)
             }
+            // iOS/iPadOS sit over a dark neutral backdrop (no bright desktop
+            // vibrancy to lift `.ultraThinMaterial`), so the card needs an extra
+            // white wash to read as light glass rather than a dark slab. macOS
+            // already reads light over the desktop, so it is excluded.
+            #if os(iOS)
+            .overlay {
+                shape.fill(Color.white.opacity(isHovering ? 0.075 : 0.052))
+            }
+            #endif
     }
 
     private func rimBorder(_ shape: RoundedRectangle) -> some View {
@@ -99,15 +108,16 @@ public struct LiquidLightCardSurface: ViewModifier {
 extension View {
     /// Apply the light Today-style glass card surface (see `LiquidLightCardSurface`).
     ///
-    /// macOS-only — the single entry point every card surface routes through, so
-    /// the light recipe lives in one place. iOS falls back to the heavier
-    /// `.liquidGlass(.card)` until the touch Liquid pass, so call sites in shared
-    /// packages don't each need their own `#if`.
+    /// The single entry point every card surface routes through, so the light
+    /// recipe lives in one place. macOS + iOS/iPadOS both get the light
+    /// glass-over-wallpaper surface (the touch Liquid pass mounts the aurora at the
+    /// iOS shell root, so `.ultraThinMaterial` has a canvas to read through).
+    /// watchOS has no shell wallpaper, so it keeps the heavier `.liquidGlass(.card)`.
     public func liquidLightCard(cornerRadius: CGFloat = DS.Radius.m, isHovering: Bool = false) -> some View {
-        #if os(macOS)
-        modifier(LiquidLightCardSurface(cornerRadius: cornerRadius, isHovering: isHovering))
-        #else
+        #if os(watchOS)
         liquidGlass(.card, radius: cornerRadius, isHovering: isHovering)
+        #else
+        modifier(LiquidLightCardSurface(cornerRadius: cornerRadius, isHovering: isHovering))
         #endif
     }
 }

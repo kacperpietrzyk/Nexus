@@ -40,13 +40,14 @@ struct IOSMeetingsListContentView: View {
                         } label: {
                             IOSMeetingRow(meeting: meeting)
                         }
-                        .listRowBackground(NexusColor.Background.base)
+                        .listRowBackground(Color.clear)
                     }
                 }
                 .scrollContentBackground(.hidden)
             }
         }
-        .background(NexusColor.Background.base)
+        // Liquid: transparent root so the shell aurora reads behind the list.
+        .background(Color.clear)
         .navigationTitle("Meetings")
         .refreshable {
             reload()

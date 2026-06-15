@@ -40,7 +40,8 @@ public struct iOSMeetingDetailView: View {  // swiftlint:disable:this type_name
 
             tabContent
         }
-        .background(NexusColor.Background.base)
+        // Liquid: transparent so the shell aurora reads behind the detail.
+        .background(Color.clear)
         .navigationTitle(meeting?.title ?? "Meeting")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
