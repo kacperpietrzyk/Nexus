@@ -66,22 +66,41 @@ private struct TextBlockEditor: View {
     let font: Font
     let role: TextRole
     @State private var draft: String = ""
+    @State private var trigger: InlineLinkInsertion.Trigger?
 
     var body: some View {
         Group {
             if model.canEdit {
-                TextField(placeholder, text: $draft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(font)
-                    .foregroundStyle(NexusColor.Text.primary)
-                    .onAppear { draft = InlineRunRendering.plainText(runs) }
-                    .onChange(of: block.id) { _, _ in draft = InlineRunRendering.plainText(runs) }
-                    .onSubmit { commit() }
-                    .submitLabel(.return)
+                editor
             } else {
                 Text(InlineRunRendering.attributed(runs))
                     .font(font)
                     .foregroundStyle(NexusColor.Text.primary)
+            }
+        }
+    }
+
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField(placeholder, text: $draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(font)
+                .foregroundStyle(NexusColor.Text.primary)
+                .onAppear { draft = InlineRunRendering.plainText(runs) }
+                .onChange(of: block.id) { _, _ in
+                    draft = InlineRunRendering.plainText(runs)
+                    trigger = nil
+                }
+                .onChange(of: draft) { _, newValue in
+                    // Detect a typed `[[query` trigger (spec §9, GAP #6).
+                    trigger = InlineLinkInsertion.detectTrigger(in: newValue)
+                }
+                .onSubmit { commit() }
+                .submitLabel(.return)
+            if let trigger {
+                InlineLinkAutocomplete(query: trigger.query, excludingNoteID: model.noteID) { candidate in
+                    pickLink(candidate, trigger: trigger)
+                }
             }
         }
     }
@@ -91,6 +110,17 @@ private struct TextBlockEditor: View {
     private func commit() {
         guard draft != InlineRunRendering.plainText(runs) else { return }
         model.setPlainText(draft, forBlock: block.id)
+    }
+
+    /// On pick: splice the `.link` run through the model AND sync the local draft to
+    /// the flattened plain text. The model write keeps the run (so it persists +
+    /// mirrors a `mentions` edge); the local `draft` sync keeps the TextField from
+    /// re-showing the now-replaced `[[query` token (same block id → no reset fires).
+    private func pickLink(_ candidate: LinkCandidate, trigger: InlineLinkInsertion.Trigger) {
+        model.insertInlineLink(to: candidate, trigger: trigger, draft: draft, forBlock: block.id)
+        let spliced = InlineLinkInsertion.splice(draft: draft, trigger: trigger, candidate: candidate)
+        draft = InlineRunRendering.plainText(spliced)
+        self.trigger = nil
     }
 }
 

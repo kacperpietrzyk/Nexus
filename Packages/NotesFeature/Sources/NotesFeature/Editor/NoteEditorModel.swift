@@ -40,6 +40,8 @@ public final class NoteEditorModel {
     public var role: NoteRole { note.role }
     public var createdAt: Date { note.createdAt }
     public var updatedAt: Date { note.updatedAt }
+    /// The edited note's id — used to exclude self from inline-link candidates.
+    public var noteID: UUID { note.id }
 
     // MARK: - Tags (A2)
 
@@ -133,6 +135,37 @@ public final class NoteEditorModel {
 
     public func setHTML(_ raw: String, forBlock id: UUID) {
         apply(BlockListOps.setHTML(raw, forBlock: id, in: blocks))
+    }
+
+    /// Insert an inline `.link(ref:)` span into a text-bearing block, replacing a
+    /// typed `[[query` trigger (GAP #6, spec §9 — stored by id, rename-safe). The
+    /// spliced multi-run block persists through `setRuns` (NOT `setPlainText`, which
+    /// would flatten the link), and `updateContent` mirrors the run as a `mentions`
+    /// edge. A subsequent staged plain-text edit of the block re-flattens the span —
+    /// that is the documented §5 staging behavior (applies to every inline mark).
+    public func insertInlineLink(
+        to candidate: LinkCandidate,
+        trigger: InlineLinkInsertion.Trigger,
+        draft: String,
+        forBlock id: UUID
+    ) {
+        let runs = InlineLinkInsertion.splice(draft: draft, trigger: trigger, candidate: candidate)
+        apply(BlockListOps.setRuns(runs, forBlock: id, in: blocks))
+    }
+
+    /// Wrap a selected substring of a block's text as a `.link(ref:)` span (GAP #6).
+    /// Pure span logic is shared with the `[[` path; persistence is the same
+    /// `setRuns` seam. UI for live selection is gated on a `TextField` selection API
+    /// the staged editor doesn't expose (see gapsBlocked), but the model method is
+    /// fully wired for callers that can supply a range.
+    public func wrapSelectionAsLink(
+        to candidate: LinkCandidate,
+        text: String,
+        range: Range<Int>,
+        forBlock id: UUID
+    ) {
+        let runs = InlineLinkInsertion.wrapSelection(text: text, range: range, candidate: candidate)
+        apply(BlockListOps.setRuns(runs, forBlock: id, in: blocks))
     }
 
     /// Insert a wikilink/embed target chosen from the picker, by id (spec §9 — never
