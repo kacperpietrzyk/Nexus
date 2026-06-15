@@ -32,7 +32,9 @@ struct ProjectsUniversalTypeToolsTests {
     func createAcceptsTypeFields() async throws {
         let fixture = try await InMemoryAgentContext.make()
         let tool = try #require(ToolRegistry(tools: CoreTaskTools.all()).tool(named: "projects.create"))
-        let clientID = UUID()
+        // client_id is now validated as a live Organization FK (parity with parent_project_id),
+        // so seed the organization the create references.
+        let clientID = try fixture.context.organizationRepository.create(name: "AKMF Client").id
         let result = try await tool.call(
             args: .object([
                 "name": .string("AKMF"),

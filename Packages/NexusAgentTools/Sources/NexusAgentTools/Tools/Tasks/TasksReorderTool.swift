@@ -24,11 +24,16 @@ public struct TasksReorderTool: AgentTool {
             throw AgentError.validation("ordered_ids must be a non-empty array")
         }
         var ids: [UUID] = []
+        var seen: Set<UUID> = []
         for value in raw {
             guard let text = value.stringValue, let id = UUID(uuidString: text) else {
                 throw AgentError.validation("ordered_ids must contain task UUID strings")
             }
-            ids.append(id)
+            // Dedup preserving first-occurrence order: a repeated id would otherwise
+            // resolve + reorder the same task twice and inflate the returned count.
+            if seen.insert(id).inserted {
+                ids.append(id)
+            }
         }
         var ordered: [TaskItem] = []
         for id in ids {

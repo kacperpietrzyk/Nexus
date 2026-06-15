@@ -30,6 +30,21 @@ struct ItemsTrashToolsTests {
         #expect(gone.deletedAt == nil)
     }
 
+    @Test("restore on a live (never-deleted) item is rejected and does not mutate it")
+    func restoreLiveItemRejected() async throws {
+        let live = TaskItem(title: "Live")
+        let fixture = try await InMemoryAgentContext.make(tasks: [live])
+        let before = live.updatedAt
+        let args = JSONValue.object(["id": .string(live.id.uuidString), "kind": .string("task")])
+        await #expect(throws: AgentError.self) {
+            _ = try await ItemsRestoreTool().call(args: args, context: fixture.context)
+        }
+        // Not soft-deleted before, still not after; and the buggy path's `updatedAt` bump
+        // must not have happened.
+        #expect(live.deletedAt == nil)
+        #expect(live.updatedAt == before)
+    }
+
     @Test("restore on an unsupported kind is a validation error")
     func unsupportedKind() async throws {
         let fixture = try await InMemoryAgentContext.make()

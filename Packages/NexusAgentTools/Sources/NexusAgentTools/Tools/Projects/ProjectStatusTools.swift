@@ -47,6 +47,11 @@ public struct ProjectsCreateTool: AgentTool {
             projectType = .generic
         }
         let clientID = try TasksStructuredCreateArguments.optionalUUID(args["client_id"], field: "client_id")
+        // Validate the client/organization FK *before* persisting the project (mirror the
+        // parent_project_id check above) — a bad client_id must not leave an orphan project.
+        if let clientID {
+            _ = try OrganizationsToolSupport.liveOrganization(id: clientID, context: context)
+        }
         let vendor = try ProjectsToolSupport.optionalTrimmedString(args["vendor"], field: "vendor")
         let project = try context.projectRepository.create(
             name: name,
@@ -281,6 +286,7 @@ public struct ProjectsUpdateTool: AgentTool {
                 guard let clientID = UUID(uuidString: trimmed) else {
                     throw AgentError.validation("client_id must be a valid UUID")
                 }
+                _ = try OrganizationsToolSupport.liveOrganization(id: clientID, context: context)
                 try context.projectRepository.setClient(clientID, on: project)
             }
         }

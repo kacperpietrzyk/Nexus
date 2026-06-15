@@ -34,6 +34,24 @@ struct TasksReorderToolTests {
         }
     }
 
+    @Test("duplicated id is deduped and counted once")
+    func dedupsRepeatedID() async throws {
+        let a = TaskItem(title: "A")
+        let b = TaskItem(title: "B")
+        let fixture = try await InMemoryAgentContext.make(tasks: [a, b])
+        let args = JSONValue.object([
+            "ordered_ids": .array([
+                .string(a.id.uuidString), .string(b.id.uuidString), .string(a.id.uuidString),
+            ])
+        ])
+        let result = try await TasksReorderTool().call(args: args, context: fixture.context)
+        #expect(result["count"]?.intValue == 2)
+        // First-occurrence order preserved: a before b.
+        let aOrder = try #require(a.orderIndex)
+        let bOrder = try #require(b.orderIndex)
+        #expect(aOrder < bOrder)
+    }
+
     @Test("empty ordered_ids is a validation error")
     func emptyIDs() async throws {
         let fixture = try await InMemoryAgentContext.make()

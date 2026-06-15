@@ -83,6 +83,50 @@ struct ProjectsWriteToolsTests {
         }
     }
 
+    @Test("projects.create with an unknown client_id is rejected and persists no project")
+    @MainActor
+    func createRejectsUnknownClient() async throws {
+        let (context, container, _) = try await InMemoryAgentContext.make()
+        _ = container
+        let args = JSONValue.object([
+            "name": .string("Orphan"),
+            "client_id": .string(UUID().uuidString),
+        ])
+        await #expect(throws: AgentError.self) {
+            _ = try await ProjectsCreateTool().call(args: args, context: context)
+        }
+        // The FK is validated before create, so no orphan project is persisted.
+        #expect(try context.projectRepository.allActive().isEmpty)
+    }
+
+    @Test("projects.create with a live client_id succeeds")
+    @MainActor
+    func createAcceptsLiveClient() async throws {
+        let (context, container, _) = try await InMemoryAgentContext.make()
+        _ = container
+        let org = try context.organizationRepository.create(name: "Acme")
+        let out = try await ProjectsCreateTool().call(
+            args: .object(["name": .string("Engagement"), "client_id": .string(org.id.uuidString)]),
+            context: context
+        )
+        #expect(out["name"]?.stringValue == "Engagement")
+    }
+
+    @Test("projects.update with an unknown client_id is rejected")
+    @MainActor
+    func updateRejectsUnknownClient() async throws {
+        let (context, container, _) = try await InMemoryAgentContext.make()
+        _ = container
+        let project = try context.projectRepository.create(name: "P", color: "azure", parentProjectID: nil)
+        let args = JSONValue.object([
+            "project_id": .string(project.id.uuidString),
+            "client_id": .string(UUID().uuidString),
+        ])
+        await #expect(throws: AgentError.self) {
+            _ = try await ProjectsUpdateTool().call(args: args, context: context)
+        }
+    }
+
     @Test("projects.get includes sections")
     @MainActor
     func getIncludesSections() async throws {

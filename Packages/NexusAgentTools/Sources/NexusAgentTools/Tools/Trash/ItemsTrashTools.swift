@@ -133,6 +133,12 @@ public struct ItemsRestoreTool: AgentTool {
             guard let item = try ctx.fetch(FetchDescriptor<Model>()).first(where: { idOf($0) == id }) else {
                 throw AgentError.notFound("\(kind.rawValue) not found: \(id.uuidString)")
             }
+            // Only restore a genuinely tombstoned row. A live (never-deleted) item has no
+            // restore to perform; mutating + re-indexing it and reporting success would be a
+            // silent no-op that bumps `updatedAt` and fires a spurious search upsert.
+            guard item.deletedAt != nil else {
+                throw AgentError.conflict("\(kind.rawValue) is not soft-deleted: \(id.uuidString)")
+            }
             try LinkableRepository(context: ctx, observers: [searchIndex]).restore(item)
         }
 
