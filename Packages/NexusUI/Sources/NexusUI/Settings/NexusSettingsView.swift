@@ -11,7 +11,10 @@ import UIKit
 import AppKit
 #endif
 
-// swiftlint:disable type_body_length
+// The iOS Settings form grows by ~1 section/row per feature by design, so it
+// crosses the per-type and per-file line budgets — same rationale as the app
+// composition roots.
+// swiftlint:disable type_body_length file_length
 /// iOS Settings root (mounted by `NexusiOSApp` → `SettingsTab`). On macOS,
 /// Settings now lives in-shell as `LiquidSettingsView`; this view's former
 /// macOS branch was retired, so the body is the iOS scrollable form.
@@ -26,6 +29,7 @@ public struct NexusSettingsView: View {
     @AppStorage(NexusPreferences.Keys.theme) private var theme: String = NexusTheme.amberDark.rawValue
     @AppStorage(NexusPreferences.Keys.advancedEnabled) private var advancedEnabled: Bool = false
     @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) private var calendarEventsInTodayEnabled = false
+    @AppStorage(NexusPreferences.Keys.keepScreenAwakeEnabled) private var keepScreenAwakeEnabled = false
 
     /// Optional Tasks-section wiring. When `notificationsAuthorized` is non-nil
     /// the Tasks section renders — apps inject this from a
@@ -205,8 +209,27 @@ public struct NexusSettingsView: View {
                     .frame(minHeight: 44)
                 NexusSettingsDivider()
                 iosHelperText("Reveals external access and advanced cloud-provider settings.")
+                keepScreenAwakeRow
             }
         }
+    }
+
+    /// iPad-only: a desk-side always-on companion. Suppresses Auto-Lock while
+    /// Nexus is foreground-active (see `KeepScreenAwakeLifecycleModifier`).
+    @ViewBuilder
+    private var keepScreenAwakeRow: some View {
+        #if os(iOS)
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            NexusSettingsDivider()
+            NexusToggle(
+                "Keep screen awake",
+                caption: "Prevents Auto-Lock while Nexus is open — for a desk-side iPad.",
+                isOn: $keepScreenAwakeEnabled
+            )
+            .padding(.horizontal, NexusSpacing.s4)
+            .frame(minHeight: 44)
+        }
+        #endif
     }
 
     private var iosSyncSection: some View {

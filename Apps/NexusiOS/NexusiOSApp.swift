@@ -13,6 +13,7 @@ import PeopleFeature
 import SwiftData
 import SwiftUI
 import TasksFeature
+import UIKit
 import UserNotifications
 
 #if canImport(WidgetKit)
@@ -645,6 +646,7 @@ private struct NexusiOSRootView: View {
                     mlxLifecycle: mlxLifecycle
                 )
             )
+            .modifier(KeepScreenAwakeLifecycleModifier())
             .modifier(NotificationPermissionLifecycleModifier(permissionState: $permissionState))
             .modifier(
                 WatchRelayLifecycleModifier(
@@ -803,6 +805,29 @@ private struct MLXForegroundLifecycleModifier: ViewModifier {
     private func activateMLX() {
         mlxLifecycle.setForegroundActive(true)
         NexusiOSApp.preloadMLXIfRequested(router: aiRouter, lifecycle: mlxLifecycle)
+    }
+}
+
+/// Desk-companion always-on: drives `UIApplication.isIdleTimerDisabled` off the
+/// user's "Keep screen awake" preference (Settings → General, iPad-only). The
+/// idle timer is only suppressed while the scene is foreground-active; any
+/// non-active phase restores normal Auto-Lock so the flag never lingers in the
+/// background. Re-applies live when the toggle flips.
+private struct KeepScreenAwakeLifecycleModifier: ViewModifier {
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(NexusPreferences.Keys.keepScreenAwakeEnabled) private var keepScreenAwake = false
+
+    func body(content: Content) -> some View {
+        content
+            // `.task` covers the launch value; `.onChange` does not fire for the
+            // initial scenePhase on a cold launch (mirrors the MLX/Agent modifiers).
+            .task { apply() }
+            .onChange(of: scenePhase) { _, _ in apply() }
+            .onChange(of: keepScreenAwake) { _, _ in apply() }
+    }
+
+    private func apply() {
+        UIApplication.shared.isIdleTimerDisabled = keepScreenAwake && scenePhase == .active
     }
 }
 

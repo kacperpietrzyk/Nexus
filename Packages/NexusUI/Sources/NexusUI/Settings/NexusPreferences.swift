@@ -39,6 +39,9 @@ public enum NexusPreferences {
         /// User-facing display name greeted in Today's dashboard. Empty string means fall back to
         /// `NSFullUserName()` on Mac / `UIDevice.current.name` on iOS / "You" otherwise.
         public static let workspaceDisplayName = "nexus.workspace.displayName"
+        /// iPad-only: suppresses Auto-Lock (`isIdleTimerDisabled`) while Nexus is
+        /// foreground-active, for desk-companion always-on use. Default false.
+        public static let keepScreenAwakeEnabled = "nexus.display.keepScreenAwake"
     }
 
     public static func migrateLegacyAgentPreloadSpeechKey(defaults: UserDefaults = .standard) {
