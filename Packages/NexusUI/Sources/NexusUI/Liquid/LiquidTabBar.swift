@@ -38,8 +38,13 @@ public struct LiquidTabBar<ID: Hashable>: View {
         self._active = active
     }
 
-    /// Whether the given id is the active tab. Exposed for tests.
-    internal func isActive(_ id: ID) -> Bool { id == active }
+    /// Whether the given id is the active tab.
+    internal func isActive(_ id: ID) -> Bool { Self.isActive(id, selected: active) }
+
+    /// Pure active-tab check. Extracted as a static helper so it can be
+    /// unit-tested without reading the `@Binding active` through a `View`
+    /// instance (which traps outside the SwiftUI update loop).
+    internal static func isActive(_ id: ID, selected: ID) -> Bool { id == selected }
 
     public var body: some View {
         HStack(spacing: 2) {

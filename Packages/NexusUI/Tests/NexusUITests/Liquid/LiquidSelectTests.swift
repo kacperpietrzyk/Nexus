@@ -17,11 +17,19 @@ struct LiquidSelectTests {
         )
     }
 
-    @Test("selectedOption resolves the bound id to its option")
+    private func sampleOptions() -> [LiquidSelectOption<String>] {
+        [
+            .init(id: "todo", label: "To Do"),
+            .init(id: "doing", label: "Doing"),
+            .init(id: "done", label: "Done"),
+        ]
+    }
+
+    @Test("resolveOption maps a selection id to its option")
     func selectedOptionResolves() {
-        let field = select(selection: "doing")
-        #expect(field.selectedOption?.id == "doing")
-        #expect(field.selectedOption?.label == "Doing")
+        let resolved = liquidSelectResolveOption(in: sampleOptions(), selection: "doing")
+        #expect(resolved?.id == "doing")
+        #expect(resolved?.label == "Doing")
     }
 
     @Test("Options preserve their order and identity")
@@ -33,8 +41,7 @@ struct LiquidSelectTests {
 
     @Test("Unknown selection resolves to no option")
     func unknownSelection() {
-        let field = select(selection: "archived")
-        #expect(field.selectedOption == nil)
+        #expect(liquidSelectResolveOption(in: sampleOptions(), selection: "archived") == nil)
     }
 
     @Test("Placeholder defaults to empty and is stored when provided")

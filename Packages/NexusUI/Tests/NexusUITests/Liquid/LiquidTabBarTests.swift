@@ -19,10 +19,9 @@ struct LiquidTabBarTests {
 
     @Test("isActive maps the active id to exactly one tab")
     func activeMapping() {
-        let tabs = bar(active: "done")
-        #expect(tabs.isActive("done"))
-        #expect(!tabs.isActive("open"))
-        #expect(!tabs.isActive("blocked"))
+        #expect(LiquidTabBar<String>.isActive("done", selected: "done"))
+        #expect(!LiquidTabBar<String>.isActive("open", selected: "done"))
+        #expect(!LiquidTabBar<String>.isActive("blocked", selected: "done"))
     }
 
     @Test("Items preserve their order, identity and counts")
@@ -38,18 +37,5 @@ struct LiquidTabBarTests {
         let item = LiquidTabBarItem(id: "open", label: "Open")
         #expect(item.systemImage == nil)
         #expect(item.count == nil)
-    }
-
-    @Test("Bound active tab updates flow through isActive")
-    func boundActive() {
-        var current = "open"
-        let binding = Binding(get: { current }, set: { current = $0 })
-        let tabs = LiquidTabBar(
-            items: [.init(id: "open", label: "Open"), .init(id: "done", label: "Done")],
-            active: binding
-        )
-        #expect(tabs.isActive("open"))
-        current = "done"
-        #expect(tabs.isActive("done"))
     }
 }

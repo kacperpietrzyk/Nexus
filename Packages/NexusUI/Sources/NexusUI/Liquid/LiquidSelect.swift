@@ -1,5 +1,15 @@
 import SwiftUI
 
+/// Pure resolution of a selection id to its option. A free function (not a
+/// member of the generic `LiquidSelect` View) so it can be unit-tested without
+/// reading the `@Binding selection` through a `View` instance.
+internal func liquidSelectResolveOption<ID: Hashable>(
+    in options: [LiquidSelectOption<ID>],
+    selection: ID
+) -> LiquidSelectOption<ID>? {
+    options.first { $0.id == selection }
+}
+
 /// A single option in a ``LiquidSelect`` dropdown.
 public struct LiquidSelectOption<ID: Hashable>: Identifiable, @unchecked Sendable {
     public let id: ID
@@ -34,7 +44,7 @@ public struct LiquidSelect<ID: Hashable>: View {
 
     /// The currently selected option, if its id resolves to a known option.
     internal var selectedOption: LiquidSelectOption<ID>? {
-        options.first { $0.id == selection }
+        liquidSelectResolveOption(in: options, selection: selection)
     }
 
     private var displayLabel: String {
