@@ -30,6 +30,7 @@ public struct NotesListView: View {
     @State private var path: [UUID] = []
     @State private var newNoteError: String?
     @State private var groupMode: NoteListGrouping.Mode = .role
+    @State private var showingTrash = false
 
     public init() {}
 
@@ -74,6 +75,16 @@ public struct NotesListView: View {
                     }
                     .pickerStyle(.menu)
                 }
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showingTrash = true
+                    } label: {
+                        Label("Trash", systemImage: "trash")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingTrash) {
+                NotesTrashView(noteRepository: noteRepository)
             }
             .navigationDestination(for: UUID.self) { id in
                 NoteDetailLoader(noteID: id, onOpenNote: { path.append($0) })
