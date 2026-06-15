@@ -55,7 +55,7 @@ public struct MeetingCard: View {
                     TimelineView(.animation(paused: reduceMotion)) { tl in
                         let phase =
                             tl.date.timeIntervalSinceReferenceDate
-                            / NexusMotion.breathePeriod * 2 * .pi
+                            / DS.Motion.breathePeriod * 2 * .pi
                         let opacity = Self.liveDotOpacity(reduceMotion: reduceMotion, phase: phase)
                         Circle()
                             .fill(NexusColor.Text.primary)

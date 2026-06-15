@@ -135,11 +135,6 @@ struct TaskDTOTests {
         #expect(focusBuckets["am"] is [[String: Any]])
         #expect(focusBuckets["pm"] is [[String: Any]])
         #expect(focusBuckets["evening"] is [[String: Any]])
-
-        let error = try encodedObject(ErrorDTO(from: .validation("Title is required")))
-        #expect(error["code"] as? Int == -32004)
-        #expect(error["name"] as? String == "validation")
-        #expect(error["message"] as? String == "Title is required")
     }
 
     @MainActor

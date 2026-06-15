@@ -120,7 +120,7 @@ struct ContentView: View {
             // mirroring the Mac full-window scrim. Self-gates on `isRegularWidth`.
             captureOverlay
         }
-        .animation(NexusMotion.standard, value: capturePresented)
+        .animation(DS.Motion.standard, value: capturePresented)
         // Nexus is a dark-only design. Force it at the shell root so EVERY tab —
         // not just Today and the iPad split — paints dark; otherwise, on a
         // light-mode device, unstyled system surfaces (segmented-control tracks,
@@ -403,7 +403,7 @@ extension ContentView {
                         height: proxy.size.height
                     )
                     .overlay(alignment: .trailing) { taskPeek }
-                    .animation(NexusMotion.standard, value: selectedTask?.id)
+                    .animation(DS.Motion.standard, value: selectedTask?.id)
             }
             .frame(
                 width: proxy.size.width,

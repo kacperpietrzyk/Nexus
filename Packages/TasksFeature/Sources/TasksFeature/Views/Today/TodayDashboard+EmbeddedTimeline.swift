@@ -474,7 +474,7 @@ private struct EmbeddedDayTimeline: View {
                 * (0.5 + 0.5
                     * sin(
                         now.timeIntervalSinceReferenceDate
-                            / NexusMotion.breathePeriod * 2 * .pi))
+                            / DS.Motion.breathePeriod * 2 * .pi))
         let ny = y(nowFrac)
         var nline = Path()
         nline.move(to: CGPoint(x: gutter, y: ny))

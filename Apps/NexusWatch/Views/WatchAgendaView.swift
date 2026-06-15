@@ -150,7 +150,7 @@ struct WatchAgendaView: View {
                             if let task = task(forID: undo.taskID) {
                                 try? await actions?.reopen(task)
                             }
-                            withAnimation(NexusMotion.standard) {
+                            withAnimation(DS.Motion.standard) {
                                 pendingUndo = nil
                             }
                         }
@@ -173,7 +173,7 @@ struct WatchAgendaView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .animation(NexusMotion.standard, value: pendingUndo)
+            .animation(DS.Motion.standard, value: pendingUndo)
             .sheet(item: $selected) { task in
                 WatchTaskDetailSheet(task: task)
                     .environment(\.watchTaskActions, actions)
@@ -236,13 +236,13 @@ struct WatchAgendaView: View {
 
     private func handleMarkedDone(_ task: TaskItem, now: Date) {
         let stamp = now.addingTimeInterval(5)
-        withAnimation(NexusMotion.standard) {
+        withAnimation(DS.Motion.standard) {
             pendingUndo = PendingUndo(taskID: task.id, title: task.title, expiresAt: stamp)
         }
         Task { @MainActor in
             try? await _Concurrency.Task.sleep(for: .seconds(5))
             if pendingUndo?.expiresAt == stamp {
-                withAnimation(NexusMotion.standard) {
+                withAnimation(DS.Motion.standard) {
                     pendingUndo = nil
                 }
             }

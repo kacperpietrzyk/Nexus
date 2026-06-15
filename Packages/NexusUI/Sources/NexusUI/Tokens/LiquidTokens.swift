@@ -169,5 +169,13 @@ public enum DS {
         public static let nav = Animation.smooth(duration: 0.28)
         /// general state change
         public static let standard = Animation.easeOut(duration: 0.22)
+        /// entrance transition (consolidated from NexusMotion.enter)
+        public static let enter = Animation.easeOut(duration: 0.34)
+        /// exit transition (consolidated from NexusMotion.exit)
+        public static let exit = Animation.easeIn(duration: 0.16)
+        /// per-item stagger delay in seconds (consolidated from NexusMotion.staggerStep)
+        public static let staggerStep = 0.055
+        /// breathing/pulse period in seconds (consolidated from NexusMotion.breathePeriod)
+        public static let breathePeriod = 2.4
     }
 }

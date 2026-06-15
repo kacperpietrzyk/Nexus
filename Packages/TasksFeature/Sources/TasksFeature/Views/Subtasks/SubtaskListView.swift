@@ -271,7 +271,7 @@ public struct SubtaskListView: View {
                 try TaskCompletionAction.complete(item, repository: repository)
             }
             // Animate the row leaving the list on completion (see TaskListView).
-            withAnimation(NexusMotion.standard) { reload() }
+            withAnimation(DS.Motion.standard) { reload() }
         } catch let error as TaskItemRepositoryError {
             if case .parentHasOpenSubtasks(let parentID, let openCount) = error, parentID == item.id {
                 cascadePrompt = CascadeCompletionPrompt(task: item, openCount: openCount)
@@ -288,7 +288,7 @@ public struct SubtaskListView: View {
         guard let repository else { return }
         do {
             try TaskCompletionAction.cascadeComplete(prompt.task, repository: repository)
-            withAnimation(NexusMotion.standard) { reload() }
+            withAnimation(DS.Motion.standard) { reload() }
         } catch {
             self.error = String(describing: error)
         }
@@ -310,7 +310,7 @@ public struct SubtaskListView: View {
         }
         do {
             try repository.snooze(item, until: until)
-            withAnimation(NexusMotion.standard) { reload() }
+            withAnimation(DS.Motion.standard) { reload() }
         } catch {
             self.error = String(describing: error)
         }

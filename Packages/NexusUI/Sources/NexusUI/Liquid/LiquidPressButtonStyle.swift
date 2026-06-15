@@ -4,11 +4,9 @@ import SwiftUI
 /// §Button motion.
 ///
 /// Replicates the press scale of the shared legacy `NexusPressableButtonStyle`
-/// (still used by iOS) — `0.97` on press — but animates with `DS.Motion.press`
-/// (easeOut 80 ms) instead of `NexusMotion.press`. Liquid buttons adopt this so
-/// they sit entirely on the DS motion namespace and don't straddle the two
-/// motion namespaces the design system carries (`DS.Motion` canonical +
-/// `NexusMotion` residue).
+/// (still used by iOS) — `0.97` on press — and animates with `DS.Motion.press`
+/// (easeOut 80 ms). Liquid buttons sit entirely on the canonical `DS.Motion`
+/// namespace.
 public struct LiquidPressButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduce
 

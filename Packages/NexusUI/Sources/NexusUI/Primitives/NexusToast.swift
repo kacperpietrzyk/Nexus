@@ -3,8 +3,8 @@ import SwiftUI
 /// Ephemeral confirmation pill (LabKit `LabToast`).
 ///
 /// Pair with `.transition(.nexusToast)` at the call site and fire / clear it
-/// inside `withAnimation(NexusMotion.standard)` (in) and
-/// `withAnimation(NexusMotion.exit)` (out) so the slide+fade matches the
+/// inside `withAnimation(DS.Motion.standard)` (in) and
+/// `withAnimation(DS.Motion.exit)` (out) so the slide+fade matches the
 /// LabKit motion vocabulary.
 public struct NexusToast: View {
     public let icon: String

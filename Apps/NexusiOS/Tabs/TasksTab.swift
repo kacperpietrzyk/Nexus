@@ -105,6 +105,6 @@ struct TasksTab: View {
         )
         .padding(.horizontal, 16)
         .padding(.top, 8)
-        .animation(NexusMotion.standard, value: filter)
+        .animation(DS.Motion.standard, value: filter)
     }
 }

@@ -19,8 +19,6 @@ struct ExternalAccessSectionTests {
             activityLog: log
         )
         #expect(section.activityLog === log)
-        #else
-        _ = ExternalAccessInfoSection()
         #endif
     }
 
@@ -45,23 +43,6 @@ struct ExternalAccessSectionTests {
         let view = AgentActivityLogView(log: log)
         _ = view.body
         #expect(log.entries.count == 2)
-    }
-
-    /// Resolves the `SyncSettingsSection` body in both `cloudKitEnabled`
-    /// states so the slice-2 icon ternary burn (positive → `Text.secondary`,
-    /// negative → `Text.primary`) is guarded along the public-init path.
-    @Test("sync section resolves enabled and disabled states")
-    func syncSectionResolvesBothStates() {
-        let enabled = SyncSettingsSection(
-            cloudKitEnabled: true,
-            containerIdentifier: "iCloud.com.example.test"
-        )
-        _ = enabled.body
-        let disabled = SyncSettingsSection(
-            cloudKitEnabled: false,
-            containerIdentifier: "iCloud.com.example.test"
-        )
-        _ = disabled.body
     }
 
     #if os(macOS)

@@ -53,7 +53,7 @@ public struct NexusStatusGlyph: View {
                 .modifier(DoneBounceEffect(isDone: isDone, reduceMotion: reduceMotion))
         }
         .frame(width: 12, height: 12)
-        .animation(NexusMotion.standard, value: status)
+        .animation(DS.Motion.standard, value: status)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel))
         .accessibilityValue(Text(accessibilityValue))

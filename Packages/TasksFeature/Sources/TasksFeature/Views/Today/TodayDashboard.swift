@@ -345,7 +345,7 @@ public struct TodayDashboard: View {
     /// Route content with a cross-fade between nav destinations (audit C1).
     ///
     /// First attempt relied solely on the nav-rail's ambient
-    /// `withAnimation(NexusMotion.nav)` reaching this deep identity swap; it
+    /// `withAnimation(DS.Motion.nav)` reaching this deep identity swap; it
     /// did not propagate reliably (user: "C1 was not working"). Now the
     /// cross-fade is self-contained: an explicit `.animation(_:value:)`
     /// keyed on the resolved route drives the `.id`/`.transition(.opacity)`
@@ -363,7 +363,7 @@ public struct TodayDashboard: View {
             .transition(
                 .opacity.combined(with: .offset(y: 6))
             )
-            .animation(NexusMotion.standard, value: route)
+            .animation(DS.Motion.standard, value: route)
     }
 
     @ViewBuilder

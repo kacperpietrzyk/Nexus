@@ -62,6 +62,14 @@ import Testing
     #expect(display != DS.FontToken.body)
     let hover: Animation = DS.Motion.hover
     #expect(hover != DS.Motion.panelReveal)
+
+    // Tokens consolidated from the former NexusMotion namespace. The numeric
+    // ones carry concrete values; the Animation ones are opaque, so we only
+    // exercise that they resolve.
+    #expect(DS.Motion.staggerStep == 0.055)
+    #expect(DS.Motion.breathePeriod == 2.4)
+    _ = DS.Motion.enter
+    _ = DS.Motion.exit
 }
 
 @Test func liquidTokens_depthMembersResolve() {
