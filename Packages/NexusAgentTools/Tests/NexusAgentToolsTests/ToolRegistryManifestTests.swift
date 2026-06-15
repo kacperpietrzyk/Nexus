@@ -11,4 +11,9 @@ struct ToolRegistryManifestTests {
         #expect(names.contains("links.outgoing"))
         #expect(names.contains("links.list"))
     }
+
+    @Test("tasks.reorder is registered in the core task tools")
+    func reorderToolRegistered() {
+        #expect(Set(CoreTaskTools.all().map(\.name)).contains("tasks.reorder"))
+    }
 }

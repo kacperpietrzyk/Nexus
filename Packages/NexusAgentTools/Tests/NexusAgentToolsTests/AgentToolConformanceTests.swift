@@ -40,8 +40,8 @@ struct AgentToolConformanceTests {
     func registryCount() {
         let registry = ToolRegistry(tools: CoreTaskTools.all())
 
-        #expect(registry.tools.count == 90)
-        #expect(registry.manifest().tools.count == 90)
+        #expect(registry.tools.count == 91)
+        #expect(registry.manifest().tools.count == 91)
     }
 
     // MARK: - Calendar / schedule tools (injected at app level, so otherwise
