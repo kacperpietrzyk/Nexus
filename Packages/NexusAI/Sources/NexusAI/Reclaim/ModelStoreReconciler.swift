@@ -150,6 +150,38 @@ public struct ModelStoreReconciler: @unchecked Sendable {
         return ReclaimResult(freedBytes: freed, failures: failures)
     }
 
+    /// Manual "Free up space" for a specific managed model. Removes its bytes (verified)
+    /// and resets its local state to `.available` so readiness reads `notDownloaded` and
+    /// the model re-downloads on next use per the Wi-Fi/consent policy.
+    @discardableResult
+    public func reclaim(canonicalID id: String) -> ReclaimResult {
+        let dir = roots.managedModels.appending(path: id)
+        let size = directorySize(dir)
+        do {
+            try fileManager.removeItem(at: dir)
+            if fileManager.fileExists(atPath: dir.path) {
+                return ReclaimResult(
+                    freedBytes: 0,
+                    failures: [ReclaimResult.Failure(path: dir, message: "still present after removeItem")])
+            }
+        } catch {
+            // A non-existent dir is success (already gone); other errors surface.
+            if fileManager.fileExists(atPath: dir.path) {
+                return ReclaimResult(
+                    freedBytes: 0,
+                    failures: [ReclaimResult.Failure(path: dir, message: error.localizedDescription)])
+            }
+        }
+        var state = store.load(manifestID: id)
+        state.status = .available
+        state.localFolderPath = nil
+        state.downloadedAt = nil
+        state.downloadProgressPercent = 0
+        state.downloadError = nil
+        store.save(manifestID: id, state: state)
+        return ReclaimResult(freedBytes: size, failures: [])
+    }
+
     // MARK: Helpers
 
     /// Lists immediate subdirectories, including hidden ones (`.hf-cache` is dot-prefixed,

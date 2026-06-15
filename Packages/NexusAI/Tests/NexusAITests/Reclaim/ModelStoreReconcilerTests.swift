@@ -160,4 +160,31 @@ import Testing
             !FileManager.default.fileExists(
                 atPath: roots.managedModels.appending(path: "qwen3.5-27b-4bit").path))
     }
+
+    @Test func reclaimByIDRemovesBytesAndResetsState() throws {
+        let (roots, tmp) = try Self.makeRoots()
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let defaults = UserDefaults(suiteName: "reclaim-\(UUID().uuidString)")!
+        let store = ModelManifestLocalState.Store(defaults: defaults)
+
+        try Self.seedModelDir(roots.managedModels, "gemma-e4b")
+        store.save(
+            manifestID: "gemma-e4b",
+            state: ModelManifestLocalState(
+                status: .downloaded,
+                localFolderPath: roots.managedModels.appending(path: "gemma-e4b").path,
+                assignedAsChat: true))
+
+        let reconciler = ModelStoreReconciler(
+            roots: roots, store: store,
+            canonical: Self.resolvedSet(chat: "gemma-e4b", embedder: "bge-small"),
+            whisperVariant: "openai_whisper-base")
+
+        let result = reconciler.reclaim(canonicalID: "gemma-e4b")
+        #expect(result.failures.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: roots.managedModels.appending(path: "gemma-e4b").path))
+        // State reset so AssistantReadiness reads .notDownloaded and the band re-offers download.
+        #expect(store.load(manifestID: "gemma-e4b").status == .available)
+        #expect(store.load(manifestID: "gemma-e4b").localFolderPath == nil)
+    }
 }

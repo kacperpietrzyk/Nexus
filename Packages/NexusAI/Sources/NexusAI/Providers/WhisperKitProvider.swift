@@ -159,6 +159,18 @@ public final class WhisperKitProvider: AIProvider {
         isUsableLocalModelFolder(defaultLocalModelFolder())
     }
 
+    /// Removes the downloaded WhisperKit model folder (no delete path existed before) and
+    /// clears the persisted path key, so `isModelDownloaded()` reads false and the model
+    /// re-downloads on next transcription. Returns the freed byte count.
+    @discardableResult
+    public static func deleteDownloadedModel() -> Int64 {
+        guard let folder = defaultLocalModelFolder() else { return 0 }
+        let size = LiveHFFetcher.directorySize(at: folder)
+        try? FileManager.default.removeItem(at: folder)
+        UserDefaults.standard.removeObject(forKey: modelFolderDefaultsKey)
+        return FileManager.default.fileExists(atPath: folder.path) ? 0 : size
+    }
+
     /// A usable model folder has the three CoreML models present (compiled
     /// `.mlmodelc` or `.mlpackage`). The tokenizer is intentionally NOT required
     /// here — WhisperKit resolves it at load time (see the type doc).
