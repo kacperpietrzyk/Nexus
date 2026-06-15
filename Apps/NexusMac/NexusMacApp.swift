@@ -349,6 +349,7 @@ struct NexusMacApp: App {
                 .environment(\.insightCooldownStore, agentComposition.insightCooldownStore)
                 .environment(\.meetingsComposition, meetingsComposition)
                 .environment(\.meetingNavigationRouter, meetingNavigationRouter)
+                .environment(\.meetingHelperControl, helperToastBridge)
                 .environment(\.focusModeState, focusModeState)
                 #if canImport(EventKit) && !os(watchOS)
             .environment(\.calendarEventProvider, EventKitCalendarProvider.shared)
@@ -898,6 +899,10 @@ private struct MeetingNavigationRouterKey: EnvironmentKey {
     static let defaultValue: MeetingNavigationRouter? = nil
 }
 
+private struct MeetingHelperControlKey: EnvironmentKey {
+    static let defaultValue: (any MeetingHelperControlling)? = nil
+}
+
 extension EnvironmentValues {
     var meetingsComposition: MeetingsComposition? {
         get { self[MeetingsCompositionKey.self] }
@@ -907,6 +912,11 @@ extension EnvironmentValues {
     var meetingNavigationRouter: MeetingNavigationRouter? {
         get { self[MeetingNavigationRouterKey.self] }
         set { self[MeetingNavigationRouterKey.self] = newValue }
+    }
+
+    var meetingHelperControl: (any MeetingHelperControlling)? {
+        get { self[MeetingHelperControlKey.self] }
+        set { self[MeetingHelperControlKey.self] = newValue }
     }
 }
 

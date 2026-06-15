@@ -25,7 +25,8 @@ struct MeetingsHelperXPCTests {
             meetingID: meetingID,
             elapsedSec: 92,
             micLevel: 0.42,
-            othersLevel: 0.85
+            othersLevel: 0.85,
+            isPaused: true
         )
 
         let decoded = try roundTrip(snapshot, as: RecordingStateSnapshot.self)
@@ -35,6 +36,7 @@ struct MeetingsHelperXPCTests {
         #expect(decoded.elapsedSec == 92)
         #expect(decoded.micLevel == 0.42)
         #expect(decoded.othersLevel == 0.85)
+        #expect(decoded.isPaused == true)
     }
 
     @Test func recordingStateSnapshotAllowsMissingMeetingID() throws {

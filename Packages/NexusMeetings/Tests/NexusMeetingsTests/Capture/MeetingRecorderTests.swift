@@ -55,6 +55,61 @@ import Testing
 }
 
 @MainActor
+@Test func recorderPauseSuspendsCapturesAndResumeRestoresThem() async throws {
+    let fixture = try RecorderFixture()
+    defer { fixture.cleanup() }
+    let recorder = fixture.makeRecorder()
+
+    _ = try recorder.start(meetingID: UUID(), pid: 100)
+    #expect(recorder.isPaused == false)
+
+    try recorder.pause()
+
+    #expect(recorder.isPaused == true)
+    #expect(recorder.isRecording == true)
+    #expect(fixture.mic.pausedStates == [true])
+    #expect(fixture.app.pausedStates == [true])
+    // Levels read zero while paused so the panel meters fall to silence.
+    #expect(recorder.currentLevels().micLevel == 0)
+    #expect(recorder.currentLevels().othersLevel == 0)
+
+    try recorder.resume()
+
+    #expect(recorder.isPaused == false)
+    #expect(fixture.mic.pausedStates == [true, false])
+    #expect(fixture.app.pausedStates == [true, false])
+
+    try recorder.stop()
+    #expect(recorder.isPaused == false)
+}
+
+@MainActor
+@Test func recorderPauseIsIdempotentAndRejectedWhenIdle() async throws {
+    let fixture = try RecorderFixture()
+    defer { fixture.cleanup() }
+    let recorder = fixture.makeRecorder()
+
+    #expect(throws: MeetingRecorderError.notRecording) {
+        try recorder.pause()
+    }
+    #expect(throws: MeetingRecorderError.notRecording) {
+        try recorder.resume()
+    }
+
+    _ = try recorder.start(meetingID: UUID(), pid: 100)
+    try recorder.pause()
+    // A redundant pause is a no-op, not a second forward to the captures.
+    try recorder.pause()
+    #expect(fixture.mic.pausedStates == [true])
+
+    try recorder.resume()
+    try recorder.resume()
+    #expect(fixture.mic.pausedStates == [true, false])
+
+    try recorder.stop()
+}
+
+@MainActor
 @Test func recorderRollsBackWhenAppCaptureStartFails() async throws {
     let fixture = try RecorderFixture(appStartError: StubCaptureError.startFailed)
     defer { fixture.cleanup() }
@@ -114,6 +169,7 @@ private struct RecorderFixture {
 private final class FakeMicCapture: MeetingMicrophoneCapturing, @unchecked Sendable {
     var started = false
     var stopped = false
+    var pausedStates: [Bool] = []
 
     func start() throws {
         started = true
@@ -121,6 +177,10 @@ private final class FakeMicCapture: MeetingMicrophoneCapturing, @unchecked Senda
 
     func stop() {
         stopped = true
+    }
+
+    func setPaused(_ paused: Bool) {
+        pausedStates.append(paused)
     }
 }
 
@@ -133,6 +193,8 @@ private final class FakeAppCapture: MeetingAppAudioCapturing, @unchecked Sendabl
         self.startError = startError
     }
 
+    var pausedStates: [Bool] = []
+
     func start(pid: pid_t) throws {
         startedPID = pid
         if let startError {
@@ -142,6 +204,10 @@ private final class FakeAppCapture: MeetingAppAudioCapturing, @unchecked Sendabl
 
     func stop() {
         stopped = true
+    }
+
+    func setPaused(_ paused: Bool) {
+        pausedStates.append(paused)
     }
 }
 

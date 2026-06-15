@@ -33,6 +33,9 @@ struct ContentView: View {
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     @AppStorage(NexusPreferences.Keys.agentEnabled) var agentEnabled = true
     @Environment(\.modelDownloadManager) private var modelDownloadManager
+    // Internal: read from the `ContentView+LiquidMeetings` extension for in-app
+    // helper recording control (cancel/pause), re-homed from the deleted MeetingsTabView.
+    @Environment(\.meetingHelperControl) var meetingHelperControl
 
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     @State var selection: TodayNavSelection = .today

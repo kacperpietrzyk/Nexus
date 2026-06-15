@@ -17,11 +17,25 @@ public enum MeetingRecorderError: Error, Equatable {
 public protocol MeetingMicrophoneCapturing: AnyObject, Sendable {
     func start() throws
     func stop()
+    /// Suspend (or resume) writing captured audio to disk without tearing down
+    /// the underlying engine, so a pause/resume keeps the same file open.
+    func setPaused(_ paused: Bool)
 }
 
 public protocol MeetingAppAudioCapturing: AnyObject, Sendable {
     func start(pid: pid_t) throws
     func stop()
+    /// Suspend (or resume) writing captured audio to disk without tearing down
+    /// the underlying process tap, so a pause/resume keeps the same file open.
+    func setPaused(_ paused: Bool)
+}
+
+extension MeetingMicrophoneCapturing {
+    public func setPaused(_ paused: Bool) {}
+}
+
+extension MeetingAppAudioCapturing {
+    public func setPaused(_ paused: Bool) {}
 }
 
 extension MicrophoneCapture: MeetingMicrophoneCapturing {}
@@ -39,6 +53,7 @@ public final class MeetingRecorder {
     private var activeMic: (any MeetingMicrophoneCapturing)?
     private var activeApp: (any MeetingAppAudioCapturing)?
     private var activeHandle: RecordingHandle?
+    private var paused = false
 
     public init(
         writerFactory: @escaping (URL) throws -> AudioFileWriter = { try AudioFileWriter(folder: $0) },
@@ -152,6 +167,7 @@ public final class MeetingRecorder {
             activeMic = mic
             activeApp = app
             activeHandle = handle
+            paused = false
             return handle
         } catch {
             cleanupFailedStart(writer: writer)
@@ -168,8 +184,32 @@ public final class MeetingRecorder {
             activeMic = nil
             activeApp = nil
             activeHandle = nil
+            paused = false
         }
         try writer.finalize()
+    }
+
+    public var isPaused: Bool { paused }
+
+    /// Suspend audio capture without finalizing the file: the engine/tap stay
+    /// alive but stop writing frames, so `resume()` continues the same recording
+    /// (the gap is simply silence). Idempotent while already paused.
+    public func pause() throws {
+        guard activeWriter != nil else { throw MeetingRecorderError.notRecording }
+        guard paused == false else { return }
+        paused = true
+        activeMic?.setPaused(true)
+        activeApp?.setPaused(true)
+        levelStore.reset()
+    }
+
+    /// Resume a paused recording. Idempotent while already running.
+    public func resume() throws {
+        guard activeWriter != nil else { throw MeetingRecorderError.notRecording }
+        guard paused else { return }
+        paused = false
+        activeMic?.setPaused(false)
+        activeApp?.setPaused(false)
     }
 
     public func currentHandle() -> RecordingHandle? {
@@ -178,6 +218,9 @@ public final class MeetingRecorder {
 
     public func currentLevels() -> RecordingLevels {
         guard activeWriter != nil else { return .zero }
+        // While paused no frames flow, so report silence (the level store still
+        // holds the last pre-pause snapshot) — the panel meters fall to zero.
+        guard paused == false else { return .zero }
         return levelStore.snapshot()
     }
 
