@@ -45,4 +45,44 @@ struct TasksCompleteModeTests {
         #expect(parent.lastCompletedAt != nil)
         #expect(child.lastCompletedAt != nil)
     }
+
+    @Test("default mode cascades through an open subtask (legacy behavior)")
+    func defaultCascadesOpenSubtask() async throws {
+        let parent = TaskItem(title: "Parent")
+        let child = TaskItem(title: "Child")
+        child.parentTaskID = parent.id
+        let fixture = try await InMemoryAgentContext.make(tasks: [parent, child])
+        let args = JSONValue.object(["task_id": .string(parent.id.uuidString)])
+        _ = try await TasksCompleteTool().call(args: args, context: fixture.context)
+        #expect(parent.lastCompletedAt != nil)
+        #expect(child.lastCompletedAt != nil)
+    }
+
+    @Test("an unknown mode string is rejected")
+    func unknownModeStringRejected() async throws {
+        let task = TaskItem(title: "Solo")
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+        let args = JSONValue.object([
+            "task_id": .string(task.id.uuidString),
+            "mode": .string("turbo"),
+        ])
+        await #expect(throws: (any Error).self) {
+            _ = try await TasksCompleteTool().call(args: args, context: fixture.context)
+        }
+        #expect(task.lastCompletedAt == nil)
+    }
+
+    @Test("a non-string mode value is rejected, not silently defaulted")
+    func nonStringModeRejected() async throws {
+        let task = TaskItem(title: "Solo")
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+        let args = JSONValue.object([
+            "task_id": .string(task.id.uuidString),
+            "mode": .int(123),
+        ])
+        await #expect(throws: (any Error).self) {
+            _ = try await TasksCompleteTool().call(args: args, context: fixture.context)
+        }
+        #expect(task.lastCompletedAt == nil)
+    }
 }
