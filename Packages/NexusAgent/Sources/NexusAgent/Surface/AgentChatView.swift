@@ -328,7 +328,7 @@ public struct AgentChatView: View {
             .padding(.vertical, 18)
             .frame(width: 374, alignment: .topLeading)
             .frame(minHeight: 134, alignment: .topLeading)
-            .liquidGlass(.card, radius: DS.Radius.xl)
+            .liquidLightCard(cornerRadius: DS.Radius.xl)
     }
 
     /// `nil` when there is no active thread (the rail is then omitted

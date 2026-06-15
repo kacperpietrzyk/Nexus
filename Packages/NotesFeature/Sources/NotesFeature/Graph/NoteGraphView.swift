@@ -282,7 +282,7 @@ struct NoteGraphView: View {
         }
         .padding(DS.Space.l)
         .frame(width: 260, alignment: .leading)
-        .liquidGlass(.card, radius: DS.Radius.l)
+        .liquidLightCard(cornerRadius: DS.Radius.l)
         .padding(DS.Space.l)
         .accessibilityElement(children: .contain)
     }

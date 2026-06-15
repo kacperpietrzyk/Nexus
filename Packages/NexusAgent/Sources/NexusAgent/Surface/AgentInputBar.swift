@@ -233,7 +233,7 @@ public struct AgentInputBar: View {
         // replaces the opaque `Background.raised` composer slab + manual
         // Line.regular stroke + raw black shadow. The active-drop ring overlay
         // stays on top of the glass (behavior unchanged).
-        .liquidGlass(.card, radius: DS.Radius.l)
+        .liquidLightCard(cornerRadius: DS.Radius.l)
         .overlay {
             if shouldShowActiveDropRing {
                 RoundedRectangle(cornerRadius: DS.Radius.l, style: .continuous)

@@ -149,7 +149,7 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             list
             .scrollContentBackground(.hidden)
             .padding(.vertical, DS.Space.s)
-            .liquidGlass(.card, radius: DS.Radius.l)
+            .liquidLightCard(cornerRadius: DS.Radius.l)
             .padding(.horizontal, DS.Space.xl)
             .padding(.vertical, DS.Space.l)
         #else
