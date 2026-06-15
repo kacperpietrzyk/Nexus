@@ -38,4 +38,18 @@ struct LinkEnumerationToolsTests {
             _ = try await LinksBacklinksTool().call(args: args, context: fixture.context)
         }
     }
+
+    @Test("list truncates to the given limit")
+    func listTruncates() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        for _ in 0..<3 {
+            _ = try fixture.context.linkRepository.findOrCreate(
+                from: (.task, UUID()), to: (.note, UUID()), linkKind: .mentions
+            )
+        }
+        let args = JSONValue.object(["limit": .int(2)])
+        let result = try await LinksListTool().call(args: args, context: fixture.context)
+        let dtos = try TasksToolJSON.decode([LinkDTO].self, from: result["links"]!)
+        #expect(dtos.count == 2)
+    }
 }
