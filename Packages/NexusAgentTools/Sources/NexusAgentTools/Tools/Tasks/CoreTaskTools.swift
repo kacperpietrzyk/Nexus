@@ -7,7 +7,19 @@ import Foundation
 /// the `calendar.preferences.*` tools, the `stats.*` tools, and `organizations.*` tools.
 public enum CoreTaskTools {
     public static func all() -> [any AgentTool] {
-        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats + export + organizations
+        tasksAndNotes + projectsTier + peopleCyclesSearch + savedFilters + calendarPreferences + stats + export
+            + organizations + linkEnumeration
+    }
+
+    /// `links.*` tools — read-only enumeration of the polymorphic `Link` graph
+    /// (backlinks / outgoing edges / whole-graph dump). Thin wrappers over
+    /// `LinkRepository`.
+    private static var linkEnumeration: [any AgentTool] {
+        [
+            LinksBacklinksTool(),
+            LinksOutgoingTool(),
+            LinksListTool(),
+        ]
     }
 
     /// `export.*` tools — anti-lock-in Markdown export. `export.item` renders one
