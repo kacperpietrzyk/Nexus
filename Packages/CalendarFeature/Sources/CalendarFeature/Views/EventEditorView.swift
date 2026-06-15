@@ -80,7 +80,13 @@ public struct EventEditorView: View {
                 end: Date().addingTimeInterval(3600)
             )
         _title = State(initialValue: base.title)
-        _calendarID = State(initialValue: base.calendarID)
+        // #6: an empty-slot create seed (`WeekEditorTarget.createSeed`) carries
+        // `calendarID: nil` to mean "let the editor resolve the default" — NOT
+        // the "None" sentinel (which is a runtime picker choice). Without this
+        // fallback the nil survives and the writer skips the create silently, so
+        // resolve the seeded default just like the toolbar (`initial == nil`)
+        // path. Edit always passes a concrete id, so this only steers create.
+        _calendarID = State(initialValue: base.calendarID ?? seededCalendarID)
         _start = State(initialValue: base.start)
         _end = State(initialValue: base.end)
         _isAllDay = State(initialValue: base.isAllDay)

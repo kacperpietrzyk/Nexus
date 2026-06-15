@@ -206,6 +206,49 @@ struct CalendarViewModelConflictTests {
         )
     }
 
+    @Test("#12: week scope flags a conflict on a non-today day of the visible week")
+    func weekScopeFlagsNonTodayConflict() async throws {
+        let context = try makeContext()
+        let task = try insertOpenTask(context, title: "deep work")
+        let reader = MockCalendarEventProvider()
+        let writer = MockCalendarWriter()
+        let calendarID = try await writer.ensureNexusCalendar()
+
+        let viewModel = makeViewModel(context: context, reader: reader, writer: writer)
+        viewModel.scope = .week
+        await viewModel.load()
+
+        // Pick a slot a full day after `now` that still falls inside the visible
+        // week window — the day the OLD today-only scan would never reach.
+        let window = viewModel.window
+        let nextDay = calendar.date(byAdding: .day, value: 1, to: now) ?? now
+        try #require(nextDay >= window.start && nextDay < window.end)
+        let blockStart = nextDay
+        let blockEnd = nextDay.addingTimeInterval(3600)
+
+        let mirrorID = try await writer.createEvent(
+            EventDraft(calendarID: calendarID, title: "deep work", start: blockStart, end: blockEnd)
+        )
+        let repo = ScheduledBlockRepository(context: context)
+        let accepted = try repo.create(
+            taskID: task.id, start: blockStart, end: blockEnd, title: "deep work",
+            status: .accepted, externalEventID: mirrorID
+        )
+        reader.setEvents([
+            CalendarEvent(id: mirrorID, title: "deep work", start: blockStart, end: blockEnd),
+            CalendarEvent(
+                id: "ext-2", title: "incoming",
+                start: blockStart.addingTimeInterval(1800),
+                end: blockEnd.addingTimeInterval(1800)
+            ),
+        ])
+        await viewModel.load()
+
+        await viewModel.handleExternalChange()
+
+        #expect(viewModel.conflictedBlockIDs.contains(accepted.id))
+    }
+
     @Test("a store-change notification drives the pipeline end-to-end")
     func observerWiring() async throws {
         let context = try makeContext()

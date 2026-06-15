@@ -514,20 +514,20 @@ extension CalendarViewModel {
             (try? await reader.eventsBetween(start: dayStart, end: dayEnd)) ?? []
         )
         do {
+            // Today-only by design (S2 / anti-thrash): reconcile + regenerate.
             let outcome = try await autoReplanner.handleStoreChange(
-                events: fetched,
-                prefs: preferences,
-                now: instant,
-                calendar: calendar
-            )
+                events: fetched, prefs: preferences, now: instant, calendar: calendar)
             conflictedBlockIDs = Set(outcome.report.protectedBlockIDs)
-            if outcome.replanned {
-                overload = outcome.overload
-            }
+            if outcome.replanned { overload = outcome.overload }
         } catch {
             lastError = Self.errorMessage(error)
         }
         await load()
+        // #12: the pipeline above flags only today, but the Week surface shows
+        // `conflictedBlockIDs.count` over 7 days; union the protected conflicts
+        // across the loaded window (pure scan; Day window is today → no-op).
+        let windowReport = BlockConflictDetector.detect(blocks: blocks, events: events)
+        conflictedBlockIDs.formUnion(windowReport.protectedBlockIDs)
     }
 
     /// The non-blocking "Replan" affordance (M1): tear down the conflicted
