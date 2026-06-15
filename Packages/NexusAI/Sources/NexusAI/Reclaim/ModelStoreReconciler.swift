@@ -155,6 +155,15 @@ public struct ModelStoreReconciler: @unchecked Sendable {
     /// the model re-downloads on next use per the Wi-Fi/consent policy.
     @discardableResult
     public func reclaim(canonicalID id: String) -> ReclaimResult {
+        guard !id.isEmpty, !id.contains("/") else {
+            return ReclaimResult(
+                freedBytes: 0,
+                failures: [
+                    ReclaimResult.Failure(
+                        path: roots.managedModels.appending(path: id),
+                        message: "invalid model id")
+                ])
+        }
         let dir = roots.managedModels.appending(path: id)
         let size = directorySize(dir)
         do {

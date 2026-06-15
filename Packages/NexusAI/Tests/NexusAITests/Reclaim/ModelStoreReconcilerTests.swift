@@ -182,6 +182,7 @@ import Testing
 
         let result = reconciler.reclaim(canonicalID: "gemma-e4b")
         #expect(result.failures.isEmpty)
+        #expect(result.freedBytes == 1)
         #expect(!FileManager.default.fileExists(atPath: roots.managedModels.appending(path: "gemma-e4b").path))
         // State reset so AssistantReadiness reads .notDownloaded and the band re-offers download.
         #expect(store.load(manifestID: "gemma-e4b").status == .available)
