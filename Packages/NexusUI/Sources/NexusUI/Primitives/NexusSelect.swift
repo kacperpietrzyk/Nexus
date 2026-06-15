@@ -57,9 +57,16 @@ public struct NexusSelect<Value: Hashable>: View {
         .disabled(!isEnabled)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(label(selection))
+        // `popover` is unavailable on watchOS; fall back to a sheet there.
+        #if os(watchOS)
+        .sheet(isPresented: $presented) {
+            optionList
+        }
+        #else
         .popover(isPresented: $presented, arrowEdge: .bottom) {
             optionList
         }
+        #endif
     }
 
     // MARK: - Trigger tile
@@ -150,8 +157,11 @@ private struct OptionRow: View {
             )
         }
         .buttonStyle(.plain)
+        // `onHover` is unavailable on watchOS (no pointer).
+        #if !os(watchOS)
         .onHover { hovering in
             isHovered = hovering
         }
+        #endif
     }
 }

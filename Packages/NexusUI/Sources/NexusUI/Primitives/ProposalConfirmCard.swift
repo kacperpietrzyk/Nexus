@@ -56,8 +56,11 @@ public struct ProposalConfirmCard: View {
             HStack {
                 Button("Discard") { model.reject() }
                 Button("Apply") { Task { await model.accept() } }
-                    .keyboardShortcut(.defaultAction)
                     .disabled(model.isApplying)
+                    // `keyboardShortcut` is unavailable on watchOS.
+                    #if !os(watchOS)
+                    .keyboardShortcut(.defaultAction)
+                    #endif
             }
         }
         .padding()
