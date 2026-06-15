@@ -18,6 +18,7 @@ struct NotesTreeView: View {
     @State private var showNewFolderAlert = false
     @State private var moveTarget: Note?
     @State private var moveFolderText = ""
+    @State private var showingTrash = false
 
     @Query(filter: #Predicate<Note> { $0.deletedAt == nil }, sort: \Note.updatedAt, order: .reverse)
     private var notes: [Note]
@@ -89,6 +90,9 @@ struct NotesTreeView: View {
             }
             Button("Cancel", role: .cancel) { moveTarget = nil }
         }
+        .sheet(isPresented: $showingTrash) {
+            NotesTrashView(noteRepository: noteRepository)
+        }
     }
 
     // MARK: - Header
@@ -107,6 +111,13 @@ struct NotesTreeView: View {
             }
             .disabled(onOpenGraph == nil)
             .help("Graph view")
+            LiquidIconButton(
+                systemImage: "trash",
+                accessibilityLabel: "Trash"
+            ) {
+                showingTrash = true
+            }
+            .help("Trash")
             LiquidIconButton(
                 systemImage: "folder.badge.plus",
                 accessibilityLabel: "New folder"
