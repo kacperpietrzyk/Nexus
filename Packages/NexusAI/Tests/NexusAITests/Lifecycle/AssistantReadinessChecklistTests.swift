@@ -133,6 +133,27 @@ import Testing
         #expect(summary.overall == .ready)
     }
 
+    @Test func staleUnknownTaggedChatCountsAsUpdatingNotMissing() {
+        // Regression: the reconciler tags a superseded-but-active chat model with
+        // `kind == .unknown` (its id matches neither canonical chat nor embedder),
+        // so the checklist must treat an `.unknown`-tagged `.staleButActive` entry as
+        // a working older chat — `updating`, not `missing`/broken — while the canonical
+        // chat has not been downloaded yet.
+        let s = store("acl-9")
+        let tier = DeviceTier(recommendedChat: "gemma-chat", recommendedEmbedder: nil)
+        let checklist = AssistantReadinessChecklist(tier: tier, resolvedSet: makeSet(), store: s)
+        let items = checklist.items(scanEntries: [
+            entry(id: "old-gemma", kind: .unknown, classification: .staleButActive)
+        ])
+        let chat = items.first { $0.role == .chat }
+        #expect(chat?.status == .updating)
+        #expect(chat?.status != .missing)
+        let summary = checklist.summary(for: items)
+        #expect(summary.readyCount == 1)
+        #expect(summary.overall == .ready)
+        #expect(summary.overall != .incomplete)
+    }
+
     @Test func incompleteWhenMixedReadyAndMissing() {
         let s = store("acl-8")
         s.save(manifestID: "gemma-chat", state: .init(status: .downloaded))

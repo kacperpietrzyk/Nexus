@@ -128,8 +128,13 @@ public struct AssistantReadinessChecklist: Sendable {
             $0.id == id && $0.classification == .canonical && $0.sizeBytes > 0
         }
         let inFlight = scanEntries.contains { $0.id == id && $0.classification == .inFlight }
+        // A superseded-but-working chat model is tagged `.staleButActive` by the
+        // reconciler; because it is non-canonical its `kind` resolves to `.unknown`
+        // (it matches neither canonical chat nor embedder id). Accept that tag so a
+        // working older chat model reads as `updating`, not `missing`/broken.
         let staleActive = scanEntries.contains {
-            $0.kind == kind && $0.classification == .staleButActive && $0.sizeBytes > 0
+            ($0.kind == kind || $0.kind == .unknown)
+                && $0.classification == .staleButActive && $0.sizeBytes > 0
         }
 
         let status: ModelReadinessItem.Status
