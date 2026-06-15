@@ -43,14 +43,15 @@ struct CycleAssignmentPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker("Cycle", selection: selectionBinding) {
-                Text("No cycle").tag(CycleAssignmentSelection.none)
-                ForEach(cycles, id: \.id) { cycle in
-                    Text(cycle.name).tag(CycleAssignmentSelection.assigned(cycle.id))
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
+            NexusSelect(
+                selection: selectionBinding,
+                options: [CycleAssignmentSelection.none] + cycles.map { .assigned($0.id) },
+                label: { selection in
+                    guard let id = selection.cycleID else { return "No cycle" }
+                    return cycles.first { $0.id == id }?.name ?? "No cycle"
+                },
+                accessibilityLabel: "Cycle"
+            )
 
             if let error {
                 Text(error)

@@ -158,6 +158,8 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
 
     private var titleField: some View {
+        // Document title heading (not a form field): keep the display font — a
+        // tile-boxed NexusTextField would flatten the page title.
         TextField("Title", text: $model.title)
             .textFieldStyle(.plain)
             .font(DS.FontToken.displayMedium)
@@ -264,10 +266,7 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     /// The "add tag" text field. iOS-only autocorrect/capitalization suppression is
     /// applied here (outside the `HStack` chain) so no `#if` sits mid-modifier-chain.
     private var tagInputField: some View {
-        let field = TextField("Add tag", text: $newTag)
-            .textFieldStyle(.plain)
-            .font(DS.FontToken.metadata)
-            .foregroundStyle(DS.ColorToken.textPrimary)
+        let field = NexusTextField("Add tag", text: $newTag, isEnabled: model.canEdit)
             .onSubmit { commitTag() }
         #if os(iOS)
         return
@@ -312,10 +311,7 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
 
     private var folderInputField: some View {
-        let field = TextField("No folder", text: $folderText)
-            .textFieldStyle(.plain)
-            .font(DS.FontToken.metadata)
-            .foregroundStyle(DS.ColorToken.textPrimary)
+        let field = NexusTextField("No folder", text: $folderText, isEnabled: model.canEdit)
             .onSubmit { commitFolder() }
         #if os(iOS)
         return
@@ -352,10 +348,7 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             Image(systemName: "plus.circle")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(DS.ColorToken.textTertiary)
-            TextField("Add property", text: $newPropertyKey)
-                .textFieldStyle(.plain)
-                .font(DS.FontToken.metadata)
-                .foregroundStyle(DS.ColorToken.textPrimary)
+            NexusTextField("Add property", text: $newPropertyKey)
                 .onSubmit {
                     model.addProperty(key: newPropertyKey)
                     newPropertyKey = ""

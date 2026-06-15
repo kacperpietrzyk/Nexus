@@ -41,16 +41,8 @@ public struct ExternalAccessSection: View {
                         .overlay(DS.ColorToken.strokeHairline)
 
                     // MCP server toggle
-                    HStack {
-                        Text("MCP server")
-                            .font(DS.FontToken.body)
-                            .foregroundStyle(DS.ColorToken.textPrimary)
-                        Spacer()
-                        Toggle("", isOn: $enabled)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                    }
-                    .frame(minHeight: 44)
+                    NexusToggle("MCP server", isOn: $enabled)
+                        .frame(minHeight: 44)
 
                     Divider()
                         .overlay(DS.ColorToken.strokeHairline)

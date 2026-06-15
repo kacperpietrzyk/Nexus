@@ -8,7 +8,7 @@ public struct WhisperKitPreloadToggle: View {
     public init() {}
 
     public var body: some View {
-        Toggle("Preload transcription model at launch", isOn: $enabled)
+        NexusToggle("Preload transcription model at launch", isOn: $enabled)
             .help(
                 "Loads the WhisperKit model on app start so the first voice tap is instant. "
                     + "Costs RAM and a few seconds at launch."

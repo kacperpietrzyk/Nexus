@@ -7,11 +7,12 @@ import SwiftUI
 extension TaskDetailInspector {
     var recurrenceCard: some View {
         inspectorCard("Recurrence") {
-            Picker("Repeat", selection: $recurrenceChoice) {
-                ForEach(RecurrenceChoice.allCases) { choice in
-                    Text(choice.label).tag(choice)
-                }
-            }
+            NexusSelect(
+                selection: $recurrenceChoice,
+                options: RecurrenceChoice.allCases,
+                label: { $0.label },
+                accessibilityLabel: "Repeat"
+            )
             .onChange(of: recurrenceChoice) { _, choice in
                 if let rule = choice.rrule {
                     task.recurrenceRule = RRuleAnchorToken.applying(
@@ -27,13 +28,7 @@ extension TaskDetailInspector {
                 anchorPicker
             }
             if recurrenceChoice == .custom {
-                TextField("RRULE", text: $customRRule)
-                    .textFieldStyle(.plain)
-                    .padding(10)
-                    .background(
-                        NexusColor.Background.control,
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    )
+                NexusTextField("RRULE", text: $customRRule, isMonospaced: true)
                     .onSubmit {
                         task.recurrenceRule = customRRule.isEmpty ? nil : customRRule
                         // The typed text is the source of truth for the anchor;
@@ -53,12 +48,13 @@ extension TaskDetailInspector {
             Text("REPEAT FROM")
                 .font(NexusType.eyebrow)
                 .foregroundStyle(NexusColor.Text.tertiary)
-            Picker("Repeat from", selection: $completionAnchored) {
-                Text("Due date").tag(false)
-                Text("Completion").tag(true)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
+            NexusSegmentedControl(
+                items: [
+                    .init(id: false, label: "Due date"),
+                    .init(id: true, label: "Completion"),
+                ],
+                selection: $completionAnchored
+            )
             .onChange(of: completionAnchored) { _, anchored in
                 guard let rule = task.recurrenceRule, !rule.isEmpty else { return }
                 task.recurrenceRule = RRuleAnchorToken.applying(completionAnchor: anchored, to: rule)

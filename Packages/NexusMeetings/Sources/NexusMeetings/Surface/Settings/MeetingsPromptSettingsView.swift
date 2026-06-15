@@ -19,9 +19,7 @@ public struct MeetingsPromptSettingsView: View {
     public var body: some View {
         LiquidGlassCard("Summary prompt (custom)") {
             VStack(alignment: .leading, spacing: DS.Space.l) {
-                TextEditor(text: $prompt)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 160)
+                NexusTextEditor(text: $prompt, minHeight: 160)
 
                 HStack(spacing: DS.Space.m) {
                     NexusButton(variant: .primary, size: .sm) {

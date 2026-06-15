@@ -94,15 +94,11 @@ public struct MeetingsVocabularySettingsView: View {
 
     private var addRow: some View {
         HStack(spacing: DS.Space.m) {
-            TextField("Spoken term", text: $newTerm)
-                .textFieldStyle(.roundedBorder)
-                .font(DS.FontToken.body)
+            NexusTextField("Spoken term", text: $newTerm)
             Image(systemName: "arrow.right")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(DS.ColorToken.textMuted)
-            TextField("Replacement", text: $newReplacement)
-                .textFieldStyle(.roundedBorder)
-                .font(DS.FontToken.body)
+            NexusTextField("Replacement", text: $newReplacement)
             Button {
                 add()
             } label: {

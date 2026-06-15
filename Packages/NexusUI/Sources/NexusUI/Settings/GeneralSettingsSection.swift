@@ -13,17 +13,19 @@ public struct GeneralSettingsSection: View {
 
     public var body: some View {
         Section {
-            Picker("Theme", selection: $theme) {
-                ForEach(NexusTheme.allCases, id: \.rawValue) { value in
-                    Text(label(for: value)).tag(value.rawValue)
-                }
-            }
-            .pickerStyle(.menu)
+            NexusSelect(
+                selection: $theme,
+                options: NexusTheme.allCases.map(\.rawValue),
+                label: { rawValue in
+                    NexusTheme(rawValue: rawValue).map(label(for:)) ?? rawValue
+                },
+                accessibilityLabel: "Theme"
+            )
             Text("Light mode arrives once the base tokens stabilize.")
                 .font(NexusType.caption)
                 .foregroundStyle(NexusColor.Text.muted)
 
-            Toggle("Show advanced features", isOn: $advancedEnabled)
+            NexusToggle("Show advanced features", isOn: $advancedEnabled)
             Text("Reveals external access and advanced cloud-provider settings.")
                 .font(NexusType.caption)
                 .foregroundStyle(NexusColor.Text.muted)

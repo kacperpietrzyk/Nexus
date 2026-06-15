@@ -16,12 +16,8 @@ struct NotePropertyRowView: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
-            TextField("Key", text: $keyText)
-                .textFieldStyle(.plain)
-                .font(DS.FontToken.caption)
-                .foregroundStyle(DS.ColorToken.textTertiary)
+            NexusTextField("Key", text: $keyText, isEnabled: canEdit)
                 .frame(width: 64, alignment: .leading)
-                .disabled(!canEdit)
                 .onSubmit { onRenameKey(keyText) }
 
             NotePropertyValueEditor(value: property.value, canEdit: canEdit, onCommit: onSetValue)
@@ -43,20 +39,17 @@ struct NotePropertyRowView: View {
     }
 
     private var typeMenu: some View {
-        Menu {
-            ForEach(NotePropertyEditing.PropertyType.allCases, id: \.self) { type in
-                Button(type.label) {
-                    onSetValue(NotePropertyEditing.convert(property.value, to: type))
-                }
-            }
-        } label: {
-            Text(NotePropertyEditing.PropertyType(of: property.value).label)
-                .font(DS.FontToken.caption)
-                .foregroundStyle(DS.ColorToken.textTertiary)
-        }
-        .menuStyle(.borderlessButton)
+        NexusSelect(
+            selection: Binding(
+                get: { NotePropertyEditing.PropertyType(of: property.value) },
+                set: { onSetValue(NotePropertyEditing.convert(property.value, to: $0)) }
+            ),
+            options: NotePropertyEditing.PropertyType.allCases,
+            label: { $0.label },
+            isEnabled: canEdit,
+            accessibilityLabel: "Property type"
+        )
         .fixedSize()
-        .accessibilityLabel("Property type")
     }
 }
 
@@ -85,13 +78,12 @@ struct NotePropertyValueEditor: View {
             .labelsHidden()
             .disabled(!canEdit)
         case .date(let date):
-            DatePicker(
-                "",
-                selection: Binding(get: { date }, set: { onCommit(.date($0)) }),
-                displayedComponents: .date
+            NexusDateField(
+                date: Binding(get: { date }, set: { onCommit(.date($0)) }),
+                components: [.date],
+                isEnabled: canEdit,
+                accessibilityLabel: "Property date value"
             )
-            .labelsHidden()
-            .disabled(!canEdit)
         case .list(let items):
             CommitTextField(
                 initial: items.joined(separator: ", "),
@@ -112,11 +104,7 @@ private struct CommitTextField: View {
     @State private var text = ""
 
     var body: some View {
-        TextField("Value", text: $text)
-            .textFieldStyle(.plain)
-            .font(DS.FontToken.metadata)
-            .foregroundStyle(DS.ColorToken.textPrimary)
-            .disabled(!canEdit)
+        NexusTextField("Value", text: $text, isEnabled: canEdit)
             .onSubmit { commit(text) }
             .onAppear { text = initial }
     }

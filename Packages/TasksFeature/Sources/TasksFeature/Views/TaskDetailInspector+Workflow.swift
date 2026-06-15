@@ -38,14 +38,17 @@ extension TaskDetailInspector {
             Text("STATE")
                 .font(NexusType.eyebrow)
                 .foregroundStyle(NexusColor.Text.tertiary)
-            Picker("State", selection: workflowSelectionBinding) {
-                Text("Not started").tag(WorkflowStateSelection.unset)
-                ForEach(WorkflowState.allCases, id: \.self) { state in
-                    Text(workflowLabel(state)).tag(WorkflowStateSelection.set(state))
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
+            NexusSelect(
+                selection: workflowSelectionBinding,
+                options: [WorkflowStateSelection.unset] + WorkflowState.allCases.map { .set($0) },
+                label: { selection in
+                    switch selection {
+                    case .unset: return "Not started"
+                    case .set(let state): return workflowLabel(state)
+                    }
+                },
+                accessibilityLabel: "State"
+            )
         }
     }
 
@@ -91,14 +94,17 @@ extension TaskDetailInspector {
             Text("AGENT")
                 .font(NexusType.eyebrow)
                 .foregroundStyle(NexusColor.Text.tertiary)
-            Picker("Agent", selection: agentSelectionBinding) {
-                Text("Me").tag(AgentSelection.none)
-                ForEach(AgentAssignee.allCases, id: \.self) { agent in
-                    Text(agentLabel(agent)).tag(AgentSelection.assigned(agent))
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
+            NexusSelect(
+                selection: agentSelectionBinding,
+                options: [AgentSelection.none] + AgentAssignee.allCases.map { .assigned($0) },
+                label: { selection in
+                    switch selection {
+                    case .none: return "Me"
+                    case .assigned(let agent): return agentLabel(agent)
+                    }
+                },
+                accessibilityLabel: "Agent"
+            )
 
             agentSuggestionHint
         }

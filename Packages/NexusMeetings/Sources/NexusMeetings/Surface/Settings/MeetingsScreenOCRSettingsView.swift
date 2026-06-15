@@ -19,16 +19,8 @@ public struct MeetingsScreenOCRSettingsView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             LiquidGlassCard("Screen context") {
-                HStack {
-                    Text("Capture shared-window text")
-                        .font(DS.FontToken.body)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $screenOCREnabled)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-                .frame(minHeight: 44)
+                NexusToggle("Capture shared-window text", isOn: $screenOCREnabled)
+                    .frame(minHeight: 44)
             }
 
             Text(

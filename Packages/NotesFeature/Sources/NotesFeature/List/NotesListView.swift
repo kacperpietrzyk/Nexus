@@ -190,15 +190,18 @@ public struct NotesListView: View {
                     }
                 }
                 ToolbarItem(placement: .automatic) {
-                    Picker("Group by", selection: $groupMode) {
-                        Label("Type", systemImage: "square.stack.3d.up")
-                            .tag(NoteListGrouping.Mode.role)
-                        Label("Tag", systemImage: "number")
-                            .tag(NoteListGrouping.Mode.tag)
-                        Label("Folder", systemImage: "folder")
-                            .tag(NoteListGrouping.Mode.folder)
-                    }
-                    .pickerStyle(.menu)
+                    NexusSelect(
+                        selection: $groupMode,
+                        options: [.role, .tag, .folder],
+                        label: { mode in
+                            switch mode {
+                            case .role: return "Type"
+                            case .tag: return "Tag"
+                            case .folder: return "Folder"
+                            }
+                        },
+                        accessibilityLabel: "Group by"
+                    )
                 }
             }
         #endif

@@ -95,35 +95,37 @@ public struct EventEditorView: View {
     public var body: some View {
         Form {
             Section("Event") {
-                TextField("Title", text: $title)
-                Picker("Calendar", selection: $calendarID) {
-                    // #7: "None" writes no system-calendar event; mirrors the
-                    // Settings "Write target" picker.
-                    Text("None").tag(String?.none)
-                    ForEach(calendars.filter(\.isWritable)) { calendar in
-                        Text(calendar.title).tag(Optional(calendar.id))
-                    }
-                }
+                NexusTextField("Title", text: $title)
+                // #7: "None" writes no system-calendar event; mirrors the
+                // Settings "Write target" picker.
+                NexusSelect(
+                    selection: $calendarID,
+                    options: calendarPickerOptions,
+                    label: { id in id.flatMap { cid in calendars.first { $0.id == cid }?.title } ?? "None" },
+                    accessibilityLabel: "Calendar"
+                )
             }
 
             Section("Time") {
-                Toggle("All-day", isOn: $isAllDay)
-                DatePicker("Starts", selection: $start, displayedComponents: dateComponents)
-                DatePicker("Ends", selection: $end, displayedComponents: dateComponents)
+                NexusToggle("All-day", isOn: $isAllDay)
+                NexusDateField(date: $start, components: dateComponents, accessibilityLabel: "Starts")
+                NexusDateField(date: $end, components: dateComponents, accessibilityLabel: "Ends")
             }
 
             Section("Details") {
-                TextField("Location", text: $location)
-                Picker("Repeat", selection: $recurrence) {
-                    ForEach(recurrenceOptions) { choice in
-                        Text(choice.label).tag(choice)
-                    }
-                }
-                Picker("Alert", selection: $alarmChoice) {
-                    ForEach(alarmOptions) { choice in
-                        Text(choice.label).tag(choice)
-                    }
-                }
+                NexusTextField("Location", text: $location)
+                NexusSelect(
+                    selection: $recurrence,
+                    options: recurrenceOptions,
+                    label: { $0.label },
+                    accessibilityLabel: "Repeat"
+                )
+                NexusSelect(
+                    selection: $alarmChoice,
+                    options: alarmOptions,
+                    label: { $0.label },
+                    accessibilityLabel: "Alert"
+                )
             }
 
             if !attendees.isEmpty {
@@ -178,6 +180,12 @@ public struct EventEditorView: View {
 
     private var dateComponents: DatePickerComponents {
         isAllDay ? [.date] : [.date, .hourAndMinute]
+    }
+
+    /// Writable calendars prefixed with the "None" sentinel (#7: no system-calendar
+    /// event is written). Mirrors the Settings "Write target" picker.
+    private var calendarPickerOptions: [String?] {
+        [String?.none] + calendars.filter(\.isWritable).map { Optional($0.id) }
     }
 
     /// `.custom` is offered only when the original recurrence can't be represented

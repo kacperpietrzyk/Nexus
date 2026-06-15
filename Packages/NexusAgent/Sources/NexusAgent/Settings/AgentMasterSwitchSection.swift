@@ -14,16 +14,8 @@ public struct AgentMasterSwitchSection: View {
     public var body: some View {
         LiquidGlassCard("Master Switch") {
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text("Enable Nexus Agent")
-                        .font(DS.FontToken.body)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $enabled)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-                .frame(minHeight: 44)
+                NexusToggle("Enable Nexus Agent", isOn: $enabled)
+                    .frame(minHeight: 44)
                 helperText(
                     enabled
                         ? "Chat, briefs and tool calls are active."
@@ -31,16 +23,8 @@ public struct AgentMasterSwitchSection: View {
                 )
                 Divider()
                     .overlay(DS.ColorToken.strokeHairline)
-                HStack {
-                    Text("Vacation Mode")
-                        .font(DS.FontToken.body)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $vacationMode)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-                .frame(minHeight: 44)
+                NexusToggle("Vacation Mode", isOn: $vacationMode)
+                    .frame(minHeight: 44)
                 helperText("Pauses scheduled runs.")
             }
         }

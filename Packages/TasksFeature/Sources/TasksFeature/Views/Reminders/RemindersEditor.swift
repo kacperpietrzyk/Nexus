@@ -77,14 +77,19 @@ struct RemindersEditor: View {
                     components: [.date, .hourAndMinute],
                     accessibilityLabel: "Reminder date and time"
                 )
-                Picker("Repeat", selection: $absoluteRepeat) {
-                    Text("Once").tag(ReminderRepeat?.none)
-                    Text("Daily").tag(ReminderRepeat?.some(.daily))
-                    Text("Weekly").tag(ReminderRepeat?.some(.weekly))
-                }
-                .labelsHidden()
+                NexusSelect(
+                    selection: $absoluteRepeat,
+                    options: [ReminderRepeat?.none, .some(.daily), .some(.weekly)],
+                    label: { value in
+                        switch value {
+                        case .none: return "Once"
+                        case .some(.daily): return "Daily"
+                        case .some(.weekly): return "Weekly"
+                        }
+                    },
+                    accessibilityLabel: "Reminder repeat frequency"
+                )
                 .fixedSize()
-                .accessibilityLabel("Reminder repeat frequency")
                 NexusButton(
                     variant: .outline,
                     size: .sm,

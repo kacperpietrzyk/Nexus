@@ -119,20 +119,13 @@ public struct MeetingsHelperSettingsView: View {
         VStack(alignment: .leading, spacing: DS.Space.xxxl) {
             LiquidGlassCard("Helper") {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text("Enable Meetings auto-record")
-                            .font(DS.FontToken.body)
-                            .foregroundStyle(DS.ColorToken.textPrimary)
-                        Spacer()
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { viewModel.isEnabled },
-                                set: { viewModel.toggle(enabled: $0) }
-                            )
+                    NexusToggle(
+                        "Enable Meetings auto-record",
+                        isOn: Binding(
+                            get: { viewModel.isEnabled },
+                            set: { viewModel.toggle(enabled: $0) }
                         )
-                        .labelsHidden()
-                    }
+                    )
                     .frame(minHeight: 44)
 
                     Divider()

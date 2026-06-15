@@ -76,6 +76,9 @@ private struct TextBlockEditor: View {
     var body: some View {
         Group {
             if model.canEdit {
+                // Document content (not form chrome): keep the plain field carrying
+                // the block's semantic font — a tile-boxed NexusTextField would read
+                // as a form and flatten the heading/paragraph hierarchy.
                 TextField(placeholder, text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(font)
@@ -244,11 +247,7 @@ private struct CodeBlockView: View {
                     .foregroundStyle(NexusColor.Text.tertiary)
             }
             if model.canEdit {
-                TextEditor(text: $draft)
-                    .font(NexusType.mono)
-                    .foregroundStyle(NexusColor.Text.primary)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 60)
+                NexusTextEditor(text: $draft, minHeight: 100, isMonospaced: true)
                     .onAppear { draft = text }
                     .onChange(of: draft) { _, newValue in
                         if newValue != text { model.setCode(newValue, forBlock: block.id) }

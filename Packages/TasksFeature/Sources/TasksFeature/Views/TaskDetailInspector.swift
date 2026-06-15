@@ -143,7 +143,7 @@ public struct TaskDetailInspector: View {
 
             priorityPicker
 
-            Toggle("Pin as focus", isOn: $task.pinnedAsFocus)
+            NexusToggle("Pin as focus", isOn: $task.pinnedAsFocus)
                 .onChange(of: task.pinnedAsFocus) { _, _ in save() }
 
             TagsEditor(tags: $task.tags) { save() }
@@ -158,7 +158,7 @@ public struct TaskDetailInspector: View {
 
     var scheduleCard: some View {
         inspectorCard("Schedule") {
-            Toggle("All-day", isOn: $allDay)
+            NexusToggle("All-day", isOn: $allDay)
                 .onChange(of: allDay) { _, isAllDay in
                     if isAllDay {
                         task.startAt = nil
@@ -226,20 +226,7 @@ public struct TaskDetailInspector: View {
 
     var notesCard: some View {
         inspectorCard("Notes") {
-            TextEditor(text: $notesDraft)
-                .font(NexusType.body)
-                .foregroundStyle(NexusColor.Text.primary)
-                .scrollContentBackground(.hidden)
-                .padding(10)
-                .frame(minHeight: 120)
-                .background(
-                    NexusColor.Background.control,
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(NexusColor.Line.hairline, lineWidth: 1)
-                }
+            NexusTextEditor(text: $notesDraft, minHeight: 120)
                 .onChange(of: notesDraft) { _, _ in saveNotesDebounced() }
         }
     }
@@ -447,21 +434,22 @@ extension TaskDetailInspector {
             Text("PRIORITY")
                 .font(NexusType.eyebrow)
                 .foregroundStyle(NexusColor.Text.tertiary)
-            Picker("Priority", selection: priorityBinding) {
-                Text("None").tag(TaskPriority.none)
-                Text("Low").tag(TaskPriority.low)
-                Text("Medium").tag(TaskPriority.medium)
-                Text("High").tag(TaskPriority.high)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
+            NexusSegmentedControl(
+                items: [
+                    .init(id: TaskPriority.none, label: "None"),
+                    .init(id: TaskPriority.low, label: "Low"),
+                    .init(id: TaskPriority.medium, label: "Medium"),
+                    .init(id: TaskPriority.high, label: "High"),
+                ],
+                selection: priorityBinding
+            )
             .onChange(of: task.priorityRaw) { _, _ in save() }
         }
     }
 
     var deadlineCard: some View {
         inspectorCard("Deadline") {
-            Toggle("Deadline", isOn: deadlineEnabledBinding)
+            NexusToggle("Deadline", isOn: deadlineEnabledBinding)
             if task.deadlineAt != nil {
                 deadlineRiskRow()  // spec §19.1 D1; see +DeadlineRisk
                 dateRow("Date") {

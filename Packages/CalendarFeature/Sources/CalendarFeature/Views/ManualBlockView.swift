@@ -42,17 +42,18 @@ struct ManualBlockView: View {
                         .font(NexusType.bodySmall)
                         .foregroundStyle(NexusColor.Text.muted)
                 } else {
-                    Picker("Task", selection: $selectedTaskID) {
-                        ForEach(tasks, id: \.id) { task in
-                            Text(task.title).tag(Optional(task.id))
-                        }
-                    }
+                    NexusSelect(
+                        selection: $selectedTaskID,
+                        options: tasks.map { Optional($0.id) },
+                        label: { id in tasks.first { $0.id == id }?.title ?? "" },
+                        accessibilityLabel: "Task"
+                    )
                 }
             }
 
             Section("Time") {
-                DatePicker("Starts", selection: $start, displayedComponents: [.date, .hourAndMinute])
-                DatePicker("Ends", selection: $end, displayedComponents: [.date, .hourAndMinute])
+                NexusDateField(date: $start, components: [.date, .hourAndMinute], accessibilityLabel: "Starts")
+                NexusDateField(date: $end, components: [.date, .hourAndMinute], accessibilityLabel: "Ends")
             }
 
             Section {

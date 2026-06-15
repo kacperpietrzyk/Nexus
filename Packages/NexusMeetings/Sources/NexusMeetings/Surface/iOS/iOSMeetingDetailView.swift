@@ -24,13 +24,14 @@ public struct iOSMeetingDetailView: View {  // swiftlint:disable:this type_name
 
     public var body: some View {
         VStack(spacing: 0) {
-            Picker("Meeting detail tab", selection: $selectedTab) {
-                Text("Summary").tag(Tab.summary)
-                Text("Transcript").tag(Tab.transcript)
-                Text("Actions").tag(Tab.actions)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            NexusSegmentedControl(
+                items: [
+                    .init(id: Tab.summary, label: "Summary"),
+                    .init(id: Tab.transcript, label: "Transcript"),
+                    .init(id: Tab.actions, label: "Actions"),
+                ],
+                selection: $selectedTab
+            )
             .padding()
 
             Rectangle()

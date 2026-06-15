@@ -52,31 +52,32 @@ public struct CalendarSettingsView: View {
             }
 
             Section("Nexus write calendar") {
-                Picker("Write target", selection: writeTargetBinding) {
-                    Text("None").tag(String?.none)
-                    ForEach(calendars.filter(\.isWritable)) { calendar in
-                        Text(calendar.title).tag(Optional(calendar.id))
-                    }
-                }
+                NexusSelect(
+                    selection: writeTargetBinding,
+                    options: writeTargetOptions,
+                    label: { id in id.flatMap { cid in calendars.first { $0.id == cid }?.title } ?? "None" },
+                    accessibilityLabel: "Write target"
+                )
                 Button("Create / ensure \"Nexus\" calendar") {
                     Task { await ensureNexusCalendar() }
                 }
             }
 
             Section("Working window") {
-                DatePicker("Day starts", selection: $workdayStart, displayedComponents: .hourAndMinute)
-                DatePicker("Day ends", selection: $workdayEnd, displayedComponents: .hourAndMinute)
-                Stepper("Min block: \(prefs.minBlockMinutes) min", value: $prefs.minBlockMinutes, in: 5...60, step: 5)
-                Stepper("Max block: \(prefs.maxBlockMinutes) min", value: $prefs.maxBlockMinutes, in: 30...240, step: 15)
-                Stepper("Buffer: \(prefs.bufferMinutes) min", value: $prefs.bufferMinutes, in: 0...60, step: 5)
-                Toggle("Auto-rollover unfinished tasks", isOn: $prefs.rolloverEnabled)
+                NexusDateField(date: $workdayStart, components: [.hourAndMinute], accessibilityLabel: "Day starts")
+                NexusDateField(date: $workdayEnd, components: [.hourAndMinute], accessibilityLabel: "Day ends")
+                NexusStepper("Min block", value: $prefs.minBlockMinutes, in: 5...60, step: 5, unit: "min")
+                NexusStepper("Max block", value: $prefs.maxBlockMinutes, in: 30...240, step: 15, unit: "min")
+                NexusStepper("Buffer", value: $prefs.bufferMinutes, in: 0...60, step: 5, unit: "min")
+                NexusToggle("Auto-rollover unfinished tasks", isOn: $prefs.rolloverEnabled)
             }
 
             Section("Recurring series") {
-                Stepper(
-                    "Preview horizon: \(prefs.seriesPreviewHorizonDays) days",
+                NexusStepper(
+                    "Preview horizon",
                     value: $prefs.seriesPreviewHorizonDays,
-                    in: 0...30
+                    in: 0...30,
+                    unit: "days"
                 )
                 Text("Show ghost blocks for upcoming occurrences of recurring tasks this many days ahead. 0 turns previews off.")
                     .font(NexusType.caption)
@@ -110,6 +111,11 @@ public struct CalendarSettingsView: View {
 
     private var writeTargetBinding: Binding<String?> {
         Binding(get: { prefs.writeCalendarID }, set: { prefs.writeCalendarID = $0 })
+    }
+
+    /// Writable calendars prefixed with the "None" sentinel (no write target).
+    private var writeTargetOptions: [String?] {
+        [String?.none] + calendars.filter(\.isWritable).map { Optional($0.id) }
     }
 
     /// Materialize the implicit "empty == all granted" set into explicit IDs so a

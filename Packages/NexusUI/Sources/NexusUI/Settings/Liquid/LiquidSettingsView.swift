@@ -119,13 +119,14 @@ private struct GeneralPanel: View {
                         .font(DS.FontToken.body)
                         .foregroundStyle(DS.ColorToken.textPrimary)
                     Spacer()
-                    Picker("Theme", selection: $theme) {
-                        ForEach(NexusTheme.allCases, id: \.rawValue) { value in
-                            Text(label(for: value)).tag(value.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
+                    NexusSelect(
+                        selection: $theme,
+                        options: NexusTheme.allCases.map(\.rawValue),
+                        label: { rawValue in
+                            NexusTheme(rawValue: rawValue).map(label(for:)) ?? rawValue
+                        },
+                        accessibilityLabel: "Theme"
+                    )
                     .frame(width: 142)
                 }
                 .frame(minHeight: 44)
@@ -143,16 +144,8 @@ private struct GeneralPanel: View {
                     .overlay(DS.ColorToken.strokeHairline)
 
                 // Advanced toggle row
-                HStack {
-                    Text("Show advanced features")
-                        .font(DS.FontToken.body)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $advancedEnabled)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-                .frame(minHeight: 44)
+                NexusToggle("Show advanced features", isOn: $advancedEnabled)
+                    .frame(minHeight: 44)
 
                 Divider()
                     .overlay(DS.ColorToken.strokeHairline)
@@ -280,9 +273,12 @@ private struct TasksPanel: View {
                         .font(DS.FontToken.body)
                         .foregroundStyle(DS.ColorToken.textPrimary)
                     Spacer()
-                    DatePicker("", selection: deps.quietHoursStart, displayedComponents: .hourAndMinute)
-                        .labelsHidden()
-                        .frame(width: 102)
+                    NexusDateField(
+                        date: deps.quietHoursStart,
+                        components: [.hourAndMinute],
+                        accessibilityLabel: "Quiet hours from"
+                    )
+                    .frame(width: 102)
                 }
                 .frame(minHeight: 44)
 
@@ -295,9 +291,12 @@ private struct TasksPanel: View {
                         .font(DS.FontToken.body)
                         .foregroundStyle(DS.ColorToken.textPrimary)
                     Spacer()
-                    DatePicker("", selection: deps.quietHoursEnd, displayedComponents: .hourAndMinute)
-                        .labelsHidden()
-                        .frame(width: 102)
+                    NexusDateField(
+                        date: deps.quietHoursEnd,
+                        components: [.hourAndMinute],
+                        accessibilityLabel: "Quiet hours until"
+                    )
+                    .frame(width: 102)
                 }
                 .frame(minHeight: 44)
 
@@ -305,19 +304,11 @@ private struct TasksPanel: View {
                     .overlay(DS.ColorToken.strokeHairline)
 
                 // Calendar events toggle
-                HStack {
-                    Text("Show Calendar events in Today")
-                        .font(DS.FontToken.body)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $calendarEventsInTodayEnabled)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .onChange(of: calendarEventsInTodayEnabled) { _, newValue in
-                            handleCalendarToggleChange(newValue)
-                        }
-                }
-                .frame(minHeight: 44)
+                NexusToggle("Show Calendar events in Today", isOn: $calendarEventsInTodayEnabled)
+                    .frame(minHeight: 44)
+                    .onChange(of: calendarEventsInTodayEnabled) { _, newValue in
+                        handleCalendarToggleChange(newValue)
+                    }
 
                 Divider()
                     .overlay(DS.ColorToken.strokeHairline)
@@ -354,27 +345,15 @@ private struct TasksPanel: View {
         return LiquidGlassCard("Goals") {
             VStack(spacing: 0) {
                 // Daily goal row
-                HStack {
-                    Text("Daily goal")
-                        .font(DS.FontToken.body)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                    Spacer()
-                    goalStepper(value: $goals.dailyTarget)
-                }
-                .frame(minHeight: 44)
+                NexusStepper("Daily goal", value: $goals.dailyTarget, in: 0...99, unit: "tasks")
+                    .frame(minHeight: 44)
 
                 Divider()
                     .overlay(DS.ColorToken.strokeHairline)
 
                 // Weekly goal row
-                HStack {
-                    Text("Weekly goal")
-                        .font(DS.FontToken.body)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                    Spacer()
-                    goalStepper(value: $goals.weeklyTarget)
-                }
-                .frame(minHeight: 44)
+                NexusStepper("Weekly goal", value: $goals.weeklyTarget, in: 0...99, unit: "tasks")
+                    .frame(minHeight: 44)
 
                 Divider()
                     .overlay(DS.ColorToken.strokeHairline)
@@ -392,25 +371,6 @@ private struct TasksPanel: View {
     }
 
     // MARK: Helpers
-
-    private func goalStepper(value: Binding<Int>) -> some View {
-        HStack(spacing: DS.Space.m) {
-            Text(goalLabel(for: value.wrappedValue))
-                .font(DS.FontToken.body.weight(.medium))
-                .foregroundStyle(DS.ColorToken.textSecondary)
-                .monospacedDigit()
-            Stepper("", value: value, in: 0...99)
-                .labelsHidden()
-        }
-    }
-
-    private func goalLabel(for target: Int) -> String {
-        switch target {
-        case 0: return "Off"
-        case 1: return "1 task"
-        default: return "\(target) tasks"
-        }
-    }
 
     private func handleCalendarToggleChange(_ newValue: Bool) {
         guard newValue else { return }

@@ -110,6 +110,7 @@ private struct AgentScheduleEditorContent: View {
 
                 Toggle("Enabled", isOn: binding(for: schedule))
                     .labelsHidden()
+                    .tint(NexusColor.Accent.lime)
 
                 Button {
                     draft = .existing(schedule)
@@ -204,7 +205,7 @@ private struct AgentScheduleEditorSheet: View {
         NavigationStack {
             Form {
                 SwiftUI.Section("Schedule") {
-                    TextField("Name", text: $name)
+                    NexusTextField("Name", text: $name)
 
                     Picker("Cron preset", selection: $selectedPreset) {
                         ForEach(Self.presets) { preset in
@@ -218,15 +219,13 @@ private struct AgentScheduleEditorSheet: View {
                         cronExpression = expression
                     }
 
-                    TextField("Cron expression", text: $cronExpression)
-                        .font(.system(.body, design: .monospaced))
+                    NexusTextField("Cron expression", text: $cronExpression, isMonospaced: true)
 
-                    Toggle("Enabled", isOn: $enabled)
+                    NexusToggle("Enabled", isOn: $enabled)
                 }
 
                 SwiftUI.Section("Prompt") {
-                    TextEditor(text: $prompt)
-                        .frame(minHeight: 120)
+                    NexusTextEditor(text: $prompt, minHeight: 120)
                 }
 
                 SwiftUI.Section("Routing") {

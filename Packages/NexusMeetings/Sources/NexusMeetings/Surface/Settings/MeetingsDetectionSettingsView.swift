@@ -52,22 +52,15 @@ public struct MeetingsDetectionSettingsView: View {
                             Divider()
                                 .overlay(DS.ColorToken.strokeHairline)
                         }
-                        HStack {
-                            Text(pattern.displayName)
-                                .font(DS.FontToken.body)
-                                .foregroundStyle(DS.ColorToken.textPrimary)
-                            Spacer()
-                            Toggle(
-                                "",
-                                isOn: Binding(
-                                    get: { pattern.enabled },
-                                    set: { enabled in
-                                        viewModel.toggle(bundleID: pattern.bundleID, enabled: enabled)
-                                    }
-                                )
+                        NexusToggle(
+                            pattern.displayName,
+                            isOn: Binding(
+                                get: { pattern.enabled },
+                                set: { enabled in
+                                    viewModel.toggle(bundleID: pattern.bundleID, enabled: enabled)
+                                }
                             )
-                            .labelsHidden()
-                        }
+                        )
                         .frame(minHeight: 44)
                     }
                 }

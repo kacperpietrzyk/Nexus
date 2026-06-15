@@ -38,11 +38,7 @@ struct HTMLBlockView: View {
             }
 
             if showingSource {
-                TextEditor(text: $draft)
-                    .font(NexusType.mono)
-                    .foregroundStyle(NexusColor.Text.primary)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 80)
+                NexusTextEditor(text: $draft, minHeight: 100, isMonospaced: true)
                     .onAppear { draft = raw }
             } else {
                 SanitizedHTMLView(html: raw)

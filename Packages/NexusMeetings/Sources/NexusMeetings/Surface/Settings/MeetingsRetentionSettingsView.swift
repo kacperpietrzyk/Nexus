@@ -18,14 +18,20 @@ public struct MeetingsRetentionSettingsView: View {
                         .font(DS.FontToken.body)
                         .foregroundStyle(DS.ColorToken.textPrimary)
                     Spacer()
-                    Picker("Default policy", selection: $rawPolicy) {
-                        Text("7 days").tag("7d")
-                        Text("30 days").tag("30d")
-                        Text("Forever").tag("forever")
-                        Text("Never save").tag("never")
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
+                    NexusSelect(
+                        selection: $rawPolicy,
+                        options: ["7d", "30d", "forever", "never"],
+                        label: { raw in
+                            switch raw {
+                            case "7d": "7 days"
+                            case "30d": "30 days"
+                            case "forever": "Forever"
+                            case "never": "Never save"
+                            default: raw
+                            }
+                        },
+                        accessibilityLabel: "Default policy"
+                    )
                     .frame(maxWidth: 160, alignment: .trailing)
                 }
                 .frame(minHeight: 44)

@@ -23,16 +23,23 @@ public struct MeetingsProviderSettingsView: View {
                         .font(DS.FontToken.body)
                         .foregroundStyle(DS.ColorToken.textPrimary)
                     Spacer()
-                    Picker("Provider", selection: $transcription) {
-                        Text("Parakeet TDT v3 (default)")
-                            .tag(MeetingsTranscriptionProviderPreference.parakeetTDTv3.rawValue)
-                        Text("WhisperKit-large (fallback)")
-                            .tag(MeetingsTranscriptionProviderPreference.whisperKitLarge.rawValue)
-                        Text("Ask per meeting")
-                            .tag(MeetingsTranscriptionProviderPreference.ask.rawValue)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
+                    NexusSelect(
+                        selection: $transcription,
+                        options: [
+                            MeetingsTranscriptionProviderPreference.parakeetTDTv3.rawValue,
+                            MeetingsTranscriptionProviderPreference.whisperKitLarge.rawValue,
+                            MeetingsTranscriptionProviderPreference.ask.rawValue,
+                        ],
+                        label: { raw in
+                            switch MeetingsTranscriptionProviderPreference(rawValue: raw) {
+                            case .parakeetTDTv3: "Parakeet TDT v3 (default)"
+                            case .whisperKitLarge: "WhisperKit-large (fallback)"
+                            case .ask: "Ask per meeting"
+                            default: raw
+                            }
+                        },
+                        accessibilityLabel: "Provider"
+                    )
                     .frame(maxWidth: 220, alignment: .trailing)
                 }
                 .frame(minHeight: 44)
@@ -44,14 +51,21 @@ public struct MeetingsProviderSettingsView: View {
                         .font(DS.FontToken.body)
                         .foregroundStyle(DS.ColorToken.textPrimary)
                     Spacer()
-                    Picker("Provider", selection: $summary) {
-                        Text("Apple Intelligence (default)")
-                            .tag(MeetingsSummaryProviderPreference.auto.rawValue)
-                        Text("Disabled")
-                            .tag(MeetingsSummaryProviderPreference.disabled.rawValue)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
+                    NexusSelect(
+                        selection: $summary,
+                        options: [
+                            MeetingsSummaryProviderPreference.auto.rawValue,
+                            MeetingsSummaryProviderPreference.disabled.rawValue,
+                        ],
+                        label: { raw in
+                            switch MeetingsSummaryProviderPreference(rawValue: raw) {
+                            case .auto: "Apple Intelligence (default)"
+                            case .disabled: "Disabled"
+                            default: raw
+                            }
+                        },
+                        accessibilityLabel: "Provider"
+                    )
                     .frame(maxWidth: 220, alignment: .trailing)
                 }
                 .frame(minHeight: 44)

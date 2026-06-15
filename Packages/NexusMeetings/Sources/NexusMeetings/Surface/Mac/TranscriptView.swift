@@ -428,8 +428,7 @@ private struct RenameSpeakerSheet: View {
                 .font(.caption)
                 .foregroundStyle(tertiaryColor)
 
-            TextField("Name (or create a new contact)", text: $draft)
-                .textFieldStyle(.roundedBorder)
+            NexusTextField("Name (or create a new contact)", text: $draft)
 
             if !filteredPeople.isEmpty {
                 peopleSection

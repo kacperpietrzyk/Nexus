@@ -73,15 +73,7 @@ public struct SummaryView: View {
             }
 
             if viewModel.editing {
-                TextEditor(text: $viewModel.rawMarkdown)
-                    .font(
-                        style == .liquid
-                            ? DS.FontToken.body.monospaced() : NexusType.bodySmall.monospaced()
-                    )
-                    .foregroundStyle(
-                        style == .liquid ? DS.ColorToken.textSecondary : NexusColor.Text.secondary
-                    )
-                    .scrollContentBackground(.hidden)
+                NexusTextEditor(text: $viewModel.rawMarkdown, isMonospaced: true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {

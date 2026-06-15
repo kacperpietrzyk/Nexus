@@ -17,25 +17,19 @@ public struct AgentMemoryEditorSection: View {
     public var body: some View {
         LiquidGlassCard("Memory") {
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text("Auto-save high-confidence memory")
-                        .font(DS.FontToken.body)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $autoSave)
-                        .labelsHidden()
-                }
-                .frame(minHeight: 44)
+                NexusToggle("Auto-save high-confidence memory", isOn: $autoSave)
+                    .frame(minHeight: 44)
                 Divider()
                     .overlay(DS.ColorToken.strokeHairline)
 
-                Picker("Scope", selection: $viewModel.scope) {
-                    Text("Global").tag("global")
-                    Text("Project").tag("project")
-                    Text("Tag").tag("tag")
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                NexusSegmentedControl(
+                    items: [
+                        .init(id: "global", label: "Global"),
+                        .init(id: "project", label: "Project"),
+                        .init(id: "tag", label: "Tag"),
+                    ],
+                    selection: $viewModel.scope
+                )
                 .onChange(of: viewModel.scope) { _, _ in
                     viewModel.reload()
                 }

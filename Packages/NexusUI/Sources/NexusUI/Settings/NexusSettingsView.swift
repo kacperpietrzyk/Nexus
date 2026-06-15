@@ -2,8 +2,6 @@ import SwiftUI
 
 #if !os(watchOS)
 
-// swiftlint:disable file_length
-
 import NexusAI
 import NexusCore
 
@@ -190,22 +188,21 @@ public struct NexusSettingsView: View {
         iosSettingsSection("General") {
             VStack(spacing: 0) {
                 NexusSettingsRow("Theme") {
-                    Picker("Theme", selection: $theme) {
-                        ForEach(NexusTheme.allCases, id: \.rawValue) { value in
-                            Text(label(for: value)).tag(value.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .tint(NexusColor.Text.primary)
+                    NexusSelect(
+                        selection: $theme,
+                        options: NexusTheme.allCases.map(\.rawValue),
+                        label: { rawValue in
+                            NexusTheme(rawValue: rawValue).map(label(for:)) ?? rawValue
+                        },
+                        accessibilityLabel: "Theme"
+                    )
                 }
                 NexusSettingsDivider()
                 iosHelperText("Light mode arrives once the base tokens stabilize.")
                 NexusSettingsDivider()
-                NexusSettingsRow("Show advanced features") {
-                    Toggle("", isOn: $advancedEnabled)
-                        .labelsHidden()
-                }
+                NexusToggle("Show advanced features", isOn: $advancedEnabled)
+                    .padding(.horizontal, NexusSpacing.s4)
+                    .frame(minHeight: 44)
                 NexusSettingsDivider()
                 iosHelperText("Reveals external access and advanced cloud-provider settings.")
             }
@@ -254,22 +251,27 @@ public struct NexusSettingsView: View {
                         NexusSettingsDivider()
                     }
                     NexusSettingsRow("Quiet hours from") {
-                        DatePicker("", selection: config.start, displayedComponents: .hourAndMinute)
-                            .labelsHidden()
+                        NexusDateField(
+                            date: config.start,
+                            components: [.hourAndMinute],
+                            accessibilityLabel: "Quiet hours from"
+                        )
                     }
                     NexusSettingsDivider()
                     NexusSettingsRow("Quiet hours until") {
-                        DatePicker("", selection: config.end, displayedComponents: .hourAndMinute)
-                            .labelsHidden()
+                        NexusDateField(
+                            date: config.end,
+                            components: [.hourAndMinute],
+                            accessibilityLabel: "Quiet hours until"
+                        )
                     }
                     NexusSettingsDivider()
-                    NexusSettingsRow("Show Calendar events in Today") {
-                        Toggle("", isOn: $calendarEventsInTodayEnabled)
-                            .labelsHidden()
-                            .onChange(of: calendarEventsInTodayEnabled) { _, newValue in
-                                handleCalendarToggleChange(newValue)
-                            }
-                    }
+                    NexusToggle("Show Calendar events in Today", isOn: $calendarEventsInTodayEnabled)
+                        .padding(.horizontal, NexusSpacing.s4)
+                        .frame(minHeight: 44)
+                        .onChange(of: calendarEventsInTodayEnabled) { _, newValue in
+                            handleCalendarToggleChange(newValue)
+                        }
                     if calendarPermission.status == .denied || calendarPermission.status == .restricted {
                         NexusSettingsDivider()
                         iosCalendarDeniedRow
@@ -302,32 +304,13 @@ public struct NexusSettingsView: View {
     private var goalsRows: some View {
         @Bindable var goals = goalsState
         return VStack(spacing: 0) {
-            NexusSettingsRow("Daily goal") {
-                goalStepper(value: $goals.dailyTarget)
-            }
+            NexusStepper("Daily goal", value: $goals.dailyTarget, in: 0...99, unit: "tasks")
+                .padding(.horizontal, NexusSpacing.s4)
+                .frame(minHeight: 44)
             NexusSettingsDivider()
-            NexusSettingsRow("Weekly goal") {
-                goalStepper(value: $goals.weeklyTarget)
-            }
-        }
-    }
-
-    private func goalStepper(value: Binding<Int>) -> some View {
-        HStack(spacing: NexusSpacing.s3) {
-            Text(goalLabel(for: value.wrappedValue))
-                .font(NexusType.bodySmall.weight(.medium))
-                .foregroundStyle(NexusColor.Text.secondary)
-                .monospacedDigit()
-            Stepper("", value: value, in: 0...99)
-                .labelsHidden()
-        }
-    }
-
-    private func goalLabel(for target: Int) -> String {
-        switch target {
-        case 0: return "Off"
-        case 1: return "1 task"
-        default: return "\(target) tasks"
+            NexusStepper("Weekly goal", value: $goals.weeklyTarget, in: 0...99, unit: "tasks")
+                .padding(.horizontal, NexusSpacing.s4)
+                .frame(minHeight: 44)
         }
     }
 
