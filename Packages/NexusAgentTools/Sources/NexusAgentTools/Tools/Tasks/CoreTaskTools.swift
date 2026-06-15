@@ -155,6 +155,7 @@ public enum CoreTaskTools {
             PeopleAggregateTool(),
             PeopleLinkTool(),
             PeopleMergeTool(),
+            PeopleSuggestDuplicatesTool(),
             CyclesListTool(),
             CyclesAssignTool(),
             CyclesCreateTool(),

@@ -16,4 +16,9 @@ struct ToolRegistryManifestTests {
     func reorderToolRegistered() {
         #expect(Set(CoreTaskTools.all().map(\.name)).contains("tasks.reorder"))
     }
+
+    @Test("people.suggest_duplicates is registered in the core task tools")
+    func suggestDuplicatesToolRegistered() {
+        #expect(Set(CoreTaskTools.all().map(\.name)).contains("people.suggest_duplicates"))
+    }
 }
