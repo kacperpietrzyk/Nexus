@@ -30,6 +30,12 @@ public struct TaskDTO: Codable, Sendable, Equatable {
     /// Cycle assignment (Tranche 2 Plan C). Additive, appended last so existing
     /// positional callers keep compiling.
     public let cycleID: String?
+    /// User-owned duration estimate in seconds (Calendar / Motion-AI module,
+    /// spec §4.2). `nil` = no estimate. Canonical unit is seconds (lossless —
+    /// `CalendarSyncReconciler` may write non-minute-aligned values); the
+    /// create/update tools accept minutes and convert. Appended last so existing
+    /// positional callers keep compiling.
+    public let estimatedDurationSeconds: Int?
 
     private enum CodingKeys: String, CodingKey {
         case id, title, notes, priority, tags, state, reminders
@@ -46,6 +52,7 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case cycleID = "cycle_id"
+        case estimatedDurationSeconds = "estimated_duration_seconds"
     }
 
     public init(
@@ -68,7 +75,8 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         reminders: [ReminderDTO]?,
         createdAt: String,
         updatedAt: String,
-        cycleID: String? = nil
+        cycleID: String? = nil,
+        estimatedDurationSeconds: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -90,6 +98,7 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.cycleID = cycleID
+        self.estimatedDurationSeconds = estimatedDurationSeconds
     }
 
     @MainActor
@@ -139,7 +148,8 @@ public struct TaskDTO: Codable, Sendable, Equatable {
             reminders: task.reminders.isEmpty ? nil : task.reminders.map { ReminderDTO.from($0, formatter: formatter) },
             createdAt: formatter.string(from: task.createdAt),
             updatedAt: formatter.string(from: task.updatedAt),
-            cycleID: task.cycleID?.uuidString
+            cycleID: task.cycleID?.uuidString,
+            estimatedDurationSeconds: task.estimatedDurationSeconds
         )
     }
 

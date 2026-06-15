@@ -28,6 +28,11 @@ public struct TasksCreateTool: AgentTool {
                 enumValues: ["due_date", "completion"],
                 description: "Recurrence anchor: due_date (default) or completion (repeat from completion date)."
             ),
+            "estimated_duration_minutes": .integer(
+                minimum: 1,
+                description: "Optional user estimate of how long the task takes, in minutes (>0). "
+                    + "Stored as estimated_duration_seconds with an explicit source."
+            ),
             "reminders": .array(
                 items: .object(
                     properties: [
@@ -62,6 +67,9 @@ public struct TasksCreateTool: AgentTool {
         let anchoredRecurrence = try TasksStructuredCreateArguments.applyingRecurrenceAnchor(
             args["recurrence_anchor"], to: recurrence
         )
+        let estimateSeconds = try TasksStructuredCreateArguments.optionalEstimatedDurationSeconds(
+            args["estimated_duration_minutes"]
+        )
         let reminders = try TasksStructuredCreateArguments.optionalReminders(args["reminders"])
 
         let task = TaskItem(
@@ -72,7 +80,9 @@ public struct TasksCreateTool: AgentTool {
             priority: fields.priority,
             tags: fields.tags,
             recurrenceRule: anchoredRecurrence,
-            parentTaskID: parentID
+            parentTaskID: parentID,
+            estimatedDurationSeconds: estimateSeconds,
+            durationSource: estimateSeconds == nil ? nil : .explicit
         )
         task.reminders = reminders
 
@@ -308,6 +318,21 @@ enum TasksStructuredCreateArguments {
         } catch {
             throw AgentError.validation("invalid reminder entry")
         }
+    }
+
+    /// Parses the optional `estimated_duration_minutes` field (minutes, >0) into
+    /// the canonical seconds unit stored on `TaskItem.estimatedDurationSeconds`.
+    /// Returns `nil` when the field is omitted; rejects non-integer or
+    /// non-positive values so a bad estimate cannot silently persist.
+    static func optionalEstimatedDurationSeconds(_ value: JSONValue?) throws -> Int? {
+        guard let value else { return nil }
+        guard let minutes = value.intValue else {
+            throw AgentError.validation("estimated_duration_minutes must be an integer")
+        }
+        guard minutes > 0 else {
+            throw AgentError.validation("estimated_duration_minutes must be greater than 0")
+        }
+        return minutes * 60
     }
 
     static func optionalPriority(_ value: JSONValue?) throws -> TaskPriority {

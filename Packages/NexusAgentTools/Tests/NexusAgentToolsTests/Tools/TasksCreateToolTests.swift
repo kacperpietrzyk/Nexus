@@ -332,6 +332,41 @@ struct TasksCreateToolTests {
         }
     }
 
+    @MainActor
+    @Test("persists estimated_duration_minutes to estimatedDurationSeconds with explicit source")
+    func createPersistsEstimatedDuration() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+
+        let dto = try await callCreate(
+            args: .object([
+                "title": .string("Write report"),
+                "estimated_duration_minutes": .int(90),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(dto.estimatedDurationSeconds == 5_400)
+        let task = try #require(try fixture.repo.context.fetch(FetchDescriptor<TaskItem>()).first)
+        #expect(task.estimatedDurationSeconds == 5_400)
+        #expect(task.durationSource == .explicit)
+    }
+
+    @MainActor
+    @Test("rejects non-positive estimated_duration_minutes")
+    func createRejectsNonPositiveEstimate() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+
+        await #expect(throws: AgentError.self) {
+            _ = try await TasksCreateTool().call(
+                args: .object([
+                    "title": .string("Task"),
+                    "estimated_duration_minutes": .int(0),
+                ]),
+                context: fixture.context
+            )
+        }
+    }
+
     private func callCreate(args: JSONValue, context: AgentContext) async throws -> TaskDTO {
         let result = try await TasksCreateTool().call(args: args, context: context)
         let data = try JSONEncoder().encode(result)
