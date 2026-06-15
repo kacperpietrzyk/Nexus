@@ -104,9 +104,12 @@ struct LiquidTodayToolbarControl: View {
             .padding(2)
             .background {
                 Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.030))
+                    .fill(DS.ColorToken.glassToolbar)
                     .background(.ultraThinMaterial, in: Capsule(style: .continuous))
                     .overlay {
+                        // Intentional diagonal glass sheen (no token equivalent):
+                        // a bright top-leading highlight fading to a dark
+                        // bottom-trailing edge that gives the capsule its lift.
                         LinearGradient(
                             colors: [Color.white.opacity(0.070), .clear, Color.black.opacity(0.040)],
                             startPoint: .topLeading,
@@ -117,20 +120,21 @@ struct LiquidTodayToolbarControl: View {
             }
             .overlay {
                 Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.095), lineWidth: 1)
+                    .stroke(DS.ColorToken.strokeStrong, lineWidth: 1)
             }
-            .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 5)
+            .shadow(
+                color: Color.black.opacity(0.12),
+                radius: DS.Elevation.cardShadowRadius,
+                x: 0,
+                y: DS.Elevation.cardShadowY
+            )
 
-            Button(action: onOpenCalendar) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(DS.ColorToken.textPrimary)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            LiquidIconButton(
+                systemImage: "calendar",
+                accessibilityLabel: "Open calendar",
+                action: onOpenCalendar
+            )
             .help("Open calendar")
-            .accessibilityLabel("Open calendar")
 
             Spacer(minLength: 0)
         }
@@ -151,7 +155,7 @@ private struct LiquidToolbarSegmentIcon: View {
 private struct LiquidToolbarSegmentSeparator: View {
     var body: some View {
         Capsule(style: .continuous)
-            .fill(Color.white.opacity(0.075))
+            .fill(DS.ColorToken.strokeHairline)
             .frame(width: 1, height: 16)
             .padding(.vertical, 8)
             .accessibilityHidden(true)

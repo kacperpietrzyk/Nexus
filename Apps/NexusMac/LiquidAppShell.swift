@@ -1,7 +1,7 @@
 import NexusUI
 import SwiftUI
 
-private let shellOuterHorizontalPadding: CGFloat = 14
+private let shellOuterHorizontalPadding: CGFloat = DS.Space.m
 private let shellOuterVerticalPadding: CGFloat = 12
 
 /// The Liquid app frame (design-system `docs/03_COMPONENTS.md` §AppShell +

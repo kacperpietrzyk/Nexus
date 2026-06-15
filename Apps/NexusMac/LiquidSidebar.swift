@@ -147,26 +147,13 @@ struct LiquidSidebar: View {
         HStack {
             Spacer(minLength: 0)
 
-            Button {
+            LiquidIconButton(
+                systemImage: "slider.horizontal.3",
+                accessibilityLabel: "Open settings"
+            ) {
                 onNavigate(.settings)
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    .frame(width: 34, height: 34)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .background {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.white.opacity(0.026))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
             }
             .help("Open settings")
-            .accessibilityLabel("Open settings")
         }
         .frame(height: trafficLightClearance, alignment: .top)
     }

@@ -182,7 +182,7 @@ struct ContentView: View {
             // for the inspector's content. Gated on the UNCHANGED `inspectorBinding`
             // predicate (§1 "inspector ⊥ Agent" + its test hold).
             .overlay { taskModal }
-            .animation(NexusMotion.standard, value: inspectorBinding.wrappedValue)
+            .animation(DS.Motion.standard, value: inspectorBinding.wrappedValue)
             .sheet(item: $customSnoozeTask) { task in
                 CustomSnoozeSheet(task: task)
             }
@@ -246,7 +246,7 @@ struct ContentView: View {
     @ViewBuilder
     private var toolbarLeading: some View {
         if selection == .inbox {
-            HStack(spacing: 8) {
+            HStack(spacing: DS.Space.s) {
                 ForEach(InboxFilter.allCases, id: \.self) { filter in
                     InboxFilterTab(
                         label: filter.displayLabel,
@@ -257,10 +257,10 @@ struct ContentView: View {
                     }
                 }
 
-                Spacer(minLength: 12)
+                Spacer(minLength: DS.Space.m)
 
                 NexusButton(variant: .ghost, size: .sm, action: markInboxRead) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DS.Space.xxs) {
                         Image(systemName: "envelope.open")
                         Text("Mark Read")
                     }
@@ -302,7 +302,7 @@ struct ContentView: View {
                 AgentBottomInput(viewModel: agentViewModel)
                     .padding(.horizontal, 26)
                     .padding(.top, 14)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, DS.Space.xl)
             }
         } else if selection == .projects {
             // Liquid Projects / Execution (Task 8): picker → header + tabs +
@@ -397,7 +397,7 @@ struct ContentView: View {
     /// taps (via `onNavigate`) and programmatic writes (goToToday/goToInbox
     /// notifications, ⌘⇧A → Agent, meeting/task routing, the command-palette
     /// bootstrap closures) — so every write shares the same
-    /// `withAnimation(NexusMotion.nav)` envelope: content cross-fade +
+    /// `withAnimation(DS.Motion.nav)` envelope: content cross-fade +
     /// selection-pill hero-transition (audit C3 follow-up, carried over from
     /// the pre-Liquid `NexusNavRail`). The `.onChange(of: selection)`
     /// "inspector ⊥ Agent" chokepoint still fires regardless — orthogonal,
@@ -405,7 +405,7 @@ struct ContentView: View {
     /// Internal (not `private`): called from the `ContentView+LiquidToday` extension.
     @MainActor
     func navigate(to destination: TodayNavSelection) {
-        withAnimation(NexusMotion.nav) { selection = destination }
+        withAnimation(DS.Motion.nav) { selection = destination }
     }
 
     /// Opening a task's detail inspector while the Agent destination is
