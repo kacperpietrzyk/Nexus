@@ -234,6 +234,19 @@ struct NexusiOSApp: App {
         )
     }
 
+    @MainActor
+    fileprivate static func makeChatReadinessProbe() -> @MainActor () -> AssistantReadiness {
+        guard let catalog = try? ModelCatalog.loadDefault() else {
+            return { .ready }
+        }
+        let manifestID = DefaultHardcodedModelPolicy(catalog: catalog).resolve().chatManifestID
+        let resolver = AssistantReadinessResolver(
+            localStateStore: ModelManifestLocalState.Store(),
+            chatManifestID: manifestID
+        )
+        return { resolver.readiness(progress: nil) }
+    }
+
     var body: some Scene {
         WindowGroup {
             NexusiOSRootView(
@@ -694,15 +707,18 @@ private struct NexusiOSRootView: View {
             containerIdentifier: environment.cloudKitContainerIdentifier,
             permissionState: permissionState,
             agentSettingsContext: agentComposition.settingsContext,
-            manageModelsContent: AnyView(
-                ManageModelsSection(
-                    localStateStore: ModelManifestLocalState.Store(),
-                    downloadManager: welcomeMLXDownloads.manager,
-                    lifecycle: mlxLifecycle,
-                    onChatReassigned: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
-                    onEmbedderReassigned: { [aiRouter] in try? await aiRouter.reloadMLXEmbedder() }
-                )
-            ),
+            manageModelsContent: {
+                if let reconciler = Self.makeModelReconciler() {
+                    return AnyView(
+                        AssistantStorageContainer(
+                            reconciler: reconciler,
+                            readinessProvider: Self.makeChatReadinessProbe(),
+                            onReloadChat: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
+                            onReloadEmbedder: { [aiRouter] in try? await aiRouter.reloadMLXEmbedder() }
+                        ))
+                }
+                return AnyView(EmptyView())
+            }(),
             onExportRequested: { exportPickerPresented = true }
         )
     }

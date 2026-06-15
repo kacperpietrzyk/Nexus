@@ -257,17 +257,20 @@ struct NexusMacApp: App {
             quietHoursEnd: $quietHoursState.endTime,
             onExportRequested: { exportPickerPresented = true },
             manageModelsContent: {
-                AnyView(
-                    ManageModelsSection(
-                        localStateStore: ModelManifestLocalState.Store(),
-                        downloadManager: welcomeMLXDownloads.manager,
-                        lifecycle: aiGraph.mlxLifecycle,
-                        onChatReassigned: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
-                        onEmbedderReassigned: { [aiRouter] in
-                            try? await aiRouter.reloadMLXEmbedder()
-                        }
+                if let reconciler = Self.makeModelReconciler() {
+                    return AnyView(
+                        AssistantStorageContainer(
+                            reconciler: reconciler,
+                            readinessProvider: Self.makeChatReadinessProbe(),
+                            onReloadChat: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
+                            onReloadEmbedder: { [aiRouter] in
+                                try? await aiRouter.reloadMLXEmbedder()
+                            }
+                        )
                     )
-                )
+                } else {
+                    return AnyView(EmptyView())
+                }
             },
             agentSettingsContent: {
                 AnyView(AgentSettingsView(context: agentComposition.settingsContext))
