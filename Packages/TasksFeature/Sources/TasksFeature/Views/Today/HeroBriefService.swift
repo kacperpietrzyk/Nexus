@@ -34,6 +34,9 @@ public actor HeroBriefService {
     private struct CacheKey: Hashable {
         let dayBucket: Int
         let counts: Counts
+        // `meetings` feeds the skill-path prompt, so it must key the cache or a
+        // changed meeting count returns a stale brief within the TTL.
+        let meetings: Int
     }
 
     private let router: AIRouter
@@ -83,7 +86,11 @@ public actor HeroBriefService {
         now: Date,
         meetings: Int = 0
     ) async -> String {
-        let key = CacheKey(dayBucket: calendar.component(.day, from: now), counts: counts)
+        let key = CacheKey(
+            dayBucket: calendar.component(.day, from: now),
+            counts: counts,
+            meetings: meetings
+        )
         if let entry = cache, entry.key == key, now.timeIntervalSince(entry.timestamp) < ttl {
             return entry.value
         }

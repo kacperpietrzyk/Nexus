@@ -27,7 +27,19 @@ extension TaskDetailInspector {
                         NexusColor.Background.control,
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                     )
+                    .focused($estimateFocused)
                     .onSubmit { commitEstimate() }
+                    // Blur-commit: closing the inspector (X / Escape / selecting
+                    // another row) or tabbing to another field drops focus while
+                    // `task` is still the current one, so the typed value persists
+                    // before any selection-swap resync can overwrite the draft.
+                    .onChange(of: estimateFocused) { _, isFocused in
+                        if !isFocused { commitEstimate() }
+                    }
+                    // Teardown backstop for the Mac modal, whose host removes the
+                    // view rather than invoking `onClose`. `commitEstimate` re-derives
+                    // the draft from the stored value, so double-firing is harmless.
+                    .onDisappear { commitEstimate() }
                 Text("min")
                     .font(NexusType.bodySmall)
                     .foregroundStyle(NexusColor.Text.tertiary)

@@ -67,6 +67,24 @@ struct HandcodedParserDateLiteralTests {
         #expect(result.dueAt == nil)
         #expect(result.title == "audit 2026-02-30")
     }
+
+    @Test("partial DD.MM '29.02' in a non-leap year is rejected, not rolled to Mar 1")
+    func partialFeb29NonLeapRejected() async {
+        // now = May 4, 2026 (non-leap). "29.02" must NOT lenient-normalize to
+        // Mar 1; the partial-date resolver should reject it entirely.
+        let result = await parser.parse(
+            "renew 29.02", locale: Locale(identifier: "pl"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.dueAt == nil)
+        #expect(result.title == "renew 29.02")
+    }
+
+    @Test("partial DD.MM '28.02' (valid) still resolves as a control")
+    func partialFeb28Valid() async {
+        // now = May 4, 2026. Feb 28 is in the past this year → rolls to 2027.
+        let result = await parser.parse(
+            "renew 28.02", locale: Locale(identifier: "pl"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.dueAt == ISO8601DateFormatter.fixedNoon.date(from: "2027-02-28T00:00:00Z"))
+    }
 }
 
 extension ISO8601DateFormatter {

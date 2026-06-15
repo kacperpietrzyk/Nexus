@@ -116,6 +116,13 @@ public final class WatchPayloadHandler {
         }
 
         let parsed = await parser.parse(input, locale: .current, now: nowProvider())
+        // Resolve the `@project` capture token the same way the App Intent /
+        // Share capture paths do, so Watch captures land in the named project
+        // instead of the inbox.
+        let projectID = parsed.projectToken.flatMap { token in
+            (try? ProjectRepository(context: repository.context).findActive(matchingToken: token))
+                .flatMap { $0 }?.id
+        }
         let task = TaskItem(
             title: parsed.title,
             dueAt: parsed.dueAt,
@@ -124,7 +131,8 @@ public final class WatchPayloadHandler {
             deadlineAt: parsed.deadlineAt,
             priority: parsed.priority ?? .none,
             tags: parsed.tags,
-            recurrenceRule: parsed.recurrence
+            recurrenceRule: parsed.recurrence,
+            projectID: projectID
         )
 
         do {

@@ -111,6 +111,33 @@ struct HeroBriefServiceSkillTests {
         #expect(result.contains("Everything else has been quietly set aside."))
     }
 
+    @Test("cache key includes meetings → changed meeting count is not served stale")
+    func cacheKeyIncludesMeetings() async throws {
+        // Echo skill path: returns the summary string verbatim so we can read the
+        // meetings param it was built with. With the meetings param missing from
+        // the cache key, the second call (meetings:2) would return the cached
+        // meetings=0 brief within the TTL.
+        let router = makeRouter(responseText: "unused")
+        let readyProbe: @MainActor @Sendable () -> AssistantReadiness = { .ready }
+        let skillPath: @MainActor @Sendable (String, Date) async throws -> String = { summary, _ in
+            summary
+        }
+        let service = HeroBriefService(
+            router: router,
+            ttl: 1800,
+            skillPath: skillPath,
+            readinessProbe: readyProbe
+        )
+        let counts = HeroBriefService.Counts(overdue: 0, today: 1, noDate: 0, awaiting: 0)
+        let now = Date.now
+        let first = await service.brief(for: counts, firstTitles: [], now: now, meetings: 0)
+        let second = await service.brief(
+            for: counts, firstTitles: [], now: now.addingTimeInterval(10), meetings: 2)
+        #expect(first.contains("meetings=0"))
+        #expect(second.contains("meetings=2"))
+        #expect(first != second)
+    }
+
     @Test("cache: identical key within TTL returns same value without new inference call")
     func cachePreventsReInference() async throws {
         let ctx = try makeContext()

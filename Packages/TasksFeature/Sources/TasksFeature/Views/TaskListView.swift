@@ -255,37 +255,13 @@ public struct TaskListView: View {
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
         .onTapGesture { onSelect?(item) }
-        .swipeActions(edge: .leading) {
-            Button {
-                toggleDone(item)
-            } label: {
-                Label(item.status == .done ? "Reopen" : "Done", systemImage: "checkmark.circle")
-            }
-            // Solid dark swipe fill (backgroundElevated) so the white system
-            // label stays legible; glass tokens are translucent and would let
-            // the row bleed through mid-swipe.
-            .tint(DS.ColorToken.backgroundElevated)
-        }
-        .swipeActions(edge: .trailing) {
-            Button {
-                snooze(item, by: .oneHour)
-            } label: {
-                Label("1h", systemImage: "clock")
-            }
-            // Solid dark swipe fill (see leading edge).
-            .tint(DS.ColorToken.backgroundElevated)
-            Button {
-                snooze(item, by: .tomorrow)
-            } label: {
-                Label("Tomorrow", systemImage: "sun.haze")
-            }
-            .tint(DS.ColorToken.backgroundElevated)
-        }
+        .swipeActions(edge: .leading) { leadingSwipeActions(for: item) }
+        .swipeActions(edge: .trailing) { trailingSwipeActions(for: item) }
         .taskAssistContextMenu(for: item) { actions in
             if item.isTemplate {
                 Button("New Task from Template") { instantiateTemplate(item) }
-                // I-D1: no complete/snooze/subtask affordances on an inert blueprint;
-                // delete stays available via the leading swipe + list delete flows.
+                // I-D1: no complete/snooze/subtask affordances on an inert blueprint.
+                Button("Delete Template", role: .destructive) { deleteTemplate(item) }
             } else {
                 Button(item.status == .done ? "Reopen" : "Mark done") { toggleDone(item) }
                 Button("Save as Template") { saveAsTemplate(item) }
@@ -494,6 +470,60 @@ extension TaskListView {
             reload()
         } catch {
             self.error = String(describing: error)
+        }
+    }
+
+    @MainActor
+    private func deleteTemplate(_ item: TaskItem) {
+        guard let repository, item.isTemplate else { return }
+        do {
+            try repository.softDelete(item)
+            withAnimation(DS.Motion.standard) { reload() }
+        } catch {
+            self.error = String(describing: error)
+        }
+    }
+
+    @ViewBuilder
+    func leadingSwipeActions(for item: TaskItem) -> some View {
+        // Templates are inert blueprints — no Done. Everything else gets the
+        // complete/reopen toggle.
+        if !item.isTemplate {
+            Button {
+                toggleDone(item)
+            } label: {
+                Label(item.status == .done ? "Reopen" : "Done", systemImage: "checkmark.circle")
+            }
+            // Solid dark swipe fill (backgroundElevated) so the white system label
+            // stays legible; glass tokens are translucent and would let the row
+            // bleed through mid-swipe.
+            .tint(DS.ColorToken.backgroundElevated)
+        }
+    }
+
+    @ViewBuilder
+    func trailingSwipeActions(for item: TaskItem) -> some View {
+        if item.isTemplate {
+            // Templates have no snooze; the trailing edge is their delete path.
+            Button(role: .destructive) {
+                deleteTemplate(item)
+            } label: {
+                Label("Delete Template", systemImage: "trash")
+            }
+        } else {
+            Button {
+                snooze(item, by: .oneHour)
+            } label: {
+                Label("1h", systemImage: "clock")
+            }
+            // Solid dark swipe fill (see leading edge).
+            .tint(DS.ColorToken.backgroundElevated)
+            Button {
+                snooze(item, by: .tomorrow)
+            } label: {
+                Label("Tomorrow", systemImage: "sun.haze")
+            }
+            .tint(DS.ColorToken.backgroundElevated)
         }
     }
 

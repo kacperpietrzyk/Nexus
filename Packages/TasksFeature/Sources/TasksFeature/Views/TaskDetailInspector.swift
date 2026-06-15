@@ -33,6 +33,11 @@ public struct TaskDetailInspector: View {
     /// Editable estimate (minutes string) bound by `+Estimate`; persists to
     /// `estimatedDurationSeconds`. Internal so the extension can render it.
     @State var estimateMinutesDraft: String
+    /// Focus of the estimate field. Blur (clicking X / another row / a different
+    /// field) commits the typed estimate while `task` still points to the current
+    /// task — so closing the Mac modal the normal way (which removes the view
+    /// rather than calling `onClose`) doesn't drop an un-submitted edit.
+    @FocusState var estimateFocused: Bool
     @State var outgoingBlockedTasks: [TaskItem] = []
     @State var incomingBlockerTasks: [TaskItem] = []
     @State var blockSearchText: String = ""

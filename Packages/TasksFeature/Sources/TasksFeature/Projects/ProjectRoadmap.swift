@@ -251,10 +251,17 @@ struct ProjectRoadmap: View {
             let effectiveBarWidth = max(barWidth, RoadmapMetrics.markerSize)
             let halfMarker = RoadmapMetrics.markerSize / 2
             let clampedX = min(max(markerX, halfMarker), effectiveBarWidth - halfMarker)
+            // A milestone dated before the project start (markerX < 0) or past
+            // its end (> bar extent) gets clamped to the bar edge; dim it so a
+            // clamped marker isn't mistaken for a real on-edge one. The threshold
+            // is the bar's true date extent, not the half-marker render inset —
+            // an on-start milestone resolves to markerX == 0 and must stay bright.
+            let isOutOfRange = markerX < 0 || markerX > effectiveBarWidth
             Rectangle()
                 .fill(Self.markerColor(marker.state))
                 .frame(width: RoadmapMetrics.markerSize, height: RoadmapMetrics.markerSize)
                 .rotationEffect(.degrees(45))
+                .opacity(isOutOfRange ? 0.4 : 1)
                 .offset(x: clampedX - RoadmapMetrics.markerSize / 2)
                 .accessibilityHidden(true)
         }
