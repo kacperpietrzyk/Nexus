@@ -1,11 +1,11 @@
-// SlotScheduler and SchedulingIntelligence are intentionally NOT unified in SP2.
-// Empirical result (2026-06-14): the two finders are OUTPUT-IDENTICAL across all
-// tested fixtures, including boundary cases that the plan predicted would diverge.
-// SlotScheduler's workday pre-filter and SchedulingIntelligence's clip() guard
-// both defend against the same invalid-DateInterval bug; they produce the same
-// busy-span sets. Unification is therefore safe but deferred to a later sub-project
-// (no caller change in SP2, adapter-first per spec §8.3).
-// Do NOT "fix" either implementation to match the other without a deliberate migration.
+// SlotScheduler and SchedulingIntelligence ARE now unified (2026-06-15, adapter-first
+// per spec §8.3): SchedulingIntelligence.suggestedFocusBlocks delegates to
+// SlotScheduler.freeSlots (seconds-native overload). The empirical equivalence below
+// (2026-06-14: OUTPUT-IDENTICAL across all fixtures) is what made the merge safe; the
+// comparison tests now also guard that the delegation wiring stays a true pass-through.
+// The fractional-duration test additionally locks the seconds-native contract against a
+// future seconds→Int truncation regression (the whole-minute comparison fixtures cannot
+// catch that — every input there is a clean minutes*60 multiple).
 
 import Foundation
 import NexusCore
@@ -182,5 +182,32 @@ struct SlotSchedulerVsIntelligenceTests {
         for block in ss {
             #expect(block.duration >= 3600)
         }
+    }
+
+    // (i) Fractional-minute minimum — the seconds-native contract. A naive
+    // seconds→Int-minute conversion (Int(minimumDuration / 60) * 60) would truncate
+    // 1801 s down to 1800 s and WRONGLY keep an exactly-1800 s gap. This fixture
+    // feeds a single 30-min (1800 s) gap and a sub-minute-precision minimum so the
+    // truncation bug is observable; the whole-minute comparison fixtures cannot.
+    @Test("(i) fractional minimum respected — no truncation")
+    func fractionalMinimumNotTruncated() {
+        // 09:00–12:00 then 12:30–17:00 → one 1800 s gap at 12:00–12:30.
+        let events = [
+            event("m1", from: 9, to: 12),
+            event("m2", from: 12.5, to: 17),
+        ]
+        let scheduler = SlotScheduler()
+
+        // 1801 s > 1800 s gap → dropped (truncation would keep it).
+        let dropped = scheduler.freeSlots(
+            events: events, within: workday,
+            minimumDuration: 1801, maximumDuration: .infinity)
+        #expect(dropped.isEmpty, "a 1800 s gap must be dropped when the minimum is 1801 s")
+
+        // 1799 s < 1800 s gap → kept as exactly one 1800 s block.
+        let kept = scheduler.freeSlots(
+            events: events, within: workday,
+            minimumDuration: 1799, maximumDuration: .infinity)
+        #expect(kept == [DateInterval(start: t(12), end: t(12.5))])
     }
 }

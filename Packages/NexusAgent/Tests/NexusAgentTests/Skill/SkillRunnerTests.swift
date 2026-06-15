@@ -73,6 +73,22 @@ import Testing
         let inference = ScriptedSkillInference(responses: ["ok"])
         let runner = SkillRunner(inference: inference, assembler: try makeAssembler())
         _ = try await runner.run(skill { Out(value: $0) }, focus: ContextFocus(), userText: "hi")
-        #expect(inference.requests[0].tools == nil || inference.requests[0].tools?.isEmpty == true)
+        #expect(inference.requests[0].tools == nil)
+    }
+
+    // Tool-subset seam (spec §4.B) is deliberately unwired: even a skill that NAMES
+    // tools sends `tools: nil`, because SkillRunner is single-shot and has no dispatch
+    // loop. (allowsToolCalling is left false — the assert tripwire forbids true here.)
+    @Test func namedToolsStillSendNilBecauseSeamIsUnwired() async throws {
+        let inference = ScriptedSkillInference(responses: ["ok"])
+        let runner = SkillRunner(inference: inference, assembler: try makeAssembler())
+        let toolNamed = AssistantSkill<Out>(
+            id: "t",
+            systemPrompt: "system",
+            toolNames: ["tasks.list", "search.global"],
+            contextRecipe: ContextRecipe(),
+            output: OutputContract<Out>(schemaDescription: "{value:string}", decode: { Out(value: $0) }))
+        _ = try await runner.run(toolNamed, focus: ContextFocus(), userText: "hi")
+        #expect(inference.requests[0].tools == nil)
     }
 }

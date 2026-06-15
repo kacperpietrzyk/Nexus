@@ -7,13 +7,15 @@ import NexusCore
 /// view-model. No SwiftData, no EventKit, no ambient clock; every function is
 /// deterministic over its inputs.
 ///
-/// Reuse note: NexusCore's `FreeSlotComputer` (the DayPlanner/DayScheduler gap
-/// engine) is internal to NexusCore and is shaped around `CalendarPreferences`
-/// (workday `DateComponents`, buffer padding, min-block pruning) plus `@Model
-/// ScheduledBlock` obstacles. The gap semantics needed here (explicit
-/// `DateInterval` window, no buffers, plain minimum duration) differ, so the
-/// interval merge/gap walk is implemented locally instead of widening
-/// NexusCore's API.
+/// Reuse note: gap-finding (`suggestedFocusBlocks`) delegates to NexusCore's
+/// `SlotScheduler.freeSlots` — the two were characterized output-identical
+/// (`SlotSchedulerVsSchedulingIntelligenceTests`) and unified here, so there is a
+/// single gap engine. The conflict/meeting-load/time-insight functions keep their
+/// own interval helpers (`clip`/`mergedIntervals`/`unionDuration`) because they
+/// have no `SlotScheduler` analog. NexusCore's `FreeSlotComputer` (the
+/// DayPlanner/DayScheduler engine) remains separate: it is shaped around
+/// `CalendarPreferences` buffers + `@Model ScheduledBlock` obstacles, semantics
+/// these UI-derived functions do not want.
 public enum SchedulingIntelligence {
     /// Two non-all-day events whose time ranges genuinely overlap, plus the
     /// overlapping interval. `first` starts no later than `second` (ties broken
@@ -88,8 +90,8 @@ public enum SchedulingIntelligence {
     /// minimum is included. Overlapping events merge into one busy span; events
     /// outside the window (and zero-length ones) never split a gap.
     ///
-    /// Implemented locally rather than via NexusCore's `FreeSlotComputer` — see
-    /// the type-level reuse note.
+    /// Delegates to NexusCore's `SlotScheduler.freeSlots` (seconds-native overload
+    /// — see the type-level reuse note); they were characterized output-identical.
     /// `maximumDuration` (default unbounded) chunks each free gap into
     /// block-sized suggestions — a 10 h empty workday should propose 2 h focus
     /// blocks, not one all-day slab. Chunk remainders below `minimumDuration`
@@ -100,38 +102,11 @@ public enum SchedulingIntelligence {
         minimumDuration: TimeInterval = 3600,
         maximumDuration: TimeInterval = .infinity
     ) -> [DateInterval] {
-        let busy = mergedIntervals(events.compactMap { clip($0, to: workday) })
-
-        var gaps: [DateInterval] = []
-        var cursor = workday.start
-        for span in busy {
-            if span.start.timeIntervalSince(cursor) >= minimumDuration {
-                gaps.append(DateInterval(start: cursor, end: span.start))
-            }
-            cursor = max(cursor, span.end)
-        }
-        if workday.end.timeIntervalSince(cursor) >= minimumDuration {
-            gaps.append(DateInterval(start: cursor, end: workday.end))
-        }
-        guard maximumDuration < .infinity else { return gaps }
-        return gaps.flatMap { chunked($0, minimum: minimumDuration, maximum: maximumDuration) }
-    }
-
-    /// Split one free gap into consecutive `maximum`-long blocks; the trailing
-    /// remainder survives only when it still clears `minimum`.
-    private static func chunked(
-        _ gap: DateInterval,
-        minimum: TimeInterval,
-        maximum: TimeInterval
-    ) -> [DateInterval] {
-        var blocks: [DateInterval] = []
-        var cursor = gap.start
-        while gap.end.timeIntervalSince(cursor) >= minimum {
-            let end = min(cursor.addingTimeInterval(maximum), gap.end)
-            blocks.append(DateInterval(start: cursor, end: end))
-            cursor = end
-        }
-        return blocks
+        SlotScheduler().freeSlots(
+            events: events,
+            within: workday,
+            minimumDuration: minimumDuration,
+            maximumDuration: maximumDuration)
     }
 
     /// How an event spends time, for weekly insights. Mirrors the semantics of

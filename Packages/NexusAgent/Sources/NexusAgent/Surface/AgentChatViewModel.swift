@@ -31,6 +31,12 @@ public final class AgentChatViewModel: ObservableObject {
     public let chatConfig: AssistantChatConfig
     private let proposalCoordinator: ProposalCoordinator?
     private let readinessProbe: (@MainActor () -> AssistantReadiness)?
+    /// Pre-assembles a stuffed context for a turn (iOS extraction-only path). Wraps
+    /// `ContextAssembler.assemble(...).renderedBlocks().joined(...)`; injected as a
+    /// closure to keep the VM testable and avoid importing the assembler at every
+    /// call site. `nil` on Mac / legacy callers — context then flows only through
+    /// `ContextBuilder` inside the runtime, exactly as before.
+    private let assembleContext: (@MainActor (ContextRecipe, ContextFocus, Date) async -> String)?
 
     /// Primary init — callers that don't use chat config (brief / schedule / legacy)
     /// omit `chatConfig`, `proposalCoordinator`, and `readinessProbe`; defaults keep
@@ -45,7 +51,8 @@ public final class AgentChatViewModel: ObservableObject {
         warmChatModel: (@MainActor () async -> Void)? = nil,
         chatConfig: AssistantChatConfig = .mac,
         proposalCoordinator: ProposalCoordinator? = nil,
-        readinessProbe: (@MainActor () -> AssistantReadiness)? = nil
+        readinessProbe: (@MainActor () -> AssistantReadiness)? = nil,
+        assembleContext: (@MainActor (ContextRecipe, ContextFocus, Date) async -> String)? = nil
     ) {
         self.runtime = runtime
         self.threadStore = threadStore
@@ -57,6 +64,7 @@ public final class AgentChatViewModel: ObservableObject {
         self.chatConfig = chatConfig
         self.proposalCoordinator = proposalCoordinator
         self.readinessProbe = readinessProbe
+        self.assembleContext = assembleContext
         self.isChatModelAvailable = chatModelAvailability?() ?? true
 
         reloadThreads()
@@ -135,13 +143,15 @@ public final class AgentChatViewModel: ObservableObject {
         defer { isThinking = false }
 
         let initialMessageIDs = currentMessageIDs(threadID: threadID)
+        let effectivePrefix = await assembledContextPrefix(
+            userMessage: userMessage, callerPrefix: contextPrefix)
         do {
             let response = try await runtime.runTurn(
                 AgentTurnRequest(
                     threadID: threadID,
                     userMessage: userMessage,
                     attachments: attachments,
-                    contextPrefix: contextPrefix,
+                    contextPrefix: effectivePrefix,
                     scope: "global",
                     toolAllowlist: chatConfig.toolNames,
                     systemPromptOverride: chatConfig.systemPrompt
@@ -173,6 +183,30 @@ public final class AgentChatViewModel: ObservableObject {
 
         let accepted = !currentMessageIDs(threadID: threadID).subtracting(initialMessageIDs).isEmpty
         return accepted ? .accepted : .rejected(lastError)
+    }
+
+    /// For extraction-only configs (iOS, `allowsToolCalling == false`), pre-assembles a
+    /// stuffed context via the injected `assembleContext` closure and merges it with any
+    /// caller-supplied `contextPrefix` (e.g. file attachments from the input bar) — neither
+    /// is dropped. Returns `callerPrefix` unchanged when no closure was injected or the
+    /// config allows tool-calling (Mac path), so Mac behaviour is byte-identical to before.
+    private func assembledContextPrefix(userMessage: String, callerPrefix: String?) async -> String? {
+        guard !chatConfig.allowsToolCalling, let assembleContext else { return callerPrefix }
+        let base = chatConfig.contextRecipe
+        // The iOS recipe ships an empty RAG query string; bind it to this turn's message
+        // so retrieval runs against what the user actually asked (not "").
+        let perTurnRecipe = ContextRecipe(
+            includeEntity: base.includeEntity,
+            linkGraphDepth: base.linkGraphDepth,
+            repoSlices: base.repoSlices,
+            ragQuery: base.ragQuery.map { RagQuerySpec(query: userMessage, limit: $0.limit) },
+            tokenBudget: base.tokenBudget)
+        let assembled = await assembleContext(perTurnRecipe, ContextFocus(freeText: userMessage), Date())
+        let parts = [assembled, callerPrefix].compactMap { part -> String? in
+            guard let part, !part.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return part
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
 
     /// Accept the pending proposal for the given message id.

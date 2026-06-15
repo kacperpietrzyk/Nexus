@@ -7,12 +7,26 @@ public struct SlotScheduler: Sendable {
     public init(calendar: Calendar = .current) { self.calendar = calendar }
 
     /// Free gaps inside `workday`, each ≥ minimumMinutes, chunked to ≤ maximumMinutes.
+    /// Minutes-based convenience overload; forwards to the seconds-native core.
     public func freeSlots(
         events: [CalendarEvent], within workday: DateInterval,
         minimumMinutes: Int, maximumMinutes: Int
     ) -> [DateInterval] {
         let minSec = TimeInterval(minimumMinutes * 60)
         let maxSec = maximumMinutes <= 0 ? TimeInterval.infinity : TimeInterval(maximumMinutes * 60)
+        return freeSlots(
+            events: events, within: workday,
+            minimumDuration: minSec, maximumDuration: maxSec)
+    }
+
+    /// Seconds-native core. Free gaps inside `workday`, each ≥ `minimumDuration`
+    /// seconds, chunked to ≤ `maximumDuration` seconds (`.infinity` = unchunked).
+    /// Use this directly when the caller's durations are not whole-minute (e.g. an
+    /// event length in raw seconds) — the minutes overload would truncate.
+    public func freeSlots(
+        events: [CalendarEvent], within workday: DateInterval,
+        minimumDuration minSec: TimeInterval, maximumDuration maxSec: TimeInterval
+    ) -> [DateInterval] {
         // Busy spans clipped to the workday, merged.
         // Pre-filter to only events that actually overlap the workday window before clipping
         // (prevents end < start in DateInterval when an event ends before the window starts).

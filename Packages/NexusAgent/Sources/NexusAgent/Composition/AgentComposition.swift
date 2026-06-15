@@ -212,6 +212,28 @@ public struct AgentComposition {
             }
         )
 
+        // iOS chat is extraction-only (no tool-calling): pre-stuff a context via
+        // ContextAssembler, reusing the same hybrid retriever the ContextBuilder uses.
+        // Mac tool-calls instead, so it gets no closure (see AssistantChatConfig).
+        let iosChatAssembler: ContextAssembler? =
+            platform == .iOS
+            ? ContextAssembler(
+                agentContext: resolvedAgentContext,
+                retriever: AgentSearchSemanticTool(
+                    embeddingClient: embedding.embeddingClient,
+                    index: embedding.index,
+                    ftsSearch: embedding.ftsSearch,
+                    context: context))
+            : nil
+        let iosAssembleContext: (@MainActor (ContextRecipe, ContextFocus, Date) async -> String)?
+        if let assembler = iosChatAssembler {
+            iosAssembleContext = { recipe, focus, now in
+                await assembler.assemble(recipe, focus: focus, now: now)
+                    .renderedBlocks().joined(separator: "\n\n")
+            }
+        } else {
+            iosAssembleContext = nil
+        }
         let chatViewModel = AgentChatViewModel(
             runtime: runtime,
             threadStore: stores.threadStore,
@@ -222,7 +244,8 @@ public struct AgentComposition {
             warmChatModel: warmChatModel,
             chatConfig: platform == .mac ? .mac : .iOS,
             proposalCoordinator: chatCoordinator,
-            readinessProbe: chatReadiness
+            readinessProbe: chatReadiness,
+            assembleContext: iosAssembleContext
         )
         let settingsContext = AgentSettingsContext(
             memoryStore: stores.memoryStore,

@@ -78,14 +78,25 @@ public final class SkillRunner {
         prompt: String,
         context: [String]
     ) -> AIRequest {
-        AIRequest(
+        // Tool-subset seam (spec §4.B step 2), deliberately left unwired: `SkillRunner`
+        // is single-shot (one inference + one repair retry) and holds no ToolDispatcher,
+        // so it cannot execute a tool call or feed the result back. Advertising tools
+        // here would make the model emit calls that nothing runs — strictly worse than
+        // sending none. The one live tool-calling surface (assistant.chat) runs on
+        // `AgentRuntime`, which already resolves `toolNames` → `[AIToolSpec]` and owns the
+        // dispatch loop. Closing this seam means giving SkillRunner that loop too; until
+        // then a skill run through here must stay extraction-only.
+        assert(
+            !skill.allowsToolCalling,
+            "SkillRunner cannot execute tool calls; route tool-calling skills through AgentRuntime")
+        return AIRequest(
             prompt: prompt,
             capability: .generate,
             connectivity: .offlineOnly,
             cost: .free,
             providerPreference: .auto,
             context: context,
-            tools: skill.allowsToolCalling && !skill.toolNames.isEmpty ? [] : nil,
+            tools: nil,
             systemPrompt: skill.systemPrompt)
     }
 }
