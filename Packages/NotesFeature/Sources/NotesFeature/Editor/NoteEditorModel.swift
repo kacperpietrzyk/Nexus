@@ -103,6 +103,34 @@ public final class NoteEditorModel {
         apply(BlockListOps.setCode(text, forBlock: id, in: blocks))
     }
 
+    // MARK: - Table editing (GAP #5)
+    //
+    // Cell edits/structure changes route through the same `apply` → `updateContent`
+    // path as every other block op, so the markdown cache + mirror stay consistent in
+    // one transaction. `setTableCell` collapses a cell to a single unmarked run
+    // (staged plain-text editing, mirroring `setPlainText`).
+
+    public func setTableCell(_ text: String, row: Int, column: Int, forBlock id: UUID) {
+        let runs = InlineRunRendering.runs(fromPlainText: text)
+        apply(BlockListOps.setTableCell(runs, row: row, column: column, forBlock: id, in: blocks))
+    }
+
+    public func addTableRow(forBlock id: UUID) {
+        apply(BlockListOps.addTableRow(forBlock: id, in: blocks))
+    }
+
+    public func removeTableRow(forBlock id: UUID) {
+        apply(BlockListOps.removeTableRow(forBlock: id, in: blocks))
+    }
+
+    public func addTableColumn(forBlock id: UUID) {
+        apply(BlockListOps.addTableColumn(forBlock: id, in: blocks))
+    }
+
+    public func removeTableColumn(forBlock id: UUID) {
+        apply(BlockListOps.removeTableColumn(forBlock: id, in: blocks))
+    }
+
     public func setHTML(_ raw: String, forBlock id: UUID) {
         apply(BlockListOps.setHTML(raw, forBlock: id, in: blocks))
     }
