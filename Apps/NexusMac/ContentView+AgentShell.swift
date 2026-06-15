@@ -1,3 +1,4 @@
+import NexusAI
 import NexusAgent
 import NexusUI
 import SwiftUI
@@ -20,11 +21,11 @@ import SwiftUI
 /// §2 achromatic LabPalette→NexusColor map:
 /// `soft→Text.tertiary`, `ink→Text.primary`, `faint→Text.muted`,
 /// `glassRim→Line.hairline`, `dim→Text.disabled`. Not a primitive — a thin
-/// token composition, same status as the private `NexusCommandBar` /
-/// `InboxFilterTab`. Inter-SemiBold 13 / IBMPlexMono-Medium 11/10 are
-/// below/aside the `NexusType` scale, so raw `Font.custom` against the
-/// process-registered family is the honest §8 stopgap (same path
-/// `NexusCommandBar` uses for its ⌘K kbd chip).
+/// token composition, same status as the private `InboxFilterTab`.
+/// Inter-SemiBold 13 / IBMPlexMono-Medium 11/10 are below/aside the
+/// `NexusType` scale, so raw `Font.custom` against the process-registered
+/// family is the honest §8 stopgap (same path the old `NexusCommandBar`
+/// used for its ⌘K kbd chip before the Liquid rewrite deleted it).
 ///
 /// The thread label is derived from the live view-model (`threads` +
 /// `currentThreadID`, both already published — no new query / behaviour):
@@ -37,6 +38,19 @@ import SwiftUI
 /// `viewModel.createThread()` (no new behaviour).
 struct AgentTopControl: View {
     @ObservedObject var viewModel: AgentChatViewModel
+
+    private var readinessLabel: String {
+        switch viewModel.assistantReadiness() {
+        case .ready:
+            return "ready"
+        case .downloading(let progress):
+            return "preparing \(Int(progress * 100))%"
+        case .notDownloaded:
+            return "model not downloaded"
+        case .failed:
+            return "unavailable"
+        }
+    }
 
     private var threadLabel: String {
         guard let currentID = viewModel.currentThreadID else {
@@ -57,30 +71,30 @@ struct AgentTopControl: View {
         HStack(spacing: 14) {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(NexusColor.Text.tertiary)
+                    .fill(DS.ColorToken.accentPrimary)
                     .frame(width: 5, height: 5)
                 Text("Nexus")
-                    .font(Font.custom("Inter-SemiBold", size: 13))
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.bodyStrong)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
             }
 
-            Text("ready")
-                .font(Font.custom("IBMPlexMono-Medium", size: 11))
-                .foregroundStyle(NexusColor.Text.secondary)
-                .padding(.horizontal, 8)
+            Text(readinessLabel)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .padding(.horizontal, DS.Space.s)
                 .padding(.vertical, 3)
-                .background(NexusColor.Background.control.opacity(0.72), in: Capsule())
-                .overlay(Capsule().strokeBorder(NexusColor.Line.hairline, lineWidth: 1))
+                .background(DS.ColorToken.glassSelected, in: Capsule())
+                .overlay(Capsule().strokeBorder(DS.ColorToken.strokeHairline, lineWidth: 1))
 
             Spacer()
 
             Text(threadLabel)
-                .font(Font.custom("IBMPlexMono-Medium", size: 11))
-                .foregroundStyle(NexusColor.Text.muted)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textTertiary)
                 .lineLimit(1)
 
             Rectangle()
-                .fill(NexusColor.Line.hairline)
+                .fill(DS.ColorToken.strokeHairline)
                 .frame(width: 1, height: 12)
 
             // Deliberate oracle deviation: an interactive affordance over the
@@ -93,13 +107,13 @@ struct AgentTopControl: View {
                         Image(systemName: "plus")
                             .font(.system(size: 10, weight: .semibold))
                         Text("New")
-                            .font(Font.custom("Inter-SemiBold", size: 12))
+                            .font(DS.FontToken.button)
                     }
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(NexusColor.Background.control.opacity(0.72), in: Capsule())
-                    .overlay(Capsule().strokeBorder(NexusColor.Line.regular, lineWidth: 1))
+                    .background(DS.ColorToken.glassSelected, in: Capsule())
+                    .overlay(Capsule().strokeBorder(DS.ColorToken.strokeDefault, lineWidth: 1))
                 }
             )
             .buttonStyle(.plain)
@@ -156,5 +170,56 @@ struct AgentBottomInput: View {
                 viewModel.imageAttachmentDeferralReason()
             }
         )
+    }
+}
+
+/// Reactive banner shown above the agent chat content when the on-device model
+/// is not yet downloaded. Uses `@ObservedObject` (not `@Environment`) for the
+/// same reason `AgentTopControl` / `AgentBottomInput` do: `@Environment` does
+/// not subscribe to `@Published` changes on a reference-type value, so the band
+/// would not hide itself reactively once readiness flips to `.downloading`.
+///
+/// `bandDismissed` is a `@Binding` hoisted to `ContentView` so "Later" survives
+/// navigation (the agent destination unmounts when the user switches rails).
+struct AgentContentBand: View {
+    @ObservedObject var viewModel: AgentChatViewModel
+    let downloadManager: ModelDownloadManager?
+    @Binding var bandDismissed: Bool
+
+    var body: some View {
+        bandContent
+    }
+
+    @ViewBuilder
+    private var bandContent: some View {
+        if let context = bandContext {
+            AssistantUpdateBand(
+                modelName: context.set.chatManifestID,
+                sizeGB: context.set.chatSizeGB,
+                onDownload: {
+                    let preparer = AssistantPreparer(
+                        resolvedSet: context.set,
+                        downloadManager: context.manager,
+                        localStateStore: ModelManifestLocalState.Store()
+                    )
+                    Task { try? await preparer.prepareIfNeeded() }
+                },
+                onLater: { bandDismissed = true }
+            )
+            .padding(.horizontal, DS.Space.xl)
+            .padding(.top, DS.Space.m)
+        }
+    }
+
+    /// Returns the resolved model set + download manager when the band should be
+    /// shown: model not yet downloaded, not dismissed, manager available, catalog
+    /// decodable. `nil` means the band is hidden.
+    private var bandContext: (set: ResolvedModelSet, manager: ModelDownloadManager)? {
+        guard case .notDownloaded = viewModel.assistantReadiness() else { return nil }
+        guard !bandDismissed else { return nil }
+        guard let manager = downloadManager else { return nil }
+        guard let catalog = try? ModelCatalog.loadDefault() else { return nil }
+        let set = DefaultHardcodedModelPolicy(catalog: catalog).resolve()
+        return (set, manager)
     }
 }

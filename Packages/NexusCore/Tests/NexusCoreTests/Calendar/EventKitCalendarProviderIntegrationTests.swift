@@ -105,6 +105,15 @@ struct EventKitCalendarProviderHelperTests {
         let id = EventKitCalendarProvider.teamsMeetingID(notes: notes, joinURL: url, eventURL: nil)
         #expect(id == "111222333")
     }
+
+    @Test("completion-anchored RRule maps onto an EKRecurrenceRule with the anchor ignored")
+    func anchoredRRuleMapsToEKRule() throws {
+        let anchored = try RRuleParser.parse("FREQ=WEEKLY;BYDAY=MO;ANCHOR=COMPLETION")
+        let ekRule = try #require(EventKitCalendarProvider.ekRecurrenceRule(from: anchored))
+        #expect(ekRule.frequency == .weekly)
+        #expect(ekRule.interval == 1)
+        #expect(ekRule.daysOfTheWeek?.map(\.dayOfTheWeek) == [.monday])
+    }
 }
 
 @Suite(

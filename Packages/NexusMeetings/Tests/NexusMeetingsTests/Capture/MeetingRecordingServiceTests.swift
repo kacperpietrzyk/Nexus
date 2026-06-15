@@ -179,6 +179,61 @@ import Testing
 }
 
 @MainActor
+@Test func recordingServicePausesAndResumesActiveRecorder() throws {
+    let meetingID = UUID()
+    let recorder = StubRecordingStarter(
+        activeHandle: RecordingHandle(
+            meetingID: meetingID,
+            folder: URL(fileURLWithPath: "/tmp/\(meetingID.uuidString)")
+        )
+    )
+    let service = MeetingRecordingService(
+        recorder: recorder,
+        meetingRepository: InMemoryMeetingPersistence(),
+        audioStorageRepository: InMemoryMeetingAudioStoragePersistence()
+    )
+
+    try service.pauseRecording(meetingID: meetingID)
+    #expect(recorder.pauseCallCount == 1)
+    #expect(recorder.isPaused)
+
+    try service.resumeRecording(meetingID: meetingID)
+    #expect(recorder.resumeCallCount == 1)
+    #expect(recorder.isPaused == false)
+}
+
+@MainActor
+@Test func recordingServicePauseRejectsWhenIdleOrMismatched() throws {
+    let activeID = UUID()
+    let idleRecorder = StubRecordingStarter()
+    let idleService = MeetingRecordingService(
+        recorder: idleRecorder,
+        meetingRepository: InMemoryMeetingPersistence(),
+        audioStorageRepository: InMemoryMeetingAudioStoragePersistence()
+    )
+    #expect(throws: MeetingRecordingServiceError.recordingMissing) {
+        try idleService.pauseRecording(meetingID: activeID)
+    }
+    #expect(idleRecorder.pauseCallCount == 0)
+
+    let activeRecorder = StubRecordingStarter(
+        activeHandle: RecordingHandle(
+            meetingID: activeID,
+            folder: URL(fileURLWithPath: "/tmp/\(activeID.uuidString)")
+        )
+    )
+    let activeService = MeetingRecordingService(
+        recorder: activeRecorder,
+        meetingRepository: InMemoryMeetingPersistence(),
+        audioStorageRepository: InMemoryMeetingAudioStoragePersistence()
+    )
+    #expect(throws: MeetingRecordingServiceError.recordingMismatch) {
+        try activeService.resumeRecording(meetingID: UUID())
+    }
+    #expect(activeRecorder.resumeCallCount == 0)
+}
+
+@MainActor
 private final class InMemoryMeetingPersistence: MeetingPersisting {
     var meetings: [Meeting] = []
 
@@ -228,6 +283,9 @@ private final class InMemoryMeetingAudioStoragePersistence: MeetingAudioStorageP
 private final class StubRecordingStarter: MeetingRecordingStarting {
     let startError: Error?
     var stopCallCount = 0
+    var pauseCallCount = 0
+    var resumeCallCount = 0
+    var isPaused = false
     var startedFolder: URL?
     private let rootFolder: URL?
     private var handle: RecordingHandle?
@@ -261,6 +319,16 @@ private final class StubRecordingStarter: MeetingRecordingStarting {
     func stop() throws {
         stopCallCount += 1
         handle = nil
+    }
+
+    func pause() throws {
+        pauseCallCount += 1
+        isPaused = true
+    }
+
+    func resume() throws {
+        resumeCallCount += 1
+        isPaused = false
     }
 
     func currentHandle() -> RecordingHandle? {

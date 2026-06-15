@@ -162,17 +162,11 @@ public struct MeetingsWelcomeStep: View {
 
             NexusCard(.elev2, padding: 16) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Toggle(isOn: $viewModel.enableHelper) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Enable Meetings auto-record")
-                                .font(NexusType.body)
-                                .foregroundStyle(NexusColor.Text.primary)
-                            Text("Nexus will keep the helper available for Zoom, Teams, and Meet detection.")
-                                .font(NexusType.bodySmall)
-                                .foregroundStyle(NexusColor.Text.tertiary)
-                        }
-                    }
-                    .toggleStyle(.switch)
+                    NexusToggle(
+                        "Enable Meetings auto-record",
+                        caption: "Nexus will keep the helper available for Zoom, Teams, and Meet detection.",
+                        isOn: $viewModel.enableHelper
+                    )
 
                     if let statusText = viewModel.statusText {
                         Text(statusText)

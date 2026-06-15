@@ -19,6 +19,20 @@ enum ProjectsToolSupport {
         return project
     }
 
+    /// Resolves a live (non-soft-deleted) `Section` by UUID, throwing `notFound`.
+    @MainActor
+    static func liveSection(id: UUID, context: AgentContext) throws -> Section {
+        let descriptor = FetchDescriptor<Section>(
+            predicate: #Predicate<Section> { section in
+                section.id == id && section.deletedAt == nil
+            }
+        )
+        guard let section = try context.modelContext.context.fetch(descriptor).first else {
+            throw AgentError.notFound("Section not found: \(id.uuidString)")
+        }
+        return section
+    }
+
     /// Parses an `item_id` + `item_kind` pair restricted to task/project endpoints
     /// (the only valid `.labeled`/`.blocks` endpoints in scope).
     static func parseEndpoint(_ args: JSONValue) throws -> (UUID, LabelEndpointKind) {

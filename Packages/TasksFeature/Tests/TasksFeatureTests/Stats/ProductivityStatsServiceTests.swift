@@ -130,6 +130,91 @@ struct ProductivityStatsServiceTests {
     }
 
     @MainActor
+    @Test("Goal progress counts today + current week and clamps fractions")
+    func goalProgressCountsTodayAndCurrentWeek() throws {
+        let context = try makeContext()
+        let service = ProductivityStatsService(context: context, calendar: calendar)
+        let now = date(2026, 5, 10, 15)
+        let lastWeek = calendar.date(byAdding: .day, value: -14, to: now)!
+
+        [
+            completedTask("today-1", at: now),
+            completedTask("today-2", at: now.addingTimeInterval(-600)),
+            completedTask("out-of-week", at: lastWeek),
+        ].forEach(context.insert)
+        try context.save()
+
+        let progress = try service.goalProgress(
+            preferences: GoalsPreferences(dailyCompletionTarget: 2, weeklyCompletionTarget: 10),
+            now: now
+        )
+
+        #expect(progress.dailyCompleted == 2)
+        #expect(progress.weeklyCompleted == 2)
+        #expect(progress.dailyTarget == 2)
+        #expect(progress.weeklyTarget == 10)
+        #expect(progress.dailyFraction == 1.0)  // clamped at 1 even when over
+        #expect(progress.weeklyFraction == 0.2)
+        #expect(progress.streakAtRisk == nil)  // already completed today
+    }
+
+    @MainActor
+    @Test("Goal progress flags the streak at risk when today is still at zero")
+    func goalProgressStreakAtRisk() throws {
+        let context = try makeContext()
+        let service = ProductivityStatsService(context: context, calendar: calendar)
+        let now = date(2026, 5, 10, 15)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        let dayBefore = calendar.date(byAdding: .day, value: -2, to: now)!
+
+        [completedTask("y", at: yesterday), completedTask("db", at: dayBefore)].forEach(context.insert)
+        try context.save()
+
+        let progress = try service.goalProgress(preferences: .default, now: now)
+
+        #expect(progress.dailyCompleted == 0)
+        #expect(progress.streakAtRisk == 2)
+    }
+
+    @MainActor
+    @Test("Disabled daily goal never flags a streak at risk, even with real streak history")
+    func goalProgressDisabledDailyTargetSuppressesStreakAtRisk() throws {
+        let context = try makeContext()
+        let service = ProductivityStatsService(context: context, calendar: calendar)
+        let now = date(2026, 5, 10, 15)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        let dayBefore = calendar.date(byAdding: .day, value: -2, to: now)!
+
+        // Same history as goalProgressStreakAtRisk — only the target differs.
+        [completedTask("y", at: yesterday), completedTask("db", at: dayBefore)].forEach(context.insert)
+        try context.save()
+
+        let progress = try service.goalProgress(
+            preferences: GoalsPreferences(dailyCompletionTarget: 0, weeklyCompletionTarget: 10),
+            now: now
+        )
+
+        #expect(progress.dailyCompleted == 0)
+        #expect(progress.streakAtRisk == nil)  // daily goal off = streak protection off
+    }
+
+    @MainActor
+    @Test("Goal progress with no history and zero targets is inert")
+    func goalProgressZeroTargetsAndEmptyHistory() throws {
+        let context = try makeContext()
+        let service = ProductivityStatsService(context: context, calendar: calendar)
+
+        let progress = try service.goalProgress(
+            preferences: GoalsPreferences(dailyCompletionTarget: 0, weeklyCompletionTarget: 0),
+            now: date(2026, 5, 10, 15)
+        )
+
+        #expect(progress.dailyFraction == 0)
+        #expect(progress.weeklyFraction == 0)
+        #expect(progress.streakAtRisk == nil)
+    }
+
+    @MainActor
     private func makeContext() throws -> ModelContext {
         let schema = Schema([TaskItem.self, Project.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)

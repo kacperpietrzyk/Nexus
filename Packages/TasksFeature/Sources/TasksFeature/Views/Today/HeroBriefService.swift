@@ -7,6 +7,9 @@ import NexusCore
 /// deterministic template when no provider is available or the call errors.
 /// Caches the last result for 30 minutes keyed on calendar-day + counts so
 /// repeat focuses don't keep firing the LM.
+///
+/// The skill-backed path (Task 6) is injected via `skillPath` and
+/// `readinessProbe` closures so no non-Sendable types live in the actor.
 public actor HeroBriefService {
 
     public struct Counts: Hashable, Sendable {
@@ -31,6 +34,9 @@ public actor HeroBriefService {
     private struct CacheKey: Hashable {
         let dayBucket: Int
         let counts: Counts
+        // `meetings` feeds the skill-path prompt, so it must key the cache or a
+        // changed meeting count returns a stale brief within the TTL.
+        let meetings: Int
     }
 
     private let router: AIRouter
@@ -38,6 +44,13 @@ public actor HeroBriefService {
     private let ttl: TimeInterval
     private var cache: CacheEntry?
 
+    // Skill-backed path: a closure that returns model text or throws.
+    // Nil = router-only fallback path (original behaviour).
+    private let skillPath: (@MainActor @Sendable (String, Date) async throws -> String)?
+    // Readiness probe: returns .ready when the local model is loaded.
+    private let readinessProbe: (@MainActor @Sendable () -> AssistantReadiness)?
+
+    /// Original init: router-only fallback, no skill path.
     public init(
         router: AIRouter,
         calendar: Calendar = .current,
@@ -46,23 +59,69 @@ public actor HeroBriefService {
         self.router = router
         self.calendar = calendar
         self.ttl = ttl
+        self.skillPath = nil
+        self.readinessProbe = nil
+    }
+
+    /// Skill-backed init. `skillPath` receives `summaryNumbers` + `now` and
+    /// returns model text. `readinessProbe` gates whether the skill path runs.
+    /// Falls back to the deterministic template on not-ready or any error.
+    public init(
+        router: AIRouter,
+        calendar: Calendar = .current,
+        ttl: TimeInterval = 30 * 60,
+        skillPath: @escaping @MainActor @Sendable (String, Date) async throws -> String,
+        readinessProbe: @escaping @MainActor @Sendable () -> AssistantReadiness
+    ) {
+        self.router = router
+        self.calendar = calendar
+        self.ttl = ttl
+        self.skillPath = skillPath
+        self.readinessProbe = readinessProbe
     }
 
     public func brief(
         for counts: Counts,
         firstTitles: [String],
-        now: Date
+        now: Date,
+        meetings: Int = 0
     ) async -> String {
-        let key = CacheKey(dayBucket: calendar.component(.day, from: now), counts: counts)
+        let key = CacheKey(
+            dayBucket: calendar.component(.day, from: now),
+            counts: counts,
+            meetings: meetings
+        )
         if let entry = cache, entry.key == key, now.timeIntervalSince(entry.timestamp) < ttl {
             return entry.value
         }
-        let text = await query(counts: counts, firstTitles: firstTitles, now: now)
+        let text = await query(counts: counts, firstTitles: firstTitles, meetings: meetings, now: now)
         cache = CacheEntry(key: key, value: text, timestamp: now)
         return text
     }
 
-    private func query(counts: Counts, firstTitles: [String], now: Date) async -> String {
+    private func query(
+        counts: Counts,
+        firstTitles: [String],
+        meetings: Int,
+        now: Date
+    ) async -> String {
+        if let skillPath, let readinessProbe {
+            let readiness = await MainActor.run { readinessProbe() }
+            if readiness == .ready {
+                let summaryNumbers =
+                    "overdue=\(counts.overdue), today=\(counts.today), noDate=\(counts.noDate), "
+                    + "awaiting=\(counts.awaiting), meetings=\(meetings)"
+                do {
+                    return try await skillPath(summaryNumbers, now)
+                } catch {
+                    // fall through to deterministic template below
+                }
+            }
+        }
+        return await legacyQuery(counts: counts, firstTitles: firstTitles, now: now)
+    }
+
+    private func legacyQuery(counts: Counts, firstTitles: [String], now: Date) async -> String {
         let prompt = makePrompt(counts: counts, firstTitles: firstTitles)
         let request = AIRequest(
             prompt: prompt,

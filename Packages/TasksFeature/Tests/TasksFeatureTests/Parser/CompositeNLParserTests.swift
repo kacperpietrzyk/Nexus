@@ -131,4 +131,29 @@ struct CompositeNLParserTests {
             "FM must skip when handcoded confidence >= cutoff even without date/recurrence"
         )
     }
+
+    @Test("handcoded project token survives the fast path without FM")
+    func projectTokenSkipsFM() async {
+        let (composite, provider) = makeParser(fmJSON: #"{"title":"FM"}"#)
+        let result = await composite.parse(
+            "ship build tomorrow @Nexus", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == "Nexus")
+        #expect(result.title == "ship build")
+        #expect(result.dueAt != nil)
+        #expect(provider.generateCallCount == 0, "project token must not trigger FM")
+    }
+
+    @Test("FM-provided project counts as structure and is not discarded")
+    func fmProjectCountsAsStructure() async {
+        // Input the handcoded parser sees as pure residual (no date, no sigil
+        // match — trailing comma defeats the @token regex), so the cascade
+        // falls through to FM, which extracts the project.
+        let json = #"{"title":"kupić chleb","project":"dom"}"#
+        let (composite, provider) = makeParser(fmJSON: json)
+        let result = await composite.parse(
+            "kupić chleb @dom,", locale: Locale(identifier: "pl"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == "dom")
+        #expect(result.title == "kupić chleb")
+        #expect(provider.generateCallCount == 1, "FM must be consulted on the low-confidence path")
+    }
 }

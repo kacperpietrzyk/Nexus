@@ -8,6 +8,9 @@ struct WatchAgendaView: View {
     let onCapture: () -> Void
     let onAskNexus: () -> Void
 
+    // I-D1: templates post-filter in memory in `makeAgendaResult` — a third
+    // `#Predicate` conjunct inside the `@Query` macro blows the watchOS
+    // type-checker budget (the `TaskItemRepository.tasks(in:)` precedent).
     @Query(
         filter: #Predicate<TaskItem> { task in
             task.deletedAt == nil
@@ -147,7 +150,7 @@ struct WatchAgendaView: View {
                             if let task = task(forID: undo.taskID) {
                                 try? await actions?.reopen(task)
                             }
-                            withAnimation(NexusMotion.standard) {
+                            withAnimation(DS.Motion.standard) {
                                 pendingUndo = nil
                             }
                         }
@@ -170,7 +173,7 @@ struct WatchAgendaView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .animation(NexusMotion.standard, value: pendingUndo)
+            .animation(DS.Motion.standard, value: pendingUndo)
             .sheet(item: $selected) { task in
                 WatchTaskDetailSheet(task: task)
                     .environment(\.watchTaskActions, actions)
@@ -192,7 +195,7 @@ struct WatchAgendaView: View {
         let startOfDay = calendar.startOfDay(for: now)
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
 
-        let openTasks = openWithDue.filter { $0.status == .open }
+        let openTasks = openWithDue.filter { $0.status == .open && !$0.isTemplate }
         let overdue = openTasks.filter { ($0.dueAt ?? .distantFuture) < startOfDay }
         let today = openTasks.filter { task in
             guard let due = task.dueAt else { return false }
@@ -200,7 +203,8 @@ struct WatchAgendaView: View {
         }
         let recentlyDone = completed.filter { task in
             guard let stamp = task.lastCompletedAt else { return false }
-            return task.status == .done
+            return !task.isTemplate
+                && task.status == .done
                 && stamp >= startOfDay
                 && stamp < startOfTomorrow
         }
@@ -232,13 +236,13 @@ struct WatchAgendaView: View {
 
     private func handleMarkedDone(_ task: TaskItem, now: Date) {
         let stamp = now.addingTimeInterval(5)
-        withAnimation(NexusMotion.standard) {
+        withAnimation(DS.Motion.standard) {
             pendingUndo = PendingUndo(taskID: task.id, title: task.title, expiresAt: stamp)
         }
         Task { @MainActor in
             try? await _Concurrency.Task.sleep(for: .seconds(5))
             if pendingUndo?.expiresAt == stamp {
-                withAnimation(NexusMotion.standard) {
+                withAnimation(DS.Motion.standard) {
                     pendingUndo = nil
                 }
             }

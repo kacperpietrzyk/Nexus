@@ -10,6 +10,13 @@ public struct AgentContext: Sendable {
     public let searchIndex: SearchIndex
     public let now: @Sendable () -> Date
 
+    /// Boxed `ModelContainer` for whole-vault walks (the `export.bundle` tool
+    /// opens its own `ModelContext` per container, mirroring `MarkdownExporter`).
+    /// `nil` when no container was injected — export tools then throw
+    /// `.internalError`. Defaulted nil so non-production callers (e.g. older
+    /// fixtures) keep compiling without supplying one.
+    public let modelContainer: ModelContainerRef?
+
     /// On-demand `CommentRepository` backed by the same `ModelContext` as `taskRepository`.
     @MainActor public var commentRepository: CommentRepository {
         CommentRepository(context: modelContext.context)
@@ -45,12 +52,42 @@ public struct AgentContext: Sendable {
         LinkRepository(context: modelContext.context)
     }
 
+    /// On-demand `CycleRepository` (Tranche 2, Plan A) backed by the same
+    /// `ModelContext` as `taskRepository`. Used today only by
+    /// `AgentEndpointValidator` (edge tools accept any `ItemKind`, so a cycle
+    /// endpoint must be existence-checked); cycle agent tools land in Plan C.
+    @MainActor public var cycleRepository: CycleRepository {
+        CycleRepository(context: modelContext.context, now: now)
+    }
+
+    /// On-demand read-only `ActivityEntryRepository` reader (Tranche 2 Plan B,
+    /// spec §6.3) backed by the same `ModelContext` as `taskRepository`. Tools
+    /// only READ the audit log — they never insert rows (invariant I-B1).
+    @MainActor public var activityEntryRepository: ActivityEntryRepository {
+        ActivityEntryRepository(context: modelContext.context, now: now)
+    }
+
+    /// On-demand `SavedFilterRepository` backed by the same `ModelContext`.
+    @MainActor public var savedFilterRepository: SavedFilterRepository {
+        SavedFilterRepository(context: modelContext.context, now: now)
+    }
+
     /// On-demand `PersonRepository` (People/Contacts module, spec §7) backed by the
     /// same `ModelContext` as `taskRepository`. CRUD + dedup/upsert + atomic merge +
     /// graph aggregation; the only `task ↔ person` edge it emits is `.mentions`
     /// (invariant I1 — a `Person` is never a task assignee).
     @MainActor public var personRepository: PersonRepository {
         PersonRepository(context: modelContext.context, now: now)
+    }
+
+    /// On-demand `OrganizationRepository` backed by the same `ModelContext`.
+    @MainActor public var organizationRepository: OrganizationRepository {
+        OrganizationRepository(context: modelContext.context, now: now)
+    }
+
+    /// On-demand `ProjectKeyDateRepository` backed by the same `ModelContext`.
+    @MainActor public var projectKeyDateRepository: ProjectKeyDateRepository {
+        ProjectKeyDateRepository(context: modelContext.context, now: now)
     }
 
     /// TasksFeature-specific helpers (NL parser + hero brief). Only populated when
@@ -64,7 +101,8 @@ public struct AgentContext: Sendable {
         searchIndex: SearchIndex,
         now: @escaping @Sendable () -> Date,
         nlParser: AnyNLParserRef? = nil,
-        heroBriefService: HeroBriefServiceRef? = nil
+        heroBriefService: HeroBriefServiceRef? = nil,
+        modelContainer: ModelContainerRef? = nil
     ) {
         self.modelContext = modelContext
         self.taskRepository = taskRepository
@@ -72,6 +110,19 @@ public struct AgentContext: Sendable {
         self.now = now
         self.nlParser = nlParser
         self.heroBriefService = heroBriefService
+        self.modelContainer = modelContainer
+    }
+}
+
+/// Boxed @MainActor reference to ModelContainer (ModelContainer is Sendable, but
+/// keep the same boxed shape as `ModelContextRef` for consistency at call sites).
+public struct ModelContainerRef: @unchecked Sendable {
+    private let stored: ModelContainer
+
+    @MainActor public var container: ModelContainer { stored }
+
+    @MainActor public init(_ container: ModelContainer) {
+        self.stored = container
     }
 }
 

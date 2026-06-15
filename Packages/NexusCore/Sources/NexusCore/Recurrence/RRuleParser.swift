@@ -3,7 +3,7 @@ import Foundation
 /// Parses the subset of RFC 5545 RRULE that Nexus supports.
 public enum RRuleParser {
     private static let supportedKeys: Set<String> = [
-        "FREQ", "INTERVAL", "BYDAY", "BYMONTHDAY", "UNTIL", "COUNT",
+        "FREQ", "INTERVAL", "BYDAY", "BYMONTHDAY", "UNTIL", "COUNT", "ANCHOR",
     ]
 
     public static func parse(_ input: String) throws -> RRule {
@@ -28,7 +28,8 @@ public enum RRuleParser {
             byWeekday: state.byWeekday,
             byMonthDay: state.byMonthDay,
             until: state.until,
-            count: state.count
+            count: state.count,
+            anchor: state.anchor
         )
     }
 
@@ -51,6 +52,8 @@ public enum RRuleParser {
             state.until = try parseUntil(value)
         case "COUNT":
             state.count = try parsePositiveInt(field: "COUNT", value: value)
+        case "ANCHOR":
+            state.anchor = try parseAnchor(value)
         default:
             throw RRuleParseError.unsupportedToken(key)
         }
@@ -116,6 +119,13 @@ public enum RRuleParser {
         return formatter.date(from: value)
     }
 
+    private static func parseAnchor(_ value: String) throws -> RRule.Anchor {
+        guard let parsed = RRule.Anchor(rawValue: value.uppercased()) else {
+            throw RRuleParseError.invalidValue(field: "ANCHOR", value: value)
+        }
+        return parsed
+    }
+
     private struct ParseState {
         var frequency: RRule.Frequency?
         var interval = 1
@@ -123,5 +133,6 @@ public enum RRuleParser {
         var byMonthDay: Int?
         var until: Date?
         var count: Int?
+        var anchor: RRule.Anchor = .dueDate
     }
 }

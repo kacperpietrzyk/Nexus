@@ -1,5 +1,6 @@
 import Foundation
 import NexusAI
+import NexusAgent
 import NexusCore
 import SwiftData
 
@@ -186,5 +187,45 @@ public struct TaskAssistService: Sendable {
         let wholeSeconds = ISO8601DateFormatter()
         wholeSeconds.formatOptions = [.withInternetDateTime]
         return wholeSeconds.date(from: value)
+    }
+
+    // MARK: - Skill-backed proposal path (Task 7)
+
+    /// Returns a `Proposal` describing the mutation without applying it.
+    /// Delegates to the panel.*  coordinators over a locally-built `SkillRunner`.
+    /// The caller is responsible for presenting and accepting/rejecting the Proposal.
+    /// Throws `SkillRunError` on inference failure; the existing `TaskAssistErrorCopy`
+    /// catch-all surfaces it as a generic retry message (no new error type needed).
+    @MainActor
+    public func proposal(for action: Action, on task: TaskItem) async throws -> Proposal {
+        guard let ctx = task.modelContext else {
+            throw AssistError.emptyRefinement(.title)  // nearest "unavailable" shape
+        }
+        let runner = FoundationComposition.makeLocalRunner(modelContext: ctx, router: router)
+        let focus = ContextFocus()
+        switch action {
+        case .refine(let field):
+            let body: String
+            if let mc = task.modelContext {
+                body = (try? TaskNoteContent.markdown(for: task, in: mc)) ?? task.body
+            } else {
+                body = task.body
+            }
+            let currentText = field == .title ? task.title : body
+            let panelField: PanelTaskRefineSkill.Field = field == .title ? .title : .body
+            return try await PanelTaskRefineCoordinator(runner: runner)
+                .refine(
+                    field: panelField,
+                    taskID: task.id,
+                    currentText: currentText,
+                    focus: focus
+                )
+        case .breakIntoSubtasks:
+            return try await PanelTaskBreakdownCoordinator(runner: runner)
+                .breakdown(taskID: task.id, title: task.title, focus: focus)
+        case .suggestDueDate:
+            return try await PanelTaskSuggestDueCoordinator(runner: runner, dateMath: DateMath())
+                .suggestDue(taskID: task.id, title: task.title, focus: focus)
+        }
     }
 }

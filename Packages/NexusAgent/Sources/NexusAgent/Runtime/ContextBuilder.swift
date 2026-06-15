@@ -138,9 +138,11 @@ public final class ContextBuilder {
         userPrompt: String,
         slidingWindowSize: Int = 10,
         memoryLimit: Int = 5,
-        ragLimit: Int = 5
+        ragLimit: Int = 5,
+        toolAllowlist: [String]? = nil,
+        systemPromptOverride: String? = nil
     ) async throws -> AgentContextWindow {
-        let systemPrompt = Self.systemPrompt
+        let systemPrompt = systemPromptOverride ?? Self.systemPrompt
         let memorySection: String
         do {
             let memories = try memoryStore.recent(scope: scope, limit: memoryLimit)
@@ -169,7 +171,8 @@ public final class ContextBuilder {
             scope: scope,
             limit: ragLimit
         )
-        let toolDefs = Self.toolDefinitionsJSON(tools: tools)
+        let effectiveTools = toolAllowlist.map { a in tools.filter { a.contains($0.name) } } ?? tools
+        let toolDefs = Self.toolDefinitionsJSON(tools: effectiveTools)
         let toolDefsText = String(data: toolDefs, encoding: .utf8) ?? ""
 
         let estimatedTokens =

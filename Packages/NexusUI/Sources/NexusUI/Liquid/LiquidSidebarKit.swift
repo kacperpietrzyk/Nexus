@@ -1,0 +1,152 @@
+import SwiftUI
+
+/// Nav row corner radius — `docs/03_COMPONENTS.md` §Sidebar: "nav row radius: 10 pt".
+/// No 10 pt entry in `DS.Radius`, so the spec value lives here.
+private let navRowCornerRadius: CGFloat = 10
+/// Hover wash. Kept below card intensity so the sidebar remains part of the
+/// same glass sheet instead of a stack of opaque selected pills.
+private let navRowHoverFill = Color.white.opacity(0.034)
+
+/// Sidebar navigation row per `docs/03_COMPONENTS.md` §Sidebar.
+///
+/// 34 pt tall: 16 pt SF Symbol slot, title, optional trailing badge count
+/// (min 20×20 pt pill). Selection renders the `glassSelected` fill with a
+/// `strokeDefault` border and an accent tint; hover adds a subtle white wash
+/// (macOS only).
+public struct LiquidSidebarNavRow: View {
+
+    public let title: String
+    public let systemImage: String
+    public let badge: Int?
+    public let isSelected: Bool
+    public let action: () -> Void
+
+    @State private var hovering = false
+
+    public init(
+        _ title: String,
+        systemImage: String,
+        badge: Int? = nil,
+        isSelected: Bool = false,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.badge = badge
+        self.isSelected = isSelected
+        self.action = action
+    }
+
+    private var fill: Color {
+        if isSelected { return Color.white.opacity(0.052) }
+        return hovering ? navRowHoverFill : .clear
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            HStack(spacing: DS.Space.s) {
+                Image(systemName: systemImage)
+                    // 13 pt symbol inside the 16 pt icon slot (03_COMPONENTS.md §Sidebar:
+                    // "icon size: 16 pt" refers to the slot; symbol point size is optical).
+                    // Medium weight is deliberate — heavier than DS.FontToken.body's regular
+                    // so glyphs hold up against the 13 pt title at sidebar density.
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(isSelected ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
+                    .frame(width: 16, height: 16)
+
+                Text(title)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    .foregroundStyle(isSelected ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                if let badge {
+                    Text("\(badge)")
+                        .font(DS.FontToken.caption)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                        .padding(.horizontal, DS.Space.xs)
+                        .frame(minWidth: 20, minHeight: 20)
+                        .background {
+                            Capsule(style: .continuous)
+                                .fill(DS.ColorToken.glassSelected)
+                        }
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+                        }
+                }
+            }
+            .padding(.horizontal, DS.Space.s)
+            .frame(height: DS.Size.navItemHeight)
+            .background {
+                RoundedRectangle(cornerRadius: navRowCornerRadius, style: .continuous)
+                    .fill(fill)
+                    .overlay {
+                        if isSelected {
+                            ZStack {
+                                DS.ColorToken.accentPrimary.opacity(0.060)
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.10), Color.white.opacity(0.026), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: navRowCornerRadius, style: .continuous))
+                        }
+                    }
+            }
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: navRowCornerRadius, style: .continuous)
+                        .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+                }
+            }
+            .shadow(
+                color: isSelected ? DS.ColorToken.accentPrimary.opacity(0.08) : .clear,
+                radius: 8,
+                x: 0,
+                y: 0
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(badge.map { "\(title), \($0) items" } ?? title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        #if os(macOS)
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        #endif
+    }
+}
+
+/// Uppercase sidebar section header (Workspaces, Views, …).
+public struct LiquidSidebarSectionHeader: View {
+
+    public let title: String
+
+    public init(_ title: String) {
+        self.title = title
+    }
+
+    public var body: some View {
+        Text(title)
+            .font(DS.FontToken.caption)
+            .foregroundStyle(DS.ColorToken.textMuted)
+            .textCase(.uppercase)
+            .kerning(0.6)
+    }
+}
+
+#if os(macOS)
+#Preview("Sidebar rows") {
+    VStack(alignment: .leading, spacing: DS.Space.xxs) {
+        LiquidSidebarSectionHeader("Views")
+        LiquidSidebarNavRow("Today", systemImage: "sun.max", isSelected: true, action: {})
+        LiquidSidebarNavRow("Inbox", systemImage: "tray", badge: 4, action: {})
+    }
+    .padding(DS.Space.m)
+    .frame(width: 224)
+    .background(DS.ColorToken.backgroundApp)
+}
+#endif

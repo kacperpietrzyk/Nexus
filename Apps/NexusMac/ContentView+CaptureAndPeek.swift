@@ -1,4 +1,5 @@
 import CommandPaletteShell
+import NexusCore
 import NexusUI
 import SwiftUI
 import TasksFeature
@@ -20,7 +21,7 @@ extension ContentView {
                 Rectangle()
                     .fill(.ultraThinMaterial)
                     .ignoresSafeArea()
-                Color.black.opacity(0.5)
+                DS.ColorToken.backgroundWallpaperScrim
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { commandPalettePresented = false }
@@ -53,36 +54,35 @@ extension ContentView {
     /// "inspector ⊥ Agent" still holds and its test is untouched). The hosted
     /// `TaskDetailInspector` is reused verbatim (all field logic + auto-save) and
     /// is shared with iOS, so its single-column internals are NOT reshaped here —
-    /// only the container changes. It paints its own base background + wallpaper,
-    /// clipped to the dialog's rounded rect, and scrolls internally past the cap.
-    /// `.tint(Text.primary)` keeps its native segmented Priority picker /
-    /// DatePickers / toggles achromatic. Escape closes via the inspector's own
+    /// only the container changes. The `.wide` layout is background-transparent,
+    /// so the host's liquid glass panel shows through, clipped to the dialog's
+    /// rounded rect; the inspector asserts its own liquid `.tint` for native
+    /// controls. Escape closes via the inspector's own
     /// `.cancelAction` close button (no duplicate key-equivalent here); the scrim
     /// tap and the × both clear `selectedTask`.
     @ViewBuilder
     var taskModal: some View {
         if inspectorBinding.wrappedValue, let task = selectedTask {
             ZStack {
-                Color.black.opacity(0.5)
+                // Lighter dim than the shared `.strong` overlays: the task modal is
+                // now a LIGHT (airy) panel, so a near-opaque scrim would occlude the
+                // wallpaper the light recipe samples and pull the panel back to dark.
+                Color.black.opacity(0.34)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { selectedTask = nil }
 
-                // The wide inspector has an intrinsic (content) height, so the
-                // dialog sizes to its content — short task → short modal, no
-                // phantom scrollbar. `maxHeight` only CAPS (it never stretches an
-                // intrinsically-sized view), keeping a very tall task off the
-                // window edges.
-                TaskDetailInspector(task: task, onClose: { selectedTask = nil }, layout: .wide)
-                    .frame(width: 720)
-                    .frame(maxHeight: 760)
-                    .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
-                            .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
-                    )
-                    .nexusShadow(NexusShadow.pop)
-                    .tint(NexusColor.Text.primary)
+                // `WideTaskModalContent` hugs the inspector's content height for a
+                // short task (no phantom scrollbar) but scrolls — instead of
+                // clipping at the window edges — once a tall task exceeds the cap.
+                // Liquid re-skin (Task 11): the strong liquid glass recipe replaces
+                // the opaque base slab + manual stroke + pop shadow; the inspector's
+                // own `.tint` carries the liquid accent for its native controls.
+                // DS.Radius.xl: the shared radius of all three `.strong` glass
+                // modal surfaces (task modal, capture overlay, command palette).
+                WideTaskModalContent(task: task, onClose: { selectedTask = nil })
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous))
+                    .liquidLightCard(cornerRadius: DS.Radius.xl)
                     .transition(.scale(scale: 0.97).combined(with: .opacity))
             }
         }
@@ -101,20 +101,20 @@ extension ContentView {
     var captureOverlay: some View {
         if capturePresented {
             ZStack {
-                Color.black.opacity(0.5)
+                DS.ColorToken.backgroundWallpaperScrim
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { capturePresented = false }
 
-                NexusCard(.elev2, padding: 0) {
-                    CapturePane(
-                        mode: captureMode,
-                        onSaved: { capturePresented = false },
-                        onCancelled: { capturePresented = false }
-                    )
-                }
+                // Liquid re-skin (Task 11): the strong liquid glass recipe
+                // replaces the flat `NexusCard(.elev2)` + pop shadow chrome.
+                CapturePane(
+                    mode: captureMode,
+                    onSaved: { capturePresented = false },
+                    onCancelled: { capturePresented = false }
+                )
                 .fixedSize()
-                .nexusShadow(NexusShadow.pop)
+                .liquidGlass(.strong, radius: DS.Radius.xl)
 
                 // Escape dismisses the in-window capture overlay. This `.cancelAction`
                 // key-equivalent fires via `performKeyEquivalent:` BEFORE the focused
@@ -132,5 +132,38 @@ extension ContentView {
                     .accessibilityHidden(true)
             }
         }
+    }
+}
+
+/// Hosts the wide `TaskDetailInspector` so the centered Mac modal hugs the
+/// inspector's content height when the task is short (no phantom scrollbar) but
+/// scrolls — instead of clipping at the window edges — once a tall task's content
+/// exceeds `maxModalHeight`. Owns its own measurement state so the host extension
+/// needs no stored property. The `.wide` layout has no internal scroll by design
+/// (so it reports an intrinsic height we can measure here).
+private struct WideTaskModalContent: View {
+    let task: TaskItem
+    let onClose: () -> Void
+
+    @State private var contentHeight: CGFloat = 0
+
+    private let modalWidth: CGFloat = 720
+    private let maxModalHeight: CGFloat = 760
+
+    var body: some View {
+        ScrollView {
+            TaskDetailInspector(task: task, onClose: onClose, layout: .wide)
+                .frame(width: modalWidth)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: {
+                    contentHeight = $0
+                }
+        }
+        // No bounce until the content actually overflows the cap.
+        .scrollBounceBehavior(.basedOnSize)
+        // Hug the measured content height, capped so a very tall task scrolls
+        // within the modal rather than running off the window edges.
+        .frame(width: modalWidth, height: min(contentHeight, maxModalHeight))
     }
 }

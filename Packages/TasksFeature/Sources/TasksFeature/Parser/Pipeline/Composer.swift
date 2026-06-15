@@ -21,6 +21,7 @@ internal struct Composer: Sendable {
         var pendingTimeOfDay: TimeInterval?
         var priority: TaskPriority?
         var tags: [String] = []
+        var projectToken: String?
         var recurrence: String?
         var maxConfidence: Float = 0.0
 
@@ -44,6 +45,15 @@ internal struct Composer: Sendable {
             case .tag(let body, let confidence):
                 tags.append(body)
                 maxConfidence = max(maxConfidence, confidence)
+            case .project(let body, let confidence):
+                if projectToken == nil {
+                    projectToken = body
+                    maxConfidence = max(maxConfidence, confidence)
+                } else {
+                    // Single-project rule: first @token wins; later ones stay
+                    // in the title verbatim so typed text is never dropped.
+                    titleParts.append("@\(body)")
+                }
             case .recurrence(let rrule, let confidence):
                 recurrence = rrule
                 maxConfidence = max(maxConfidence, confidence)
@@ -68,6 +78,7 @@ internal struct Composer: Sendable {
             startAt: startAt,
             priority: priority,
             tags: tags,
+            projectToken: projectToken,
             recurrence: recurrence,
             confidence: maxConfidence
         )

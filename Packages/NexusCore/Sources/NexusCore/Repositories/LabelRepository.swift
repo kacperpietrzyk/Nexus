@@ -187,6 +187,10 @@ public final class LabelRepository {
             },
             sortBy: [SortDescriptor(\.createdAt)]
         )
-        return try context.fetch(descriptor)
+        // I-D1: templates never enter an agent's work queue. Post-filtered in
+        // memory — a fourth `#Predicate` conjunct alongside the `||` clause
+        // blows the type-checker budget here (same workaround as
+        // `CyclePlanningView.backlogTasks`).
+        return try context.fetch(descriptor).filter { !$0.isTemplate }
     }
 }

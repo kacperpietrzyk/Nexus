@@ -64,15 +64,33 @@ internal struct Resolver: Sendable {
         let nowComponents = calendar.dateComponents([.year], from: now)
         var components = calendar.dateComponents([.month, .day], from: parsed)
         components.year = nowComponents.year
-        guard let candidate = calendar.date(from: components) else { return nil }
+        // Reject — don't lenient-roll — a day invalid for the resolved month/year
+        // (e.g. "29.02" in a non-leap year would otherwise become 1 Mar).
+        guard let candidate = validatedDate(from: components, calendar: calendar) else { return nil }
 
         let nowDay = calendar.startOfDay(for: now)
         let candidateDay = calendar.startOfDay(for: candidate)
         if candidateDay < nowDay {
             components.year = (components.year ?? 1970) + 1
-            return calendar.date(from: components) ?? candidate
+            // The +1-year rollover can also land on an invalid day (29 Feb in a
+            // following non-leap year); reject rather than silently roll over.
+            return validatedDate(from: components, calendar: calendar)
         }
         return candidate
+    }
+
+    /// Builds a date from `components` only if the calendar reproduces the exact
+    /// year/month/day requested. `Calendar.date(from:)` is lenient and normalizes
+    /// out-of-range days (29 Feb in a non-leap year → 1 Mar), so we round-trip and
+    /// reject any mismatch.
+    private func validatedDate(from components: DateComponents, calendar: Calendar) -> Date? {
+        guard let date = calendar.date(from: components) else { return nil }
+        let resolved = calendar.dateComponents([.year, .month, .day], from: date)
+        guard resolved.year == components.year,
+            resolved.month == components.month,
+            resolved.day == components.day
+        else { return nil }
+        return date
     }
 
     private func parseTimeOfDay(_ raw: String) -> TimeInterval? {

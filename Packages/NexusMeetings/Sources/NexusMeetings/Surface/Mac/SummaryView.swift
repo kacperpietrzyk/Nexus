@@ -4,6 +4,16 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
+/// Presentation style for the re-usable meeting surfaces (`SummaryView`,
+/// `TranscriptView`). `.standard` keeps the original NexusType/NexusColor look
+/// used by the iOS detail view (its own Liquid pass is separate). `.liquid`
+/// renders with the Liquid DS tokens so the macOS detail pane's embeds match
+/// their surrounding glass cards. Style-only — no behavior changes.
+public enum MeetingSurfaceStyle {
+    case standard
+    case liquid
+}
+
 @MainActor
 public final class SummaryViewModel: ObservableObject {
     @Published public var rawMarkdown: String = ""
@@ -35,14 +45,17 @@ public final class SummaryViewModel: ObservableObject {
 public struct SummaryView: View {
     @StateObject private var viewModel: SummaryViewModel
     private let isReadOnly: Bool
+    private let style: MeetingSurfaceStyle
     @State private var saveError: String?
 
     public init(
         meetingID: UUID,
         repository: MeetingRepository,
-        isReadOnly: Bool = false
+        isReadOnly: Bool = false,
+        style: MeetingSurfaceStyle = .standard
     ) {
         self.isReadOnly = isReadOnly
+        self.style = style
         _viewModel = StateObject(
             wrappedValue: SummaryViewModel(meetingID: meetingID, repository: repository)
         )
@@ -50,33 +63,21 @@ public struct SummaryView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("SUMMARY")
-                    .nexusType(.eyebrow)
-                    .foregroundStyle(NexusColor.Text.muted)
-                Spacer()
-                if !isReadOnly {
-                    Toggle("Edit", isOn: editingBinding)
-                        .toggleStyle(.button)
-                        .font(NexusType.meta)
-                }
-            }
+            headerRow
 
             if let saveError {
                 Text(saveError)
-                    .font(NexusType.meta)
-                    .foregroundStyle(NexusColor.Status.danger)
+                    .font(style == .liquid ? DS.FontToken.metadata : NexusType.meta)
+                    .foregroundStyle(
+                        style == .liquid ? DS.ColorToken.statusDanger : NexusColor.Status.danger)
             }
 
             if viewModel.editing {
-                TextEditor(text: $viewModel.rawMarkdown)
-                    .font(NexusType.bodySmall.monospaced())
-                    .foregroundStyle(NexusColor.Text.secondary)
-                    .scrollContentBackground(.hidden)
+                NexusTextEditor(text: $viewModel.rawMarkdown, isMonospaced: true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    MeetingSummaryMarkdown(raw: viewModel.rawMarkdown)
+                    MeetingSummaryMarkdown(raw: viewModel.rawMarkdown, style: style)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 4)
                 }
@@ -90,6 +91,36 @@ public struct SummaryView: View {
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
             viewModel.load(force: true)
         }
+    }
+
+    /// In `.liquid` the enclosing `LiquidGlassCard("Notes")` already supplies the
+    /// title, so the legacy "SUMMARY" eyebrow is dropped to avoid a doubled
+    /// header — only the Edit affordance remains (and nothing when read-only).
+    @ViewBuilder
+    private var headerRow: some View {
+        switch style {
+        case .standard:
+            HStack {
+                Text("SUMMARY")
+                    .nexusType(.eyebrow)
+                    .foregroundStyle(NexusColor.Text.muted)
+                Spacer()
+                if !isReadOnly { editToggle }
+            }
+        case .liquid:
+            if !isReadOnly {
+                HStack {
+                    Spacer()
+                    editToggle
+                }
+            }
+        }
+    }
+
+    private var editToggle: some View {
+        Toggle("Edit", isOn: editingBinding)
+            .toggleStyle(.button)
+            .font(style == .liquid ? DS.FontToken.caption : NexusType.meta)
     }
 
     private var editingBinding: Binding<Bool> {
@@ -119,6 +150,19 @@ public struct SummaryView: View {
 /// still delegating inline emphasis to `AttributedString` per line.
 private struct MeetingSummaryMarkdown: View {
     let raw: String
+    var style: MeetingSurfaceStyle = .standard
+
+    private var headingFont: Font { style == .liquid ? DS.FontToken.section : NexusType.h3 }
+    private var bodyFont: Font { style == .liquid ? DS.FontToken.body : NexusType.body }
+    private var primary: Color {
+        style == .liquid ? DS.ColorToken.textPrimary : NexusColor.Text.primary
+    }
+    private var secondary: Color {
+        style == .liquid ? DS.ColorToken.textSecondary : NexusColor.Text.secondary
+    }
+    private var muted: Color {
+        style == .liquid ? DS.ColorToken.textMuted : NexusColor.Text.muted
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -127,7 +171,7 @@ private struct MeetingSummaryMarkdown: View {
             }
         }
         .textSelection(.enabled)
-        .tint(NexusColor.Text.primary)
+        .tint(primary)
     }
 
     @ViewBuilder
@@ -135,36 +179,36 @@ private struct MeetingSummaryMarkdown: View {
         switch block {
         case .heading(let text):
             Text(inline(text))
-                .font(NexusType.h3)
-                .foregroundStyle(NexusColor.Text.primary)
+                .font(headingFont)
+                .foregroundStyle(primary)
                 .padding(.top, 4)
         case .bullet(let text):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("•")
-                    .font(NexusType.body)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .font(bodyFont)
+                    .foregroundStyle(muted)
                 Text(inline(text))
-                    .font(NexusType.body)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .font(bodyFont)
+                    .foregroundStyle(secondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
         case .numbered(let index, let text):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("\(index).")
-                    .font(NexusType.body)
+                    .font(bodyFont)
                     .monospacedDigit()
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .foregroundStyle(muted)
                 Text(inline(text))
-                    .font(NexusType.body)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .font(bodyFont)
+                    .foregroundStyle(secondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
         case .paragraph(let text):
             Text(inline(text))
-                .font(NexusType.body)
-                .foregroundStyle(NexusColor.Text.secondary)
+                .font(bodyFont)
+                .foregroundStyle(secondary)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
         }

@@ -9,6 +9,9 @@ public struct TasksSearchTool: AgentTool {
         properties: [
             "query": .string(description: "Search query."),
             "limit": .integer(minimum: 1, maximum: 200, description: "Maximum tasks to return."),
+            "include_templates": .boolean(
+                description: "If true, template tasks are included in search results. Defaults to false."
+            ),
         ],
         required: ["query"]
     )
@@ -29,6 +32,7 @@ public struct TasksSearchTool: AgentTool {
             default: 50,
             range: 1...200
         )
+        let includeTemplates = (args["include_templates"]?.boolValue) ?? false
         let indexedCount = await context.searchIndex.documentCount
         let hits = await context.searchIndex.search(query, kinds: [.task], limit: max(limit, indexedCount))
         guard !hits.isEmpty else {
@@ -41,7 +45,9 @@ public struct TasksSearchTool: AgentTool {
         // keep-first instead of trapping on a duplicate id from a sync conflict.
         let tasksByID = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
         let result = hits.compactMap { hit -> TaskDTO? in
-            guard let task = tasksByID[hit.itemID], task.deletedAt == nil else { return nil }
+            guard let task = tasksByID[hit.itemID], task.deletedAt == nil,
+                includeTemplates || !task.isTemplate
+            else { return nil }
             return try? TaskNotesContentStore.dto(for: task, context: context)
         }
         return try TasksToolJSON.encode(Array(result.prefix(limit)))

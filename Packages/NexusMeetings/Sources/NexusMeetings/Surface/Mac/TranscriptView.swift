@@ -138,6 +138,7 @@ public final class TranscriptViewModel: ObservableObject {
 public struct TranscriptView: View {
     @StateObject private var viewModel: TranscriptViewModel
     private let isReadOnly: Bool
+    private let style: MeetingSurfaceStyle
     @State private var renaming: String?
     @State private var renameDraft = ""
     @State private var renameError: String?
@@ -146,11 +147,13 @@ public struct TranscriptView: View {
         meetingID: UUID,
         repository: MeetingRepository,
         isReadOnly: Bool = false,
+        style: MeetingSurfaceStyle = .standard,
         peopleLinker: MeetingPeopleLinker? = nil,
         personRepository: PersonRepository? = nil,
         attendeeSeedProvider: (@MainActor (Meeting) async -> [MeetingAttendeeCandidate])? = nil
     ) {
         self.isReadOnly = isReadOnly
+        self.style = style
         _viewModel = StateObject(
             wrappedValue: TranscriptViewModel(
                 meetingID: meetingID,
@@ -170,6 +173,7 @@ public struct TranscriptView: View {
                         segment: segment,
                         displayName: viewModel.displayName(for: segment.speaker),
                         isReadOnly: isReadOnly,
+                        style: style,
                         onRename: {
                             renaming = segment.speaker
                             renameDraft = viewModel.displayName(for: segment.speaker)
@@ -206,6 +210,7 @@ public struct TranscriptView: View {
                 speaker: renaming ?? "",
                 draft: $renameDraft,
                 errorMessage: renameError,
+                style: style,
                 people: viewModel.people,
                 attendeeSuggestions: viewModel.attendeeSuggestions,
                 suggestions: viewModel.priorParticipantNames,
@@ -247,31 +252,55 @@ private struct TranscriptSegmentRow: View {
     let segment: MeetingSpeakerSegment
     let displayName: String
     let isReadOnly: Bool
+    var style: MeetingSurfaceStyle = .standard
     let onRename: () -> Void
+
+    private var timestampFont: Font {
+        style == .liquid
+            ? .system(size: 10, weight: .medium, design: .monospaced) : NexusType.metaMono
+    }
+    private var timestampColor: Color {
+        style == .liquid ? DS.ColorToken.textMuted : NexusColor.Text.disabled
+    }
+    private var speakerFont: Font {
+        style == .liquid ? DS.FontToken.bodyStrong : Font.custom("Inter-Medium", size: 12)
+    }
+    private var speakerColor: Color {
+        style == .liquid ? DS.ColorToken.textPrimary : NexusColor.Text.secondary
+    }
+    private var chevronColor: Color {
+        style == .liquid ? DS.ColorToken.textMuted : NexusColor.Text.muted
+    }
+    private var bodyFont: Font {
+        style == .liquid ? DS.FontToken.body : NexusType.bodySmall
+    }
+    private var bodyColor: Color {
+        style == .liquid ? DS.ColorToken.textSecondary : NexusColor.Text.secondary
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(Self.timestamp(from: segment.startMs))
-                    .font(NexusType.metaMono)
+                    .font(timestampFont)
                     .monospacedDigit()
-                    .foregroundStyle(NexusColor.Text.disabled)
+                    .foregroundStyle(timestampColor)
 
                 if isReadOnly {
                     Text(displayName)
-                        .font(Font.custom("Inter-Medium", size: 12))
-                        .foregroundStyle(NexusColor.Text.secondary)
+                        .font(speakerFont)
+                        .foregroundStyle(speakerColor)
                 } else {
                     Menu {
                         Button("Rename…", action: onRename)
                     } label: {
                         HStack(spacing: 4) {
                             Text(displayName)
-                                .font(Font.custom("Inter-Medium", size: 12))
-                                .foregroundStyle(NexusColor.Text.secondary)
+                                .font(speakerFont)
+                                .foregroundStyle(speakerColor)
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 7, weight: .semibold))
-                                .foregroundStyle(NexusColor.Text.muted)
+                                .foregroundStyle(chevronColor)
                         }
                     }
                     #if os(macOS)
@@ -282,10 +311,10 @@ private struct TranscriptSegmentRow: View {
             }
 
             Text(segment.text)
-                .font(NexusType.bodySmall)
-                .foregroundStyle(NexusColor.Text.secondary)
+                .font(bodyFont)
+                .foregroundStyle(bodyColor)
                 .textSelection(.enabled)
-                .lineSpacing(2)
+                .lineSpacing(style == .liquid ? 3 : 2)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -304,6 +333,7 @@ private struct RenameSpeakerSheet: View {
     let speaker: String
     @Binding var draft: String
     let errorMessage: String?
+    var style: MeetingSurfaceStyle = .standard
     /// Existing contacts to assign the speaker to (#3). Picking one assigns a real
     /// `Person` (personID + displayName); the `TextField` below stays as the
     /// "create a new contact / free-text" fallback.
@@ -369,17 +399,36 @@ private struct RenameSpeakerSheet: View {
         )
     }
 
+    // MARK: - Style tokens
+
+    private var titleFont: Font { style == .liquid ? DS.FontToken.section : .headline }
+    private var sectionLabelColor: Color {
+        style == .liquid ? DS.ColorToken.textTertiary : NexusColor.Text.muted
+    }
+    private var primaryColor: Color {
+        style == .liquid ? DS.ColorToken.textPrimary : NexusColor.Text.primary
+    }
+    private var tertiaryColor: Color {
+        style == .liquid ? DS.ColorToken.textTertiary : NexusColor.Text.tertiary
+    }
+    private var dangerColor: Color {
+        style == .liquid ? DS.ColorToken.statusDanger : NexusColor.Status.danger
+    }
+    private var rowBackground: Color {
+        style == .liquid ? DS.ColorToken.glassSoft : NexusColor.Background.control
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Assign Speaker")
-                .font(.headline)
+                .font(titleFont)
+                .foregroundStyle(primaryColor)
 
             Text(speaker)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(tertiaryColor)
 
-            TextField("Name (or create a new contact)", text: $draft)
-                .textFieldStyle(.roundedBorder)
+            NexusTextField("Name (or create a new contact)", text: $draft)
 
             if !filteredPeople.isEmpty {
                 peopleSection
@@ -400,7 +449,7 @@ private struct RenameSpeakerSheet: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(NexusColor.Status.danger)
+                    .foregroundStyle(dangerColor)
             }
 
             HStack {
@@ -413,6 +462,11 @@ private struct RenameSpeakerSheet: View {
         }
         .padding(20)
         .frame(width: 360)
+        .background {
+            if style == .liquid {
+                DS.ColorToken.backgroundApp
+            }
+        }
     }
 
     /// Existing contacts — picking a row assigns a real `Person` (#3).
@@ -420,7 +474,7 @@ private struct RenameSpeakerSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Contacts")
                 .font(.caption2)
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(sectionLabelColor)
 
             ForEach(filteredPeople) { person in
                 Button {
@@ -440,7 +494,7 @@ private struct RenameSpeakerSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("From this meeting's invite")
                 .font(.caption2)
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(sectionLabelColor)
 
             ForEach(filteredAttendeeSuggestions) { candidate in
                 Button {
@@ -463,22 +517,22 @@ private struct RenameSpeakerSheet: View {
         HStack(spacing: 8) {
             Image(systemName: "person.crop.circle")
                 .font(.body)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .foregroundStyle(tertiaryColor)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
                     Text(name)
                         .font(.caption)
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .foregroundStyle(primaryColor)
                     if let hint {
                         Text(hint)
                             .font(.caption2)
-                            .foregroundStyle(NexusColor.Text.muted)
+                            .foregroundStyle(sectionLabelColor)
                     }
                 }
                 if let email, !email.isEmpty {
                     Text(email)
                         .font(.caption2)
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .foregroundStyle(tertiaryColor)
                 }
             }
             Spacer(minLength: 0)
@@ -488,7 +542,7 @@ private struct RenameSpeakerSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .background(
-            NexusColor.Background.control,
+            rowBackground,
             in: RoundedRectangle(cornerRadius: 6)
         )
     }
@@ -498,7 +552,7 @@ private struct RenameSpeakerSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption2)
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(sectionLabelColor)
 
             ForEach(names, id: \.self) { suggestion in
                 Button {
@@ -507,10 +561,10 @@ private struct RenameSpeakerSheet: View {
                     HStack(spacing: 6) {
                         Image(systemName: glyph)
                             .font(.caption)
-                            .foregroundStyle(NexusColor.Text.tertiary)
+                            .foregroundStyle(tertiaryColor)
                         Text(suggestion)
                             .font(.caption)
-                            .foregroundStyle(NexusColor.Text.primary)
+                            .foregroundStyle(primaryColor)
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 8)
@@ -518,7 +572,7 @@ private struct RenameSpeakerSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .background(
-                        NexusColor.Background.control,
+                        rowBackground,
                         in: RoundedRectangle(cornerRadius: 6)
                     )
                 }

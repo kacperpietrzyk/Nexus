@@ -64,6 +64,10 @@ public final class MeetingProcessingPipeline {
         var currentStage = MeetingProcessingStatus.processingVAD.rawValue
 
         do {
+            // Each `setStatus` first runs `try Task.checkCancellation()`, so
+            // cancellation (see `PipelineQueue.cancelProcessing`) is observed at
+            // every stage boundary: a cancelled run falls into the `catch` and is
+            // recorded as failed-at-stage, so it can be reprocessed from there.
             try setStatus(meeting, .processingVAD)
             _ = try await vad.run(audioURL: meURL, durationMs: durationMs)
             _ = try await vad.run(audioURL: othersURL, durationMs: durationMs)
@@ -154,6 +158,9 @@ public final class MeetingProcessingPipeline {
     }
 
     private func setStatus(_ meeting: Meeting, _ status: MeetingProcessingStatus) throws {
+        // Stage boundary: observe cooperative cancellation before entering the
+        // next (potentially long) stage.
+        try Task.checkCancellation()
         meeting.processingStatus = status.rawValue
         meeting.updatedAt = now()
         try repo.updateProcessingStatus(status.rawValue, for: meeting.id)

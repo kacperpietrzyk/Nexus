@@ -13,6 +13,13 @@ struct NoteRepositoryTests {
         return ModelContext(container)
     }
 
+    private func makeContextWithAttachments() throws -> ModelContext {
+        let schema = Schema([Note.self, TaskItem.self, Link.self, Project.self, Section.self, AttachmentAsset.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        return ModelContext(container)
+    }
+
     private func makeRepo(_ context: ModelContext) -> NoteRepository {
         NoteRepository(context: context)
     }
@@ -53,6 +60,35 @@ struct NoteRepositoryTests {
 
         #expect(note.plainText == "Target")
         #expect(try outgoing(context, from: note.id).contains { $0.linkKind == .mentions && $0.toID == target.id })
+    }
+
+    @Test func insertImageAttachmentPersistsBlockAndAsset() throws {
+        let context = try makeContextWithAttachments()
+        let note = Note(contentData: try NoteContentCoder.encode([]))
+        context.insert(note)
+        try context.save()
+        let repo = NoteRepository(context: context)
+        let imported = ImportedAttachmentFile(
+            id: UUID(),
+            originalFilename: "diagram.png",
+            mimeType: "image/png",
+            byteCount: 4,
+            sha256: "hash",
+            storagePath: "attachments/id/diagram.png",
+            fileURL: URL(fileURLWithPath: "/tmp/diagram.png")
+        )
+
+        let asset = try repo.insertImageAttachment(imported, into: note, after: nil)
+
+        #expect(asset.id == imported.id)
+        let blocks = try NoteContentCoder.decode(note.contentData)
+        guard case .image(let ref, let assetPath) = blocks.first?.kind else {
+            Issue.record("expected image block")
+            return
+        }
+        #expect(ref == imported.id)
+        #expect(assetPath == imported.storagePath)
+        #expect(try context.fetch(FetchDescriptor<AttachmentAsset>()).count == 1)
     }
 
     // MARK: - reconcileOnLoad gating (no churn on clean note)
@@ -170,6 +206,47 @@ struct NoteRepositoryTests {
         #expect(survivor?.noteRef == nil)
         // Project page pointer nulled.
         #expect(project.canonicalNoteRef == nil)
+    }
+
+    // MARK: - Trash / restore (§8)
+
+    @Test func fetchDeletedReturnsOnlyTombstonesNewestFirst() throws {
+        let context = try makeContext()
+        let repo = makeRepo(context)
+        let live = try repo.create(title: "Live", blocks: [])
+        let first = try repo.create(title: "First deleted", blocks: [])
+        let second = try repo.create(title: "Second deleted", blocks: [])
+
+        // Delete `first`, then `second`, with distinct timestamps.
+        first.deletedAt = Date(timeIntervalSince1970: 1_000)
+        second.deletedAt = Date(timeIntervalSince1970: 2_000)
+        try context.save()
+
+        let deleted = try repo.fetchDeleted()
+
+        #expect(deleted.map(\.id) == [second.id, first.id])  // newest-deleted first
+        #expect(!deleted.contains { $0.id == live.id })
+    }
+
+    @Test func restoreClearsTombstoneAndRemirrorsContent() throws {
+        let context = try makeContext()
+        let repo = makeRepo(context)
+        let placeholder = UUID()
+        let note = try repo.create(blocks: [
+            Block(kind: .todo(taskRef: placeholder, runs: [InlineRun(text: "Recover me")]))
+        ])
+        try repo.delete(note)
+        #expect(note.deletedAt != nil)
+        #expect(try outgoing(context, from: note.id).isEmpty)  // edges detached on delete
+
+        try repo.restore(note)
+
+        // Tombstone cleared and the note is live again.
+        #expect(note.deletedAt == nil)
+        #expect(try repo.find(id: note.id)?.id == note.id)
+        #expect(!(try repo.fetchDeleted().contains { $0.id == note.id }))
+        // Reconcile on restore re-mirrors the note's own containsTask edge.
+        #expect(try outgoing(context, from: note.id).contains { $0.linkKind == .containsTask })
     }
 
     // MARK: - Embed snapshot (§10)

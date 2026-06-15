@@ -40,6 +40,8 @@ public final class NotificationScheduler {
     /// When `reminders` is non-empty, schedules one request per rule keyed
     /// `task-<uuid>-r<index>`. Falls back to the legacy single `task-<uuid>`
     /// request (from `dueAt`) when `reminders` is empty.
+    /// Repeating absolute rules (T4) become repeating calendar triggers at
+    /// their wall-clock time; one-shot rules keep the original behavior.
     /// If a fire date falls inside the configured quiet window, the trigger is
     /// deferred to `QuietHours.nextActive(after:)`.
     public func schedule(_ task: TaskItem) async throws {
@@ -53,16 +55,11 @@ public final class NotificationScheduler {
 
         let currentDate = now()
         for (index, rule) in rules.enumerated() {
-            guard let fireDate = resolve(rule, for: task) else { continue }
-            guard fireDate > currentDate else { continue }
-            let content = UNMutableNotificationContent()
-            content.title = task.title
-            content.categoryIdentifier = NotificationCategory.taskReminder.rawValue
-            content.userInfo = ["taskId": task.id.uuidString]
+            guard let reminderTrigger = trigger(for: rule, task: task, currentDate: currentDate) else { continue }
             let request = UNNotificationRequest(
                 identifier: "\(identifier(for: task.id))-r\(index)",
-                content: content,
-                trigger: trigger(firingAt: fireDate)
+                content: reminderContent(for: task),
+                trigger: reminderTrigger
             )
             try await delivery.add(request)
         }
@@ -125,11 +122,45 @@ public final class NotificationScheduler {
         try await delivery.add(request)
     }
 
+    /// Repeating absolutes get a repeating calendar trigger (no fire-date /
+    /// overdue handling — a repeating trigger always matches its next
+    /// occurrence). Everything else keeps the original one-shot path.
+    private func trigger(for rule: ReminderRule, task: TaskItem, currentDate: Date) -> sending UNNotificationTrigger? {
+        if case .absolute(let anchor, .some(let frequency)) = rule {
+            return repeatingTrigger(anchoredAt: anchor, frequency: frequency)
+        }
+        guard let fireDate = resolve(rule, for: task), fireDate > currentDate else { return nil }
+        return trigger(firingAt: fireDate)
+    }
+
+    private func reminderContent(for task: TaskItem) -> sending UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = task.title
+        content.categoryIdentifier = NotificationCategory.taskReminder.rawValue
+        content.userInfo = ["taskId": task.id.uuidString]
+        return content
+    }
+
+    /// Repeating trigger at the rule's wall-clock time (T4), the
+    /// `OverdueDigestScheduler` precedent. Quiet hours are applied ONCE to the
+    /// anchor (a repeating trigger cannot defer per-fire): a time inside the
+    /// quiet window shifts to the window end — for weekly rules the weekday is
+    /// read from the shifted date too, so a cross-midnight shift stays
+    /// consistent with its new wall-clock day.
+    nonisolated private func repeatingTrigger(anchoredAt anchor: Date, frequency: ReminderRepeat) -> UNNotificationTrigger {
+        let adjusted = quietHoursProvider()?.nextActive(after: anchor, calendar: calendar) ?? anchor
+        var components = calendar.dateComponents([.hour, .minute], from: adjusted)
+        if frequency == .weekly {
+            components.weekday = calendar.component(.weekday, from: adjusted)
+        }
+        return UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+    }
+
     /// Resolves a reminder rule to a concrete fire date, or nil if unresolvable
     /// (relative rule whose anchor date is not set).
     private func resolve(_ rule: ReminderRule, for task: TaskItem) -> Date? {
         switch rule {
-        case .absolute(let date):
+        case .absolute(let date, _):
             return date
         case .relative(let offset, let anchor):
             let base: Date? = (anchor == .due) ? task.dueAt : task.deadlineAt

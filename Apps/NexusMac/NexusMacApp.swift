@@ -10,6 +10,7 @@ import NexusSearch
 import NexusSync
 import NexusUI
 import NotesFeature
+import OSLog
 import PeopleFeature
 import SwiftData
 import SwiftUI
@@ -108,7 +109,7 @@ struct NexusMacApp: App {
         DebugDemoSeed.seedIfRequested(context: made.mainContext, noteRepository: self.noteRepository)
         #endif
         // People / Contacts (spec §6). `Person` is already a synced model in
-        // NexusSchemaV12, so the main window + Settings `.modelContainer(container)`
+        // NexusSchemaV13, so the main window + Settings `.modelContainer(container)`
         // already register it — no separate container registration is needed.
         self.personRepository = PeopleComposition.makeRepository(
             for: made.mainContext,
@@ -127,6 +128,7 @@ struct NexusMacApp: App {
         TaskIntentRuntime.configure(parser: self.taskParser, repository: self.taskRepository)
         let agentRouter = self.aiRouter
         let agentLifecycle = self.aiGraph.mlxLifecycle
+        let meetingsRepo = self.meetingsComposition.meetingRepository
         self.agentComposition = Self.makeAgentComposition(
             modelContext: made.mainContext,
             router: self.aiRouter,
@@ -136,6 +138,18 @@ struct NexusMacApp: App {
             heroBriefService: heroBriefService,
             meetingTools: self.meetingsComposition.agentTools(),
             ocrPipeline: self.aiGraph.ocrPipeline,
+            meetingCandidatesProvider: {
+                let meetings = (try? meetingsRepo.allChronological()) ?? []
+                let eligible = meetings.filter { $0.deletedAt == nil && !$0.summaryText.isEmpty }
+
+                return eligible.map { m in
+                    MeetingDecomposeCandidate(
+                        id: m.id,
+                        summary: m.summaryText,
+                        actionItemIDs: m.actionItemIDs
+                    )
+                }
+            },
             // Lazy-warm the assigned chat model when the agent surface opens, so
             // an assigned local model serves chat even with "preload on launch"
             // off. Guarded to an assigned, on-disk, not-yet-loaded model (same
@@ -223,13 +237,82 @@ struct NexusMacApp: App {
         }
     }
 
+    // In-shell Settings (Task 9): the typed bundle the legacy `Settings {}`
+    // scene assembled inline is lifted into `MacSettingsDependencies` and
+    // injected through the environment so `LiquidSettingsView` renders as the
+    // `.settings` destination. Every field mirrors the value the old scene
+    // passed; the 4 `AnyView` thunks wrap the same composed sub-views, and
+    // `ExternalAccessSection` is built directly (no `ExternalAccessConfig`
+    // intermediary) from the same sidecar path + activity log. The old
+    // `Settings {}` scene stays in place for now (removed in a later task).
+    // Computed (not an inline `let` in `body`) so the multi-scene
+    // `@SceneBuilder` body stays intact — `@State`-projected bindings
+    // ($quietHoursState) and stored props are member-accessible here.
+    private var macSettings: MacSettingsDependencies {
+        MacSettingsDependencies(
+            cloudKitEnabled: environment.cloudKitEnabled,
+            cloudKitContainerIdentifier: environment.cloudKitContainerIdentifier,
+            notificationsAuthorized: permissionState.status != .denied,
+            quietHoursStart: $quietHoursState.startTime,
+            quietHoursEnd: $quietHoursState.endTime,
+            onExportRequested: { exportPickerPresented = true },
+            manageModelsContent: {
+                if let inputs = Self.makeModelStorageInputs() {
+                    return AnyView(
+                        AssistantStorageContainer(
+                            reconciler: inputs.reconciler,
+                            resolvedSet: inputs.resolvedSet,
+                            tier: inputs.tier,
+                            onReloadChat: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
+                            onReloadEmbedder: { [aiRouter] in
+                                try? await aiRouter.reloadMLXEmbedder()
+                            }
+                        )
+                    )
+                } else {
+                    return AnyView(EmptyView())
+                }
+            },
+            agentSettingsContent: {
+                AnyView(AgentSettingsView(context: agentComposition.settingsContext))
+            },
+            meetingsSettingsContent: {
+                AnyView(
+                    MeetingsSettingsSection(
+                        composition: meetingsComposition,
+                        helperViewModel: MeetingsHelperSettingsViewModel()
+                    )
+                )
+            },
+            externalAccessContent: {
+                AnyView(
+                    ExternalAccessSection(
+                        sidecarPath: Bundle.main.bundleURL
+                            .appendingPathComponent("Contents/MacOS/nexus-mcp")
+                            .path,
+                        activityLog: agentActivityLog
+                    )
+                )
+            }
+        )
+    }
+
     var body: some Scene {
         Window("Nexus", id: "main") {
             ContentView()
+                .environment(\.macSettingsDependencies, macSettings)
                 .environment(\.searchSubsystem, search)
                 .environment(\.aiRouter, aiRouter)
                 .environment(\.taskParser, taskParser)
                 .environment(\.taskRepository, taskRepository)
+                .environment(
+                    \.projectTokenResolver,
+                    ProjectTokenResolver { token in
+                        (try? ProjectRepository(context: taskRepository.context)
+                            .findActive(matchingToken: token))
+                            .flatMap { $0 }
+                    }
+                )
                 .environment(\.noteRepository, noteRepository)
                 .environment(\.personRepository, personRepository)
                 // People profile meeting history: PeopleFeature cannot import
@@ -241,21 +324,42 @@ struct NexusMacApp: App {
                         try? meetingsComposition.meetingRepository.find(id: id)
                     }
                 )
+                // O1 graph view: NotesFeature cannot import NexusMeetings
+                // (feature isolation), so the host resolves meeting titles for
+                // graph nodes — same seam as personMeetingResolver above.
+                .environment(
+                    \.notesGraphExternalTitles,
+                    NotesGraphExternalTitlesProvider { [meetingsComposition] in
+                        let meetings =
+                            (try? meetingsComposition.meetingRepository.allChronological()) ?? []
+                        let pairs =
+                            meetings
+                            .filter { $0.deletedAt == nil }
+                            .map { ($0.id, $0.title) }
+                        return [.meeting: Dictionary(pairs, uniquingKeysWith: { first, _ in first })]
+                    }
+                )
                 .environment(\.notificationScheduler, notificationScheduler)
                 .environment(\.agentActivityLog, agentActivityLog)
                 .environment(\.agentChatViewModel, agentComposition.chatViewModel)
+                .environment(\.modelDownloadManager, welcomeMLXDownloads.manager)
                 .environment(\.agentBriefService, agentComposition.briefService)
+                .environment(\.pendingInsightStore, agentComposition.pendingInsightStore)
+                .environment(\.insightProposalCoordinator, agentComposition.proposalCoordinator)
+                .environment(\.insightCooldownStore, agentComposition.insightCooldownStore)
                 .environment(\.meetingsComposition, meetingsComposition)
                 .environment(\.meetingNavigationRouter, meetingNavigationRouter)
+                .environment(\.meetingHelperControl, helperToastBridge)
                 .environment(\.focusModeState, focusModeState)
                 #if canImport(EventKit) && !os(watchOS)
             .environment(\.calendarEventProvider, EventKitCalendarProvider.shared)
             .environment(\.calendarEventWriter, EventKitCalendarProvider.shared)
                 #endif
                 // Cheap insurance for non-dashboard states (Focus mode, future
-                // sheets) where `NexusWallpaper` is not painted; wallpaper-bearing
-                // dashboard ignores safe area and covers this anyway.
-                .containerBackground(NexusColor.Background.base, for: .window)
+                // sheets) where the shell background is not painted; the
+                // dashboard ignores safe area and covers this anyway. Liquid
+                // re-skin: DS app background (matches the Settings scene).
+                .containerBackground(DS.ColorToken.backgroundApp, for: .window)
                 // Achromatic control tint for the WHOLE main window — mirrors the
                 // Settings scene (line ~413). Without it, native Toggle / Picker /
                 // segmented / DatePicker controls in the main window (the task
@@ -270,7 +374,7 @@ struct NexusMacApp: App {
                             do {
                                 let result = try await MarkdownExporter.export(
                                     container: container,
-                                    types: TaskItem.self,
+                                    types: TaskItem.self, Meeting.self, Cycle.self, Note.self,
                                     to: folder
                                 )
                                 lastExportResult = result
@@ -298,11 +402,27 @@ struct NexusMacApp: App {
                 .task {
                     if scenePhase == .active {
                         agentComposition.runActiveMaintenance(context: container.mainContext)
+                        await agentComposition.insightCoordinator.runDueInsights(now: .now)
                     }
+                }
+                .task {
+                    guard let reconciler = Self.makeModelReconciler() else { return }
+                    await Task.detached(priority: .utility) {
+                        let result = reconciler.reclaimOrphans()
+                        if !result.failures.isEmpty {
+                            Logger(subsystem: "com.kacperpietrzyk.Nexus", category: "ai.reclaim")
+                                .error(
+                                    "model reclaim failures: \(result.failures.map(\.path.lastPathComponent), privacy: .public)"
+                                )
+                        }
+                    }.value
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     agentComposition.runActiveMaintenance(context: container.mainContext)
+                    _Concurrency.Task { @MainActor in
+                        await agentComposition.insightCoordinator.runDueInsights(now: .now)
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
                     syncAgentListener(
@@ -335,6 +455,13 @@ struct NexusMacApp: App {
                     NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)
                 }
                 .keyboardShortcut("n", modifiers: [.command])
+            }
+
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    NotificationCenter.default.post(name: .nexusGoToSettings, object: nil)
+                }
+                .keyboardShortcut(",", modifiers: [.command])
             }
 
             CommandMenu("Navigate") {
@@ -372,6 +499,13 @@ struct NexusMacApp: App {
                     NotificationCenter.default.post(name: .nexusGoToSettings, object: nil)
                 }
                 .keyboardShortcut("7", modifiers: [.command])
+
+                Divider()
+
+                Button("Today's Note") {
+                    NotificationCenter.default.post(name: .nexusOpenDailyNote, object: nil)
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
             }
 
             CommandMenu("Tasks") {
@@ -422,66 +556,6 @@ struct NexusMacApp: App {
             }
         }
 
-        Settings {
-            NavigationStack {
-                NexusSettingsView(
-                    cloudKitEnabled: environment.cloudKitEnabled,
-                    containerIdentifier: environment.cloudKitContainerIdentifier,
-                    aiRouter: aiRouter,
-                    notificationsAuthorized: permissionState.status != .denied,
-                    quietHoursStartTime: $quietHoursState.startTime,
-                    quietHoursEndTime: $quietHoursState.endTime,
-                    externalAccessConfig: NexusSettingsView.ExternalAccessConfig(
-                        sidecarPath: Bundle.main.bundleURL
-                            .appendingPathComponent("Contents/MacOS/nexus-mcp")
-                            .path,
-                        activityLog: agentActivityLog
-                    ),
-                    agentSettingsContent: AnyView(
-                        AgentSettingsView(context: agentComposition.settingsContext)
-                    ),
-                    meetingsSettingsContent: AnyView(
-                        MeetingsSettingsSection(
-                            composition: meetingsComposition,
-                            helperViewModel: MeetingsHelperSettingsViewModel()
-                        )
-                    ),
-                    manageModelsContent: AnyView(
-                        ManageModelsSection(
-                            localStateStore: ModelManifestLocalState.Store(),
-                            downloadManager: welcomeMLXDownloads.manager,
-                            lifecycle: aiGraph.mlxLifecycle,
-                            onChatReassigned: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
-                            onEmbedderReassigned: { [aiRouter] in
-                                try? await aiRouter.reloadMLXEmbedder()
-                            }
-                        )
-                    ),
-                    onExportRequested: { exportPickerPresented = true }
-                )
-                .navigationTitle("Settings")
-            }
-            // The Settings scene is SEPARATE from the main `Window` and does NOT
-            // inherit its `.modelContainer`. Without this, the `@Query` in
-            // `ManageModelsSection` has no SwiftData container in scope and Manage
-            // Models renders empty (no model rows — the Mac-only "can't manage
-            // models" bug). The main window already attaches the same container.
-            .modelContainer(container)
-            // MP-4.1 §3: native Toggle/DatePicker/Button controls in the
-            // Settings Form inherit this scene tint — burning it
-            // achromatic is what makes the whole Form render without
-            // accent hue. `Text.primary` matches the oracle
-            // `SettingsPreview.toggle(_:)` "on"-knob fill (§2
-            // LabPalette.ink).
-            .tint(NexusColor.Text.primary)
-            .task { await permissionState.refresh() }
-            .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
-                syncAgentListener(
-                    enabled: UserDefaults.standard.bool(forKey: AgentServiceConstants.mcpEnabledKey)
-                )
-            }
-        }
-
         MenuBarExtra("Nexus", systemImage: "checklist") {
             NexusMenuBarContent()
         }
@@ -519,7 +593,7 @@ struct NexusMacApp: App {
         let openStatus = TaskStatus.open.rawValue
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { item in
-                item.deletedAt == nil && item.statusRaw == openStatus
+                item.deletedAt == nil && item.statusRaw == openStatus && item.isTemplate == false
             },
             sortBy: [
                 SortDescriptor(\.dueAt, order: .forward),
@@ -554,7 +628,7 @@ struct NexusMacApp: App {
             do {
                 try await index.rebuild(
                     from: context,
-                    types: TaskItem.self, Note.self, Label.self, Person.self
+                    types: TaskItem.self, Note.self, Label.self, Person.self, Organization.self
                 )
             } catch {
                 print("SearchIndex.rebuild failed on launch: \(error)")
@@ -668,6 +742,7 @@ struct NexusMacApp: App {
         heroBriefService: HeroBriefService,
         meetingTools: [any AgentTool],
         ocrPipeline: OCRPipeline,
+        meetingCandidatesProvider: (@MainActor () -> [MeetingDecomposeCandidate])? = nil,
         warmChatModel: @escaping @MainActor () async -> Void
     ) -> AgentComposition {
         let additionalTools =
@@ -680,6 +755,7 @@ struct NexusMacApp: App {
             nlParser: nlParser,
             heroBriefService: heroBriefService
         )
+        let chatReadiness = makeChatReadinessProbe()
         do {
             return try AgentComposition.make(
                 platform: .mac,
@@ -692,11 +768,60 @@ struct NexusMacApp: App {
                 additionalTools: additionalTools,
                 ocrPipeline: ocrPipeline,
                 warmChatModel: warmChatModel,
+                chatReadiness: chatReadiness,
+                eventsProvider: {
+                    let end = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
+                    return
+                        (try? await EventKitCalendarProvider.shared.eventsBetween(
+                            start: .now,
+                            end: end
+                        )) ?? []
+                },
+                meetingCandidatesProvider: meetingCandidatesProvider,
                 legacyBrief: makeLegacyBrief(using: heroBriefService)
             )
         } catch {
             fatalError("Failed to compose Nexus Agent: \(error)")
         }
+    }
+
+    @MainActor
+    private static func makeChatReadinessProbe() -> @MainActor () -> AssistantReadiness {
+        guard let catalog = try? ModelCatalog.loadDefault() else {
+            return { .ready }
+        }
+        let manifestID = DefaultHardcodedModelPolicy(catalog: catalog).resolve().chatManifestID
+        let resolver = AssistantReadinessResolver(
+            localStateStore: ModelManifestLocalState.Store(),
+            chatManifestID: manifestID
+        )
+        return { resolver.readiness(progress: nil) }
+    }
+
+    @MainActor
+    private static func makeModelReconciler() -> ModelStoreReconciler? {
+        guard let catalog = try? ModelCatalog.loadDefault() else { return nil }
+        return ModelStoreReconciler(
+            roots: .production(),
+            store: ModelManifestLocalState.Store(),
+            canonical: DefaultHardcodedModelPolicy(catalog: catalog).resolve(),
+            whisperVariant: WhisperKitProvider.modelVariantPublic
+        )
+    }
+
+    /// Reconciler + resolved set + device tier for the assistant-readiness checklist.
+    @MainActor
+    private static func makeModelStorageInputs() -> ModelStorageInputs? {
+        guard let catalog = try? ModelCatalog.loadDefault() else { return nil }
+        let tier = TierDetector.detectCurrent()
+        let resolvedSet = DefaultHardcodedModelPolicy(catalog: catalog, tier: tier).resolve()
+        let reconciler = ModelStoreReconciler(
+            roots: .production(),
+            store: ModelManifestLocalState.Store(),
+            canonical: resolvedSet,
+            whisperVariant: WhisperKitProvider.modelVariantPublic
+        )
+        return ModelStorageInputs(reconciler: reconciler, resolvedSet: resolvedSet, tier: tier)
     }
 
     private static func makeLegacyBrief(
@@ -733,6 +858,17 @@ private struct MeetingNavigationInfrastructure {
     let bridge: HelperToastBridge
 }
 
+private struct ModelDownloadManagerKey: EnvironmentKey {
+    static let defaultValue: ModelDownloadManager? = nil
+}
+
+extension EnvironmentValues {
+    var modelDownloadManager: ModelDownloadManager? {
+        get { self[ModelDownloadManagerKey.self] }
+        set { self[ModelDownloadManagerKey.self] = newValue }
+    }
+}
+
 private struct SearchSubsystemKey: EnvironmentKey {
     static let defaultValue: SearchSubsystem? = nil
 }
@@ -763,6 +899,10 @@ private struct MeetingNavigationRouterKey: EnvironmentKey {
     static let defaultValue: MeetingNavigationRouter? = nil
 }
 
+private struct MeetingHelperControlKey: EnvironmentKey {
+    static let defaultValue: (any MeetingHelperControlling)? = nil
+}
+
 extension EnvironmentValues {
     var meetingsComposition: MeetingsComposition? {
         get { self[MeetingsCompositionKey.self] }
@@ -773,6 +913,11 @@ extension EnvironmentValues {
         get { self[MeetingNavigationRouterKey.self] }
         set { self[MeetingNavigationRouterKey.self] = newValue }
     }
+
+    var meetingHelperControl: (any MeetingHelperControlling)? {
+        get { self[MeetingHelperControlKey.self] }
+        set { self[MeetingHelperControlKey.self] = newValue }
+    }
 }
 
 extension Notification.Name {
@@ -781,6 +926,7 @@ extension Notification.Name {
     static let nexusGoToMeetings = Notification.Name("nexus.goToMeetings")
     static let nexusGoToTasks = Notification.Name("nexus.goToTasks")
     static let nexusGoToStats = Notification.Name("nexus.goToStats")
+    static let nexusOpenDailyNote = Notification.Name("nexus.openDailyNote")
     static let nexusOpenCommandPalette = Notification.Name("nexus.openCommandPalette")
     static let nexusOpenCapture = Notification.Name("nexus.openCapture")
     static let nexusToggleAgentSidebar = Notification.Name("nexus.toggleAgentSidebar")
@@ -856,8 +1002,8 @@ private struct NexusMenuBarContent: View {
 
         Divider()
 
-        SettingsLink {
-            Text("Settings…")
+        Button("Settings…") {
+            NotificationCenter.default.post(name: .nexusGoToSettings, object: nil)
         }
 
         Divider()

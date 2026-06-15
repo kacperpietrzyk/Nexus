@@ -11,6 +11,7 @@ internal enum Token: Sendable, Equatable {
     case relativePhrase(amount: Int, unitDays: Int, confidence: Float)
     case priority(TaskPriority, confidence: Float)
     case tag(String, confidence: Float)
+    case project(String, confidence: Float)
     case recurrence(rrule: String, confidence: Float)
     case residual(String)
 }
@@ -27,6 +28,7 @@ extension Token {
             .relativePhrase(_, _, let c),
             .priority(_, let c),
             .tag(_, let c),
+            .project(_, let c),
             .recurrence(_, let c):
             return c
         case .residual:

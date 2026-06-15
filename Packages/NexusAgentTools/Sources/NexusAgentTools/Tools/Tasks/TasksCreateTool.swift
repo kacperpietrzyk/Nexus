@@ -24,6 +24,15 @@ public struct TasksCreateTool: AgentTool {
             "section_id": .string(description: "Section UUID within the project."),
             "parent_id": .string(description: "Parent task UUID for a subtask."),
             "recurrence_rule": .string(description: "RFC 5545 RRULE subset, e.g. FREQ=DAILY."),
+            "recurrence_anchor": .string(
+                enumValues: ["due_date", "completion"],
+                description: "Recurrence anchor: due_date (default) or completion (repeat from completion date)."
+            ),
+            "estimated_duration_minutes": .integer(
+                minimum: 1,
+                description: "Optional user estimate of how long the task takes, in minutes (>0). "
+                    + "Stored as estimated_duration_seconds with an explicit source."
+            ),
             "reminders": .array(
                 items: .object(
                     properties: [
@@ -33,6 +42,10 @@ public struct TasksCreateTool: AgentTool {
                         ),
                         "anchor": .string(enumValues: ["due", "deadline"], description: "relative: due | deadline"),
                         "at": .string(description: "absolute: ISO8601 timestamp"),
+                        "repeat": .string(
+                            enumValues: ["daily", "weekly"],
+                            description: "absolute only: repeat the reminder daily or weekly at that time"
+                        ),
                     ],
                     required: ["type"]
                 ),
@@ -51,6 +64,12 @@ public struct TasksCreateTool: AgentTool {
         let sectionID = try TasksStructuredCreateArguments.optionalUUID(args["section_id"], field: "section_id")
         let parentID = try TasksStructuredCreateArguments.optionalUUID(args["parent_id"], field: "parent_id")
         let recurrence = try TasksStructuredCreateArguments.optionalRecurrenceRule(args["recurrence_rule"])
+        let anchoredRecurrence = try TasksStructuredCreateArguments.applyingRecurrenceAnchor(
+            args["recurrence_anchor"], to: recurrence
+        )
+        let estimateSeconds = try TasksStructuredCreateArguments.optionalEstimatedDurationSeconds(
+            args["estimated_duration_minutes"]
+        )
         let reminders = try TasksStructuredCreateArguments.optionalReminders(args["reminders"])
 
         let task = TaskItem(
@@ -60,8 +79,10 @@ public struct TasksCreateTool: AgentTool {
             deadlineAt: fields.deadlineAt,
             priority: fields.priority,
             tags: fields.tags,
-            recurrenceRule: recurrence,
-            parentTaskID: parentID
+            recurrenceRule: anchoredRecurrence,
+            parentTaskID: parentID,
+            estimatedDurationSeconds: estimateSeconds,
+            durationSource: estimateSeconds == nil ? nil : .explicit
         )
         task.reminders = reminders
 
@@ -247,6 +268,37 @@ enum TasksStructuredCreateArguments {
         return text
     }
 
+    /// Parses the optional `recurrence_anchor` field. Returns `true` for
+    /// "completion", `false` for "due_date", and `nil` when the field is
+    /// omitted. Any other value is rejected so a typo cannot silently fall
+    /// back to the due-date default.
+    static func optionalRecurrenceAnchorIsCompletion(_ value: JSONValue?) throws -> Bool? {
+        guard let value else { return nil }
+        guard let text = value.stringValue else {
+            throw AgentError.validation("recurrence_anchor must be a string")
+        }
+        switch text {
+        case "completion": return true
+        case "due_date": return false
+        default:
+            throw AgentError.validation("recurrence_anchor must be \"due_date\" or \"completion\"")
+        }
+    }
+
+    /// Applies the optional `recurrence_anchor` field to an already-parsed
+    /// recurrence rule string. The explicit field wins over any inline
+    /// `ANCHOR=` token in the rule. When the field is omitted, the rule
+    /// (including any inline anchor token) is returned unchanged. Passing an
+    /// anchor with no rule is rejected — there is nothing to anchor.
+    static func applyingRecurrenceAnchor(_ value: JSONValue?, to rule: String?) throws -> String? {
+        let isCompletion = try optionalRecurrenceAnchorIsCompletion(value)
+        guard let isCompletion else { return rule }
+        guard let rule else {
+            throw AgentError.validation("recurrence_anchor requires recurrence_rule")
+        }
+        return RRuleAnchorToken.applying(completionAnchor: isCompletion, to: rule)
+    }
+
     static func optionalReminders(_ value: JSONValue?) throws -> [ReminderRule] {
         guard let value else { return [] }
         guard value.arrayValue != nil else {
@@ -266,6 +318,21 @@ enum TasksStructuredCreateArguments {
         } catch {
             throw AgentError.validation("invalid reminder entry")
         }
+    }
+
+    /// Parses the optional `estimated_duration_minutes` field (minutes, >0) into
+    /// the canonical seconds unit stored on `TaskItem.estimatedDurationSeconds`.
+    /// Returns `nil` when the field is omitted; rejects non-integer or
+    /// non-positive values so a bad estimate cannot silently persist.
+    static func optionalEstimatedDurationSeconds(_ value: JSONValue?) throws -> Int? {
+        guard let value else { return nil }
+        guard let minutes = value.intValue else {
+            throw AgentError.validation("estimated_duration_minutes must be an integer")
+        }
+        guard minutes > 0 else {
+            throw AgentError.validation("estimated_duration_minutes must be greater than 0")
+        }
+        return minutes * 60
     }
 
     static func optionalPriority(_ value: JSONValue?) throws -> TaskPriority {

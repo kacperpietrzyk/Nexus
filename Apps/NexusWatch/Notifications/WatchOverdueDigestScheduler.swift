@@ -81,6 +81,7 @@ final class WatchOverdueDigestScheduler {
                     && task.statusRaw == openRaw
                     && task.dueAt != nil
                     && (task.dueAt ?? distantFuture) < cutoff
+                    && task.isTemplate == false
             }
         )
         return (try? context.fetch(descriptor).count) ?? 0

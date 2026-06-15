@@ -20,8 +20,8 @@ private struct NexusAppear: ViewModifier {
             .opacity(shown ? 1 : 0)
             .offset(y: shown || reduce ? 0 : 6)
             .onAppear {
-                let delay = reduce ? 0 : Double(index) * NexusMotion.staggerStep
-                withAnimation(reduce ? NexusMotion.exit : NexusMotion.enter.delay(delay)) {
+                let delay = reduce ? 0 : Double(index) * DS.Motion.staggerStep
+                withAnimation(reduce ? DS.Motion.exit : DS.Motion.enter.delay(delay)) {
                     shown = true
                 }
             }
@@ -38,7 +38,7 @@ private struct NexusReveal: ViewModifier {
             .scaleEffect(shown || reduce ? 1 : 0.92)
             .onAppear {
                 let delay = reduce ? 0 : 0.18 + Double(index) * 0.09
-                withAnimation(reduce ? NexusMotion.exit : NexusMotion.standard.delay(delay)) {
+                withAnimation(reduce ? DS.Motion.exit : DS.Motion.standard.delay(delay)) {
                     shown = true
                 }
             }
@@ -53,7 +53,7 @@ public struct NexusPressableButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed && !reduce ? 0.97 : 1)
-            .animation(NexusMotion.press, value: configuration.isPressed)
+            .animation(DS.Motion.press, value: configuration.isPressed)
     }
 }
 
@@ -70,7 +70,7 @@ private struct NexusOverlayEnter: ViewModifier {
         content
             .scaleEffect(shown || reduce ? 1 : 0.98)
             .opacity(shown ? 1 : 0)
-            .onAppear { withAnimation(NexusMotion.standard) { shown = true } }
+            .onAppear { withAnimation(DS.Motion.standard) { shown = true } }
     }
 }
 

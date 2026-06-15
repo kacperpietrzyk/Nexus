@@ -23,7 +23,7 @@ public actor TasksSnoozedSource: InboxSource {
             let status = TaskStatus.snoozed.rawValue
             let descriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate { task in
-                    task.deletedAt == nil && task.statusRaw == status
+                    task.deletedAt == nil && task.statusRaw == status && task.isTemplate == false
                 },
                 sortBy: [SortDescriptor(\.snoozedUntil, order: .forward)]
             )

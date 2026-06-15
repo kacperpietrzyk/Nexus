@@ -172,6 +172,59 @@ import Testing
 }
 
 @MainActor
+@Test func markdownExporter_copiesNoteImageAttachments() async throws {
+    let schema = Schema([Note.self, Link.self, AttachmentAsset.self])
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+    let container = try ModelContainer(for: schema, configurations: [config])
+    let context = ModelContext(container)
+    let attachmentRoot = try makeTempFolder()
+    defer { try? FileManager.default.removeItem(at: attachmentRoot) }
+    let exportRoot = try makeTempFolder()
+    defer { try? FileManager.default.removeItem(at: exportRoot) }
+
+    let assetID = UUID()
+    let storagePath = "attachments/\(assetID.uuidString)/diagram.png"
+    let sourceFile = attachmentRoot.appendingPathComponent(storagePath)
+    try FileManager.default.createDirectory(
+        at: sourceFile.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    try Data([1, 2, 3]).write(to: sourceFile)
+    let asset = AttachmentAsset(
+        id: assetID,
+        originalFilename: "diagram.png",
+        mimeType: "image/png",
+        byteCount: 3,
+        sha256: "hash",
+        storagePath: storagePath
+    )
+    let note = Note(
+        title: "With image",
+        contentData: try NoteContentCoder.encode([
+            Block(kind: .image(ref: assetID, asset: storagePath))
+        ])
+    )
+    context.insert(asset)
+    context.insert(note)
+    try context.save()
+
+    _ = try await MarkdownExporter.export(
+        container: container,
+        types: Note.self,
+        to: exportRoot,
+        attachmentRoot: attachmentRoot
+    )
+
+    let markdown = try String(
+        contentsOf: exportRoot.appendingPathComponent("\(note.id.uuidString).md"),
+        encoding: .utf8
+    )
+    let expectedRelativePath = "_assets/\(note.id.uuidString)/diagram.png"
+    #expect(markdown.contains("![](\(expectedRelativePath))"))
+    #expect(FileManager.default.fileExists(atPath: exportRoot.appendingPathComponent(expectedRelativePath).path))
+}
+
+@MainActor
 @Test func markdownExporter_export_writesMultipleTypes() async throws {
     let schema = Schema([TaskItem.self, DebugItem.self, Link.self])
     let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
@@ -190,6 +243,36 @@ import Testing
         to: folder
     )
     #expect(result.itemsExported == 2)
+}
+
+@MainActor
+@Test func markdownExporter_renderItem_rendersBuiltInTaskWithLinkedNoteBody() async throws {
+    // `renderItem` (MCP `export.item`) must drive the SAME built-in path the
+    // bundle writer uses for core types: frontmatter from the item plus the
+    // linked note's serialized body, with outgoing links resolved.
+    let schema = Schema([TaskItem.self, Note.self, Link.self])
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+    let container = try ModelContainer(for: schema, configurations: [config])
+    let context = ModelContext(container)
+
+    let blocks = [Block(kind: .paragraph(runs: [InlineRun(text: "Single-item body")]))]
+    let note = Note(title: "Item note", contentData: try NoteContentCoder.encode(blocks))
+    let task = TaskItem(title: "Render me", noteRef: note.id)
+    let link = Link(from: (.task, task.id), to: (.note, note.id), linkKind: .mentions)
+    context.insert(note)
+    context.insert(task)
+    context.insert(link)
+    try context.save()
+
+    let markdown = try MarkdownExporter.renderItem(task, context: context)
+
+    #expect(markdown.contains("Render me"))
+    #expect(markdown.contains("Single-item body"))
+    #expect(markdown.contains("id: \(task.id.uuidString)"))
+    // Guard outgoing-link rendering: the task's `.mentions` edge to the note
+    // must surface as a concrete link entry, not just the `links:` header.
+    #expect(markdown.contains("toID: \(note.id.uuidString)"))
+    #expect(markdown.contains("linkKind: mentions"))
 }
 
 private func makeTempFolder() throws -> URL {

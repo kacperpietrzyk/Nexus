@@ -1,17 +1,34 @@
 import NexusCore
 import NexusUI
 import SwiftUI
+import UniformTypeIdentifiers
+
+#if os(iOS)
+import PhotosUI
+#endif
 
 /// The native block editor for a single `Note` (spec §5). Title field + a
 /// properties/metadata panel (tags, type, timestamps) + an ordered stack of
 /// per-block render/edit views, an "insert block" menu, a wikilink/embed picker,
 /// and a backlinks panel. Mac + iOS; the Watch projection is separate.
-struct NoteEditorView: View {
+struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     @Environment(\.noteRepository) private var noteRepository
     @State private var model: NoteEditorModel
     @State private var pickerContext: PickerContext?
     @State private var backlinks: [BacklinkEntry] = []
     @State private var newTag: String = ""
+    @State private var folderText: String = ""
+    @State private var newPropertyKey: String = ""
+    @State private var imageImporterPresented = false
+    @State private var imageImportError: String?
+    #if os(iOS)
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    #endif
+
+    // O4 daily-note navigation: adjacent EXISTING daily notes + today check.
+    @State private var previousDailyNoteID: UUID?
+    @State private var nextDailyNoteID: UUID?
+    @State private var isTodaysNote = true
 
     private let note: Note
     /// Navigate to another note's editor (spec §10 "klik → otwórz obiekt").
@@ -19,10 +36,18 @@ struct NoteEditorView: View {
     /// shared path. Cross-feature targets (Task/Project) are not wired here — see
     /// `openRef`.
     private let onOpenNote: (UUID) -> Void
+    /// Open the local graph centered on this note (O1). nil means the host has
+    /// not wired the graph surface, so the row stays hidden.
+    private let onOpenGraph: ((UUID) -> Void)?
 
-    init(note: Note, onOpenNote: @escaping (UUID) -> Void = { _ in }) {
+    init(
+        note: Note,
+        onOpenNote: @escaping (UUID) -> Void = { _ in },
+        onOpenGraph: ((UUID) -> Void)? = nil
+    ) {
         self.note = note
         self.onOpenNote = onOpenNote
+        self.onOpenGraph = onOpenGraph
         // The repository is read from the environment in `body`; the model is
         // rebuilt with it on appear so persistence is wired.
         _model = State(initialValue: NoteEditorModel(note: note, repository: nil))
@@ -30,22 +55,65 @@ struct NoteEditorView: View {
 
     var body: some View {
         ScrollViewReader { _ in
-            List {
-                titleField
-                propertiesSection
-                blockRows
-                insertRow
-                if !backlinks.isEmpty {
-                    backlinksSection
-                }
-            }
-            .listStyle(.plain)
+            editorList
         }
         .navigationTitle(model.title.isEmpty ? "Untitled" : model.title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: note.id) { rebindModel() }
+        #if os(iOS)
+        .task(id: selectedPhotoItem) {
+            await handleSelectedPhotoItem(selectedPhotoItem)
+        }
+        #endif
+        .toolbar {
+            ToolbarItemGroup {
+                #if os(iOS)
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Image(systemName: "photo.badge.plus")
+                }
+                .accessibilityLabel("Insert image")
+                .disabled(!model.canEdit)
+
+                Menu {
+                    Button("Insert image file") {
+                        imageImporterPresented = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("More image import options")
+                .disabled(!model.canEdit)
+                #else
+                Button {
+                    imageImporterPresented = true
+                } label: {
+                    Image(systemName: "photo.badge.plus")
+                }
+                .accessibilityLabel("Insert image")
+                .disabled(!model.canEdit)
+                #endif
+            }
+        }
+        .fileImporter(
+            isPresented: $imageImporterPresented,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImageImport(result)
+        }
+        .alert(
+            "Image import failed",
+            isPresented: Binding(
+                get: { imageImportError != nil },
+                set: { if !$0 { imageImportError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { imageImportError = nil }
+        } message: {
+            Text(imageImportError ?? "")
+        }
         .sheet(item: $pickerContext) { context in
             LinkPickerView(
                 noteRepository: noteRepository,
@@ -59,42 +127,106 @@ struct NoteEditorView: View {
 
     // MARK: - Sections
 
+    /// The block list. On macOS it is hosted as a Liquid glass document panel
+    /// (the platform `List` background is hidden so the glass shows through);
+    /// iOS keeps the platform-native list. Same rows, same interactions.
+    private var editorList: some View {
+        let list = List {
+            if model.role == .dailyNote {
+                dailyNoteNavRow
+            }
+            titleField
+            propertiesSection
+            blockRows
+            insertRow
+            if !backlinks.isEmpty {
+                backlinksSection
+            }
+        }
+        .listStyle(.plain)
+        #if os(macOS)
+        return
+            list
+            .scrollContentBackground(.hidden)
+            .padding(.vertical, DS.Space.s)
+            .liquidLightCard(cornerRadius: DS.Radius.l)
+            .padding(.horizontal, DS.Space.xl)
+            .padding(.vertical, DS.Space.l)
+        #else
+        return list
+        #endif
+    }
+
     private var titleField: some View {
+        // Document title heading (not a form field): keep the display font — a
+        // tile-boxed NexusTextField would flatten the page title.
         TextField("Title", text: $model.title)
             .textFieldStyle(.plain)
-            .font(NexusType.h2)
-            .foregroundStyle(NexusColor.Text.primary)
+            .font(DS.FontToken.displayMedium)
+            .foregroundStyle(DS.ColorToken.textPrimary)
             .disabled(!model.canEdit)
             .onSubmit { model.commitTitle() }
             .listRowSeparator(.hidden)
     }
 
-    /// Obsidian-style properties/metadata panel (A3): editable tag chips + read-only
-    /// type and timestamps, all from fields the `Note` model already carries (no
-    /// schema change). Status / extra typed properties lean on `tags` per the task's
-    /// guidance; a structured property bag is deferred (it would touch the schema).
+    /// Obsidian-style properties/metadata panel (A3 + Tranche 2 Plan E): editable
+    /// tag chips, an editable folder path, read-only type and timestamps, then the
+    /// structured custom property bag (key/value rows + an "add property" field)
+    /// persisted via `NoteRepository.updateProperties`.
     private var propertiesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.s + 2) {
             propertyRow(label: "Tags") {
                 tagEditor
             }
+            propertyRow(label: "Folder") {
+                folderEditor
+            }
             propertyRow(label: "Type") {
                 Text(roleLabel)
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
             }
             propertyRow(label: "Created") {
                 Text(model.createdAt, format: .dateTime.day().month().year())
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textMuted)
             }
             propertyRow(label: "Updated") {
                 Text(model.updatedAt, format: .dateTime.day().month().year().hour().minute())
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textMuted)
+            }
+            if let onOpenGraph {
+                propertyRow(label: "Graph") {
+                    Button {
+                        onOpenGraph(note.id)
+                    } label: {
+                        SwiftUI.Label(
+                            "View local graph",
+                            systemImage: "point.3.connected.trianglepath.dotted"
+                        )
+                        .font(DS.FontToken.metadata)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+                    .accessibilityLabel("View local graph for this note")
+                }
+            }
+            customPropertyRows
+            if model.canEdit {
+                addPropertyField
             }
         }
-        .padding(.vertical, 8)
+        .padding(DS.Space.m)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .fill(DS.ColorToken.glassSoft)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+        }
+        .padding(.vertical, DS.Space.s)
         .listRowSeparator(.hidden)
     }
 
@@ -102,10 +234,11 @@ struct NoteEditorView: View {
         label: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
-                .nexusType(.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
+            Text(label.uppercased())
+                .font(DS.FontToken.caption)
+                .kerning(0.6)
+                .foregroundStyle(DS.ColorToken.textTertiary)
                 .frame(width: 64, alignment: .leading)
             content()
             Spacer(minLength: 0)
@@ -123,7 +256,7 @@ struct NoteEditorView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "number")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                     tagInputField
                 }
             }
@@ -133,10 +266,7 @@ struct NoteEditorView: View {
     /// The "add tag" text field. iOS-only autocorrect/capitalization suppression is
     /// applied here (outside the `HStack` chain) so no `#if` sits mid-modifier-chain.
     private var tagInputField: some View {
-        let field = TextField("Add tag", text: $newTag)
-            .textFieldStyle(.plain)
-            .nexusType(.bodySmall)
-            .foregroundStyle(NexusColor.Text.primary)
+        let field = NexusTextField("Add tag", text: $newTag, isEnabled: model.canEdit)
             .onSubmit { commitTag() }
         #if os(iOS)
         return
@@ -153,6 +283,7 @@ struct NoteEditorView: View {
         case .free: return "Note"
         case .projectPage: return "Project Page"
         case .dailyNote: return "Daily Note"
+        case .template: return "Template"
         }
     }
 
@@ -161,6 +292,68 @@ struct NoteEditorView: View {
         newTag = ""
         guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         model.addTag(value)
+    }
+
+    // MARK: - Folder + custom properties (Tranche 2 Plan E)
+
+    /// Editable folder path. Commits on submit through the model (which
+    /// normalizes); the field re-seeds from the normalized result.
+    private var folderEditor: some View {
+        Group {
+            if model.canEdit {
+                folderInputField
+            } else {
+                Text(model.folderPath ?? "No folder")
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+            }
+        }
+    }
+
+    private var folderInputField: some View {
+        let field = NexusTextField("No folder", text: $folderText, isEnabled: model.canEdit)
+            .onSubmit { commitFolder() }
+        #if os(iOS)
+        return
+            field
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+        #else
+        return field
+        #endif
+    }
+
+    private func commitFolder() {
+        model.setFolderPath(folderText.isEmpty ? nil : folderText)
+        folderText = model.folderPath ?? ""
+    }
+
+    /// Editable key/value property rows (Tranche 2 Plan E, spec §4.4). Rows are
+    /// identified by key — keys are unique case-sensitively (`NotePropertyEditing`
+    /// enforces at the edit seam).
+    private var customPropertyRows: some View {
+        ForEach(model.properties, id: \.key) { property in
+            NotePropertyRowView(
+                property: property,
+                canEdit: model.canEdit,
+                onRenameKey: { model.renameProperty(property.key, to: $0) },
+                onSetValue: { model.setPropertyValue($0, forKey: property.key) },
+                onRemove: { model.removeProperty(property.key) }
+            )
+        }
+    }
+
+    private var addPropertyField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "plus.circle")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textTertiary)
+            NexusTextField("Add property", text: $newPropertyKey)
+                .onSubmit {
+                    model.addProperty(key: newPropertyKey)
+                    newPropertyKey = ""
+                }
+        }
     }
 
     private var blockRows: some View {
@@ -192,6 +385,7 @@ struct NoteEditorView: View {
                 Button("Numbered list") { model.insert(.numbered, after: lastBlockID) }
                 Button("Quote") { model.insert(.quote, after: lastBlockID) }
                 Button("Code") { model.insert(.code, after: lastBlockID) }
+                Button("Table") { model.insert(.table, after: lastBlockID) }
                 Button("Divider") { model.insert(.divider, after: lastBlockID) }
                 Divider()
                 Button("Link to…") {
@@ -202,8 +396,8 @@ struct NoteEditorView: View {
                 }
             } label: {
                 Label("Add block", systemImage: "plus.circle")
-                    .nexusType(.bodySmall)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             }
             .menuStyle(.borderlessButton)
             .listRowSeparator(.hidden)
@@ -211,27 +405,142 @@ struct NoteEditorView: View {
     }
 
     private var backlinksSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Backlinks")
-                .nexusType(.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            Text("BACKLINKS")
+                .font(DS.FontToken.caption)
+                .kerning(0.6)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             ForEach(backlinks) { entry in
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     Image(systemName: "arrow.turn.up.left")
-                        .font(.caption)
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                     Text(entry.title)
-                        .nexusType(.bodySmall)
-                        .foregroundStyle(NexusColor.Text.secondary)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
                         .lineLimit(1)
                 }
             }
         }
-        .padding(.top, 16)
+        .padding(DS.Space.m)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .fill(DS.ColorToken.glassSoft)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+        }
+        .padding(.top, DS.Space.m)
         .listRowSeparator(.hidden)
     }
 
+    // MARK: - Daily-note navigation (O4)
+
+    /// Prev/next-day chevrons between EXISTING daily notes (gaps are skipped,
+    /// edges disable) + a "Today" jump that open-or-creates today's note when
+    /// this note is not today's. Only mounted for `role == .dailyNote`.
+    private var dailyNoteNavRow: some View {
+        HStack(spacing: DS.Space.s) {
+            Button {
+                if let previousDailyNoteID { onOpenNote(previousDailyNoteID) }
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .buttonStyle(.borderless)
+            .disabled(previousDailyNoteID == nil)
+            .help("Previous daily note")
+            .accessibilityLabel("Previous daily note")
+
+            Button {
+                if let nextDailyNoteID { onOpenNote(nextDailyNoteID) }
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .buttonStyle(.borderless)
+            .disabled(nextDailyNoteID == nil)
+            .help("Next daily note")
+            .accessibilityLabel("Next daily note")
+
+            Spacer(minLength: 0)
+
+            if !isTodaysNote {
+                Button {
+                    openTodaysDailyNote()
+                } label: {
+                    Label("Today", systemImage: "calendar")
+                        .font(DS.FontToken.metadata)
+                }
+                .buttonStyle(.borderless)
+                .help("Open today's note")
+                .accessibilityLabel("Open today's note")
+            }
+        }
+        .foregroundStyle(DS.ColorToken.textSecondary)
+        .listRowSeparator(.hidden)
+    }
+
+    private func reloadDailyNavigation() {
+        guard note.role == .dailyNote, let noteRepository else {
+            previousDailyNoteID = nil
+            nextDailyNoteID = nil
+            isTodaysNote = true
+            return
+        }
+        let service = DailyNoteService(repository: noteRepository)
+        previousDailyNoteID =
+            (try? service.adjacentDailyNote(from: note, direction: .previous))?.id
+        nextDailyNoteID =
+            (try? service.adjacentDailyNote(from: note, direction: .next))?.id
+        isTodaysNote = service.day(of: note) == Calendar.current.startOfDay(for: Date.now)
+    }
+
+    private func openTodaysDailyNote() {
+        guard let noteRepository else { return }
+        guard
+            let today = try? DailyNoteService(repository: noteRepository)
+                .openOrCreate(for: Date.now)
+        else { return }
+        onOpenNote(today.id)
+    }
+
     private var lastBlockID: UUID? { model.blocks.last?.id }
+
+    // MARK: - Image import
+
+    private func handleImageImport(_ result: Result<[URL], any Error>) {
+        do {
+            guard let source = try result.get().first else { return }
+            let accessing = source.startAccessingSecurityScopedResource()
+            defer {
+                if accessing { source.stopAccessingSecurityScopedResource() }
+            }
+            guard let noteRepository else { return }
+            let importer = NoteImageImporter(
+                noteRepository: noteRepository,
+                attachmentRoot: try NoteAttachmentRoot.url()
+            )
+            _ = try importer.importImage(from: source, into: note, after: lastBlockID)
+            rebindModel()
+        } catch {
+            imageImportError = String(describing: error)
+        }
+    }
+
+    #if os(iOS)
+    private func handleSelectedPhotoItem(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        defer { selectedPhotoItem = nil }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else { return }
+            let temporaryURL = try NotePhotosImageWriter.writeTemporaryPNGData(data)
+            handleImageImport(.success([temporaryURL]))
+            try? FileManager.default.removeItem(at: temporaryURL)
+        } catch {
+            imageImportError = String(describing: error)
+        }
+    }
+    #endif
 
     // MARK: - Wiring
 
@@ -249,7 +558,9 @@ struct NoteEditorView: View {
 
     private func rebindModel() {
         model = NoteEditorModel(note: note, repository: noteRepository)
+        folderText = model.folderPath ?? ""
         reloadBacklinks()
+        reloadDailyNavigation()
     }
 
     private func reloadBacklinks() {
@@ -265,82 +576,4 @@ struct NoteEditorView: View {
             return BacklinkEntry(id: link.id, title: snapshot.title)
         }
     }
-}
-
-/// A wrapping row of removable tag chips. Uses a small flow `Layout` so chips wrap
-/// onto multiple lines instead of clipping or forcing a horizontal scroll inside
-/// the editor's property panel.
-private struct FlowChips: View {
-    let tags: [String]
-    let onRemove: (String) -> Void
-
-    var body: some View {
-        FlowLayout(spacing: 6) {
-            ForEach(tags, id: \.self) { tag in
-                NexusChip(tag, systemImage: "number", onRemove: { onRemove(tag) })
-            }
-        }
-    }
-}
-
-/// Minimal flow layout: lays subviews left-to-right, wrapping to the next line
-/// when the proposed width is exceeded. macOS/iOS 16+ `Layout`.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout Void
-    ) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var cursorX: CGFloat = 0
-        var totalHeight: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if cursorX + size.width > maxWidth, cursorX > 0 {
-                totalHeight += rowHeight + spacing
-                cursorX = 0
-                rowHeight = 0
-            }
-            cursorX += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-        totalHeight += rowHeight
-        return CGSize(width: maxWidth == .infinity ? cursorX : maxWidth, height: totalHeight)
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout Void
-    ) {
-        var cursorX = bounds.minX
-        var cursorY = bounds.minY
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if cursorX + size.width > bounds.maxX, cursorX > bounds.minX {
-                cursorX = bounds.minX
-                cursorY += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: cursorX, y: cursorY), proposal: ProposedViewSize(size))
-            cursorX += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-    }
-}
-
-private struct PickerContext: Identifiable {
-    let id = UUID()
-    let afterID: UUID?
-    let asEmbed: Bool
-}
-
-private struct BacklinkEntry: Identifiable {
-    let id: UUID
-    let title: String
 }

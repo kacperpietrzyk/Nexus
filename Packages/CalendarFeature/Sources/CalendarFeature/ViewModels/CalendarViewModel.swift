@@ -25,6 +25,14 @@ public final class CalendarViewModel {
     public private(set) var planNotice: String?
     public private(set) var isLoading = false
     public var lastError: String?
+    /// M1: accepted/manual blocks that now collide with calendar events.
+    /// Runtime-only (computed by `BlockConflictDetector` after each store
+    /// change; never persisted). The UI shows a conflicted treatment on these
+    /// blocks plus a non-blocking "Replan" banner.
+    public private(set) var conflictedBlockIDs: Set<UUID> = []
+    /// M2: runtime-computed ghost previews of FUTURE occurrences of recurring
+    /// tasks (week scope only). NEVER persisted; recomputed in `reloadBlocks()`.
+    public private(set) var seriesPreviews: [SeriesOccurrencePreview] = []
 
     private let context: ModelContext
     private let reader: any CalendarEventProviding
@@ -33,15 +41,24 @@ public final class CalendarViewModel {
     private let blockRepository: ScheduledBlockRepository
     private let reconciler: CalendarSyncReconciler?
     private let planner: DayPlanner
+    private let seriesProjector = RecurringSeriesProjector()
     private let preferencesStore: UserDefaultsCalendarPreferencesStore
     private let calendar: Calendar
     private let now: () -> Date
+    private let autoReplanner: CalendarAutoReplanner
+    private let changes: (any CalendarChangeObserving)?
+    private let changeDebounce: Duration
+    private var isHandlingExternalChange = false
+    @ObservationIgnored nonisolated(unsafe) private var changeObserverToken: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var pendingChangeTask: _Concurrency.Task<Void, Never>?
 
     public init(
         context: ModelContext,
         reader: any CalendarEventProviding,
         writer: (any CalendarEventWriting)? = nil,
         listing: (any CalendarListing)? = nil,
+        changes: (any CalendarChangeObserving)? = nil,
+        changeDebounce: Duration = .milliseconds(800),
         preferencesStore: UserDefaultsCalendarPreferencesStore = UserDefaultsCalendarPreferencesStore(),
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init
@@ -61,6 +78,17 @@ public final class CalendarViewModel {
             self.reconciler = CalendarSyncReconciler(context: context, writer: writer, now: now)
         } else {
             self.reconciler = nil
+        }
+        self.changes = changes
+        self.changeDebounce = changeDebounce
+        self.autoReplanner = CalendarAutoReplanner(context: context, reconciler: reconciler)
+        startObservingStoreChanges()
+    }
+
+    deinit {
+        pendingChangeTask?.cancel()
+        if let token = changeObserverToken {
+            NotificationCenter.default.removeObserver(token)
         }
     }
 
@@ -133,7 +161,7 @@ public final class CalendarViewModel {
             events = preferences.visibleEvents(fetched)
         } catch {
             events = []
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
         reloadBlocks()
     }
@@ -141,11 +169,48 @@ public final class CalendarViewModel {
     public func reloadBlocks() {
         let win = window
         blocks = (try? blockRepository.blocks(from: win.start, to: win.end)) ?? []
+        reloadSeriesPreviews()
+    }
+
+    /// Recompute the M2 ghost previews (week scope only — Day belongs to the
+    /// real planner, Month renders dots). Runtime-only, NEVER persisted — see
+    /// `RecurringSeriesProjector` for the rationale and exclusions. `events`
+    /// were already visibility-filtered by `load()`.
+    private func reloadSeriesPreviews() {
+        guard scope == .week else {
+            seriesPreviews = []
+            return
+        }
+        let win = window
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate { $0.deletedAt == nil })
+        let tasks = (try? context.fetch(descriptor)) ?? []
+        seriesPreviews = seriesProjector.preview(
+            tasks: tasks, events: events, obstacles: blocks, prefs: preferences,
+            window: DateInterval(start: win.start, end: win.end), now: now(), calendar: calendar
+        )
+    }
+
+    /// Unscheduled-task feed for the liquid Week strip + Scheduling Inspector.
+    /// Owned HERE (not per-view `@State`): the two columns are sibling mounts
+    /// sharing this view-model, so a schedule action from either side updates
+    /// the one observable list. Internal — not part of the public surface.
+    private(set) var unscheduledTasks: [WeekUnscheduledTask] = []
+
+    /// Refreshes `unscheduledTasks`; the Week surfaces call this on mount and
+    /// after every scheduling mutation.
+    func reloadUnscheduledTasks() {
+        unscheduledTasks = WeekUnscheduledLoader.load(modelContext: context)
     }
 
     /// Items laid out on the hour axis for a single `day`.
     public func timelineItems(forDay day: Date) -> [TimelineItem] {
-        DayTimelineLayout.items(forDay: day, events: events, blocks: blocks, calendar: calendar)
+        DayTimelineLayout.items(
+            forDay: day,
+            events: events,
+            blocks: blocks,
+            calendar: calendar,
+            conflictedBlockIDs: conflictedBlockIDs
+        )
     }
 
     // MARK: - Permissions
@@ -159,7 +224,7 @@ public final class CalendarViewModel {
                 authorization = try await reader.requestAccess()
             }
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
         await load()
         return authorization
@@ -194,7 +259,7 @@ public final class CalendarViewModel {
                 ? "It's past today's working hours — plan tomorrow instead."
                 : nil
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
         reloadBlocks()
     }
@@ -226,7 +291,7 @@ public final class CalendarViewModel {
         do {
             _ = try await reconciler.accept(block)
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
         reloadBlocks()
     }
@@ -292,7 +357,7 @@ public final class CalendarViewModel {
                 with: EventDraft(calendarID: calendarID, title: block.title, start: block.start, end: block.end)
             )
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
     }
 
@@ -306,7 +371,7 @@ public final class CalendarViewModel {
             await load()
             return id
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
             return nil
         }
     }
@@ -317,7 +382,7 @@ public final class CalendarViewModel {
             try await writer.updateEvent(id: id, with: draft, span: span)
             await load()
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
     }
 
@@ -327,7 +392,7 @@ public final class CalendarViewModel {
             try await writer.deleteEvent(id: id, span: span)
             await load()
         } catch {
-            lastError = String(describing: error)
+            lastError = Self.errorMessage(error)
         }
     }
 
@@ -370,7 +435,7 @@ public final class CalendarViewModel {
     public func schedulableTasks() -> [(id: UUID, title: String)] {
         let openRaw = TaskStatus.open.rawValue
         let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.statusRaw == openRaw },
+            predicate: #Predicate { $0.deletedAt == nil && $0.statusRaw == openRaw && $0.isTemplate == false },
             sortBy: [SortDescriptor(\.title, order: .forward)]
         )
         return (try? context.fetch(descriptor))?.map { ($0.id, $0.title) } ?? []
@@ -378,6 +443,19 @@ public final class CalendarViewModel {
 
     public func savePreferences(_ prefs: CalendarPreferences) {
         preferencesStore.save(prefs)
+    }
+
+    // MARK: - Error copy
+
+    /// User-facing `lastError` copy: `CalendarProviderError` carries its own
+    /// message (`LocalizedError`), so surfaces never render the enum's debug
+    /// shape (`underlying("…")`); anything else falls back to the debug
+    /// description as before.
+    nonisolated static func errorMessage(_ error: any Error) -> String {
+        if let providerError = error as? CalendarProviderError {
+            return providerError.errorDescription ?? String(describing: error)
+        }
+        return String(describing: error)
     }
 
     // MARK: - Calendar math
@@ -390,5 +468,133 @@ public final class CalendarViewModel {
     private func startOfMonth(for date: Date) -> Date {
         let components = calendar.dateComponents([.year, .month], from: date)
         return calendar.date(from: components) ?? calendar.startOfDay(for: date)
+    }
+}
+
+// MARK: - Auto-replan on calendar change (M1)
+
+extension CalendarViewModel {
+    /// Register on the store-change seam. Bursty `EKEventStoreChanged`
+    /// broadcasts (including ones our own mirror writes trigger) are debounced;
+    /// our own writes then no-op through the pipeline (no conflicts → no churn).
+    private func startObservingStoreChanges() {
+        guard let changes else { return }
+        changeObserverToken = changes.observeStoreChanges { [weak self] in
+            _Concurrency.Task { @MainActor [weak self] in
+                self?.scheduleExternalChangeHandling()
+            }
+        }
+    }
+
+    /// Trailing-edge debounce: each broadcast cancels the pending run.
+    private func scheduleExternalChangeHandling() {
+        pendingChangeTask?.cancel()
+        let debounce = changeDebounce
+        pendingChangeTask = _Concurrency.Task { @MainActor [weak self] in
+            if debounce > .zero {
+                try? await _Concurrency.Task.sleep(for: debounce)
+            }
+            guard !_Concurrency.Task.isCancelled else { return }
+            await self?.handleExternalChange()
+        }
+    }
+
+    /// The M1 pipeline: reconcile external edits → conflict scan → regenerate
+    /// broken auto proposals → publish the protected remainder. Public so tests
+    /// (and pull-to-refresh-style surfaces) can drive it without the observer.
+    public func handleExternalChange() async {
+        guard hasCalendarAccess, !isHandlingExternalChange else { return }
+        isHandlingExternalChange = true
+        defer { isHandlingExternalChange = false }
+
+        let instant = now()
+        let dayStart = calendar.startOfDay(for: instant)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let fetched = preferences.visibleEvents(
+            (try? await reader.eventsBetween(start: dayStart, end: dayEnd)) ?? []
+        )
+        do {
+            // Today-only by design (S2 / anti-thrash): reconcile + regenerate.
+            let outcome = try await autoReplanner.handleStoreChange(
+                events: fetched, prefs: preferences, now: instant, calendar: calendar)
+            conflictedBlockIDs = Set(outcome.report.protectedBlockIDs)
+            if outcome.replanned { overload = outcome.overload }
+        } catch {
+            lastError = Self.errorMessage(error)
+        }
+        await load()
+        // #12: the pipeline above flags only today, but the Week surface shows
+        // `conflictedBlockIDs.count` over 7 days; union the protected conflicts
+        // across the loaded window (pure scan; Day window is today → no-op).
+        let windowReport = BlockConflictDetector.detect(blocks: blocks, events: events)
+        conflictedBlockIDs.formUnion(windowReport.protectedBlockIDs)
+    }
+
+    /// The non-blocking "Replan" affordance (M1): tear down the conflicted
+    /// accepted/manual blocks (mirror event + block — reject-path semantics)
+    /// and re-propose their tasks into free slots as fresh `proposed` blocks.
+    /// The user re-accepts — suggestive, not aggressive (spec §1).
+    ///
+    /// Stale IDs are skipped BY DESIGN (pinned by
+    /// `replanConflictedSkipsAlreadyRejectedBlock`): an ID in
+    /// `conflictedBlockIDs` goes stale when the user manually rejects that
+    /// block while the banner is showing. A manual reject is an explicit
+    /// "don't schedule this", so the task is intentionally NOT re-proposed
+    /// here and no notice is shown (the user just acted on that block).
+    /// Similarly, `result.skippedTaskIDs` (tasks completed/deleted between the
+    /// conflict scan and this tap) are consciously not surfaced — completing a
+    /// task is the user's own action; its block teardown is correct cleanup.
+    public func replanConflicted() async {
+        let ids = conflictedBlockIDs.sorted { $0.uuidString < $1.uuidString }
+        guard !ids.isEmpty else { return }
+
+        var taskIDs: [UUID] = []
+        for id in ids {
+            // `find` predicates on `deletedAt == nil` — a rejected (soft-deleted)
+            // block falls out here; see the doc comment for why that's correct.
+            guard let block = try? blockRepository.find(id) else { continue }
+            taskIDs.append(block.taskID)
+            if let eventID = block.externalEventID, let writer {
+                try? await writer.deleteEvent(id: eventID)
+            }
+            try? blockRepository.softDelete(block)
+        }
+
+        let instant = now()
+        let dayStart = calendar.startOfDay(for: instant)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let fetched = preferences.visibleEvents(
+            (try? await reader.eventsBetween(start: dayStart, end: dayEnd)) ?? []
+        )
+        do {
+            let result = try planner.replan(
+                taskIDs: taskIDs,
+                events: fetched,
+                prefs: preferences,
+                now: instant,
+                calendar: calendar
+            )
+            planNotice =
+                result.overload.unplacedTaskIDs.isEmpty
+                ? nil
+                : "Some replanned tasks didn't fit today — they're back in the task pool."
+        } catch {
+            lastError = Self.errorMessage(error)
+        }
+        conflictedBlockIDs = []
+        reloadBlocks()
+    }
+
+    /// Dismiss the conflict banner without acting (the conflicts recompute on
+    /// the next store change).
+    public func dismissConflicts() {
+        conflictedBlockIDs = []
+    }
+
+    /// Banner copy for the conflicted-blocks affordance (UI + tests share it).
+    public nonisolated static func conflictNotice(count: Int) -> String {
+        count == 1
+            ? "1 scheduled block conflicts with a calendar event."
+            : "\(count) scheduled blocks conflict with calendar events."
     }
 }

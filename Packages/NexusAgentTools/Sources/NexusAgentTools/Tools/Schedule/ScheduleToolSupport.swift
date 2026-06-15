@@ -36,6 +36,7 @@ enum ScheduleToolSupport {
                 task.deletedAt == nil
                     && task.statusRaw == openStatus
                     && task.pinnedAsFocus
+                    && task.isTemplate == false
             }
         )
         return try context.fetch(descriptor)
@@ -56,7 +57,10 @@ enum ScheduleToolSupport {
                     && task.estimatedDurationSeconds != nil
             }
         )
-        return try context.fetch(descriptor)
+        // I-D1 defensive: a fifth `#Predicate` conjunct blows the type-checker
+        // budget here; templates can never be done post-guard, so this only
+        // shields against pre-guard synced rows.
+        return try context.fetch(descriptor).filter { !$0.isTemplate }
     }
 
     /// All open, non-deleted tasks (the universe the `DeadlineRiskAnalyzer`
@@ -67,6 +71,7 @@ enum ScheduleToolSupport {
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate<TaskItem> { task in
                 task.deletedAt == nil && task.statusRaw == openStatus
+                    && task.isTemplate == false
             }
         )
         return try context.fetch(descriptor)

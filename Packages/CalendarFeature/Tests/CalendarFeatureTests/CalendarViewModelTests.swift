@@ -229,4 +229,111 @@ struct CalendarViewModelTests {
         #expect(CalendarViewModel.attendeeDisplay(emailOnly) == "alan@example.com")
         #expect(CalendarViewModel.attendeeDisplay(empty) == nil)
     }
+
+    @Test("week-scope load projects future recurring occurrences WITHOUT persisting any block (M2)")
+    func weekLoadProjectsSeriesPreviews() async throws {
+        let context = try makeContext()
+        let task = TaskItem(
+            title: "standup",
+            dueAt: now.addingTimeInterval(3600),
+            recurrenceRule: "FREQ=DAILY"
+        )
+        task.estimatedDurationSeconds = 3600
+        task.durationSourceRaw = DurationSource.explicit.rawValue
+        context.insert(task)
+        try context.save()
+
+        let viewModel = makeViewModel(context: context)
+        viewModel.scope = .week
+        await viewModel.load()
+
+        #expect(!viewModel.seriesPreviews.isEmpty)
+        #expect(viewModel.seriesPreviews.allSatisfy { $0.taskID == task.id })
+        let tomorrowStart = calendar.startOfDay(for: now).addingTimeInterval(86_400)
+        #expect(viewModel.seriesPreviews.allSatisfy { $0.start >= tomorrowStart })
+        // THE M2 invariant: previews are runtime-only — the store stays empty.
+        let persisted = try context.fetch(FetchDescriptor<ScheduledBlock>())
+        #expect(persisted.isEmpty)
+    }
+
+    @Test("day and month scopes never carry series previews")
+    func nonWeekScopesStayEmpty() async throws {
+        let context = try makeContext()
+        let task = TaskItem(
+            title: "standup",
+            dueAt: now.addingTimeInterval(3600),
+            recurrenceRule: "FREQ=DAILY"
+        )
+        task.estimatedDurationSeconds = 3600
+        task.durationSourceRaw = DurationSource.explicit.rawValue
+        context.insert(task)
+        try context.save()
+
+        let viewModel = makeViewModel(context: context)
+        viewModel.scope = .day
+        await viewModel.load()
+        #expect(viewModel.seriesPreviews.isEmpty)
+
+        viewModel.scope = .month
+        await viewModel.load()
+        #expect(viewModel.seriesPreviews.isEmpty)
+    }
+
+    @Test("manually scheduling a future day suppresses that day's preview (dedup through the live seam)")
+    func manualBlockSuppressesPreviewDay() async throws {
+        let context = try makeContext()
+        let task = TaskItem(
+            title: "standup",
+            dueAt: now.addingTimeInterval(3600),
+            recurrenceRule: "FREQ=DAILY"
+        )
+        task.estimatedDurationSeconds = 3600
+        task.durationSourceRaw = DurationSource.explicit.rawValue
+        context.insert(task)
+        try context.save()
+
+        let viewModel = makeViewModel(context: context)
+        viewModel.scope = .week
+        await viewModel.load()
+        let tomorrowStart = calendar.startOfDay(for: now).addingTimeInterval(86_400)
+        #expect(viewModel.seriesPreviews.contains { calendar.isDate($0.start, inSameDayAs: tomorrowStart) })
+
+        await viewModel.addManualBlock(
+            taskID: task.id,
+            title: "standup",
+            start: tomorrowStart.addingTimeInterval(10 * 3600),
+            end: tomorrowStart.addingTimeInterval(11 * 3600)
+        )
+
+        #expect(!viewModel.seriesPreviews.contains { calendar.isDate($0.start, inSameDayAs: tomorrowStart) })
+    }
+
+    @Test("planDay coexists with previews: today gets real proposals, previews stay future and unpersisted")
+    func planDayDoesNotConsumePreviews() async throws {
+        let context = try makeContext()
+        let task = TaskItem(
+            title: "standup",
+            dueAt: now.addingTimeInterval(3600),
+            recurrenceRule: "FREQ=DAILY"
+        )
+        task.estimatedDurationSeconds = 3600
+        task.durationSourceRaw = DurationSource.explicit.rawValue
+        context.insert(task)
+        try context.save()
+
+        let viewModel = makeViewModel(context: context)
+        viewModel.scope = .week
+        await viewModel.load()
+        await viewModel.planDay()
+
+        let todayEnd = calendar.startOfDay(for: now).addingTimeInterval(86_400)
+        // Real proposal for the current instance lives today…
+        #expect(viewModel.blocks.contains { $0.taskID == task.id && $0.start < todayEnd })
+        // …ghost previews remain, all strictly in the future.
+        #expect(!viewModel.seriesPreviews.isEmpty)
+        #expect(viewModel.seriesPreviews.allSatisfy { $0.start >= todayEnd })
+        // And every persisted block is today's (nothing future was written).
+        let persisted = try context.fetch(FetchDescriptor<ScheduledBlock>())
+        #expect(persisted.filter { $0.deletedAt == nil }.allSatisfy { $0.start < todayEnd })
+    }
 }

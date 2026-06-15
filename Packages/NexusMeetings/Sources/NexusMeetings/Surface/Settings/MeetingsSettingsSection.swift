@@ -28,7 +28,7 @@ public struct MeetingsSettingsSection: View {
 
     public var body: some View {
         NexusSettingsDetailContainer(title: "Meetings") {
-            VStack(alignment: .leading, spacing: NexusSpacing.s7) {
+            VStack(alignment: .leading, spacing: DS.Space.l) {
                 if let helperContent {
                     helperContent
                 }

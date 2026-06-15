@@ -69,7 +69,8 @@ enum AgentToolBootstrap {
             searchIndex: searchIndex,
             now: now,
             nlParser: parserRef,
-            heroBriefService: heroBriefRef
+            heroBriefService: heroBriefRef,
+            modelContainer: ModelContainerRef(modelContext.container)
         )
     }
 }

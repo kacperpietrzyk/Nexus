@@ -60,14 +60,15 @@ extension TaskDetailInspector {
             Text(groupTitle(group).uppercased())
                 .font(NexusType.eyebrow)
                 .foregroundStyle(NexusColor.Text.tertiary)
-            Picker(groupTitle(group), selection: groupBinding(group: group, selectedID: selectedID)) {
-                Text("None").tag(UUID?.none)
-                ForEach(options, id: \.id) { label in
-                    Text(label.name).tag(UUID?.some(label.id))
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
+            NexusSelect(
+                selection: groupBinding(group: group, selectedID: selectedID),
+                options: [UUID?.none] + options.map { Optional($0.id) },
+                label: { id in
+                    guard let id, let label = options.first(where: { $0.id == id }) else { return "None" }
+                    return label.name
+                },
+                accessibilityLabel: groupTitle(group)
+            )
         }
     }
 
@@ -114,10 +115,10 @@ extension TaskDetailInspector {
     @ViewBuilder
     private var labelDraftField: some View {
         #if os(iOS)
-        TextField("New label", text: $newLabelDraft)
+        NexusTextField("New label", text: $newLabelDraft)
             .textInputAutocapitalization(.never)
         #else
-        TextField("New label", text: $newLabelDraft)
+        NexusTextField("New label", text: $newLabelDraft)
         #endif
     }
 

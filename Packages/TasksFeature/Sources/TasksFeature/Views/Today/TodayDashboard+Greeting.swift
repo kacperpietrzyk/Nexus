@@ -3,31 +3,6 @@ import NexusUI
 import SwiftUI
 
 extension TodayDashboard {
-    /// Settings route placeholder. On Mac it triggers the app's Settings scene via
-    /// `@Environment(\.openSettings)` (captured at the call site) and pops the selection back to
-    /// `.today`. On iOS the dashboard's Settings entry is unreachable (compact uses tab shell) so
-    /// this fires a notification the app shell can pick up if it ever wires the rail to compact.
-    @ViewBuilder
-    var settingsRoute: some View {
-        #if os(macOS)
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .task(id: activeSelection.wrappedValue) {
-                guard activeSelection.wrappedValue == .settings else { return }
-                openSettings()
-                activeSelection.wrappedValue = .today
-            }
-        #else
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .task(id: activeSelection.wrappedValue) {
-                guard activeSelection.wrappedValue == .settings else { return }
-                NotificationCenter.default.post(name: .nexusGoToSettings, object: nil)
-                activeSelection.wrappedValue = .today
-            }
-        #endif
-    }
-
     func greetingBlock(
         now: Date,
         workspaceName: String,

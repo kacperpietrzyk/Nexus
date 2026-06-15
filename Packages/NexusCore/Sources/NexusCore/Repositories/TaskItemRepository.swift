@@ -1,54 +1,13 @@
 import Foundation
 import SwiftData
 
-public enum ProjectSectionAssignmentError: Error, Equatable {
-    case sectionRequiresProject(sectionID: UUID)
-    case sectionNotFound(sectionID: UUID)
-    case sectionProjectMismatch(sectionID: UUID, expectedProjectID: UUID, actualProjectID: UUID)
-    case cannotReassignSectionToItself(sectionID: UUID)
-}
-
 public enum TaskItemRepositoryError: Error, Equatable {
     case parentHasOpenSubtasks(parentID: UUID, openCount: Int)
     case projectNotFound(projectID: UUID)
     case parentNotFound(parentID: UUID)
     case parentIsSelf(taskID: UUID)
     case parentCycle(taskID: UUID, parentID: UUID)
-}
-
-struct TaskCompletionSideEffects {
-    var cancelledTaskIDs = Set<UUID>()
-    var scheduledTasks: [TaskItem] = []
-
-    var isEmpty: Bool {
-        cancelledTaskIDs.isEmpty && scheduledTasks.isEmpty
-    }
-}
-
-@MainActor
-enum ProjectSectionAssignmentValidator {
-    static func validate(sectionID: UUID?, belongsTo projectID: UUID?, in context: ModelContext) throws {
-        guard let sectionID else { return }
-        guard let projectID else {
-            throw ProjectSectionAssignmentError.sectionRequiresProject(sectionID: sectionID)
-        }
-
-        let descriptor = FetchDescriptor<Section>(
-            predicate: #Predicate { section in
-                section.id == sectionID && section.deletedAt == nil
-            }
-        )
-        guard let section = try context.fetch(descriptor).first else {
-            throw ProjectSectionAssignmentError.sectionNotFound(sectionID: sectionID)
-        }
-        guard section.projectID == projectID else {
-            throw ProjectSectionAssignmentError.sectionProjectMismatch(
-                sectionID: sectionID,
-                expectedProjectID: projectID,
-                actualProjectID: section.projectID
-            )
-        }
-    }
+    case cycleNotFound(cycleID: UUID)
 }
 
 /// CRUD + lifecycle operations on `TaskItem`. Bound to a single `ModelContext`;
@@ -59,6 +18,9 @@ public final class TaskItemRepository {
     public let scheduler: RRuleScheduler
     public let now: () -> Date
     public let notifications: any NotificationScheduling
+    /// Audit-log hook (Tranche 2 Plan B, spec §4.1). Insert-only; entries ride
+    /// this repository's saves (I-B1). Defaults to no-op, like `notifications`.
+    public let activity: any ActivityRecording
     public let snapshotPusher: WatchSnapshotPusher
 
     public init(
@@ -66,27 +28,38 @@ public final class TaskItemRepository {
         scheduler: RRuleScheduler,
         now: @escaping () -> Date,
         notifications: any NotificationScheduling = NoopNotificationScheduler(),
+        activity: any ActivityRecording = NoopActivityRecorder(),
         snapshotPusher: @escaping WatchSnapshotPusher = noopWatchSnapshotPusher
     ) {
         self.context = context
         self.scheduler = scheduler
         self.now = now
         self.notifications = notifications
+        self.activity = activity
         self.snapshotPusher = snapshotPusher
     }
 
     public func insert(_ task: TaskItem) throws {
         task.tags = Self.normalize(tags: task.tags)
         context.insert(task)
+        // Templates are inert (I-D1) — authoring one is not a lifecycle event.
+        if !task.isTemplate {
+            activity.record(.created, itemID: task.id, itemKind: .task)
+        }
         try context.save()
-        let notifier = notifications
-        Task { @MainActor in try? await notifier.schedule(task) }
+        // I-D1: a template is never scheduled — no notification ever fires
+        // for an inert blueprint.
+        if !task.isTemplate {
+            let notifier = notifications
+            Task { @MainActor in try? await notifier.schedule(task) }
+        }
         let pusher = snapshotPusher
         Task { @MainActor in await pusher() }
     }
 
     public func update(_ task: TaskItem, mutations: (TaskItem) -> Void) throws {
         let oldRule = task.recurrenceRule
+        let snapshot = ActivityFieldSnapshot(of: task)
         mutations(task)
         let newRule = task.recurrenceRule
         task.tags = Self.normalize(tags: task.tags)
@@ -94,18 +67,28 @@ public final class TaskItemRepository {
 
         var removedSpawnID: UUID?
         var insertedSpawn: TaskItem?
-        if oldRule != newRule {
+        // I-D1: recurrence never spawns from a template. The status guard
+        // inside `regenerateNextSpawn` is not enough — a template can carry a
+        // done statusRaw synced from a pre-guard build.
+        if oldRule != newRule && !task.isTemplate {
             let result = try regenerateNextSpawn(after: task)
             removedSpawnID = result.removed
             insertedSpawn = result.inserted
         }
 
+        // I-D1: templates emit no activity events anywhere (same convention as
+        // the `.created` skip in `insert` — authoring/editing a blueprint is
+        // not a lifecycle event) and are never (re)scheduled.
+        if !task.isTemplate {
+            recordFieldChanges(on: task, since: snapshot)
+        }
         try context.save()
         let notifier = notifications
         let parent = task
+        let parentIsTemplate = task.isTemplate
         Task { @MainActor in
             if let removedSpawnID { await notifier.cancel(taskID: removedSpawnID) }
-            try? await notifier.reschedule(parent)
+            if !parentIsTemplate { try? await notifier.reschedule(parent) }
             if let insertedSpawn { try? await notifier.schedule(insertedSpawn) }
         }
         let pusher = snapshotPusher
@@ -136,9 +119,11 @@ public final class TaskItemRepository {
 
     public func assign(_ task: TaskItem, toProject projectID: UUID?, section sectionID: UUID? = nil) throws {
         try validateProjectSectionAssignment(toProject: projectID, section: sectionID)
+        let oldProjectID = task.projectID
         task.projectID = projectID
         task.sectionID = sectionID
         task.updatedAt = now()
+        recordProjectMove(on: task, from: oldProjectID)
         try context.save()
         let pusher = snapshotPusher
         Task { @MainActor in await pusher() }
@@ -158,25 +143,31 @@ public final class TaskItemRepository {
         try ProjectSectionAssignmentValidator.validate(sectionID: sectionID, belongsTo: projectID, in: context)
     }
 
+    /// Live, non-template board tasks (I-D1). The section branch post-filters
+    /// `isTemplate` in memory — a fourth `#Predicate` conjunct blows the
+    /// type-checker budget (the `CyclePlanningView.backlogTasks` precedent).
     public func tasks(in projectID: UUID, section sectionID: UUID? = nil) throws -> [TaskItem] {
-        let descriptor: FetchDescriptor<TaskItem>
         if let sectionID {
-            descriptor = FetchDescriptor<TaskItem>(
+            let descriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate { task in
                     task.projectID == projectID && task.sectionID == sectionID && task.deletedAt == nil
                 }
             )
-        } else {
-            descriptor = FetchDescriptor<TaskItem>(
-                predicate: #Predicate { task in
-                    task.projectID == projectID && task.deletedAt == nil
-                }
-            )
+            return try context.fetch(descriptor)
+                .filter { !$0.isTemplate }
+                .sorted(by: Self.assignmentOrder)
         }
+        let descriptor = FetchDescriptor<TaskItem>(
+            predicate: #Predicate { task in
+                task.projectID == projectID && task.deletedAt == nil && task.isTemplate == false
+            }
+        )
         return try context.fetch(descriptor).sorted(by: Self.assignmentOrder)
     }
 
     public func snooze(_ task: TaskItem, until: Date) throws {
+        // I-D1: a template is never scheduled — snooze is date machinery.
+        guard !task.isTemplate else { return }
         task.snoozedUntil = until
         task.statusRaw = TaskStatus.snoozed.rawValue
         task.updatedAt = now()
@@ -209,6 +200,7 @@ public final class TaskItemRepository {
         if task.statusRaw == TaskStatus.open.rawValue && task.lastCompletedAt == nil {
             return
         }
+        activity.record(.reopened, itemID: task.id, itemKind: .task)
 
         var removedSpawnID: UUID?
         if task.recurrenceRule != nil {
@@ -251,9 +243,18 @@ public final class TaskItemRepository {
         stamp: Date,
         sideEffects: inout TaskCompletionSideEffects
     ) throws {
+        // I-D1 (Tranche 2 spec §4.3): a template is never completable, so it can
+        // never spawn a recurrence either. Single choke point — covers markDone,
+        // markDoneStrict, cascadeComplete, and setWorkflowState(.done). Placed
+        // BEFORE the activity record: templates emit no activity events.
+        if task.isTemplate { return }
         if task.statusRaw == TaskStatus.done.rawValue && task.lastCompletedAt != nil {
             return
         }
+        // Single completion choke point (spec §4.1): one `completed` event per
+        // real completion, regardless of entry path. The caller always saves
+        // when this method passes the guard (it registers side effects).
+        activity.record(.completed, itemID: task.id, itemKind: .task)
 
         // Project tasks (`workflowState != nil`) complete by advancing the
         // machine to `.done` (spec §5.3); GTD tasks (nil) stay nil so I7 holds.
@@ -272,11 +273,15 @@ public final class TaskItemRepository {
         let rule = try RRuleParser.parse(ruleText)
         let parentID = task.recurrenceParentId ?? task.id
         let occurrencesSoFar = try countSiblings(parentID: parentID) + 1
+        // Delta base for shifting startAt/endAt/deadlineAt onto the next
+        // occurrence — always the old due date, in BOTH anchor modes, so the
+        // relative offsets survive however the next due date was computed.
         let recurrenceAnchor = task.dueAt ?? stamp
         guard
-            let nextDate = scheduler.next(
-                after: recurrenceAnchor,
+            let nextDate = nextOccurrenceDate(
                 rule: rule,
+                dueAt: task.dueAt,
+                completedAt: stamp,
                 occurrencesSoFar: occurrencesSoFar
             )
         else {
@@ -296,6 +301,9 @@ public final class TaskItemRepository {
         )
         nextInstance.noteRef = try duplicatedNoteRef(of: task.noteRef)
         context.insert(nextInstance)
+        // A spawned next occurrence is a real new row (spec §4.1) — it gets
+        // `created` even though it bypasses `insert(_:)`.
+        activity.record(.created, itemID: nextInstance.id, itemKind: .task)
         sideEffects.scheduledTasks.append(nextInstance)
     }
 
@@ -313,31 +321,6 @@ public final class TaskItemRepository {
         }
         let pusher = snapshotPusher
         Task { @MainActor in await pusher() }
-    }
-
-    static func normalize(tags: [String]) -> [String] {
-        var seen = Set<String>()
-        var normalized: [String] = []
-        for tag in tags {
-            let cleaned = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            guard !cleaned.isEmpty, !seen.contains(cleaned) else { continue }
-            seen.insert(cleaned)
-            normalized.append(cleaned)
-        }
-        return normalized
-    }
-
-    static func assignmentOrder(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
-        switch (lhs.orderIndex, rhs.orderIndex) {
-        case (let left?, let right?) where left != right:
-            return left < right
-        case (nil, _?):
-            return false
-        case (_?, nil):
-            return true
-        default:
-            return lhs.createdAt < rhs.createdAt
-        }
     }
 
     private func countSiblings(parentID: UUID) throws -> Int {
@@ -409,11 +392,15 @@ public final class TaskItemRepository {
         let rule = try RRuleParser.parse(newRule)
         let parentID = task.recurrenceParentId ?? task.id
         let occurrencesSoFar = try countSiblings(parentID: parentID) + 1
-        let recurrenceAnchor = task.dueAt ?? now()
+        // This path only runs on a done task (guard above), so the completion
+        // stamp is its real `lastCompletedAt`; `now()` is a defensive fallback.
+        let stamp = task.lastCompletedAt ?? now()
+        let recurrenceAnchor = task.dueAt ?? stamp
         guard
-            let nextDate = scheduler.next(
-                after: recurrenceAnchor,
+            let nextDate = nextOccurrenceDate(
                 rule: rule,
+                dueAt: task.dueAt,
+                completedAt: stamp,
                 occurrencesSoFar: occurrencesSoFar
             )
         else {
@@ -433,7 +420,29 @@ public final class TaskItemRepository {
         )
         nextInstance.noteRef = try duplicatedNoteRef(of: task.noteRef)
         context.insert(nextInstance)
+        // The regenerated spawn is a real new row — record `created` exactly
+        // like `completeTask`'s spawn path (spec §4.1).
+        activity.record(.created, itemID: nextInstance.id, itemKind: .task)
         return (removedID, nextInstance)
+    }
+
+    /// Tasks whose `lastCompletedAt` falls within the interval (productivity
+    /// stats). Release-safe form: a `#Predicate` over an optional `Date` with a
+    /// force-unwrapped comparison can TRAP under `-O` (verified), so we fetch the
+    /// non-nil candidates in the predicate and apply the date-range filter in
+    /// plain Swift. Counts by completion stamp regardless of current status —
+    /// matching the "lastCompletedAt within interval" contract.
+    public func completedTasks(in interval: DateInterval) throws -> [TaskItem] {
+        let descriptor = FetchDescriptor<TaskItem>(
+            predicate: #Predicate<TaskItem> { task in
+                task.deletedAt == nil && task.lastCompletedAt != nil
+            }
+        )
+        let candidates = try context.fetch(descriptor)
+        return candidates.filter { task in
+            guard let completed = task.lastCompletedAt else { return false }
+            return completed >= interval.start && completed <= interval.end
+        }
     }
 
     public func allExternalSourceIDs(withPrefix prefix: String) throws -> [String] {
@@ -482,9 +491,16 @@ public final class TaskItemRepository {
         // (invariant I7). `.todo.forcedStatus == .open`, so `status: .open` here
         // already reconciles with the spawned workflow for both branches.
         let nextWorkflowState: WorkflowState? = task.workflowState == nil ? nil : .todo
-        let carriedReminders = task.reminders.compactMap { rule -> ReminderRule? in
-            if case .relative = rule { return rule }
-            return nil
+        // Carry relative rules (re-anchored to the new occurrence's dates) and
+        // repeating absolutes (wall-clock-anchored, never stale — T4). One-shot
+        // absolutes are occurrence-bound and stay dropped (I7).
+        let carriedReminders = task.reminders.filter { rule in
+            switch rule {
+            case .relative:
+                return true
+            case .absolute(_, let repeats):
+                return repeats != nil
+            }
         }
         // `agent` assignment is pure metadata (I8) and carries to the next
         // occurrence so the queue assignment survives a recurrence.
@@ -521,6 +537,31 @@ public final class TaskItemRepository {
 }
 
 extension TaskItemRepository {
+    static func normalize(tags: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for tag in tags {
+            let cleaned = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !cleaned.isEmpty, !seen.contains(cleaned) else { continue }
+            seen.insert(cleaned)
+            normalized.append(cleaned)
+        }
+        return normalized
+    }
+
+    static func assignmentOrder(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
+        switch (lhs.orderIndex, rhs.orderIndex) {
+        case (let left?, let right?) where left != right:
+            return left < right
+        case (nil, _?):
+            return false
+        case (_?, nil):
+            return true
+        default:
+            return lhs.createdAt < rhs.createdAt
+        }
+    }
+
     /// Duplicates a recurring task's backing note for its next occurrence (T1).
     /// Each occurrence then owns its `Note` row, so a later `tasks.update(notes:)`
     /// on one occurrence can't mutate or delete a sibling's notes. Scalar content

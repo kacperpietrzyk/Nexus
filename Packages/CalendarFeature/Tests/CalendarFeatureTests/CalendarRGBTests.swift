@@ -81,3 +81,42 @@ struct CalendarRGBTests {
         }
     }
 }
+
+@Suite("Liquid calendar tint")
+struct LiquidCalendarTintTests {
+
+    @Test("Brightness floor lifts dark colors without changing channel ratios")
+    func floorKeepsHue() throws {
+        let dark = try #require(CalendarRGB(calendarHex: "201008"))
+        let lifted = dark.brightnessFloored(0.5)
+        let luma = 0.299 * lifted.red + 0.587 * lifted.green + 0.114 * lifted.blue
+        #expect(luma >= 0.49)
+        // Hue preserved: red:green ratio unchanged by a pure multiplicative lift.
+        #expect(abs(lifted.red / lifted.green - dark.red / dark.green) < 0.001)
+    }
+
+    @Test("Bright colors pass the floor untouched")
+    func floorPassesBright() throws {
+        let bright = try #require(CalendarRGB(calendarHex: "2997FF"))
+        let out = bright.brightnessFloored(0.5)
+        #expect(abs(out.red - bright.red) < 0.001)
+        #expect(abs(out.blue - bright.blue) < 0.001)
+    }
+
+    @Test("Fill base follows the event-token convention (accent × 0.3)")
+    func fillBaseMatchesConvention() throws {
+        // The DS pair: stroke #2997FF → fill #0C3054 ≈ accent × 0.3.
+        let accent = try #require(CalendarRGB(calendarHex: "2997FF"))
+        let fill = accent.liquidFillBase()
+        #expect(abs(fill.red - accent.red * 0.3) < 0.001)
+        #expect(abs(fill.green - accent.green * 0.3) < 0.001)
+        #expect(abs(fill.blue - accent.blue * 0.3) < 0.001)
+    }
+
+    @Test("Tint is nil for absent or malformed hex")
+    func nilFallback() {
+        #expect(LiquidCalendarTint(calendarHex: nil) == nil)
+        #expect(LiquidCalendarTint(calendarHex: "nope") == nil)
+        #expect(LiquidCalendarTint(calendarHex: "#A2845E") != nil)
+    }
+}

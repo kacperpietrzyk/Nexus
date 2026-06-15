@@ -16,7 +16,10 @@ let projectGlyphTable: [String: ProjectGlyphEntry] = [
     "slate": ProjectGlyphEntry(glyph: "seal.fill", label: "Seal"),
 ]
 
-func nexusProjectGlyph(named tokenName: String) -> String {
+/// Public (not internal like the rest of this file): exported for app-shell
+/// composition — the Mac `LiquidSidebar` renders the same identity glyph the
+/// Projects screen shows for each project, without duplicating this table.
+public func nexusProjectGlyph(named tokenName: String) -> String {
     projectGlyphTable[tokenName]?.glyph ?? "circle.fill"
 }
 

@@ -17,15 +17,36 @@ public final class ProjectRepository {
     public func create(
         name: String,
         color: String = "azure",
-        parentProjectID: UUID? = nil
+        parentProjectID: UUID? = nil,
+        type: ProjectType = .generic
     ) throws -> Project {
         let stamp = now()
-        let project = Project(name: name, color: color, parentProjectID: parentProjectID)
+        let project = Project(name: name, color: color, parentProjectID: parentProjectID, type: type)
         project.createdAt = stamp
         project.updatedAt = stamp
         context.insert(project)
         try context.save()
+        try applyTypeScaffold(type, to: project.id)
         return project
+    }
+
+    /// Seeds the default Sections for a project type (universal-types extension).
+    /// Idempotent at call site (only invoked on fresh `create`). `.generic` seeds nothing.
+    /// Deliverable-task seeding is deferred to a later tranche.
+    public func applyTypeScaffold(_ type: ProjectType, to projectID: UUID) throws {
+        let names: [String]
+        switch type {
+        case .implementation: names = ["Deliverables", "Environment", "Risks"]
+        case .sales: names = ["Activities", "Materials"]
+        case .audit: names = ["Scope", "Findings", "Report"]
+        case .internalDev: names = ["Backlog", "In Progress"]
+        case .generic: names = []
+        }
+        guard !names.isEmpty else { return }
+        let sectionRepo = SectionRepository(context: context)
+        for name in names {
+            _ = try sectionRepo.create(projectID: projectID, name: name)
+        }
     }
 
     public func rename(_ project: Project, to name: String) throws {
@@ -45,6 +66,54 @@ public final class ProjectRepository {
     /// this is a plain setter; `archivedAt` is orthogonal and left untouched.
     public func setStatus(_ status: ProjectStatus, on project: Project) throws {
         project.statusRaw = status.rawValue
+        project.updatedAt = now()
+        try context.save()
+    }
+
+    /// Sets the granular stage, validating it belongs to the project's type preset,
+    /// and syncs the coarse `statusRaw` via `ProjectStage.coarseStatus`.
+    public func setStage(_ stage: ProjectStage, on project: Project) throws {
+        guard project.type.stages.contains(stage) else {
+            throw ProjectStageError.stageNotInTypePreset(stage: stage, type: project.type)
+        }
+        project.stage = stage
+        project.statusRaw = stage.coarseStatus.rawValue
+        project.updatedAt = now()
+        try context.save()
+    }
+
+    /// Changes the project type; clears the current stage if it is not in the new
+    /// type's preset (keeps `stage ∈ type.stages || stage == nil` invariant).
+    public func setType(_ type: ProjectType, on project: Project) throws {
+        project.type = type
+        if let stage = project.stage, !type.stages.contains(stage) {
+            project.stage = nil
+        }
+        project.updatedAt = now()
+        try context.save()
+    }
+
+    public func setClient(_ clientID: UUID?, on project: Project) throws {
+        project.clientID = clientID
+        project.updatedAt = now()
+        try context.save()
+    }
+
+    public func setVendor(_ vendor: String?, on project: Project) throws {
+        project.vendor = vendor
+        project.updatedAt = now()
+        try context.save()
+    }
+
+    /// Sets or removes a single custom field. `value == nil` removes the key.
+    public func setCustomField(key: String, value: String?, on project: Project) throws {
+        var fields = project.customFields
+        if let value {
+            fields[key] = value
+        } else {
+            fields.removeValue(forKey: key)
+        }
+        project.customFields = fields
         project.updatedAt = now()
         try context.save()
     }
@@ -88,6 +157,30 @@ public final class ProjectRepository {
             sortBy: [SortDescriptor(\.name)]
         )
         return try context.fetch(descriptor)
+    }
+
+    /// Case-insensitive lookup of an active project by NL-capture token
+    /// (`@project` in quick add). Two-pass resolution: an exact lowercased-name
+    /// match always wins over a space-stripped match (so `@ABC` prefers project
+    /// "ABC" over "A BC"); only when no exact candidate exists does the
+    /// space-stripped pass run — `@SideProject` and `@sideproject` both match
+    /// "Side Project". Within each pass ties break deterministically by name,
+    /// then by UUID string, so duplicate-named projects resolve stably across
+    /// calls. Archived and deleted projects never match.
+    public func findActive(matchingToken token: String) throws -> Project? {
+        let needle = token.lowercased()
+        guard !needle.isEmpty else { return nil }
+        // allActive() sorts by name only; add the UUID-string tie-break for
+        // projects sharing a name (no stable secondary order otherwise).
+        let candidates = try allActive().sorted {
+            ($0.name, $0.id.uuidString) < ($1.name, $1.id.uuidString)
+        }
+        if let exact = candidates.first(where: { $0.name.lowercased() == needle }) {
+            return exact
+        }
+        return candidates.first { project in
+            project.name.lowercased().replacingOccurrences(of: " ", with: "") == needle
+        }
     }
 
     public func find(id: UUID) throws -> Project? {
@@ -159,4 +252,8 @@ public final class ProjectRepository {
             )
         }
     }
+}
+
+public enum ProjectStageError: Error, Equatable {
+    case stageNotInTypePreset(stage: ProjectStage, type: ProjectType)
 }

@@ -399,6 +399,38 @@ struct TasksListToolTests {
         #expect(response.tasks.map(\.title) == ["Tomorrow"])
     }
 
+    @MainActor
+    @Test("templates are excluded by default")
+    func templatesExcludedByDefault() async throws {
+        let tasks = [
+            TaskItem(title: "Live"),
+            TaskItem(title: "Template", isTemplate: true),
+        ]
+        let fixture = try await InMemoryAgentContext.make(tasks: tasks)
+
+        let response = try await callList(args: .object([:]), context: fixture.context)
+
+        #expect(response.total == 1)
+        #expect(response.tasks.map(\.title) == ["Live"])
+    }
+
+    @MainActor
+    @Test("include_templates opts templates in")
+    func includeTemplatesOptsIn() async throws {
+        let tasks = [
+            TaskItem(title: "Live"),
+            TaskItem(title: "Template", isTemplate: true),
+        ]
+        let fixture = try await InMemoryAgentContext.make(tasks: tasks)
+
+        let response = try await callList(
+            args: .object(["filter": .object(["include_templates": .bool(true)])]),
+            context: fixture.context
+        )
+
+        #expect(response.total == 2)
+    }
+
     private func callList(args: JSONValue, context: AgentContext) async throws -> TaskListResponseDTO {
         let result = try await TasksListTool().call(args: args, context: context)
         let data = try JSONEncoder().encode(result)

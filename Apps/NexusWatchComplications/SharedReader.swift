@@ -28,6 +28,7 @@ enum SharedReader {
             let descriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate { task in
                     task.statusRaw == "open" && task.deletedAt == nil && task.dueAt != nil
+                        && task.isTemplate == false
                 },
                 sortBy: [SortDescriptor(\.dueAt)]
             )

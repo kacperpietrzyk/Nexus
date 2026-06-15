@@ -17,14 +17,10 @@ public struct MeetingsScreenOCRSettingsView: View {
     public init() {}
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader("Screen context")
-            NexusSettingsCard {
-                NexusSettingsRow("Capture shared-window text") {
-                    Toggle("", isOn: $screenOCREnabled)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            LiquidGlassCard("Screen context") {
+                NexusToggle("Capture shared-window text", isOn: $screenOCREnabled)
+                    .frame(minHeight: 44)
             }
 
             Text(
@@ -32,8 +28,8 @@ public struct MeetingsScreenOCRSettingsView: View {
                     + "on-device and added as context to the summary. Only the recognized "
                     + "text is used — no screenshots are ever saved. Off by default."
             )
-            .font(NexusType.meta)
-            .foregroundStyle(NexusColor.Text.muted)
+            .font(DS.FontToken.caption)
+            .foregroundStyle(DS.ColorToken.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
         }
     }

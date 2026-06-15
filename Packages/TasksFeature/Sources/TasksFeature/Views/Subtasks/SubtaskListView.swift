@@ -137,6 +137,17 @@ public struct SubtaskListView: View {
         }
     }
 
+    /// Mirrors `TaskListView.containerBackground`: transparent on macOS so
+    /// subtask rows sit on the shell's glass panel; iOS keeps the opaque base
+    /// under its own (still Linear) shell.
+    private var rowContainerBackground: Color {
+        #if os(macOS)
+        return Color.clear
+        #else
+        return NexusColor.Background.base
+        #endif
+    }
+
     @ViewBuilder
     private var content: some View {
         Group {
@@ -145,13 +156,13 @@ public struct SubtaskListView: View {
             }
             if let error {
                 Text(error)
-                    .font(.caption)
-                    // MP-2 burned: error text renders via primary ink
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.metadata)
+                    // Error legibility is carried by contrast/weight, not color.
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                     .padding(.leading, CGFloat(min(depth, 6)) * 20 + 18)
                     .padding(.vertical, 4)
                     .listRowInsets(EdgeInsets())
-                    .listRowBackground(NexusColor.Background.base)
+                    .listRowBackground(rowContainerBackground)
                     .listRowSeparator(.hidden)
             }
         }
@@ -180,7 +191,7 @@ public struct SubtaskListView: View {
             onToggleDone: { toggleDone(item) }
         )
         .listRowInsets(EdgeInsets())
-        .listRowBackground(NexusColor.Background.base)
+        .listRowBackground(rowContainerBackground)
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
         .onTapGesture { onSelect?(item) }
@@ -190,8 +201,8 @@ public struct SubtaskListView: View {
             } label: {
                 Label(item.status == .done ? "Reopen" : "Done", systemImage: "checkmark.circle")
             }
-            // MP-2 burned: swipe tint → achromatic controlHover fill
-            .tint(NexusColor.Background.controlHover)
+            // Solid dark swipe fill so the white system label stays legible.
+            .tint(DS.ColorToken.backgroundElevated)
         }
         .swipeActions(edge: .trailing) {
             Button {
@@ -199,15 +210,14 @@ public struct SubtaskListView: View {
             } label: {
                 Label("1h", systemImage: "clock")
             }
-            // MP-2 burned: swipe tint → achromatic controlHover fill
-            .tint(NexusColor.Background.controlHover)
+            // Solid dark swipe fill (see leading edge).
+            .tint(DS.ColorToken.backgroundElevated)
             Button {
                 snooze(item, by: .tomorrow)
             } label: {
                 Label("Tomorrow", systemImage: "sun.haze")
             }
-            // MP-2 burned: swipe tint → achromatic controlHover fill
-            .tint(NexusColor.Background.controlHover)
+            .tint(DS.ColorToken.backgroundElevated)
         }
         .taskAssistContextMenu(for: item) { actions in
             Button(item.status == .done ? "Reopen" : "Mark done") { toggleDone(item) }
@@ -260,7 +270,8 @@ public struct SubtaskListView: View {
             } else {
                 try TaskCompletionAction.complete(item, repository: repository)
             }
-            reload()
+            // Animate the row leaving the list on completion (see TaskListView).
+            withAnimation(DS.Motion.standard) { reload() }
         } catch let error as TaskItemRepositoryError {
             if case .parentHasOpenSubtasks(let parentID, let openCount) = error, parentID == item.id {
                 cascadePrompt = CascadeCompletionPrompt(task: item, openCount: openCount)
@@ -277,7 +288,7 @@ public struct SubtaskListView: View {
         guard let repository else { return }
         do {
             try TaskCompletionAction.cascadeComplete(prompt.task, repository: repository)
-            reload()
+            withAnimation(DS.Motion.standard) { reload() }
         } catch {
             self.error = String(describing: error)
         }
@@ -299,7 +310,7 @@ public struct SubtaskListView: View {
         }
         do {
             try repository.snooze(item, until: until)
-            reload()
+            withAnimation(DS.Motion.standard) { reload() }
         } catch {
             self.error = String(describing: error)
         }

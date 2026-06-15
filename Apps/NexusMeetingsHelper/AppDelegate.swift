@@ -113,8 +113,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     composition.statusBar.update(state: .processing)
                 }
             },
-            onPause: {
-                NSSound.beep()
+            onPause: { [weak composition, weak state] in
+                guard let composition, let state else { return }
+                let wasPaused = state.isPaused
+                let reply: (Error?) -> Void = { error in
+                    if let error {
+                        NSAlert(error: error).runModal()
+                        return
+                    }
+                    // Reflect the new state immediately; the refresh loop also
+                    // mirrors `isPaused` from the next snapshot.
+                    state.isPaused = !wasPaused
+                }
+                if wasPaused {
+                    composition.resumeRecording(meetingID: handle.meetingID, reply: reply)
+                } else {
+                    composition.pauseRecording(meetingID: handle.meetingID, reply: reply)
+                }
             },
             onMinimize: { [weak panel] in
                 panel?.orderOut(nil)

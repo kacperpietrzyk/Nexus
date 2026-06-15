@@ -19,18 +19,21 @@ public final class CapturePaneState {
     private let locale: Locale
     private let nowProvider: @Sendable () -> Date
     private let debounce: Duration
+    private let projectResolver: (@MainActor (String) -> UUID?)?
     private var pendingTask: _Concurrency.Task<Void, Never>?
 
     public init(
         parser: any NLParser,
         locale: Locale = .current,
         nowProvider: @escaping @Sendable () -> Date = { .now },
-        debounce: Duration = .milliseconds(50)
+        debounce: Duration = .milliseconds(50),
+        projectResolver: (@MainActor (String) -> UUID?)? = nil
     ) {
         self.parser = parser
         self.locale = locale
         self.nowProvider = nowProvider
         self.debounce = debounce
+        self.projectResolver = projectResolver
     }
 
     /// Re-runs the parser with the new input. Call from SwiftUI
@@ -77,7 +80,8 @@ public final class CapturePaneState {
             deadlineAt: result.deadlineAt,
             priority: result.priority ?? .none,
             tags: result.tags,
-            recurrenceRule: result.recurrence
+            recurrenceRule: result.recurrence,
+            projectID: result.projectToken.flatMap { projectResolver?($0) }
         )
         try insert(task)
         self.input = ""

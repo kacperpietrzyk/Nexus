@@ -15,45 +15,42 @@ public struct AgentMemoryEditorSection: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader("Memory")
-            NexusSettingsCard {
-                VStack(alignment: .leading, spacing: 0) {
-                    NexusSettingsRow("Auto-save high-confidence memory") {
-                        Toggle("", isOn: $autoSave)
-                            .labelsHidden()
-                    }
-                    NexusSettingsDivider()
+        LiquidGlassCard("Memory") {
+            VStack(alignment: .leading, spacing: 0) {
+                NexusToggle("Auto-save high-confidence memory", isOn: $autoSave)
+                    .frame(minHeight: 44)
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
 
-                    Picker("Scope", selection: $viewModel.scope) {
-                        Text("Global").tag("global")
-                        Text("Project").tag("project")
-                        Text("Tag").tag("tag")
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .onChange(of: viewModel.scope) { _, _ in
-                        viewModel.reload()
-                    }
-                    .padding(.horizontal, NexusSpacing.s4)
-                    .padding(.vertical, NexusSpacing.s3)
-                    NexusSettingsDivider()
+                NexusSegmentedControl(
+                    items: [
+                        .init(id: "global", label: "Global"),
+                        .init(id: "project", label: "Project"),
+                        .init(id: "tag", label: "Tag"),
+                    ],
+                    selection: $viewModel.scope
+                )
+                .onChange(of: viewModel.scope) { _, _ in
+                    viewModel.reload()
+                }
+                .padding(.vertical, DS.Space.s)
+                Divider()
+                    .overlay(DS.ColorToken.strokeHairline)
 
-                    if viewModel.entries.isEmpty {
-                        NexusEmptyState(
-                            systemImage: "brain",
-                            title: "No memories in this scope yet."
-                        )
-                    } else {
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
-                                if index > 0 {
-                                    NexusSettingsDivider()
-                                }
-                                memoryRow(entry)
-                                    .padding(.horizontal, NexusSpacing.s4)
-                                    .padding(.vertical, NexusSpacing.s3)
+                if viewModel.entries.isEmpty {
+                    NexusEmptyState(
+                        systemImage: "brain",
+                        title: "No memories in this scope yet."
+                    )
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(viewModel.entries.enumerated()), id: \.element.id) { index, entry in
+                            if index > 0 {
+                                Divider()
+                                    .overlay(DS.ColorToken.strokeHairline)
                             }
+                            memoryRow(entry)
+                                .padding(.vertical, DS.Space.s)
                         }
                     }
                 }
@@ -68,9 +65,9 @@ public struct AgentMemoryEditorSection: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(entry.key)
-                    .font(NexusType.bodySmall)
+                    .font(DS.FontToken.body)
                     .fontWeight(.bold)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
 
                 Spacer(minLength: 12)
 
@@ -85,15 +82,15 @@ public struct AgentMemoryEditorSection: View {
                     // so it invites without faking primary salience (§2
                     // LabPalette.read).
                     Image(systemName: "trash")
-                        .foregroundStyle(NexusColor.Text.secondary)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(NexusPressableButtonStyle())
                 .help("Delete memory")
             }
 
             Text(entry.content)
-                .font(NexusType.caption)
-                .foregroundStyle(NexusColor.Text.muted)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textMuted)
         }
         .padding(.vertical, 2)
     }

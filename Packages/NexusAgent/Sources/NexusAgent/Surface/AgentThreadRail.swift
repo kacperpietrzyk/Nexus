@@ -27,7 +27,7 @@ public struct AgentThreadRail: View {
             .frame(width: 248)
 
             Rectangle()
-                .fill(NexusColor.Line.hairline)
+                .fill(DS.ColorToken.strokeHairline)
                 .frame(width: 1)
 
             AgentChatView(viewModel: viewModel)

@@ -26,6 +26,11 @@ public final class TaskIntentRuntime {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw TaskIntentRuntimeError.emptyInput }
         let result = await parser.parse(trimmed, locale: .current, now: Date())
+        let projectID = result.projectToken.flatMap { token in
+            (try? ProjectRepository(context: repository.context)
+                .findActive(matchingToken: token))
+                .flatMap { $0 }?.id
+        }
         let task = TaskItem(
             title: result.title,
             dueAt: result.dueAt,
@@ -34,7 +39,8 @@ public final class TaskIntentRuntime {
             deadlineAt: result.deadlineAt,
             priority: result.priority ?? .none,
             tags: result.tags,
-            recurrenceRule: result.recurrence
+            recurrenceRule: result.recurrence,
+            projectID: projectID
         )
         try repository.insert(task)
         return TaskAppEntity(task: task)
@@ -74,13 +80,14 @@ public final class TaskIntentRuntime {
         var descriptor: FetchDescriptor<TaskItem>
         if trimmed.isEmpty {
             descriptor = FetchDescriptor<TaskItem>(
-                predicate: #Predicate { task in task.deletedAt == nil }
+                predicate: #Predicate { task in task.deletedAt == nil && task.isTemplate == false }
             )
         } else {
             descriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate { task in
                     task.deletedAt == nil
                         && task.title.localizedStandardContains(trimmed)
+                        && task.isTemplate == false
                 }
             )
         }

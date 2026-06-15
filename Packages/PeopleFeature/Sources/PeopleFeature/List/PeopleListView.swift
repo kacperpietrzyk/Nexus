@@ -3,16 +3,26 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
+/// Row hover wash — same value as the Liquid kit's dense-list rows
+/// (`LiquidListKit.taskRowHoverFill`, private there): no scale in dense lists,
+/// just a subtle fill.
+private let personRowHoverFill = Color.white.opacity(0.04)
+
 /// The People surface (spec §6): a searchable list of all live `Person` contact
 /// records with a "New Person" affordance and navigation into the profile. Mac +
 /// iOS; the Watch projection is out of scope (slim Watch).
 ///
-/// The list is grouped into sticky alphabetical sections; the junk auto-created
+/// The list is grouped into alphabetical sections; the junk auto-created
 /// "Participant N" / "Speaker N" placeholder rows are suppressed from the main
 /// list and revealed only via a collapsible "From meetings" section at the bottom
 /// (view-layer cleanup — the root cause of placeholder creation is fixed
-/// elsewhere). Each row carries a trailing meeting-count chip, resolved once in a
+/// elsewhere). Each row carries a trailing meeting-count label, resolved once in a
 /// single batched fetch rather than per-row.
+///
+/// macOS renders the Liquid idiom: an in-panel search field + New Person action
+/// (never window-toolbar items — the Liquid shell owns the window chrome) above a
+/// hover-responsive row list. iOS keeps the native `List` + `.searchable` +
+/// navigation-bar toolbar.
 ///
 /// Mounts inside the existing app navigation, so it inherits the scene's
 /// `.modelContainer` (where `Person` is already registered via `NexusSchemaV12`) —
@@ -42,44 +52,220 @@ public struct PeopleListView: View {
 
     public var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if people.isEmpty {
-                    NexusEmptyState(
-                        systemImage: "person.crop.circle",
-                        title: "No people yet",
-                        message: "Add a contact, or they appear automatically from meetings."
+            platformContent
+                .navigationDestination(for: UUID.self) { id in
+                    PersonProfileView(personID: id)
+                }
+                .alert(
+                    "Couldn't add person",
+                    isPresented: Binding(
+                        get: { newPersonError != nil },
+                        set: { if !$0 { newPersonError = nil } }
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    list
+                ) {
+                    Button("OK", role: .cancel) { newPersonError = nil }
+                } message: {
+                    Text(newPersonError ?? "")
                 }
-            }
-            .navigationTitle("People")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        createPerson()
-                    } label: {
-                        Label("New Person", systemImage: "person.badge.plus")
+                .task(id: people.count) { reloadMeetingCounts() }
+        }
+    }
+
+    // MARK: - macOS (Liquid)
+
+    #if os(macOS)
+    private var platformContent: some View {
+        Group {
+            if people.isEmpty {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    LiquidEmptyState(
+                        systemImage: "person.crop.circle",
+                        message: "No people yet. Add a contact, or they appear automatically from meetings."
+                    ) {
+                        LiquidPrimaryButton("New Person", systemImage: "person.badge.plus") {
+                            createPerson()
+                        }
                     }
-                    .disabled(personRepository == nil)
+                    Spacer(minLength: 0)
+                }
+            } else {
+                directoryPanel
+            }
+        }
+        .padding(DS.Space.l)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// The directory sits in one contained glass pane — the same idiom as the
+    /// Liquid Meetings list pane (`.liquidGlass(.sidebar)`) — centered to a
+    /// readable measure on the wide content panel rather than floating row by
+    /// row on the bare substrate. `Person` records are sparse (avatar · name ·
+    /// meeting count), so a full-width row band would expose dead space
+    /// mid-row; a bounded, contained column reads as deliberate.
+    private var directoryPanel: some View {
+        VStack(spacing: DS.Space.m) {
+            header
+            macList
+        }
+        .padding(DS.Space.m)
+        .liquidGlass(.sidebar, radius: DS.Radius.l)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// In-panel header: live search + New Person. Window-toolbar items are
+    /// deliberately absent on macOS — the Liquid shell owns the window chrome.
+    private var header: some View {
+        HStack(spacing: DS.Space.s) {
+            searchField
+            LiquidIconButton(
+                systemImage: "person.badge.plus",
+                accessibilityLabel: "New Person"
+            ) {
+                createPerson()
+            }
+            .disabled(personRepository == nil)
+        }
+    }
+
+    /// Same live-search idiom as the Liquid Meetings list pane.
+    private var searchField: some View {
+        HStack(spacing: DS.Space.xs) {
+            Image(systemName: "magnifyingglass")
+                // 11 pt magnifier sits optically level with the 13 pt body text
+                // in the 30 pt field (Meetings list idiom); no icon-size token.
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textMuted)
+            TextField("Search people…", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+        }
+        .padding(.horizontal, DS.Space.s)
+        .frame(height: 30)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                // macOS: a light translucent inset so the field reads as glass,
+                // not a near-black slab on the light pane. iOS keeps the sunken fill.
+                #if os(macOS)
+            .fill(Color.white.opacity(0.06))
+                #else
+            .fill(DS.ColorToken.backgroundSunken.opacity(0.6))
+                #endif
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+        }
+    }
+
+    private var macList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 1) {
+                ForEach(model.sections) { section in
+                    sectionHeader(section.title)
+                    ForEach(section.people) { person in
+                        personButton(person)
+                    }
+                }
+
+                macFromMeetingsSection
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.never)
+    }
+
+    private func personButton(_ person: Person) -> some View {
+        Button {
+            path.append(person.id)
+        } label: {
+            PersonListRow(person: person, meetingCount: meetingCounts[person.id] ?? 0)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Delete", role: .destructive) { delete(person) }
+        }
+    }
+
+    @ViewBuilder
+    private var macFromMeetingsSection: some View {
+        let placeholders = model.fromMeetings
+        if !placeholders.isEmpty {
+            Button {
+                withAnimation(DS.Motion.panelReveal) { fromMeetingsExpanded.toggle() }
+            } label: {
+                HStack(spacing: DS.Space.xs) {
+                    Image(systemName: fromMeetingsExpanded ? "chevron.down" : "chevron.right")
+                        // 9 pt disclosure chevron rides the 10 pt caption — carried
+                        // over from the pre-Liquid header; no icon-size token.
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("FROM MEETINGS")
+                        .font(DS.FontToken.caption)
+                        .kerning(0.6)
+                    Text("\(placeholders.count)")
+                        .font(DS.FontToken.caption)
+                        .monospacedDigit()
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(DS.ColorToken.textMuted)
+                .padding(.horizontal, DS.Space.xs)
+                .padding(.top, DS.Space.l)
+                .padding(.bottom, DS.Space.xxs)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("From meetings, \(placeholders.count) hidden")
+            .accessibilityHint(fromMeetingsExpanded ? "Hides auto-created people." : "Shows auto-created people.")
+
+            if fromMeetingsExpanded {
+                ForEach(placeholders) { person in
+                    personButton(person)
                 }
             }
-            .navigationDestination(for: UUID.self) { id in
-                PersonProfileView(personID: id)
-            }
-            .alert(
-                "Couldn't add person",
-                isPresented: Binding(
-                    get: { newPersonError != nil },
-                    set: { if !$0 { newPersonError = nil } }
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(DS.FontToken.caption)
+            .kerning(0.6)
+            .foregroundStyle(DS.ColorToken.textMuted)
+            .padding(.horizontal, DS.Space.xs)
+            .padding(.top, DS.Space.xs)
+            .padding(.bottom, DS.Space.xxs)
+    }
+
+    private func delete(_ person: Person) {
+        guard let personRepository else { return }
+        try? personRepository.softDelete(person)
+    }
+
+    // MARK: - iOS (native list)
+
+    #else
+    private var platformContent: some View {
+        Group {
+            if people.isEmpty {
+                LiquidEmptyState(
+                    systemImage: "person.crop.circle",
+                    message: "No people yet. Add a contact, or they appear automatically from meetings."
                 )
-            ) {
-                Button("OK", role: .cancel) { newPersonError = nil }
-            } message: {
-                Text(newPersonError ?? "")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                list
             }
-            .task(id: people.count) { reloadMeetingCounts() }
+        }
+        .navigationTitle("People")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    createPerson()
+                } label: {
+                    Label("New Person", systemImage: "person.badge.plus")
+                }
+                .disabled(personRepository == nil)
+            }
         }
     }
 
@@ -91,6 +277,7 @@ public struct PeopleListView: View {
                         NavigationLink(value: person.id) {
                             PersonListRow(person: person, meetingCount: meetingCounts[person.id] ?? 0)
                         }
+                        .listRowBackground(Color.clear)
                     }
                     .onDelete { offsets in delete(from: section.people, at: offsets) }
                 } header: {
@@ -101,6 +288,8 @@ public struct PeopleListView: View {
             fromMeetingsSection
         }
         .listStyle(.plain)
+        // Liquid: transparent so the shell aurora reads behind the directory.
+        .scrollContentBackground(.hidden)
         .searchable(text: $searchText, prompt: "Search people")
     }
 
@@ -119,16 +308,19 @@ public struct PeopleListView: View {
                 }
             } header: {
                 Button {
-                    withAnimation(.snappy(duration: 0.18)) { fromMeetingsExpanded.toggle() }
+                    withAnimation(DS.Motion.panelReveal) { fromMeetingsExpanded.toggle() }
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DS.Space.xs) {
                         Image(systemName: fromMeetingsExpanded ? "chevron.down" : "chevron.right")
+                            // 9 pt disclosure chevron rides the 10 pt caption.
                             .font(.system(size: 9, weight: .semibold))
                         Text("From meetings")
-                        Spacer(minLength: 8)
-                        NexusCount(value: placeholders.count)
+                        Spacer(minLength: DS.Space.s)
+                        Text("\(placeholders.count)")
+                            .monospacedDigit()
                     }
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.caption)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -140,9 +332,20 @@ public struct PeopleListView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .nexusType(.eyebrow)
-            .foregroundStyle(NexusColor.Text.muted)
+            .font(DS.FontToken.caption)
+            .kerning(0.6)
+            .foregroundStyle(DS.ColorToken.textMuted)
     }
+
+    private func delete(from rows: [Person], at offsets: IndexSet) {
+        guard let personRepository else { return }
+        for index in offsets where rows.indices.contains(index) {
+            try? personRepository.softDelete(rows[index])
+        }
+    }
+    #endif
+
+    // MARK: - Shared
 
     private func createPerson() {
         guard let personRepository else { return }
@@ -154,54 +357,62 @@ public struct PeopleListView: View {
         }
     }
 
-    private func delete(from rows: [Person], at offsets: IndexSet) {
-        guard let personRepository else { return }
-        for index in offsets where rows.indices.contains(index) {
-            try? personRepository.softDelete(rows[index])
-        }
-    }
-
     /// One batched pass over the `Link` table to count attended meetings per person
-    /// (powers the row chip). Re-run when the population changes; failures degrade
-    /// to no chips rather than surfacing an error.
+    /// (powers the row's trailing label). Re-run when the population changes;
+    /// failures degrade to no labels rather than surfacing an error.
     private func reloadMeetingCounts() {
         meetingCounts = (try? PersonAggregateResolver.meetingCounts(in: modelContext)) ?? [:]
     }
 }
 
-/// A single row in the people list: avatar + display name + a Linear-style
-/// secondary line (company · email) + a trailing meeting-count chip ("4
-/// meetings"). The avatar stays achromatic (current design language).
+/// A single row in the people list: glass avatar pill + display name + a dense
+/// secondary line (company · email) + a trailing meeting-count label. Liquid
+/// language: DS type scale, hover wash on macOS, no chip chrome.
 struct PersonListRow: View {
     let person: Person
-    /// Attended-meeting count for the trailing chip; resolved once via a batched
-    /// fetch by the list. Defaults to 0 (no chip) for reuse sites — e.g. the merge
+    /// Attended-meeting count for the trailing label; resolved once via a batched
+    /// fetch by the list. Defaults to 0 (no label) for reuse sites — e.g. the merge
     /// picker — that have no count to show.
     var meetingCount: Int = 0
 
+    @State private var hovering = false
+
     var body: some View {
-        HStack(spacing: 10) {
-            NexusAvatar(name: displayName, size: 30)
+        HStack(spacing: DS.Space.s) {
+            LiquidAvatar(name: displayName, size: 30)
             VStack(alignment: .leading, spacing: 1) {
                 Text(displayName)
-                    .nexusType(.body)
-                    .fontWeight(.medium)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.body)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                     .lineLimit(1)
                 if !subtitle.isEmpty {
                     Text(subtitle)
-                        .nexusType(.bodySmall)
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             if meetingCount > 0 {
-                NexusChip(meetingChipLabel)
+                Text(meetingLabel)
+                    .font(DS.FontToken.metadata)
+                    .monospacedDigit()
+                    .foregroundStyle(DS.ColorToken.textTertiary)
                     .accessibilityLabel("\(meetingCount) \(meetingCount == 1 ? "meeting" : "meetings")")
             }
         }
-        .padding(.vertical, 3)
+        .padding(.horizontal, DS.Space.s)
+        .padding(.vertical, DS.Space.xs)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                .fill(hovering ? personRowHoverFill : .clear)
+        }
+        .contentShape(Rectangle())
+        #if os(macOS)
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        #endif
     }
 
     private var displayName: String {
@@ -209,8 +420,8 @@ struct PersonListRow: View {
     }
 
     /// Secondary line: company/role joined with the first contact detail by a
-    /// middot, mirroring Linear's dense metadata rows. Drops empty parts so a
-    /// company-only or email-only person reads cleanly.
+    /// middot. Drops empty parts so a company-only or email-only person reads
+    /// cleanly.
     private var subtitle: String {
         let company = person.company?.trimmingCharacters(in: .whitespacesAndNewlines)
         let contact = [person.email, person.phone]
@@ -222,7 +433,7 @@ struct PersonListRow: View {
             .joined(separator: " · ")
     }
 
-    private var meetingChipLabel: String {
+    private var meetingLabel: String {
         meetingCount == 1 ? "1 meeting" : "\(meetingCount) meetings"
     }
 }

@@ -101,13 +101,14 @@ struct WeekGridView: View {
         case .event: return item.colorHex.flatMap { Color(calendarHexDesaturated: $0) } ?? NexusColor.Text.tertiary
         case .proposedBlock: return NexusColor.Text.muted
         case .acceptedBlock: return NexusColor.Accent.lime
+        case .seriesPreview: return NexusColor.Text.muted
         }
     }
 
     @ViewBuilder
     private func chipBorder(_ item: TimelineItem) -> some View {
         let shape = RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous)
-        if item.kind == .proposedBlock {
+        if item.kind == .proposedBlock || item.kind == .seriesPreview {
             shape.strokeBorder(NexusColor.Line.strong, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
         } else {
             shape.strokeBorder(NexusColor.Line.hairline, lineWidth: 1)

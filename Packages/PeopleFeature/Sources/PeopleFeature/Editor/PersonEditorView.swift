@@ -34,24 +34,23 @@ public struct PersonEditorView: View {
         NavigationStack {
             Form {
                 Section("Name") {
-                    TextField("Display name", text: $displayName)
-                    TextField("Aliases (comma-separated)", text: $aliasesText)
+                    NexusTextField("Display name", text: $displayName)
+                    NexusTextField("Aliases (comma-separated)", text: $aliasesText)
                 }
                 Section("Contact") {
-                    TextField("Email", text: $email)
+                    NexusTextField("Email", text: $email)
                         #if os(iOS)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.emailAddress)
                         #endif
-                    TextField("Phone", text: $phone)
+                    NexusTextField("Phone", text: $phone)
                         #if os(iOS)
                     .keyboardType(.phonePad)
                         #endif
-                    TextField("Company", text: $company)
+                    NexusTextField("Company", text: $company)
                 }
                 Section("Note") {
-                    TextField("Note", text: $note, axis: .vertical)
-                        .lineLimit(3...8)
+                    NexusTextEditor(text: $note, minHeight: 80)
                 }
             }
             .navigationTitle("Edit Person")

@@ -61,6 +61,19 @@ public struct AgentComposition {
     public let scheduleRunner: AgentScheduleRunner
     public let watchHandler: WatchAgentHandler?
 
+    // MARK: - Proactive Insights (Task 7–8)
+
+    /// Foreground-driven orchestration hub. App shells call
+    /// `insightCoordinator.runDueInsights(now: .now)` on each foreground transition.
+    public let insightCoordinator: InsightCoordinator
+    /// Observable pending-insight queue; inject into `TodayDashboard` via
+    /// `.environment(\.pendingInsightStore, agentComposition.pendingInsightStore)`.
+    public let pendingInsightStore: PendingInsightStore
+    /// Cooldown store shared by coordinator and the Today dismiss handler.
+    public let insightCooldownStore: InsightCooldownStore
+    /// Shared proposal coordinator for applying insight mutations.
+    public let proposalCoordinator: ProposalCoordinator
+
     private let maintenanceRunner: AgentMaintenanceRunner
 
     // swiftlint:disable:next function_body_length function_parameter_count
@@ -76,6 +89,15 @@ public struct AgentComposition {
         ocrPipeline: OCRPipeline? = nil,
         chatModelAvailability: (@MainActor () -> Bool)? = nil,
         warmChatModel: (@MainActor () async -> Void)? = nil,
+        chatReadiness: (@MainActor () -> AssistantReadiness)? = nil,
+        /// Optional calendar-event provider for the overload insight.
+        /// Defaults to `{ [] }` (no events). Apps supply their EventKit provider.
+        eventsProvider: (@MainActor () async -> [CalendarEvent])? = nil,
+        /// Optional meeting-decompose candidate provider.
+        /// Defaults to `{ [] }` (no meetings). Apps wire a meeting repository query.
+        /// FLAG: this param is optional; a `{ [] }` fallback is acceptable for
+        /// callers that cannot reach `MeetingRepository` at composition time.
+        meetingCandidatesProvider: (@MainActor () -> [MeetingDecomposeCandidate])? = nil,
         legacyBrief: @escaping @Sendable (AgentBriefRequest) async -> String
     ) throws -> AgentComposition {
         let stores = AgentStores(context: context)
@@ -127,6 +149,91 @@ public struct AgentComposition {
             dispatcher: embedding.dispatcher,
             index: embedding.index
         )
+        let chatCoordinator = ProposalCoordinator(dispatcher: toolDispatcher)
+
+        // MARK: - Proactive insights infrastructure
+        let pendingStore = PendingInsightStore()
+        let cooldownStore = InsightCooldownStore()
+        let dayPlanRunner = FoundationComposition.makeLocalRunner(
+            modelContext: context,
+            router: router
+        )
+        let prefs = UserDefaultsCalendarPreferencesStore().load()
+        let capacity = CapacityModel.fromPreferences(prefs)
+        let resolvedEventsProvider: @MainActor () async -> [CalendarEvent] = eventsProvider ?? { [] }
+        let resolvedMeetingsProvider: @MainActor () -> [MeetingDecomposeCandidate] =
+            meetingCandidatesProvider ?? { [] }
+        let insightCoordinator = InsightCoordinator(
+            cooldown: cooldownStore,
+            pending: pendingStore,
+            tasks: {
+                let mc = context
+                let all =
+                    (try? mc.fetch(
+                        FetchDescriptor<TaskItem>(
+                            predicate: #Predicate { $0.deletedAt == nil })))
+                    ?? []
+                let openRaw = TaskStatus.open.rawValue
+                let open = all.filter { $0.statusRaw == openRaw }
+                return open.compactMap { task -> ScheduledItem? in
+                    guard let day = task.dueAt else { return nil }
+                    let mins = task.estimatedDurationSeconds.map { max(1, Int($0) / 60) } ?? 30
+                    return ScheduledItem(id: task.id, durationMinutes: mins, day: day)
+                }
+            },
+            events: resolvedEventsProvider,
+            capacity: { capacity },
+            meetingsNeedingDecompose: resolvedMeetingsProvider,
+            dayPlanRunner: dayPlanRunner,
+            dayPlanNumbers: {
+                let mc = context
+                let all =
+                    (try? mc.fetch(
+                        FetchDescriptor<TaskItem>(
+                            predicate: #Predicate { $0.deletedAt == nil })))
+                    ?? []
+                let openRaw = TaskStatus.open.rawValue
+                let open = all.filter { $0.statusRaw == openRaw }
+                let today = Date()
+                let eod = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: today) ?? today
+                let dueToday = open.filter { ($0.dueAt ?? .distantFuture) <= eod }
+                return "\(dueToday.count) due today, \(open.count) total open"
+            },
+            makeDecomposeCoordinator: {
+                MeetingDecomposeCoordinator(
+                    runner: dayPlanRunner,
+                    scheduler: SlotScheduler(),
+                    workload: WorkloadAnalyzer(),
+                    capacity: capacity,
+                    prefs: prefs,
+                    events: [],
+                    now: Date()
+                )
+            }
+        )
+
+        // iOS chat is extraction-only (no tool-calling): pre-stuff a context via
+        // ContextAssembler, reusing the same hybrid retriever the ContextBuilder uses.
+        // Mac tool-calls instead, so it gets no closure (see AssistantChatConfig).
+        let iosChatAssembler: ContextAssembler? =
+            platform == .iOS
+            ? ContextAssembler(
+                agentContext: resolvedAgentContext,
+                retriever: AgentSearchSemanticTool(
+                    embeddingClient: embedding.embeddingClient,
+                    index: embedding.index,
+                    ftsSearch: embedding.ftsSearch,
+                    context: context))
+            : nil
+        let iosAssembleContext: (@MainActor (ContextRecipe, ContextFocus, Date) async -> String)?
+        if let assembler = iosChatAssembler {
+            iosAssembleContext = { recipe, focus, now in
+                await assembler.assemble(recipe, focus: focus, now: now)
+                    .renderedBlocks().joined(separator: "\n\n")
+            }
+        } else {
+            iosAssembleContext = nil
+        }
         let chatViewModel = AgentChatViewModel(
             runtime: runtime,
             threadStore: stores.threadStore,
@@ -134,7 +241,11 @@ public struct AgentComposition {
             memoryStore: stores.memoryStore,
             voiceCapture: .live(router: router),
             chatModelAvailability: chatModelAvailability,
-            warmChatModel: warmChatModel
+            warmChatModel: warmChatModel,
+            chatConfig: platform == .mac ? .mac : .iOS,
+            proposalCoordinator: chatCoordinator,
+            readinessProbe: chatReadiness,
+            assembleContext: iosAssembleContext
         )
         let settingsContext = AgentSettingsContext(
             memoryStore: stores.memoryStore,
@@ -185,6 +296,10 @@ public struct AgentComposition {
             scheduler: platformServices.scheduler,
             scheduleRunner: scheduleRunner,
             watchHandler: platformServices.watchHandler,
+            insightCoordinator: insightCoordinator,
+            pendingInsightStore: pendingStore,
+            insightCooldownStore: cooldownStore,
+            proposalCoordinator: chatCoordinator,
             maintenanceRunner: AgentMaintenanceRunner()
         )
     }
@@ -242,7 +357,8 @@ public struct AgentComposition {
                 modelContext: ModelContextRef(context),
                 taskRepository: TaskItemRepositoryRef(taskRepository),
                 searchIndex: searchIndex,
-                now: { .now }
+                now: { .now },
+                modelContainer: ModelContainerRef(context.container)
             )
     }
 

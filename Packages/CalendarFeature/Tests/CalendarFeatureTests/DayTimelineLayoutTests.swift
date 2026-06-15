@@ -218,4 +218,49 @@ struct DayTimelineLayoutTests {
         #expect(byID["b"] == 2)
         #expect(byID["c"] == 1)
     }
+
+    @Test("series previews map to .seriesPreview items clipped to the day, with no blockID")
+    func seriesPreviewsBecomeTimelineItems() {
+        let cal = calendar
+        let day = dayStart
+        let preview = SeriesOccurrencePreview(
+            seriesID: UUID(),
+            taskID: UUID(),
+            occurrenceDate: day.addingTimeInterval(10 * 3600),
+            start: day.addingTimeInterval(9 * 3600),
+            end: day.addingTimeInterval(10 * 3600),
+            title: "standup"
+        )
+        let otherDayPreview = SeriesOccurrencePreview(
+            seriesID: UUID(),
+            taskID: UUID(),
+            occurrenceDate: day.addingTimeInterval(86_400 + 10 * 3600),
+            start: day.addingTimeInterval(86_400 + 9 * 3600),
+            end: day.addingTimeInterval(86_400 + 10 * 3600),
+            title: "tomorrow"
+        )
+
+        let items = DayTimelineLayout.items(
+            forDay: day,
+            events: [],
+            blocks: [],
+            calendar: cal,
+            seriesPreviews: [preview, otherDayPreview]
+        )
+
+        #expect(items.count == 1)
+        let item = items[0]
+        #expect(item.kind == .seriesPreview)
+        #expect(item.id == preview.id)
+        #expect(item.title == "standup")
+        #expect(item.blockID == nil)
+        #expect(item.isAllDay == false)
+        #expect(item.isConflicted == false)
+    }
+
+    @Test("omitting seriesPreviews leaves existing call sites byte-identical")
+    func defaultParameterAddsNothing() {
+        let items = DayTimelineLayout.items(forDay: dayStart, events: [], blocks: [], calendar: calendar)
+        #expect(items.isEmpty)
+    }
 }

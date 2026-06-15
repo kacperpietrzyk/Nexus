@@ -115,7 +115,7 @@ struct InboxListPanel: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 // Leading gutter = the app-wide chrome gutter (18), matching the
-                // NexusTopBar filter tabs above (was 26 — list hung 8pt right).
+                // filter-tab band in the toolbar above (was 26 — list hung 8pt right).
                 .padding(.leading, 18)
                 .padding(.trailing, 12)
                 // Top gap so the first section header isn't glued to the topbar
@@ -129,7 +129,7 @@ struct InboxListPanel: View {
     }
 }
 
-// MARK: - Section (§3 idiom — eyebrow + NexusCount + staggered rows)
+// MARK: - Section (Liquid idiom — caption eyebrow + count pill + staggered rows)
 
 struct InboxSectionView: View {
     let section: InboxSection
@@ -140,12 +140,10 @@ struct InboxSectionView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 7) {
                 Text(section.title)
-                    .nexusType(.eyebrow)
-                    .foregroundStyle(NexusColor.Text.muted)
-                NexusCount(
-                    value: section.items.count,
-                    font: NexusType.metaMono
-                )
+                    .font(DS.FontToken.caption)
+                    .tracking(1.4)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                LiquidPill("\(section.items.count)", color: DS.ColorToken.statusNeutral)
                 Spacer()
             }
             .padding(.horizontal, 10)
@@ -182,44 +180,50 @@ struct InboxPanelRow: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
                 Circle()
-                    .fill(isUnread ? NexusColor.Accent.lime : Color.clear)
+                    .fill(isUnread ? DS.ColorToken.accentPrimary : Color.clear)
                     .frame(width: 5, height: 5)
                     .padding(.top, 6)
                 Image(systemName: item.nexusInboxSourceIcon)
                     .font(.system(size: 11))
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .foregroundStyle(DS.ColorToken.textMuted)
                     .frame(width: 16)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
                         Text(item.title)
-                            .font(Font.custom("Inter-Medium", size: 13))
-                            .foregroundStyle(isUnread ? NexusColor.Text.primary : NexusColor.Text.secondary)
+                            .font(isUnread ? DS.FontToken.bodyStrong : DS.FontToken.body)
+                            .foregroundStyle(isUnread ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
                             .lineLimit(1)
                         Spacer(minLength: 12)
                         Text(item.nexusInboxRelativeTime)
-                            .font(NexusType.metaMono)
+                            .font(DS.FontToken.metadata)
                             .monospacedDigit()
-                            .foregroundStyle(NexusColor.Text.disabled)
+                            .foregroundStyle(DS.ColorToken.textTertiary)
                     }
                     Text(item.body ?? "")
-                        .nexusType(.meta)
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textMuted)
                         .lineLimit(1)
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: NexusRadius.r1)
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
                     .fill(
                         isSelected
-                            ? NexusColor.Background.controlHover
-                            : (hover ? NexusColor.Background.control : Color.clear)
+                            ? DS.ColorToken.glassSelected
+                            : (hover ? Color.white.opacity(0.04) : Color.clear)
                     )
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .stroke(isSelected ? DS.ColorToken.strokeHairline : .clear, lineWidth: 1)
+            }
             .contentShape(Rectangle())
-            .onHover { hover = $0 }
+            .onHover { value in
+                withAnimation(DS.Motion.hover) { hover = value }
+            }
         }
         .buttonStyle(.plain)
     }
@@ -231,16 +235,18 @@ struct InboxPanelEmptyState: View {
     let systemImage: String
 
     var body: some View {
-        VStack(spacing: 12) {
+        // Liquid empty-state idiom (03_COMPONENTS.md §Empty): calm glyph + one
+        // line + quiet subtitle; centered in the list panel's empty space.
+        VStack(spacing: DS.Space.m) {
             Image(systemName: systemImage)
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(NexusColor.Text.muted)
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textMuted)
             Text(title)
-                .nexusType(.h3)
-                .foregroundStyle(NexusColor.Text.secondary)
+                .font(DS.FontToken.section)
+                .foregroundStyle(DS.ColorToken.textSecondary)
             Text(subtitle)
-                .nexusType(.bodySmall)
-                .foregroundStyle(NexusColor.Text.muted)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textMuted)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)

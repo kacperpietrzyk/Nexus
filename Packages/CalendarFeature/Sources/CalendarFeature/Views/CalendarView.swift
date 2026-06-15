@@ -45,7 +45,9 @@ public struct CalendarView: View {
             Divider().overlay(NexusColor.Line.hairline)
             content
         }
-        .background(NexusColor.Background.base)
+        // Liquid: transparent root so the shell aurora reads behind the calendar
+        // (internal day/event cells keep their own surfaces). Was opaque base.
+        .background(Color.clear)
         .task {
             await viewModel.load()
             availableCalendars = await viewModel.availableCalendars()
@@ -80,6 +82,9 @@ public struct CalendarView: View {
             }
             if let notice = viewModel.planNotice {
                 planNoticeBanner(notice)
+            }
+            if !viewModel.conflictedBlockIDs.isEmpty {
+                conflictBanner(count: viewModel.conflictedBlockIDs.count)
             }
         }
         .padding(14)
@@ -157,6 +162,41 @@ public struct CalendarView: View {
                 .font(NexusType.caption)
                 .foregroundStyle(NexusColor.Text.secondary)
             Spacer()
+        }
+        .padding(8)
+        .background(NexusColor.Background.panel, in: RoundedRectangle(cornerRadius: NexusRadius.r2, style: .continuous))
+    }
+
+    /// M1 non-blocking conflict affordance: external events now overlap
+    /// accepted/manual blocks. "Replan" tears the conflicted blocks down and
+    /// re-proposes their tasks (the user re-accepts); the X just dismisses.
+    private func conflictBanner(count: Int) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(NexusColor.Status.danger)
+            Text(CalendarViewModel.conflictNotice(count: count))
+                .font(NexusType.caption)
+                .foregroundStyle(NexusColor.Text.secondary)
+            Spacer()
+            Button("Replan") {
+                Task { await viewModel.replanConflicted() }
+            }
+            .buttonStyle(.plain)
+            .font(NexusType.caption.weight(.semibold))
+            .foregroundStyle(NexusColor.Accent.limeInk)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(NexusColor.Accent.lime, in: Capsule())
+            .accessibilityLabel("Replan conflicted blocks")
+            Button {
+                viewModel.dismissConflicts()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(NexusColor.Text.tertiary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss conflict notice")
         }
         .padding(8)
         .background(NexusColor.Background.panel, in: RoundedRectangle(cornerRadius: NexusRadius.r2, style: .continuous))

@@ -26,6 +26,7 @@ extension TaskDetailInspector {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     headerCard
                     workflowCard
+                    cycleCard
                     labelsCard
                     aiAssistCard
                     scheduleCard
@@ -34,8 +35,10 @@ extension TaskDetailInspector {
                     recurrenceCard
                     linksCard
                     promoteCard
+                    templateCard
                     notesCard
                     commentsCard
+                    activityCard
                 }
                 .padding(20)
             }
@@ -65,6 +68,7 @@ extension TaskDetailInspector {
                 VStack(alignment: .leading, spacing: 16) {
                     headerCard
                     workflowCard
+                    cycleCard
                     labelsCard
                     scheduleCard
                 }
@@ -74,6 +78,7 @@ extension TaskDetailInspector {
                     remindersCard
                     recurrenceCard
                     promoteCard
+                    templateCard
                 }
             }
             // Notes + Links share a bottom row (side by side) so the dialog stays
@@ -83,8 +88,11 @@ extension TaskDetailInspector {
                 linksCompactCard
             }
             commentsCard
+            activityCard
         }
         .padding(20)
-        .background(NexusWallpaper())
+        // Liquid re-skin: the wallpaper background is dropped — the Mac modal
+        // host paints the liquid glass panel; an opaque wallpaper here would
+        // occlude it. (Sizing is unaffected: a `.background` never drove it.)
     }
 }

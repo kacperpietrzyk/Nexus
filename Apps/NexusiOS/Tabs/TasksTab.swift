@@ -10,6 +10,7 @@ struct TasksTab: View {
         case upcoming = "Upcoming"
         case inbox = "Inbox"
         case done = "Done"
+        case templates = "Templates"
 
         var id: String { rawValue }
 
@@ -20,6 +21,7 @@ struct TasksTab: View {
             case .upcoming: return .upcoming
             case .inbox: return .inbox
             case .done: return .completed
+            case .templates: return .templates
             }
         }
     }
@@ -103,6 +105,6 @@ struct TasksTab: View {
         )
         .padding(.horizontal, 16)
         .padding(.top, 8)
-        .animation(NexusMotion.standard, value: filter)
+        .animation(DS.Motion.standard, value: filter)
     }
 }

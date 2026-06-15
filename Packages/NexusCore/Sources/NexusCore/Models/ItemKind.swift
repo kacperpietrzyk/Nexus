@@ -20,6 +20,15 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
     /// meetings (`LinkKind.attendee`) + mentioned tasks/notes (`LinkKind.mentions`)
     /// via the graph. Never a task assignee (invariant I1).
     case person
+    /// A time-boxed sprint (`Cycle`, Tranche 2, Linear L1). `Linkable` for
+    /// graph uniformity; not `Searchable` in v1 (mirrors `ScheduledBlock`).
+    case cycle
+    /// App-managed file metadata. Not `Linkable`; notes derive graph edges to
+    /// this kind from image attachment blocks.
+    case attachment
+    /// A client/account record (`Organization`, universal-types extension). A graph
+    /// endpoint: contacts (`Person`) link to it; `Project.clientID` points at it by raw id.
+    case organization
 
     public var displayName: String {
         switch self {
@@ -34,6 +43,9 @@ public enum ItemKind: String, Codable, Sendable, CaseIterable {
         case .scheduledBlock: return "Scheduled Block"
         case .label: return "Label"
         case .person: return "Person"
+        case .cycle: return "Cycle"
+        case .attachment: return "Attachment"
+        case .organization: return "Organization"
         }
     }
 }

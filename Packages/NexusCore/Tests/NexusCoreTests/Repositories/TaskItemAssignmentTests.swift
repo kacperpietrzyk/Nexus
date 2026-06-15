@@ -215,6 +215,7 @@ struct TaskItemAssignmentTests {
         let section = TaskItem(title: "section", projectID: projectID, sectionID: sectionID)
         let deleted = TaskItem(title: "deleted", projectID: projectID, sectionID: sectionID)
         let otherRoot = TaskItem(title: "other root", projectID: otherProjectID, sectionID: nil)
+        let template = TaskItem(title: "template", projectID: projectID, sectionID: sectionID, isTemplate: true)
         root.createdAt = base
         section.createdAt = base.addingTimeInterval(60)
         deleted.deletedAt = base
@@ -222,8 +223,12 @@ struct TaskItemAssignmentTests {
         context.insert(section)
         context.insert(deleted)
         context.insert(otherRoot)
+        context.insert(template)
         try context.save()
 
+        // Templates carry projectID verbatim but are inert (I-D1): excluded
+        // from both the project-wide and section-scoped board fetches.
         #expect(try repo.tasks(in: projectID).map(\.title) == ["root", "section"])
+        #expect(try repo.tasks(in: projectID, section: sectionID).map(\.title) == ["section"])
     }
 }

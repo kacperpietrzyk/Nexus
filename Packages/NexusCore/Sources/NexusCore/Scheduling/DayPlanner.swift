@@ -40,10 +40,18 @@ public struct DayPlanner {
     public struct Result {
         public let proposals: [ScheduledBlock]
         public let overload: OverloadReport
+        /// Requested task IDs that were NOT re-proposed because the task is no
+        /// longer open (completed or soft-deleted between the conflict scan and
+        /// the replan call). Distinct from `overload.unplacedTaskIDs`: skipped
+        /// tasks are not schedulable at all, so re-proposing them would be
+        /// wrong — but the caller must be able to see the drop. Always empty
+        /// for `planDay` (its candidates are fetched, not requested).
+        public let skippedTaskIDs: [UUID]
 
-        public init(proposals: [ScheduledBlock], overload: OverloadReport) {
+        public init(proposals: [ScheduledBlock], overload: OverloadReport, skippedTaskIDs: [UUID] = []) {
             self.proposals = proposals
             self.overload = overload
+            self.skippedTaskIDs = skippedTaskIDs
         }
     }
 
@@ -74,7 +82,7 @@ public struct DayPlanner {
         let history = openTasks.filter {
             $0.status == .done && $0.durationSource == .explicit && $0.estimatedDurationSeconds != nil
         }
-        let accepted = try acceptedBlocks(now: now, calendar: calendar, horizonDays: horizonDays)
+        let accepted = try obstacleBlocks(now: now, calendar: calendar, horizonDays: horizonDays)
 
         let plan = scheduler.plan(
             candidates: candidates,
@@ -95,6 +103,67 @@ public struct DayPlanner {
         return Result(proposals: persisted, overload: plan.overload)
     }
 
+    /// Targeted re-proposal (M1 "Replan" affordance): schedule ONLY `taskIDs`
+    /// into free slots, treating every other live block in the day — accepted,
+    /// manual, AND other tasks' auto proposals — as hard obstacles. Unlike
+    /// `planDay` it does not clear or regenerate anything else, and it does not
+    /// require the tasks to be in the candidate pool (their now-deleted
+    /// conflicted blocks prove they were planned). Today-only by design (the
+    /// planner is today-only since S2).
+    ///
+    /// Edge case (accepted): if a replanned task still has another live block
+    /// elsewhere, that sibling block is excluded from the obstacle set with the
+    /// rest of the task's blocks.
+    @discardableResult
+    public func replan(
+        taskIDs: [UUID],
+        events: [CalendarEvent],
+        prefs: CalendarPreferences,
+        now: Date,
+        calendar: Calendar
+    ) throws -> Result {
+        let ids = Set(taskIDs)
+        guard !ids.isEmpty else {
+            return Result(
+                proposals: [],
+                overload: OverloadReport(totalEstimatedSeconds: 0, totalFreeSeconds: 0, unplacedTaskIDs: [])
+            )
+        }
+
+        let allTasks = try fetchOpenTasks()
+        let candidates = allTasks.filter { ids.contains($0.id) && $0.status == .open }
+        // Tasks completed or soft-deleted between the conflict scan and this
+        // call produce no candidate. Skipping them is correct (a done task must
+        // not be re-proposed) but the drop must be reported, not silent.
+        let candidateIDs = Set(candidates.map(\.id))
+        let skippedTaskIDs = taskIDs.filter { !candidateIDs.contains($0) }
+        let history = allTasks.filter {
+            $0.status == .done && $0.durationSource == .explicit && $0.estimatedDurationSeconds != nil
+        }
+
+        let dayStart = calendar.startOfDay(for: now)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        let obstacles = try blocks.blocks(from: dayStart, to: dayEnd).filter { !ids.contains($0.taskID) }
+
+        let plan = scheduler.plan(
+            candidates: candidates,
+            events: events,
+            accepted: obstacles,
+            prefs: prefs,
+            estimator: estimator,
+            history: history,
+            now: now,
+            calendar: calendar,
+            horizonDays: 1
+        )
+
+        var persisted: [ScheduledBlock] = []
+        for proposal in plan.proposals {
+            persisted.append(try blocks.persistProposal(proposal))
+        }
+        return Result(proposals: persisted, overload: plan.overload, skippedTaskIDs: skippedTaskIDs)
+    }
+
     // MARK: - Fetch helpers
 
     private func fetchOpenTasks() throws -> [TaskItem] {
@@ -104,15 +173,19 @@ public struct DayPlanner {
         return try context.fetch(descriptor)
     }
 
-    private func acceptedBlocks(now: Date, calendar: Calendar, horizonDays: Int) throws -> [ScheduledBlock] {
+    /// Hard obstacles for the slot-fill: accepted blocks PLUS manual-origin
+    /// proposals — both are user commitments the scheduler plans around and
+    /// never moves (anti-thrash, spec §1/§14).
+    private func obstacleBlocks(now: Date, calendar: Calendar, horizonDays: Int) throws -> [ScheduledBlock] {
         let start = calendar.startOfDay(for: now)
         let days = max(1, horizonDays)
         let end = calendar.date(byAdding: .day, value: days, to: start) ?? start
         let acceptedRaw = ScheduledBlockStatus.accepted.rawValue
+        let manualRaw = ScheduledBlockOrigin.manual.rawValue
         let descriptor = FetchDescriptor<ScheduledBlock>(
             predicate: #Predicate { block in
                 block.deletedAt == nil
-                    && block.statusRaw == acceptedRaw
+                    && (block.statusRaw == acceptedRaw || block.originRaw == manualRaw)
                     && block.start < end
                     && block.end > start
             },
@@ -121,12 +194,17 @@ public struct DayPlanner {
         return try context.fetch(descriptor)
     }
 
-    /// Soft-delete live `proposed` blocks so a re-plan regenerates a clean set.
-    /// Accepted blocks (which mirror real events) are never touched.
+    /// Soft-delete live **auto-origin** `proposed` blocks so a re-plan
+    /// regenerates a clean set. Accepted blocks (which mirror real events) and
+    /// manual-origin proposals (hand-placed by the user, origin preserved
+    /// across re-plans per `ScheduledBlockOrigin.manual`) are never touched.
     private func clearStaleProposals() throws {
         let proposedRaw = ScheduledBlockStatus.proposed.rawValue
+        let autoRaw = ScheduledBlockOrigin.auto.rawValue
         let descriptor = FetchDescriptor<ScheduledBlock>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.statusRaw == proposedRaw }
+            predicate: #Predicate {
+                $0.deletedAt == nil && $0.statusRaw == proposedRaw && $0.originRaw == autoRaw
+            }
         )
         for block in try context.fetch(descriptor) {
             try blocks.softDelete(block)

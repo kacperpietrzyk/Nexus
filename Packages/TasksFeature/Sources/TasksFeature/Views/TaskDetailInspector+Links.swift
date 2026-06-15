@@ -122,6 +122,7 @@ enum TaskParentPickerDataSource {
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { candidate in
                 candidate.deletedAt == nil && candidate.parentTaskID == nil
+                    && candidate.isTemplate == false
             },
             sortBy: [SortDescriptor(\TaskItem.title, order: .forward)]
         )
@@ -500,6 +501,7 @@ extension TaskDetailInspector {
             let descriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate { candidate in
                     candidate.deletedAt == nil && candidate.statusRaw == openStatus
+                        && candidate.isTemplate == false
                 },
                 sortBy: [SortDescriptor(\TaskItem.title, order: .forward)]
             )

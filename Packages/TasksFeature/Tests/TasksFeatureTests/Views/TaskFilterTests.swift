@@ -20,9 +20,22 @@ struct TaskFilterTests {
             .project(id),
             .projectSection(id, UUID()),
             .savedFilter(id),
+            .cycle(id),
         ] {
             _ = TaskListView(filter: filter)
         }
+    }
+
+    @Test("Cycle filter resolves its title from the cycle lookup with a generic fallback")
+    func cycleTitleResolution() {
+        let cycleID = UUID()
+        #expect(TaskFilter.cycle(cycleID).displayTitle == "Cycle")
+        let resolved = TaskFilter.cycle(cycleID).resolvedDisplayTitle(
+            cycleName: { id in id == cycleID ? "Sprint 12" : nil }
+        )
+        #expect(resolved == "Sprint 12")
+        // Archive reset never touches cycle selections.
+        #expect(TaskFilter.cycle(cycleID).replacingArchivedProject(UUID()) == .cycle(cycleID))
     }
 
     @Test("Archive reset handles project and section selections")
@@ -343,10 +356,12 @@ struct TaskFilterTests {
         let deleted = TaskItem(title: "Deleted", projectID: project.id, sectionID: section.id)
         deleted.deletedAt = Date(timeIntervalSinceReferenceDate: 30)
         let other = TaskItem(title: "Other", projectID: UUID())
+        // Templates carry projectID verbatim but are inert (I-D1): never on the board.
+        let template = TaskItem(title: "Template", projectID: project.id, sectionID: section.id, isTemplate: true)
 
         context.insert(project)
         context.insert(section)
-        [rootTask, sectionTask, childTask, deleted, other].forEach(context.insert)
+        [rootTask, sectionTask, childTask, deleted, other, template].forEach(context.insert)
         try context.save()
 
         let projectTasks = try TaskListView.projectTasks(

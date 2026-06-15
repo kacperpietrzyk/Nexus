@@ -71,6 +71,7 @@ final class NotificationViewController: UIViewController, UNNotificationContentE
                     task.statusRaw == "open"
                         && task.deletedAt == nil
                         && task.dueAt != nil
+                        && task.isTemplate == false
                 },
                 sortBy: [SortDescriptor(\.dueAt)]
             )

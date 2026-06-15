@@ -17,6 +17,12 @@ import SwiftData
 /// op, so reconcile never has to refresh labels (no per-load blob churn).
 /// `toggleTodo` drives `complete()`/reopen on the task — the single source of
 /// truth — so the change is visible everywhere the task appears.
+/// Errors thrown by the note-template operations on `NoteRepository`.
+public enum NoteTemplateError: Error, Equatable {
+    /// `instantiateTemplate` was called with a note whose `role != .template`.
+    case notATemplate(noteID: UUID)
+}
+
 @MainActor
 public final class NoteRepository {
     public let context: ModelContext
@@ -96,6 +102,38 @@ public final class NoteRepository {
         broadcastUpsert(for: note)
     }
 
+    /// Persist imported attachment metadata and insert a note image block in one save boundary.
+    @discardableResult
+    public func insertImageAttachment(
+        _ imported: ImportedAttachmentFile,
+        into note: Note,
+        after afterID: UUID?
+    ) throws -> AttachmentAsset {
+        var blocks = try NoteContentCoder.decode(note.contentData)
+        let stamp = now()
+        let asset = AttachmentAsset(
+            id: imported.id,
+            originalFilename: imported.originalFilename,
+            mimeType: imported.mimeType,
+            byteCount: imported.byteCount,
+            sha256: imported.sha256,
+            storagePath: imported.storagePath,
+            createdAt: stamp,
+            updatedAt: stamp
+        )
+        context.insert(asset)
+
+        let block = Block(kind: .image(ref: asset.id, asset: asset.storagePath))
+        blocks = Self.inserting(block, after: afterID, in: blocks)
+        note.contentData = try NoteContentCoder.encode(blocks)
+        note.updatedAt = stamp
+
+        try reconciler.reconcile(note)
+        try context.save()
+        broadcastUpsert(for: note)
+        return asset
+    }
+
     /// Update scalar fields (title/tags/role); content is untouched. Still drives
     /// reconcile so a `role` change (free → projectPage) re-homes new todos.
     public func updateFields(
@@ -111,6 +149,128 @@ public final class NoteRepository {
         try reconciler.reconcile(note)
         try context.save()
         broadcastUpsert(for: note)
+    }
+
+    // MARK: - Organization (Tranche 2 Plan E: properties + folders)
+
+    /// Replace the note's custom property bag (spec §4.4). The single write path
+    /// for `Note.propertiesJSON` — views and agent tools never write the blob.
+    /// Keys are unique case-sensitively: the editor enforces uniqueness up front;
+    /// defensively, duplicates collapse last-value-wins at the first occurrence's
+    /// position so caller order stays deterministic. No reconcile / no index
+    /// broadcast: properties are not part of `searchableText` v1 (spec §6.2).
+    public func updateProperties(_ note: Note, properties: [NoteProperty]) throws {
+        var order: [String] = []
+        var valuesByKey: [String: NotePropertyValue] = [:]
+        for property in properties {
+            if valuesByKey[property.key] == nil { order.append(property.key) }
+            valuesByKey[property.key] = property.value
+        }
+        note.properties = order.compactMap { key in
+            valuesByKey[key].map { NoteProperty(key: key, value: $0) }
+        }
+        note.updatedAt = now()
+        try context.save()
+    }
+
+    /// Move a note to a folder (spec §4.5). `rawPath` is normalized through
+    /// `NoteFolderPath.normalize`; nil / empty / all-junk input means root.
+    /// A no-op (no save, no `updatedAt` churn) when the normalized path is
+    /// unchanged. No reconcile / no index broadcast — folder placement is not
+    /// indexed v1.
+    public func setFolderPath(_ note: Note, _ rawPath: String?) throws {
+        let normalized = NoteFolderPath.normalize(rawPath)
+        guard normalized != note.folderPath else { return }
+        note.folderPath = normalized
+        note.updatedAt = now()
+        try context.save()
+    }
+
+    /// Rename/move a derived folder (spec §4.5): one prefix rewrite over every
+    /// live note whose `folderPath == old || hasPrefix(old + "/")`, ONE save.
+    /// Returns the number of notes rewritten. A target that normalizes to nil
+    /// (empty/junk) is rejected as a no-op — use `removeFolder` to dissolve a
+    /// folder to root. Tombstoned notes are left untouched.
+    @discardableResult
+    public func renameFolder(from oldRaw: String, to newRaw: String) throws -> Int {
+        guard
+            let old = NoteFolderPath.normalize(oldRaw),
+            let new = NoteFolderPath.normalize(newRaw),
+            old != new
+        else { return 0 }
+        let prefix = old + "/"
+        let stamp = now()
+        var moved = 0
+        let live = try context.fetch(
+            FetchDescriptor<Note>(predicate: #Predicate { $0.deletedAt == nil })
+        )
+        for note in live {
+            guard let path = note.folderPath else { continue }
+            if path == old {
+                note.folderPath = new
+            } else if path.hasPrefix(prefix) {
+                note.folderPath = new + "/" + String(path.dropFirst(prefix.count))
+            } else {
+                continue
+            }
+            note.updatedAt = stamp
+            moved += 1
+        }
+        if moved > 0 { try context.save() }
+        return moved
+    }
+
+    /// Remove a derived folder, KEEPING its notes (spec §4.5 "remove folder
+    /// (keep notes)"): every live note at the path or under it moves to root
+    /// (`folderPath = nil`), ONE save. Never deletes a note. Returns the number
+    /// of notes moved.
+    @discardableResult
+    public func removeFolder(_ rawPath: String) throws -> Int {
+        guard let target = NoteFolderPath.normalize(rawPath) else { return 0 }
+        let prefix = target + "/"
+        let stamp = now()
+        var moved = 0
+        let live = try context.fetch(
+            FetchDescriptor<Note>(predicate: #Predicate { $0.deletedAt == nil })
+        )
+        for note in live {
+            guard let path = note.folderPath, path == target || path.hasPrefix(prefix) else { continue }
+            note.folderPath = nil
+            note.updatedAt = stamp
+            moved += 1
+        }
+        if moved > 0 { try context.save() }
+        return moved
+    }
+
+    /// Instantiate a note template (Tranche 2 Plan D, Obsidian O3 — spec §4.3):
+    /// copy `contentData`/`plainText`/`tags`/`propertiesJSON` into a fresh
+    /// `.free` note; `folderPath` is copied verbatim; fresh id/timestamps.
+    ///
+    /// The copy is inserted WITHOUT reconcile, following the
+    /// `duplicatedNoteRef` (T1) precedent: the template's derived graph edges
+    /// (e.g. `containsTask` for embedded todos) are NOT mirrored onto the
+    /// copy, so instantiation can never cross-link the template's tasks.
+    /// `plainText` is copied verbatim, so list/search stay consistent without
+    /// a reconcile pass.
+    @discardableResult
+    public func instantiateTemplate(_ template: Note) throws -> Note {
+        guard template.role == .template else {
+            throw NoteTemplateError.notATemplate(noteID: template.id)
+        }
+        let copy = Note(
+            title: template.title,
+            contentData: template.contentData,
+            plainText: template.plainText,
+            role: .free,
+            tags: template.tags
+        )
+        copy.propertiesJSON = template.propertiesJSON
+        copy.folderPath = template.folderPath
+        context.insert(copy)
+        try context.save()
+        broadcastUpsert(for: copy)
+        return copy
     }
 
     /// Recompute-on-load (spec §6.2): repair any blob↔graph drift from a crash
@@ -167,6 +327,28 @@ public final class NoteRepository {
         for observer in observers {
             _Concurrency.Task { await observer.didSoftDelete(kind: .note, id: id) }
         }
+    }
+
+    /// Every soft-deleted note (tombstones), most-recently-deleted first. Backs the
+    /// in-app Trash UI (recovery is otherwise MCP-only). The cross-object mirror
+    /// (`Link`/`TaskItem.noteRef`/`Project.canonicalNoteRef`) was already detached by
+    /// `delete`; restoring re-creates content edges lazily on the next reconcile.
+    public func fetchDeleted() throws -> [Note] {
+        try context.fetch(FetchDescriptor<Note>())
+            .filter { $0.deletedAt != nil }
+            .sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
+    }
+
+    /// Restore a soft-deleted note: clear its tombstone, reconcile (re-mirrors the
+    /// note's own `containsTask`/`mentions` edges from its surviving blocks), save,
+    /// and re-index. Inverse of `delete` for the note row itself; incoming links that
+    /// other objects dropped are not resurrected (their owners repair those).
+    public func restore(_ note: Note) throws {
+        note.deletedAt = nil
+        note.updatedAt = now()
+        try reconciler.reconcile(note)
+        try context.save()
+        broadcastUpsert(for: note)
     }
 
     // MARK: - Checkbox → Task seam (§7)
@@ -294,5 +476,15 @@ public final class NoteRepository {
         id: UUID
     ) throws -> Model? {
         try context.fetch(FetchDescriptor<Model>()).first { $0.id == id && $0.deletedAt == nil }
+    }
+
+    private static func inserting(_ block: Block, after afterID: UUID?, in blocks: [Block]) -> [Block] {
+        guard let afterID, let index = blocks.firstIndex(where: { $0.id == afterID }) else {
+            return blocks + [block]
+        }
+
+        var updated = blocks
+        updated.insert(block, at: index + 1)
+        return updated
     }
 }

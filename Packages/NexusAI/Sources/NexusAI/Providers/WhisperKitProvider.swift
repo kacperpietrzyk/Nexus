@@ -31,6 +31,9 @@ public final class WhisperKitProvider: AIProvider {
     /// quality/speed multilingual tradeoff (Polish meetings) on Apple silicon.
     public static let modelVariant = "openai_whisper-large-v3-v20240930_turbo"
 
+    /// The canonical WhisperKit variant the app downloads — exposed for the model-store reconciler.
+    public static var modelVariantPublic: String { modelVariant }
+
     /// UserDefaults key holding the on-disk path of the downloaded variant
     /// folder. Written by ``WhisperKitModelDownloadCoordinator`` on success and
     /// read by every no-arg `WhisperKitProvider()` (the composition graph and
@@ -157,6 +160,18 @@ public final class WhisperKitProvider: AIProvider {
     /// the download button and the "Local" badge agree.
     public static func isModelDownloaded() -> Bool {
         isUsableLocalModelFolder(defaultLocalModelFolder())
+    }
+
+    /// Removes the downloaded WhisperKit model folder (no delete path existed before) and
+    /// clears the persisted path key, so `isModelDownloaded()` reads false and the model
+    /// re-downloads on next transcription. Returns the freed byte count.
+    @discardableResult
+    public static func deleteDownloadedModel() -> Int64 {
+        guard let folder = defaultLocalModelFolder() else { return 0 }
+        let size = LiveHFFetcher.directorySize(at: folder)
+        try? FileManager.default.removeItem(at: folder)
+        UserDefaults.standard.removeObject(forKey: modelFolderDefaultsKey)
+        return FileManager.default.fileExists(atPath: folder.path) ? 0 : size
     }
 
     /// A usable model folder has the three CoreML models present (compiled

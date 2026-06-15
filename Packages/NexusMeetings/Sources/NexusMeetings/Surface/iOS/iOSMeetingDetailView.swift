@@ -24,13 +24,14 @@ public struct iOSMeetingDetailView: View {  // swiftlint:disable:this type_name
 
     public var body: some View {
         VStack(spacing: 0) {
-            Picker("Meeting detail tab", selection: $selectedTab) {
-                Text("Summary").tag(Tab.summary)
-                Text("Transcript").tag(Tab.transcript)
-                Text("Actions").tag(Tab.actions)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            NexusSegmentedControl(
+                items: [
+                    .init(id: Tab.summary, label: "Summary"),
+                    .init(id: Tab.transcript, label: "Transcript"),
+                    .init(id: Tab.actions, label: "Actions"),
+                ],
+                selection: $selectedTab
+            )
             .padding()
 
             Rectangle()
@@ -39,9 +40,24 @@ public struct iOSMeetingDetailView: View {  // swiftlint:disable:this type_name
 
             tabContent
         }
-        .background(NexusColor.Background.base)
+        // Liquid: transparent so the shell aurora reads behind the detail.
+        .background(Color.clear)
         .navigationTitle(meeting?.title ?? "Meeting")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let meeting {
+                ToolbarItem(placement: .topBarTrailing) {
+                    // Same document the Mac detail pane shares — system share
+                    // sheet via ShareLink (C1 parity). Default ShareLink label
+                    // (share icon) matches the platform idiom.
+                    ShareLink(
+                        item: meeting.exportMarkdownDocument(
+                            in: composition.meetingRepository.context)
+                    )
+                    .accessibilityLabel("Share meeting as Markdown")
+                }
+            }
+        }
         .onAppear {
             reload()
         }

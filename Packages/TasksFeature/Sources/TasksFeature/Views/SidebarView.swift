@@ -73,11 +73,28 @@ public struct SidebarView: View {
                         selection = .tasks
                     }
 
+                    CyclesSidebarSection(
+                        selection: $taskFilter,
+                        onSelect: {
+                            selection = .tasks
+                        })
+
                     SmartListsSidebarSection(
                         selection: $taskFilter,
                         onSelect: {
                             selection = .tasks
                         })
+
+                    SidebarRow(
+                        title: "Templates",
+                        systemImage: "doc.on.doc",
+                        count: nil,
+                        isSelected: selection == .tasks && taskFilter == .templates,
+                        action: {
+                            taskFilter = .templates
+                            selection = .tasks
+                        }
+                    )
 
                     SidebarRow(
                         title: "Statystyki",

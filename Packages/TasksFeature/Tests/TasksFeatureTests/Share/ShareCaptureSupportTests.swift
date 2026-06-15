@@ -64,4 +64,22 @@ struct ShareCaptureSupportTests {
             _ = try ShareTaskBuilder.task(from: ParseResult(title: "   "))
         }
     }
+
+    @MainActor
+    @Test("task construction resolves the project token when a resolver is supplied")
+    func taskConstructionResolvesProject() throws {
+        let nexusID = UUID()
+        let result = ParseResult(title: "Ship build", projectToken: "Nexus", confidence: 0.95)
+
+        let resolved = try ShareTaskBuilder.task(from: result) { token in
+            token == "Nexus" ? nexusID : nil
+        }
+        #expect(resolved.projectID == nexusID)
+
+        let unresolved = try ShareTaskBuilder.task(from: result) { _ in nil }
+        #expect(unresolved.projectID == nil)
+
+        let withoutResolver = try ShareTaskBuilder.task(from: result)
+        #expect(withoutResolver.projectID == nil)
+    }
 }

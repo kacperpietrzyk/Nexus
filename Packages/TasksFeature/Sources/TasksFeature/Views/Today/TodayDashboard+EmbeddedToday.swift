@@ -246,6 +246,7 @@ extension TodayDashboard {
                 embeddedErrorRow(embeddedError)
             }
             deadlineRiskBanner()  // spec §19.1 D1; see +EmbeddedAlerts
+            insightBanner()  // proactive insights; see +Insights
 
             if !embeddedTodayTasks.isEmpty {
                 embeddedSection(eyebrow: "TODAY", count: embeddedTodayTasks.count) {
@@ -444,9 +445,15 @@ extension TodayDashboard {
                 NexusCount(value: count, font: NexusType.mono, color: NexusColor.Text.disabled)
                 Spacer()
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 6)
-            rows()
+            .padding(.horizontal, 4)
+            .padding(.bottom, 8)
+            // Touch Liquid: group the section's rows in a light glass card over
+            // the shell aurora (the Mac dashboard idiom) instead of bare rows.
+            VStack(spacing: 0) {
+                rows()
+            }
+            .padding(.vertical, 4)
+            .liquidLightCard(cornerRadius: NexusRadius.r3)
         }
     }
 

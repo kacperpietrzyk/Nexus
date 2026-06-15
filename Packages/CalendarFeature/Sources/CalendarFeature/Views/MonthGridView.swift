@@ -101,6 +101,7 @@ struct MonthGridView: View {
         case .event: return item.colorHex.flatMap { Color(calendarHexDesaturated: $0) } ?? NexusColor.Text.tertiary
         case .proposedBlock: return NexusColor.Text.muted
         case .acceptedBlock: return NexusColor.Accent.lime
+        case .seriesPreview: return NexusColor.Text.muted
         }
     }
 

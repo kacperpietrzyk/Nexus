@@ -38,6 +38,11 @@ public struct TasksListTool: AgentTool {
                         maximum: 4,
                         description: "MCP priority floor: 1=high, 2=medium, 3=low, 4=none. Returns tasks at or above this priority."
                     ),
+                    "include_templates": .boolean(
+                        description: "If true, template tasks (isTemplate == true) are included. "
+                            + "Defaults to false — templates are inert blueprints and excluded "
+                            + "from operational listings."
+                    ),
                 ],
                 required: [],
                 description: "Optional task filters."
@@ -72,6 +77,8 @@ public struct TasksListTool: AgentTool {
         let overdueOnly = try boolValue(filter["overdue"], field: "filter.overdue", default: false)
         let deadlineWithinDays = try positiveIntValue(filter["deadline_within"], field: "filter.deadline_within")
         let priorityAtLeast = try priorityFloor(filter["priority_at_least"])
+        let includeTemplates = try boolValue(
+            filter["include_templates"], field: "filter.include_templates", default: false)
         let limit = try TasksToolArguments.boundedInt(
             args["limit"],
             field: "limit",
@@ -100,6 +107,7 @@ public struct TasksListTool: AgentTool {
                 && matchesOverdue(task, overdueOnly: overdueOnly, now: now)
                 && matchesDeadlineWithin(task, days: deadlineWithinDays, now: now)
                 && matchesPriorityAtLeast(task, floor: priorityAtLeast)
+                && (includeTemplates || !task.isTemplate)
         }
         tasks.sort { lhs, rhs in
             compare(lhs, rhs, sort: sort)

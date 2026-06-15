@@ -12,7 +12,7 @@ struct AgentLinkItemsToolTests {
     func linkItemsCreatesLinkRowWithRealEnumValues() async throws {
         let harness = try LinkToolHarness.make()
         let tool = AgentLinkItemsTool(context: harness.modelContext)
-        let fromID = UUID()
+        let fromID = try harness.insertLiveTask()
         let toID = UUID()
 
         let output = try await tool.call(
@@ -40,7 +40,7 @@ struct AgentLinkItemsToolTests {
     func duplicateLinkItemsIsIdempotent() async throws {
         let harness = try LinkToolHarness.make()
         let tool = AgentLinkItemsTool(context: harness.modelContext)
-        let fromID = UUID()
+        let fromID = try harness.insertLiveTask()
         let toID = UUID()
         let input = Self.input(fromID: fromID, toID: toID, linkKind: "mentions")
 
@@ -67,7 +67,7 @@ struct AgentLinkItemsToolTests {
     @Test
     func undoingDuplicateLinkDispatchKeepsOriginalLink() async throws {
         let harness = try LinkToolHarness.make()
-        let input = Self.input(fromID: UUID(), toID: UUID(), linkKind: "source")
+        let input = Self.input(fromID: try harness.insertLiveTask(), toID: UUID(), linkKind: "source")
         let threadID = UUID()
 
         let first = try await harness.dispatcher.dispatch(
@@ -104,7 +104,7 @@ struct AgentLinkItemsToolTests {
         let harness = try LinkToolHarness.make()
         let linkTool = AgentLinkItemsTool(context: harness.modelContext)
         let unlinkTool = AgentUnlinkItemsTool(context: harness.modelContext)
-        let fromID = UUID()
+        let fromID = try harness.insertLiveTask()
         let toID = UUID()
         let matchingInput = Self.input(fromID: fromID, toID: toID, linkKind: "blocks")
         let otherKindInput = Self.input(fromID: fromID, toID: toID, linkKind: "mentions")
@@ -192,6 +192,15 @@ private struct LinkToolHarness {
     let agentContext: AgentContext
     let dispatcher: ToolDispatcher
     let coordinator: AgentUndoCoordinator
+
+    /// `agent.link_items` now existence-checks both endpoints, so `.task`
+    /// endpoints must be live rows (`.agentMemory` stays pass-through).
+    func insertLiveTask() throws -> UUID {
+        let task = TaskItem(title: "live endpoint")
+        modelContext.insert(task)
+        try modelContext.save()
+        return task.id
+    }
 
     static func make() throws -> LinkToolHarness {
         let schema = Schema([

@@ -20,6 +20,11 @@ public struct MarkdownDocument: Sendable {
     public let createdAt: Date
     public let updatedAt: Date
     public let deletedAt: Date?
+    /// Extra frontmatter fields emitted after `deletedAt` and before `links`
+    /// (e.g. a meeting's `startedAt`/`attendees` — see `MarkdownExportRenderable`).
+    /// Caller-supplied order is preserved — same determinism contract as the
+    /// base fields.
+    public let extraFrontmatter: [(String, FrontmatterValue)]
     public let outgoingLinks: [LinkRef]
     public let body: String
 
@@ -30,6 +35,7 @@ public struct MarkdownDocument: Sendable {
         createdAt: Date,
         updatedAt: Date,
         deletedAt: Date?,
+        extraFrontmatter: [(String, FrontmatterValue)] = [],
         outgoingLinks: [LinkRef],
         body: String
     ) {
@@ -39,6 +45,7 @@ public struct MarkdownDocument: Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
+        self.extraFrontmatter = extraFrontmatter
         self.outgoingLinks = outgoingLinks
         self.body = body
     }
@@ -54,6 +61,7 @@ public struct MarkdownDocument: Sendable {
             ("updatedAt", .date(updatedAt)),
             ("deletedAt", deletedAt.map { .date($0) } ?? .none),
         ]
+        fields.append(contentsOf: extraFrontmatter)
         let sortedLinks = outgoingLinks.sorted {
             ($0.toKind.rawValue, $0.toID.uuidString, $0.linkKind.rawValue)
                 < ($1.toKind.rawValue, $1.toID.uuidString, $1.linkKind.rawValue)

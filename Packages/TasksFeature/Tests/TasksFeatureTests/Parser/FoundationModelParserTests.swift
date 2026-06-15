@@ -100,6 +100,67 @@ struct FoundationModelParserTests {
         #expect(provider.generateCallCount == 1)
     }
 
+    @Test("maps project field into projectToken, stripping a leading @")
+    func mapsProjectToken() async {
+        let json = #"{"title":"ship build","project":"@Nexus"}"#
+        let provider = FakeAIProvider(
+            id: .appleIntelligence,
+            isAvailableOnThisPlatform: true,
+            responseText: json
+        )
+        let parser = FoundationModelParser(router: makeRouter(provider: provider))
+        let result = await parser.parse(
+            "ship build @Nexus", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == "Nexus")
+    }
+
+    @Test("diacritic project token passes through the @-strip unchanged")
+    func diacriticProjectToken() async {
+        let json = #"{"title":"spin up looms","project":"@Prząśnik"}"#
+        let provider = FakeAIProvider(
+            id: .appleIntelligence,
+            isAvailableOnThisPlatform: true,
+            responseText: json
+        )
+        let parser = FoundationModelParser(router: makeRouter(provider: provider))
+        let result = await parser.parse(
+            "spin up looms @Prząśnik", locale: Locale(identifier: "pl"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == "Prząśnik")
+    }
+
+    @Test("FM multi-word project token is preserved verbatim (diverges from handcoded single-word invariant)")
+    func multiWordProjectTokenPreserved() async {
+        // The handcoded tokenizer can only ever emit single-word tokens
+        // (whitespace-split). The FM path has no such constraint — the model
+        // may return the project's full name. Pin: the multi-word token passes
+        // through unchanged, so it resolves downstream via the repository's
+        // exact-name pass (see ProjectRepositoryTests).
+        let json = #"{"title":"ship build","project":"Side Project"}"#
+        let provider = FakeAIProvider(
+            id: .appleIntelligence,
+            isAvailableOnThisPlatform: true,
+            responseText: json
+        )
+        let parser = FoundationModelParser(router: makeRouter(provider: provider))
+        let result = await parser.parse(
+            "ship build @SideProject", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == "Side Project")
+    }
+
+    @Test("empty or whitespace project maps to nil projectToken")
+    func emptyProjectIsNil() async {
+        let json = #"{"title":"ship build","project":"  "}"#
+        let provider = FakeAIProvider(
+            id: .appleIntelligence,
+            isAvailableOnThisPlatform: true,
+            responseText: json
+        )
+        let parser = FoundationModelParser(router: makeRouter(provider: provider))
+        let result = await parser.parse(
+            "ship build", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.projectToken == nil)
+    }
+
     @Test("strips leading # from FM-emitted tags so output matches handcoded parser")
     func tagNormalizationMatchesHandcoded() async {
         let input = "buy bread #Shopping #work/projectA"

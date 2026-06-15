@@ -45,15 +45,11 @@ extension TodayDashboard {
         .padding(18)
         .frame(width: 320)
         .frame(maxHeight: .infinity, alignment: .top)
-        // Match the Inbox reader pane's container exactly (one right-pane idiom):
-        // r3 corner + Background.raised + Line.regular + s1 contained shadow. Was
-        // r18 + an off-system raw `.black.opacity(0.42)` r22 diffuse glow.
-        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: NexusRadius.r3, style: .continuous)
-                .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
-        }
-        .nexusShadow(NexusShadow.s1)
+        // Liquid re-skin (container level): keep the Inbox reader pane's
+        // right-pane idiom (r3 corner), but the liquid glass card recipe
+        // replaces the opaque `Background.raised` slab + manual Line.regular
+        // stroke + s1 shadow (the slab clashed inside the glass content shell).
+        .liquidGlass(.card, radius: NexusRadius.r3)
     }
 
     /// A single timeline block in fractional-hour coordinates on the full-day
@@ -478,7 +474,7 @@ private struct EmbeddedDayTimeline: View {
                 * (0.5 + 0.5
                     * sin(
                         now.timeIntervalSinceReferenceDate
-                            / NexusMotion.breathePeriod * 2 * .pi))
+                            / DS.Motion.breathePeriod * 2 * .pi))
         let ny = y(nowFrac)
         var nline = Path()
         nline.move(to: CGPoint(x: gutter, y: ny))

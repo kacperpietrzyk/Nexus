@@ -2,7 +2,7 @@ import Foundation
 import NexusMeetings
 
 @MainActor
-final class HelperToastBridge {
+final class HelperToastBridge: MeetingHelperControlling {
     private let xpcClient: MeetingsHelperXPCClient
     private let router: MeetingNavigationRouter
     private var observer: NSObjectProtocol?
@@ -12,9 +12,19 @@ final class HelperToastBridge {
         self.router = router
     }
 
+    /// App→helper control path: the helper owns the recordings and its own
+    /// processing queue, so cancelling processing must go over XPC. This is the
+    /// real control action that drives the otherwise-held XPC client.
+    func cancelProcessing(meetingID: UUID) {
+        xpcClient.connect().cancelProcessing(meetingID: meetingID.uuidString as NSString) { error in
+            if let error {
+                NSLog("Nexus meetings cancel-processing failed: %@", error.localizedDescription)
+            }
+        }
+    }
+
     func start() {
         guard observer == nil else { return }
-        _ = xpcClient
         let name = Notification.Name("com.kacperpietrzyk.nexus.meetings.openMeeting")
         observer = DistributedNotificationCenter.default().addObserver(
             forName: name,

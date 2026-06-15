@@ -87,7 +87,7 @@ public final class SavedFilterRepository {
         let openStatus = TaskStatus.open.rawValue
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { task in
-                task.deletedAt == nil && task.statusRaw == openStatus
+                task.deletedAt == nil && task.statusRaw == openStatus && task.isTemplate == false
             }
         )
         return try context.fetch(descriptor)

@@ -16,6 +16,7 @@ public struct TodayQuery: Sendable {
             task.deletedAt == nil
                 && task.statusRaw == openStatus
                 && task.dueAt != nil
+                && task.isTemplate == false
         }
         return TaskBucket(
             predicate: predicate,
@@ -40,6 +41,7 @@ public struct TodayQuery: Sendable {
             task.deletedAt == nil
                 && task.statusRaw == openStatus
                 && task.dueAt != nil
+                && task.isTemplate == false
         }
         return TaskBucket(
             predicate: predicate,
@@ -63,6 +65,7 @@ public struct TodayQuery: Sendable {
             task.deletedAt == nil
                 && task.statusRaw == openStatus
                 && task.dueAt == nil
+                && task.isTemplate == false
         }
         return TaskBucket(
             predicate: predicate,
@@ -87,7 +90,7 @@ public struct TodayQuery: Sendable {
     ) throws -> [AwaitingEntry] {
         let openStatus = TaskStatus.open.rawValue
         let openPredicate = #Predicate<TaskItem> { task in
-            task.deletedAt == nil && task.statusRaw == openStatus
+            task.deletedAt == nil && task.statusRaw == openStatus && task.isTemplate == false
         }
         let openTasks = try modelContext.fetch(FetchDescriptor<TaskItem>(predicate: openPredicate))
         // Synced entities cannot use @Attribute(.unique) (CloudKit forbids it), so two open

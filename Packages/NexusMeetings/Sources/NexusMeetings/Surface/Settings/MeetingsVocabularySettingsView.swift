@@ -24,16 +24,16 @@ public struct MeetingsVocabularySettingsView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader("Custom vocabulary")
-            NexusSettingsCard {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            LiquidGlassCard("Custom vocabulary") {
                 VStack(alignment: .leading, spacing: 0) {
                     if entries.isEmpty {
                         emptyRow
                     } else {
                         ForEach(entries) { entry in
                             entryRow(entry)
-                            NexusSettingsDivider()
+                            Divider()
+                                .overlay(DS.ColorToken.strokeHairline)
                         }
                     }
                     addRow
@@ -46,8 +46,8 @@ public struct MeetingsVocabularySettingsView: View {
                     + "the final transcript (e.g. \u{201C}threat forge\u{201D} \u{2192} "
                     + "\u{201C}ThreatForge\u{201D})."
             )
-            .font(NexusType.meta)
-            .foregroundStyle(NexusColor.Text.muted)
+            .font(DS.FontToken.caption)
+            .foregroundStyle(DS.ColorToken.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
         }
         .onAppear {
@@ -57,61 +57,62 @@ public struct MeetingsVocabularySettingsView: View {
 
     private var emptyRow: some View {
         Text("No custom terms yet.")
-            .font(NexusType.bodySmall)
-            .foregroundStyle(NexusColor.Text.muted)
-            .padding(.horizontal, NexusSpacing.s4)
+            .font(DS.FontToken.body)
+            .foregroundStyle(DS.ColorToken.textMuted)
+            .padding(.horizontal, DS.Space.l)
             .frame(minHeight: 44, alignment: .leading)
     }
 
     private func entryRow(_ entry: CustomVocabularyEntry) -> some View {
-        NexusSettingsRow(entry.term) {
-            HStack(spacing: NexusSpacing.s3) {
+        HStack {
+            Text(entry.term)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+            Spacer()
+            HStack(spacing: DS.Space.m) {
                 if !entry.replacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Image(systemName: "arrow.right")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(NexusColor.Text.disabled)
+                        .foregroundStyle(DS.ColorToken.textMuted)
                     Text(entry.replacement)
-                        .font(NexusType.bodySmall)
-                        .foregroundStyle(NexusColor.Text.secondary)
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
                 }
                 Button {
                     remove(entry)
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(NexusColor.Status.danger)
+                        .foregroundStyle(DS.ColorToken.statusDanger)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Remove \(entry.term)")
             }
         }
+        .frame(minHeight: 44)
     }
 
     private var addRow: some View {
-        HStack(spacing: NexusSpacing.s3) {
-            TextField("Spoken term", text: $newTerm)
-                .textFieldStyle(.roundedBorder)
-                .font(NexusType.bodySmall)
+        HStack(spacing: DS.Space.m) {
+            NexusTextField("Spoken term", text: $newTerm)
             Image(systemName: "arrow.right")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(NexusColor.Text.disabled)
-            TextField("Replacement", text: $newReplacement)
-                .textFieldStyle(.roundedBorder)
-                .font(NexusType.bodySmall)
+                .foregroundStyle(DS.ColorToken.textMuted)
+            NexusTextField("Replacement", text: $newReplacement)
             Button {
                 add()
             } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(
-                        trimmedNewTerm.isEmpty ? NexusColor.Text.disabled : NexusColor.Text.secondary
+                        trimmedNewTerm.isEmpty ? DS.ColorToken.textMuted : DS.ColorToken.textSecondary
                     )
             }
             .buttonStyle(.plain)
             .disabled(trimmedNewTerm.isEmpty)
             .accessibilityLabel("Add term")
         }
-        .padding(.horizontal, NexusSpacing.s4)
+        .padding(.horizontal, DS.Space.l)
         .frame(minHeight: 44)
     }
 

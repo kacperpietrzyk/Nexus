@@ -60,6 +60,80 @@ import Testing
     #expect(await recorder.events == ["start:first", "end:first", "start:second", "end:second"])
 }
 
+@Test func queueCancelRemovesPendingJobForMeeting() async throws {
+    let queue = PipelineQueue()
+    let recorder = QueueRunRecorder()
+    let blockerID = UUID()
+    let cancelID = UUID()
+    let release = Gate()
+
+    // First job blocks the queue so the second stays pending and can be cancelled
+    // before it ever runs.
+    await queue.enqueue(meetingID: blockerID) {
+        await recorder.start("blocker")
+        await release.wait()
+        await recorder.end("blocker")
+    }
+    await queue.enqueue(meetingID: cancelID) {
+        await recorder.start("cancelled")
+        await recorder.end("cancelled")
+    }
+
+    await queue.cancelProcessing(meetingID: cancelID)
+    await release.open()
+    try await queue.waitUntilEmpty()
+
+    // The cancelled meeting's pending job never started.
+    #expect(await recorder.events == ["start:blocker", "end:blocker"])
+}
+
+@Test func queueCancelSignalsRunningJobForMeeting() async throws {
+    let queue = PipelineQueue()
+    let observed = CancellationObserver()
+    let runningID = UUID()
+    let started = Gate()
+
+    await queue.enqueue(meetingID: runningID) {
+        await started.open()
+        // Spin until the queue cancels this job's task.
+        while Task.isCancelled == false {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        await observed.record(Task.isCancelled)
+    }
+
+    await started.wait()
+    await queue.cancelProcessing(meetingID: runningID)
+    try await queue.waitUntilEmpty()
+
+    #expect(await observed.wasCancelled == true)
+}
+
+private actor Gate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func open() {
+        isOpen = true
+        let pending = waiters
+        waiters = []
+        for waiter in pending { waiter.resume() }
+    }
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+}
+
+private actor CancellationObserver {
+    private(set) var wasCancelled = false
+
+    func record(_ cancelled: Bool) {
+        wasCancelled = cancelled
+    }
+}
+
 private actor Counter {
     var value = 0
 

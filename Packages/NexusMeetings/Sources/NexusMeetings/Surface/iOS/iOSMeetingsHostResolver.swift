@@ -2,7 +2,6 @@
 import SwiftUI
 
 public struct iOSMeetingsHostResolver: View {  // swiftlint:disable:this type_name
-    @Environment(\.horizontalSizeClass) private var sizeClass
     private let composition: MeetingsComposition
 
     public init(composition: MeetingsComposition) {
@@ -10,11 +9,7 @@ public struct iOSMeetingsHostResolver: View {  // swiftlint:disable:this type_na
     }
 
     public var body: some View {
-        if sizeClass == .regular {
-            iOSMeetingsListView(composition: composition)
-        } else {
-            EmptyView()
-        }
+        iOSMeetingsListView(composition: composition)
     }
 }
 #endif

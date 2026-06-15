@@ -52,6 +52,16 @@ extension TaskListView {
     /// composes uniformly with every `TaskFilter` case — no `TaskFilter` cases
     /// added (advisor note: refinement-within-a-list, not a new destination).
     @MainActor
+    /// Liquid re-skin (container level): the list container + rows are
+    /// transparent so the shell paints the canvas behind them — on macOS the
+    /// shell glass panel, on iOS the aurora + a light-glass list panel (the touch
+    /// Liquid pass, mirroring `LiquidTodayScreen`). An opaque `Background.base`
+    /// here read as a black slab over both. (Lives here, not in TaskListView.swift,
+    /// for that file's `file_length` headroom.)
+    var containerBackground: Color {
+        Color.clear
+    }
+
     func applyRefinement() {
         guard refinement.isActive else { return }
         let labeledIDs = refinement.labeledTaskIDs(in: modelContext)
@@ -66,30 +76,41 @@ extension TaskListView {
 }
 
 /// Compact filter bar above the task list: a label menu (grouped) and an agent
-/// menu. Achromatic chrome; a single "Clear" affordance when active.
+/// menu as Liquid glass chips; a single "Clear" affordance when active.
 struct TaskListFilterBar: View {
     @Binding var refinement: TaskListRefinement
     let availableLabels: [TaskLabel]
 
     var body: some View {
         if !availableLabels.isEmpty {
-            HStack(spacing: 8) {
+            HStack(spacing: DS.Space.s) {
                 labelMenu
                 agentMenu
                 if refinement.isActive {
                     Button("Clear") { refinement = TaskListRefinement() }
                         .buttonStyle(.plain)
-                        .font(NexusType.caption)
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .font(DS.FontToken.caption)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                         .accessibilityLabel("Clear filters")
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(NexusColor.Background.base)
-            .tint(NexusColor.Text.primary)
+            .padding(.horizontal, DS.Space.l)
+            .padding(.vertical, DS.Space.s)
+            .background(barBackground)
+            .tint(DS.ColorToken.textPrimary)
         }
+    }
+
+    /// Liquid re-skin (container level): transparent on macOS so the bar sits
+    /// on the shell's glass content panel (the opaque base read as a black
+    /// strip over glass); iOS keeps the opaque Linear base under its own shell.
+    private var barBackground: Color {
+        #if os(macOS)
+        return Color.clear
+        #else
+        return NexusColor.Background.base
+        #endif
     }
 
     private var labelMenu: some View {
@@ -106,8 +127,15 @@ struct TaskListFilterBar: View {
                 }
             }
         } label: {
-            filterChip(systemImage: "tag", text: selectedLabelName ?? "Label")
+            LiquidFilterChip(
+                systemImage: "tag",
+                text: selectedLabelName ?? "Label",
+                isActive: refinement.labelID != nil
+            )
         }
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     private var agentMenu: some View {
@@ -117,12 +145,15 @@ struct TaskListFilterBar: View {
                 Button(agentName(agent)) { refinement.agent = agent }
             }
         } label: {
-            filterChip(systemImage: "person", text: refinement.agent.map(agentName) ?? "Agent")
+            LiquidFilterChip(
+                systemImage: "person",
+                text: refinement.agent.map(agentName) ?? "Agent",
+                isActive: refinement.agent != nil
+            )
         }
-    }
-
-    private func filterChip(systemImage: String, text: String) -> some View {
-        NexusChip(text, systemImage: systemImage, tone: .neutral)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     private var selectedLabelName: String? {
@@ -143,5 +174,65 @@ struct TaskListFilterBar: View {
         case .codex: return "Codex"
         case .claude: return "Claude"
         }
+    }
+}
+
+/// Liquid menu chip for the filter bar: glass capsule with a hairline rim;
+/// an active filter brightens to a primary-accent tint (hover/selected may
+/// not rely on color alone — the fill change pairs with the stroke change,
+/// 01_FOUNDATIONS §Dostępność).
+private struct LiquidFilterChip: View {
+    let systemImage: String
+    let text: String
+    let isActive: Bool
+
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: DS.Space.xs) {
+            Image(systemName: systemImage)
+                .font(.system(size: 9, weight: .medium))
+            Text(text)
+                .font(DS.FontToken.caption)
+                .lineLimit(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 7, weight: .semibold))
+                .foregroundStyle(DS.ColorToken.textMuted)
+                .accessibilityHidden(true)
+        }
+        .foregroundStyle(isActive ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
+        .padding(.horizontal, DS.Space.s)
+        .frame(height: 22)
+        .background {
+            Capsule(style: .continuous)
+                .fill(chipFill)
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(chipStroke, lineWidth: 1)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .contentShape(Capsule(style: .continuous))
+        #if os(macOS)
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        #endif
+    }
+
+    private var chipFill: Color {
+        if isActive {
+            // 14% accent fill — same passive-pill calibration as LiquidPill.
+            return DS.ColorToken.accentPrimary.opacity(0.14)
+        }
+        return hovering ? DS.ColorToken.glassCardHover : DS.ColorToken.glassSoft
+    }
+
+    private var chipStroke: Color {
+        if isActive {
+            // 22% accent rim — same calibration as LiquidPill's border.
+            return DS.ColorToken.accentPrimary.opacity(0.22)
+        }
+        return hovering ? DS.ColorToken.strokeStrong : DS.ColorToken.strokeHairline
     }
 }

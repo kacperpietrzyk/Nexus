@@ -51,7 +51,19 @@ public struct TaskListView: View {
                 taskListContent
             }
         }
-        .background(NexusColor.Background.base)
+        .background(containerBackground)
+        #if os(iOS)
+        // Touch Liquid pass: the transparent list sits on a single light-glass
+        // panel over the shell aurora (mirrors the macOS shell content card and
+        // the `LiquidTodayScreen` card family), inset so the aurora reads at the
+        // margins. macOS keeps the shell-painted panel (no double card).
+        .background {
+            Color.clear
+            .liquidLightCard(cornerRadius: DS.Radius.l)
+            .padding(.horizontal, DS.Space.s)
+            .padding(.bottom, DS.Space.s)
+        }
+        #endif
         .safeAreaInset(edge: .top, spacing: 0) {
             TaskListFilterBar(refinement: $refinement, availableLabels: refinementLabels)
         }
@@ -89,7 +101,7 @@ public struct TaskListView: View {
                 section("Overdue", items: overdue)
                 todaySection
                 section("No date", items: noDate)
-            case .all, .upcoming, .completed, .byTag:
+            case .all, .upcoming, .completed, .templates, .byTag:
                 // MP-2 motion pass: staggered row enter via .nexusAppear(i)
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     row(for: item, appearIndex: i)
@@ -98,7 +110,7 @@ public struct TaskListView: View {
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     row(for: item, appearIndex: i)
                 }
-            case .project, .projectSection:
+            case .project, .projectSection, .cycle:
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     row(for: item, appearIndex: i)
                 }
@@ -110,39 +122,41 @@ public struct TaskListView: View {
         .scrollContentBackground(.hidden)
     }
 
+    /// Liquid empty state (calm, title + one line) — same idiom as
+    /// `LiquidEmptyState`, plus the title line the per-filter resolver carries.
     private func taskEmptyState(title: String, systemImage: String, message: String) -> some View {
-        VStack(spacing: 13) {
+        VStack(spacing: DS.Space.m) {
             Image(systemName: systemImage)
-                .font(.system(size: 35, weight: .medium))
-                .foregroundStyle(NexusColor.Text.muted)
+                // 22 pt hero glyph — matches LiquidEmptyState's calibration.
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textMuted)
                 .symbolRenderingMode(.hierarchical)
 
-            VStack(spacing: 8) {
+            VStack(spacing: DS.Space.xs) {
                 Text(title)
-                    .font(NexusType.h2)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.section)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
 
                 Text(message)
-                    .font(NexusType.body)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
         }
         .frame(maxWidth: 440)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding(.horizontal, 32)
+        .padding(.horizontal, DS.Space.xxxl)
         .padding(.bottom, 118)
     }
 
     private func errorRow(_ message: String) -> some View {
         Text(message)
-            .font(.caption)
-            // MP-2 burned: error text renders via primary ink (hue symbol retired;
-            // error legibility is carried by contrast/weight, not color).
-            .foregroundStyle(NexusColor.Text.primary)
+            .font(DS.FontToken.metadata)
+            // Error legibility is carried by contrast/weight, not color.
+            .foregroundStyle(DS.ColorToken.textPrimary)
             .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-            .listRowBackground(NexusColor.Background.base)
+            .listRowBackground(containerBackground)
             .listRowSeparator(.hidden)
     }
 
@@ -154,14 +168,14 @@ public struct TaskListView: View {
                 systemImage: "line.3.horizontal.decrease.circle",
                 description: Text(error)
             )
-            .listRowBackground(NexusColor.Background.base)
+            .listRowBackground(containerBackground)
         } else if flatList.isEmpty {
             ContentUnavailableView(
                 "No matching tasks",
                 systemImage: "line.3.horizontal.decrease.circle",
                 description: Text("This Smart List has no open root tasks right now.")
             )
-            .listRowBackground(NexusColor.Background.base)
+            .listRowBackground(containerBackground)
         } else {
             ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                 row(for: item, appearIndex: i)
@@ -179,9 +193,7 @@ public struct TaskListView: View {
                 }
                 .onMove { from, to in moveToday(from: from, to: to) }
             } header: {
-                Text("TODAY")
-                    .nexusType(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                sectionHeader("TODAY")
             }
         }
     }
@@ -195,11 +207,17 @@ public struct TaskListView: View {
                     row(for: item, appearIndex: i)
                 }
             } header: {
-                Text(title.uppercased())
-                    .nexusType(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                sectionHeader(title.uppercased())
             }
         }
+    }
+
+    /// Tracked-caps Liquid section header (01_FOUNDATIONS §Gęstość informacji).
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(DS.FontToken.caption)
+            .tracking(0.8)
+            .foregroundStyle(DS.ColorToken.textTertiary)
     }
 
     @ViewBuilder
@@ -233,42 +251,25 @@ public struct TaskListView: View {
             onSnooze: { snooze(item, by: .oneHour) }
         )
         .listRowInsets(EdgeInsets())
-        .listRowBackground(NexusColor.Background.base)
+        .listRowBackground(containerBackground)
         .listRowSeparator(.hidden)
         .contentShape(Rectangle())
         .onTapGesture { onSelect?(item) }
-        .swipeActions(edge: .leading) {
-            Button {
-                toggleDone(item)
-            } label: {
-                Label(item.status == .done ? "Reopen" : "Done", systemImage: "checkmark.circle")
-            }
-            // MP-2 canonical achromatic swipe fill: controlHover (0x1E1F25) is a
-            // solid dark control surface so the white system label stays legible
-            // (Text.primary would be white-on-white). Zero hue. Propagates.
-            .tint(NexusColor.Background.controlHover)
-        }
-        .swipeActions(edge: .trailing) {
-            Button {
-                snooze(item, by: .oneHour)
-            } label: {
-                Label("1h", systemImage: "clock")
-            }
-            // MP-2 canonical achromatic swipe fill (see leading edge).
-            .tint(NexusColor.Background.controlHover)
-            Button {
-                snooze(item, by: .tomorrow)
-            } label: {
-                Label("Tomorrow", systemImage: "sun.haze")
-            }
-            .tint(NexusColor.Background.controlHover)
-        }
+        .swipeActions(edge: .leading) { leadingSwipeActions(for: item) }
+        .swipeActions(edge: .trailing) { trailingSwipeActions(for: item) }
         .taskAssistContextMenu(for: item) { actions in
-            Button(item.status == .done ? "Reopen" : "Mark done") { toggleDone(item) }
-            Button("Subtask of…") { parentPickerTarget = item }
-            Button("Snooze 1h") { snooze(item, by: .oneHour) }
-            Button("Snooze until tomorrow") { snooze(item, by: .tomorrow) }
-            TaskAssistMenuSection(actions: actions)
+            if item.isTemplate {
+                Button("New Task from Template") { instantiateTemplate(item) }
+                // I-D1: no complete/snooze/subtask affordances on an inert blueprint.
+                Button("Delete Template", role: .destructive) { deleteTemplate(item) }
+            } else {
+                Button(item.status == .done ? "Reopen" : "Mark done") { toggleDone(item) }
+                Button("Save as Template") { saveAsTemplate(item) }
+                Button("Subtask of…") { parentPickerTarget = item }
+                Button("Snooze 1h") { snooze(item, by: .oneHour) }
+                Button("Snooze until tomorrow") { snooze(item, by: .tomorrow) }
+                TaskAssistMenuSection(actions: actions)
+            }
         }
     }
 
@@ -281,19 +282,7 @@ public struct TaskListView: View {
             case .all:
                 flatList = try Self.tasks(status: nil, modelContext: modelContext)
             case .today:
-                let query = TodayQuery()
-                overdue = Self.rootTasks(
-                    from: try query.overdue(now: now, excludingProjectIDs: archivedProjectIDs)
-                        .apply(in: modelContext)
-                )
-                today = Self.rootTasks(
-                    from: try query.today(now: now, excludingProjectIDs: archivedProjectIDs)
-                        .apply(in: modelContext)
-                )
-                noDate = Self.rootTasks(
-                    from: try query.noDate(excludingProjectIDs: archivedProjectIDs)
-                        .apply(in: modelContext)
-                )
+                try reloadTodayBuckets(archivedProjectIDs: archivedProjectIDs)
             case .upcoming:
                 flatList = Self.rootTasks(
                     from: try UpcomingQuery()
@@ -304,6 +293,8 @@ public struct TaskListView: View {
                 flatList = try Self.inboxTasks(now: now, modelContext: modelContext)
             case .completed:
                 flatList = try Self.tasks(status: .done, modelContext: modelContext)
+            case .templates:
+                flatList = try Self.templateTasks(modelContext: modelContext)
             case .byTag(let tag):
                 flatList = Self.rootTasks(
                     from: try ByTagQuery().tasks(withTag: tag).apply(in: modelContext)
@@ -322,6 +313,8 @@ public struct TaskListView: View {
                     now: now,
                     modelContext: modelContext
                 )
+            case .cycle(let cycleID):
+                flatList = try Self.cycleTasks(cycleID: cycleID, modelContext: modelContext)
             }
             applyRefinement()
             subtaskProgressByTaskID = try SubtaskTreeDataSource.progress(
@@ -377,14 +370,17 @@ public struct TaskListView: View {
 
     @MainActor
     private func toggleDone(_ item: TaskItem) {
-        guard let repository else { return }
+        guard let repository, !item.isTemplate else { return }
         do {
             if item.status == .done {
                 try repository.reopen(item)
             } else {
                 try TaskCompletionAction.complete(item, repository: repository)
             }
-            reload()
+            // Animate the row leaving/changing the list — completion is the
+            // most-triggered mutation and must not pop. Load/filter reloads stay
+            // unwrapped so the per-row `.nexusAppear` stagger owns those.
+            withAnimation(DS.Motion.standard) { reload() }
         } catch let error as TaskItemRepositoryError {
             if case .parentHasOpenSubtasks(let parentID, let openCount) = error, parentID == item.id {
                 cascadePrompt = CascadeCompletionPrompt(task: item, openCount: openCount)
@@ -401,7 +397,7 @@ public struct TaskListView: View {
         guard let repository else { return }
         do {
             try TaskCompletionAction.cascadeComplete(prompt.task, repository: repository)
-            reload()
+            withAnimation(DS.Motion.standard) { reload() }
         } catch {
             self.error = String(describing: error)
         }
@@ -442,7 +438,7 @@ public struct TaskListView: View {
         }
         do {
             try repository.snooze(item, until: until)
-            reload()
+            withAnimation(DS.Motion.standard) { reload() }
         } catch {
             self.error = String(describing: error)
         }
@@ -456,135 +452,97 @@ public struct TaskListView: View {
 
 extension TaskListView {
     @MainActor
-    static func rootTasks(from tasks: [TaskItem]) -> [TaskItem] {
-        // `.dedupedByID()` defends the list against the historical synced-store
-        // duplication (one logical task materialized as two same-`id` rows under
-        // different entity versions). This is the funnel for nearly every Tasks
-        // filter, so deduping here keeps the visible list honest without any
-        // destructive write. No-op on a clean store.
-        SubtaskTreeDataSource.rootTasks(from: tasks).dedupedByID()
-    }
-
-    @MainActor
-    static func tasks(status: TaskStatus?, modelContext: ModelContext) throws -> [TaskItem] {
-        if let status {
-            let rawStatus = status.rawValue
-            let predicate = #Predicate<TaskItem> { task in
-                task.deletedAt == nil && task.statusRaw == rawStatus && task.parentTaskID == nil
-            }
-            let descriptor = FetchDescriptor(
-                predicate: predicate,
-                sortBy: [
-                    SortDescriptor(\TaskItem.dueAt, order: .forward),
-                    SortDescriptor(\TaskItem.createdAt, order: .reverse),
-                ]
-            )
-            return try modelContext.fetch(descriptor).dedupedByID()
-        }
-
-        let doneStatus = TaskStatus.done.rawValue
-        let predicate = #Predicate<TaskItem> { task in
-            task.deletedAt == nil && task.statusRaw != doneStatus && task.parentTaskID == nil
-        }
-        let descriptor = FetchDescriptor(
-            predicate: predicate,
-            sortBy: [
-                SortDescriptor(\TaskItem.dueAt, order: .forward),
-                SortDescriptor(\TaskItem.createdAt, order: .reverse),
-            ]
-        )
-        return try modelContext.fetch(descriptor).dedupedByID()
-    }
-
-    @MainActor
-    static func projectTasks(
-        projectID: UUID,
-        sectionID: UUID?,
-        modelContext: ModelContext
-    ) throws -> [TaskItem] {
-        if let sectionID {
-            let descriptor = FetchDescriptor<TaskItem>(
-                predicate: #Predicate { task in
-                    task.projectID == projectID
-                        && task.sectionID == sectionID
-                        && task.deletedAt == nil
-                }
-            )
-            return rootTasks(from: try modelContext.fetch(descriptor)).sorted(by: Self.assignmentOrder)
-        }
-
-        let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { task in
-                task.projectID == projectID && task.deletedAt == nil
-            }
-        )
-        return rootTasks(from: try modelContext.fetch(descriptor)).sorted(by: Self.assignmentOrder)
-    }
-
-    static func assignmentOrder(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
-        switch (lhs.orderIndex, rhs.orderIndex) {
-        case (let left?, let right?) where left != right:
-            return left < right
-        case (nil, _?):
-            return false
-        case (_?, nil):
-            return true
-        default:
-            return lhs.createdAt < rhs.createdAt
-        }
-    }
-
-    @MainActor
-    static func inboxTasks(now: Date, modelContext: ModelContext) throws -> [TaskItem] {
-        let archivedProjectIDs =
-            (try? ProjectRepository(context: modelContext).archivedProjectIDs()) ?? []
-        let noDate = try TodayQuery()
-            .noDate(excludingProjectIDs: archivedProjectIDs)
-            .apply(in: modelContext)
-        let snoozedStatus = TaskStatus.snoozed.rawValue
-        let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { task in
-                task.deletedAt == nil && task.statusRaw == snoozedStatus && task.parentTaskID == nil
-            },
-            sortBy: [SortDescriptor(\TaskItem.snoozedUntil, order: .forward)]
-        )
-        let snoozed = try modelContext.fetch(descriptor)
-            .filter { ($0.snoozedUntil ?? .distantPast) > now }
-            .filter { task in
-                guard let projectID = task.projectID else { return true }
-                return !archivedProjectIDs.contains(projectID)
-            }
-        return (rootTasks(from: noDate) + snoozed).dedupedByID().sorted { lhs, rhs in
-            switch (lhs.snoozedUntil, rhs.snoozedUntil) {
-            case (let lhsDate?, let rhsDate?):
-                return lhsDate < rhsDate
-            case (_?, nil):
-                return true
-            case (nil, _?):
-                return false
-            case (nil, nil):
-                return lhs.createdAt > rhs.createdAt
-            }
-        }
-    }
-}
-
-extension TaskListView {
-    @MainActor
-    static func savedFilterTasks(
-        filterID: UUID,
-        now: Date,
-        modelContext: ModelContext
-    ) throws -> [TaskItem] {
-        let repository = SavedFilterRepository(context: modelContext, now: { now })
-        guard let filter = try repository.find(filterID) else {
-            throw SavedFilterTaskListError.missing
-        }
-
+    private func saveAsTemplate(_ item: TaskItem) {
+        guard let repository else { return }
         do {
-            return rootTasks(from: try repository.apply(filter, now: now))
-        } catch is DecodingError {
-            throw SavedFilterTaskListError.corrupt
+            _ = try TemplateInstantiator(tasks: repository).saveAsTemplate(item)
+            reload()
+        } catch {
+            self.error = String(describing: error)
         }
+    }
+
+    @MainActor
+    private func instantiateTemplate(_ item: TaskItem) {
+        guard let repository else { return }
+        do {
+            _ = try TemplateInstantiator(tasks: repository).instantiate(item)
+            reload()
+        } catch {
+            self.error = String(describing: error)
+        }
+    }
+
+    @MainActor
+    private func deleteTemplate(_ item: TaskItem) {
+        guard let repository, item.isTemplate else { return }
+        do {
+            try repository.softDelete(item)
+            withAnimation(DS.Motion.standard) { reload() }
+        } catch {
+            self.error = String(describing: error)
+        }
+    }
+
+    @ViewBuilder
+    func leadingSwipeActions(for item: TaskItem) -> some View {
+        // Templates are inert blueprints — no Done. Everything else gets the
+        // complete/reopen toggle.
+        if !item.isTemplate {
+            Button {
+                toggleDone(item)
+            } label: {
+                Label(item.status == .done ? "Reopen" : "Done", systemImage: "checkmark.circle")
+            }
+            // Solid dark swipe fill (backgroundElevated) so the white system label
+            // stays legible; glass tokens are translucent and would let the row
+            // bleed through mid-swipe.
+            .tint(DS.ColorToken.backgroundElevated)
+        }
+    }
+
+    @ViewBuilder
+    func trailingSwipeActions(for item: TaskItem) -> some View {
+        if item.isTemplate {
+            // Templates have no snooze; the trailing edge is their delete path.
+            Button(role: .destructive) {
+                deleteTemplate(item)
+            } label: {
+                Label("Delete Template", systemImage: "trash")
+            }
+        } else {
+            Button {
+                snooze(item, by: .oneHour)
+            } label: {
+                Label("1h", systemImage: "clock")
+            }
+            // Solid dark swipe fill (see leading edge).
+            .tint(DS.ColorToken.backgroundElevated)
+            Button {
+                snooze(item, by: .tomorrow)
+            } label: {
+                Label("Tomorrow", systemImage: "sun.haze")
+            }
+            .tint(DS.ColorToken.backgroundElevated)
+        }
+    }
+
+    /// Loads the Today view's three buckets; split out of `reload()` for the
+    /// function-body lint budget.
+    @MainActor
+    private func reloadTodayBuckets(archivedProjectIDs: Set<UUID>) throws {
+        let query = TodayQuery()
+        overdue = Self.rootTasks(
+            from: try query.overdue(now: now, excludingProjectIDs: archivedProjectIDs)
+                .apply(in: modelContext)
+        )
+        today = Self.rootTasks(
+            from: try query.today(now: now, excludingProjectIDs: archivedProjectIDs)
+                .apply(in: modelContext)
+        )
+        noDate = Self.rootTasks(
+            from: try query.noDate(excludingProjectIDs: archivedProjectIDs)
+                .apply(in: modelContext)
+        )
     }
 }

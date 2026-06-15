@@ -232,6 +232,95 @@ struct AgentChatViewModelTests {
         #expect(viewModel.currentThreadID == nil)
         #expect(viewModel.messages.isEmpty)
     }
+
+    // MARK: - iOS context pre-assembly (extraction-only path)
+
+    @Test
+    func iosConfigPreAssemblesContextAndBindsRagQueryToTurn() async throws {
+        let harness = try AgentChatViewModelHarness.make(scriptedResponse: "ok")
+        let threadID = try harness.threadStore.create(title: "ios")
+        let spy = AssembleContextSpy(returnValue: "ASSEMBLED-CTX-MARKER")
+        let viewModel = AgentChatViewModel(
+            runtime: harness.runtime,
+            threadStore: harness.threadStore,
+            messageStore: harness.messageStore,
+            memoryStore: harness.memoryStore,
+            chatConfig: .iOS,
+            assembleContext: spy.closure()
+        )
+
+        viewModel.selectThread(id: threadID)
+        await viewModel.send(userMessage: "what is due today")
+
+        #expect(spy.calls.count == 1)
+        // The empty iOS recipe query must be bound to this turn's message.
+        #expect(spy.calls.first?.recipe.ragQuery?.query == "what is due today")
+        #expect(spy.calls.first?.focus.freeText == "what is due today")
+        // The assembled block must reach the provider (folded into the flat prompt).
+        #expect(harness.provider.prompts.first?.contains("ASSEMBLED-CTX-MARKER") == true)
+    }
+
+    @Test
+    func macConfigDoesNotPreAssembleContext() async throws {
+        let harness = try AgentChatViewModelHarness.make(scriptedResponse: "ok")
+        let threadID = try harness.threadStore.create(title: "mac")
+        let spy = AssembleContextSpy(returnValue: "SHOULD-NOT-APPEAR")
+        let viewModel = AgentChatViewModel(
+            runtime: harness.runtime,
+            threadStore: harness.threadStore,
+            messageStore: harness.messageStore,
+            memoryStore: harness.memoryStore,
+            chatConfig: .mac,
+            assembleContext: spy.closure()
+        )
+
+        viewModel.selectThread(id: threadID)
+        await viewModel.send(userMessage: "hi")
+
+        // Mac tool-calls instead of pre-stuffing; the closure must never fire.
+        #expect(spy.calls.isEmpty)
+        #expect(harness.provider.prompts.first?.contains("SHOULD-NOT-APPEAR") == false)
+    }
+
+    @Test
+    func iosConfigMergesAssembledContextWithCallerPrefix() async throws {
+        let harness = try AgentChatViewModelHarness.make(scriptedResponse: "ok")
+        let threadID = try harness.threadStore.create(title: "merge")
+        let spy = AssembleContextSpy(returnValue: "ASSEMBLED-MARKER")
+        let viewModel = AgentChatViewModel(
+            runtime: harness.runtime,
+            threadStore: harness.threadStore,
+            messageStore: harness.messageStore,
+            memoryStore: harness.memoryStore,
+            chatConfig: .iOS,
+            assembleContext: spy.closure()
+        )
+
+        viewModel.selectThread(id: threadID)
+        // A caller prefix (e.g. file attachment) must survive alongside the assembled block.
+        await viewModel.send(userMessage: "summarize", contextPrefix: "CALLER-FILE-MARKER")
+
+        let prompt = try #require(harness.provider.prompts.first)
+        #expect(prompt.contains("ASSEMBLED-MARKER"))
+        #expect(prompt.contains("CALLER-FILE-MARKER"))
+    }
+}
+
+/// Records the recipe/focus passed to the injected context-assembly closure and
+/// returns a fixed marker string, so tests can assert both invocation and threading.
+@MainActor
+private final class AssembleContextSpy {
+    private(set) var calls: [(recipe: ContextRecipe, focus: ContextFocus)] = []
+    private let returnValue: String
+
+    init(returnValue: String) { self.returnValue = returnValue }
+
+    func closure() -> (@MainActor (ContextRecipe, ContextFocus, Date) async -> String) {
+        { recipe, focus, _ in
+            self.calls.append((recipe, focus))
+            return self.returnValue
+        }
+    }
 }
 
 private struct AgentChatViewModelHarness {

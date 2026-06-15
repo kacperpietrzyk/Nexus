@@ -1,3 +1,4 @@
+import NexusAI
 import NexusAgent
 import NexusCore
 import SwiftData
@@ -82,6 +83,7 @@ extension TodayDashboard {
             task.deletedAt == nil
                 && task.statusRaw == doneStatus
                 && task.dueAt != nil
+                && task.isTemplate == false
         }
         let descriptor = FetchDescriptor<TaskItem>(predicate: predicate)
         let fetched = try modelContext.fetch(descriptor)
@@ -120,7 +122,9 @@ extension TodayDashboard {
     @MainActor
     static func shutdownTasks(now: Date, modelContext: ModelContext) -> [TaskItem] {
         let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { $0.deletedAt == nil && ($0.dueAt != nil || $0.lastCompletedAt != nil) }
+            predicate: #Predicate {
+                $0.deletedAt == nil && ($0.dueAt != nil || $0.lastCompletedAt != nil) && $0.isTemplate == false
+            }
         )
         return (try? modelContext.fetch(descriptor)) ?? []
     }
@@ -136,4 +140,49 @@ extension TodayDashboard {
         let repository = ScheduledBlockRepository(context: modelContext)
         return (try? repository.blocks(from: dayStart, to: dayEnd)) ?? []
     }
+
+    // MARK: - Digest text routing (Task 6 — moved here for file_length)
+
+    @MainActor
+    func digestText(input: DigestInput, now: Date) async -> String {
+        if agentEnabled, let agentBriefService {
+            return await agentBriefService.brief(for: input.agentBriefRequest(now: now))
+        }
+        return await legacyDigestText(input: input, now: now)
+    }
+
+    @MainActor
+    func legacyDigestText(input: DigestInput, now: Date) async -> String {
+        guard let aiRouter else { return "" }
+        if heroService == nil {
+            let router = aiRouter
+            let ctx = modelContext
+            let readinessProbe: @MainActor @Sendable () -> AssistantReadiness = {
+                let store = ModelManifestLocalState.Store()
+                let policy = try? DefaultHardcodedModelPolicy(catalog: ModelCatalog.loadDefault())
+                guard let manifestID = policy?.resolve().chatManifestID else { return .notDownloaded }
+                return AssistantReadinessResolver(
+                    localStateStore: store,
+                    chatManifestID: manifestID
+                ).readiness(progress: nil)
+            }
+            let skillPath: @MainActor @Sendable (String, Date) async throws -> String = { summary, date in
+                let runner = FoundationComposition.makeLocalRunner(modelContext: ctx, router: router)
+                return try await PanelDailyBriefCoordinator(runner: runner)
+                    .brief(summaryNumbers: summary, focus: ContextFocus(), now: date)
+            }
+            heroService = HeroBriefService(
+                router: aiRouter,
+                skillPath: skillPath,
+                readinessProbe: readinessProbe
+            )
+        }
+        return await heroService?.brief(
+            for: input.counts,
+            firstTitles: input.firstTitles,
+            now: now,
+            meetings: todaysEvents.count
+        ) ?? ""
+    }
+
 }

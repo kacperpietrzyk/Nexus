@@ -90,38 +90,39 @@ public struct AgentChatView: View {
         }
     }
 
-    // Proactive nudge (iOS): the agent's on-device brain is an MLX chat model that may
-    // never have been downloaded (e.g. the Welcome download step was skipped or the
-    // `welcomeShown` flag was set by an earlier build). When absent, every turn fails
-    // silently — this banner points the user at Settings → Manage Models. Hidden when
-    // no availability probe was injected (Mac / tests), so it never renders there.
+    // Status notice (iOS): the agent's on-device brain is an MLX chat model that Nexus
+    // downloads and assigns automatically — there is no manual download control, so this
+    // banner must NOT instruct the user to download anything. Until that model is
+    // assigned and on disk the probe reports it as unavailable and every turn would fail
+    // silently; the banner explains that the model is being prepared automatically and
+    // that its readiness is shown in Settings. Hidden when no availability probe was
+    // injected (Mac / tests), so it never renders there.
     @ViewBuilder private var modelUnavailableBanner: some View {
         if !viewModel.isChatModelAvailable {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .foregroundStyle(DS.ColorToken.statusWarning)
                     .frame(width: 18, height: 18)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("On-device model not downloaded")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(NexusColor.Text.primary)
-                    Text("Nexus needs the on-device AI model to answer. Download it in Settings → Manage Models.")
-                        .font(.caption2)
-                        .foregroundStyle(NexusColor.Text.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text("On-device model not ready yet")
+                        .font(DS.FontToken.bodyStrong)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
+                    Text(
+                        "Nexus prepares the on-device AI model automatically. "
+                            + "Its readiness is shown in Settings under Assistant models."
+                    )
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 0)
             }
-            .padding(12)
+            .padding(DS.Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(NexusColor.Background.raised.opacity(0.84), in: RoundedRectangle(cornerRadius: 14))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(NexusColor.Line.regular.opacity(0.9), lineWidth: 1)
-            )
+            .liquidGlass(.strong, radius: DS.Radius.m)
             .accessibilityElement(children: .combine)
         }
     }
@@ -157,25 +158,40 @@ public struct AgentChatView: View {
         // substrate; the §5 error row uses a primary foreground token).
         HStack(alignment: .top, spacing: 0) {
             mainPane
-                .frame(maxWidth: .infinity, alignment: .top)
-                .padding(.top, 160)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-            railPanel
-                .padding(.top, 150)
-                .padding(.trailing, 26)
+            // Omitted-as-unit until the first §10-reachable tool call lands:
+            // a floating "No activity" glass box over an empty canvas reads
+            // as orphaned chrome, not as a calm empty state.
+            if let rows = recentToolRows, !rows.isEmpty {
+                railPanel(rows)
+                    .padding(.top, 20)
+                    .padding(.trailing, 26)
+            }
         }
     }
 
     @ViewBuilder
     private var mainPane: some View {
         if viewModel.currentThreadID == nil {
+            // Fresh-thread invitation, vertically centered in the content area.
+            // `AgentEmptyStateView` self-centers (`maxWidth: 380` then
+            // `maxWidth/maxHeight: .infinity`). The prior `.padding(.top, 160)`
+            // + `height: 480` were carried 1:1 from the removed Lab oracle
+            // canvas and floated "Ask Nexus" below optical center on the tall
+            // Mac window.
             AgentEmptyStateView { sample in
                 viewModel.createThread(title: sample)
             }
-            .frame(maxWidth: 520)
-            .frame(height: 480)
         } else {
+            // The stream is top-anchored with a small breathing inset so the
+            // history fills the full available height. (The prior 160 pt top
+            // inset — carried 1:1 from the removed Lab oracle canvas — left a
+            // ~quarter-height empty band at the top, so the conversation only
+            // occupied the lower ~3/4 of the pane.)
             messageList
+                .frame(maxWidth: .infinity, alignment: .top)
+                .padding(.top, 20)
         }
     }
 
@@ -186,7 +202,8 @@ public struct AgentChatView: View {
     private var blocks: [AgentMessageBlock] {
         AgentMessageGrouping.blocks(
             from: viewModel.messages,
-            isThinking: viewModel.isThinking
+            isThinking: viewModel.isThinking,
+            proposals: viewModel.pendingProposals
         )
     }
 
@@ -206,7 +223,15 @@ public struct AgentChatView: View {
             // the content area).
             LazyVStack(alignment: .leading, spacing: 24) {
                 ForEach(blocks) { block in
-                    MessageBubbleView(block: block)
+                    MessageBubbleView(
+                        block: block,
+                        onAcceptProposal: { id in
+                            try? await viewModel.acceptProposal(messageID: id)
+                        },
+                        onRejectProposal: { id in
+                            viewModel.rejectProposal(messageID: id)
+                        }
+                    )
                 }
 
                 if let lastError = viewModel.lastError {
@@ -223,8 +248,8 @@ public struct AgentChatView: View {
                     // The `listRowInsets` become an equivalent `.padding`
                     // in the `ScrollView`/`LazyVStack` context.
                     Text(lastError)
-                        .font(.caption)
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
                         .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -272,71 +297,47 @@ public struct AgentChatView: View {
     // (the only one derivable from already-loaded state). MEMORY +
     // SCHEDULES are GONE ENTIRELY — no headers, no empty bodies, and no
     // orphan dividers (a lone section needs no separator).
-    private var rail: some View {
+    private func rail(_ rows: [AgentRecentToolRow]) -> some View {
         VStack(alignment: .leading, spacing: 22) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "wrench.and.screwdriver")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                         .frame(width: 12, height: 12)
 
-                    // Oracle `eyebrow(_:)`: mono SemiBold 10 / tracking
-                    // 1.8 / §2 `faint` → `Text.muted`, optically lifted here
-                    // so the rail remains discoverable over the dark wallpaper.
-                    Text("RECENT TOOLS")
-                        .font(Font.custom("IBMPlexMono-SemiBold", size: 10))
-                        .tracking(1.8)
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                    // Liquid tracked-caption eyebrow (replaces the Lab-era
+                    // mono uppercase), kept discoverable over the dark glass.
+                    Text("Recent tools")
+                        .font(DS.FontToken.caption)
+                        .tracking(1.4)
+                        .textCase(.uppercase)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                 }
 
-                if let rows = recentToolRows, !rows.isEmpty {
-                    ForEach(rows) { row in
-                        toolRow(row)
-                    }
-                } else {
-                    // Oracle empty branch: meta 12 / §2 `dim` →
-                    // `Text.muted`. Fires when there is no thread OR no
-                    // §10-reachable tool call yet (both fall here — a thread
-                    // with no tool messages must not render a blank body).
-                    Text("No activity")
-                        .font(NexusType.meta)
-                        .foregroundStyle(NexusColor.Text.muted)
+                ForEach(rows) { row in
+                    toolRow(row)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var railPanel: some View {
-        rail
+    private func railPanel(_ rows: [AgentRecentToolRow]) -> some View {
+        // Liquid re-skin (container level): the liquid glass card recipe
+        // replaces the opaque Linear control→raised→panel gradient + manual
+        // Line.strong stroke + raw black glow (the slab clashed inside the
+        // shell's glass content column). Rail content unchanged.
+        rail(rows)
             .padding(.horizontal, 20)
             .padding(.vertical, 18)
             .frame(width: 374, alignment: .topLeading)
             .frame(minHeight: 134, alignment: .topLeading)
-            .background {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                NexusColor.Background.control.opacity(0.86),
-                                NexusColor.Background.raised.opacity(0.93),
-                                NexusColor.Background.panel.opacity(0.94),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(NexusColor.Line.strong.opacity(0.78), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.40), radius: 24, x: 0, y: 16)
+            .liquidLightCard(cornerRadius: DS.Radius.xl)
     }
 
-    /// `nil` when there is no active thread (the rail then shows the oracle
-    /// empty branch). Otherwise the §10-reachable newest-first tool list,
+    /// `nil` when there is no active thread (the rail is then omitted
+    /// entirely). Otherwise the §10-reachable newest-first tool list,
     /// derived purely from the already-loaded `messages` (see
     /// `AgentRecentTools` — §1b/§11, no new query). `Date()` at body-eval is
     /// sufficient (the derivation stays pure via the injected `now`); a
@@ -348,18 +349,19 @@ public struct AgentChatView: View {
     }
 
     /// One rail row — the oracle `tool(_:_:_:)` layout minus the §10-OMITTED
-    /// `detail` (and its fake `"·"` separator), name + age only. §2:
-    /// `soft → Text.tertiary` for the name, `dim → Text.disabled` for the
-    /// age; both IBMPlexMono SemiBold at size 10.
+    /// `detail` (and its fake `"·"` separator), name + age only. Tool names
+    /// keep a monospaced face (they are code identifiers, not prose); inks
+    /// come from DS.
     private func toolRow(_ row: AgentRecentToolRow) -> some View {
         HStack(spacing: 8) {
             Text(row.name)
-                .font(Font.custom("IBMPlexMono-SemiBold", size: 10))
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(DS.ColorToken.textSecondary)
             Spacer()
             Text(row.age)
-                .font(NexusType.metaMono)
-                .foregroundStyle(NexusColor.Text.disabled)
+                .font(DS.FontToken.metadata)
+                .monospacedDigit()
+                .foregroundStyle(DS.ColorToken.textMuted)
         }
     }
 }

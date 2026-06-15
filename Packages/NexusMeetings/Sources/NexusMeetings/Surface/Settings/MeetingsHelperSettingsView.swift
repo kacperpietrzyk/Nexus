@@ -116,28 +116,26 @@ public struct MeetingsHelperSettingsView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s7) {
-            VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-                nexusSettingsCardSectionHeader("Helper")
-                NexusSettingsCard {
-                    VStack(alignment: .leading, spacing: 0) {
-                        NexusSettingsRow("Enable Meetings auto-record") {
-                            Toggle(
-                                "",
-                                isOn: Binding(
-                                    get: { viewModel.isEnabled },
-                                    set: { viewModel.toggle(enabled: $0) }
-                                )
-                            )
-                            .labelsHidden()
-                        }
-                        Text(viewModel.statusLabel)
-                            .font(NexusType.caption)
-                            .foregroundStyle(NexusColor.Text.muted)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, NexusSpacing.s4)
-                            .padding(.bottom, NexusSpacing.s3)
-                    }
+        VStack(alignment: .leading, spacing: DS.Space.xxxl) {
+            LiquidGlassCard("Helper") {
+                VStack(alignment: .leading, spacing: 0) {
+                    NexusToggle(
+                        "Enable Meetings auto-record",
+                        isOn: Binding(
+                            get: { viewModel.isEnabled },
+                            set: { viewModel.toggle(enabled: $0) }
+                        )
+                    )
+                    .frame(minHeight: 44)
+
+                    Divider()
+                        .overlay(DS.ColorToken.strokeHairline)
+
+                    Text(viewModel.statusLabel)
+                        .font(DS.FontToken.caption)
+                        .foregroundStyle(DS.ColorToken.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, DS.Space.s)
                 }
             }
             MeetingsReadinessSection()

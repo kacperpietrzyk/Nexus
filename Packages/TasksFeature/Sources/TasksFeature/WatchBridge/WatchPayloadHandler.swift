@@ -19,6 +19,13 @@ public typealias WatchAgentPromptHandling = @MainActor @Sendable (String) async 
 /// the Watch relay never touches EventKit. Returns true when a block was accepted.
 public typealias WatchBlockAcceptHandling = @MainActor @Sendable (UUID) async -> Bool
 
+/// Provide the N most recent meetings as glance DTOs. Injected by the
+/// composition root, which owns the Meetings repository (TasksFeature cannot
+/// import NexusMeetings). The Watch has no `Meeting` type, so the iPhone maps
+/// `Meeting → WatchMeetingGlance` and replies with a JSON snapshot.
+public typealias WatchMeetingsGlanceProviding =
+    @MainActor @Sendable () async -> [WatchMeetingGlance]
+
 /// Pure entry point for Watch payloads. The platform-specific relay handles
 /// WCSession and delegates parsing plus persistence here so unit tests can run
 /// on the macOS host.
@@ -30,19 +37,22 @@ public final class WatchPayloadHandler {
     private let nowProvider: @Sendable () -> Date
     private let agentPromptHandler: WatchAgentPromptHandling?
     private let blockAcceptHandler: WatchBlockAcceptHandling?
+    private let meetingsGlanceProvider: WatchMeetingsGlanceProviding?
 
     public init(
         parser: any NLParser,
         repository: TaskItemRepository,
         now: @escaping @Sendable () -> Date = { .now },
         agentPromptHandler: WatchAgentPromptHandling? = nil,
-        blockAcceptHandler: WatchBlockAcceptHandling? = nil
+        blockAcceptHandler: WatchBlockAcceptHandling? = nil,
+        meetingsGlanceProvider: WatchMeetingsGlanceProviding? = nil
     ) {
         self.parser = parser
         self.repository = repository
         self.nowProvider = now
         self.agentPromptHandler = agentPromptHandler
         self.blockAcceptHandler = blockAcceptHandler
+        self.meetingsGlanceProvider = meetingsGlanceProvider
     }
 
     public func handle(payload: [String: String]) async -> WatchPayloadOutcome {
@@ -61,8 +71,28 @@ public final class WatchPayloadHandler {
             return await handleAskNexus(payload: payload)
         case WatchPayload.acceptBlockType:
             return await handleAcceptBlock(payload: payload)
+        case WatchPayload.meetingsRecentQueryType:
+            return await handleMeetingsRecentQuery()
         default:
             return .ignored
+        }
+    }
+
+    private func handleMeetingsRecentQuery() async -> WatchPayloadOutcome {
+        guard let meetingsGlanceProvider else { return .ignored }
+        let glances = await meetingsGlanceProvider()
+        let snapshot = WatchMeetingGlanceSnapshot(meetings: glances, generatedAt: nowProvider())
+        do {
+            let data = try JSONEncoder().encode(snapshot)
+            guard let json = String(data: data, encoding: .utf8) else {
+                return .failed("Failed to encode meeting glances.")
+            }
+            return .replied(json)
+        } catch {
+            logger.error(
+                "Watch meetings query encode failed: \(error.localizedDescription, privacy: .public)"
+            )
+            return .failed(error.localizedDescription)
         }
     }
 
@@ -86,6 +116,13 @@ public final class WatchPayloadHandler {
         }
 
         let parsed = await parser.parse(input, locale: .current, now: nowProvider())
+        // Resolve the `@project` capture token the same way the App Intent /
+        // Share capture paths do, so Watch captures land in the named project
+        // instead of the inbox.
+        let projectID = parsed.projectToken.flatMap { token in
+            (try? ProjectRepository(context: repository.context).findActive(matchingToken: token))
+                .flatMap { $0 }?.id
+        }
         let task = TaskItem(
             title: parsed.title,
             dueAt: parsed.dueAt,
@@ -94,7 +131,8 @@ public final class WatchPayloadHandler {
             deadlineAt: parsed.deadlineAt,
             priority: parsed.priority ?? .none,
             tags: parsed.tags,
-            recurrenceRule: parsed.recurrence
+            recurrenceRule: parsed.recurrence,
+            projectID: projectID
         )
 
         do {

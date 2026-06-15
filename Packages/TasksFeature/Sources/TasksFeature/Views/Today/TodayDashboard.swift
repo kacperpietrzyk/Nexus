@@ -55,7 +55,7 @@ enum TodayDashboardContentRoute: Equatable {
     ///
     /// Audit B3 — user decision "global but refined": the DAY rail
     /// stays the single global right rail on routes that have no right
-    /// column of their own (`today`, `productivity`, `settings`),
+    /// column of their own (`today`, `settings`),
     /// but `inbox` (owns `InboxReaderPane`, fixed 380) and `meetings` (owns
     /// the meeting-detail pane) already render their own right pane, so
     /// also mounting the 320pt rail there produced a competing double-rail.
@@ -63,11 +63,14 @@ enum TodayDashboardContentRoute: Equatable {
     /// Linear redesign: `.tasks` joins the false group too — the Today-only
     /// DAY timeline is always empty here and crushed the list; the freed
     /// column is capped + hugged left at the `.tasks` route case instead.
+    /// Polish pass: `.productivity` (Stats) also drops the rail — a today's-
+    /// schedule column is contextually wrong on a 30-day analytics screen and
+    /// read empty; the cards + charts take the full width instead.
     var showsEmbeddedTimelineRail: Bool {
         switch self {
-        case .today, .productivity, .settings:
+        case .today, .settings:
             return true
-        case .tasks, .inbox, .meetings:
+        case .tasks, .productivity, .inbox, .meetings:
             return false
         }
     }
@@ -106,8 +109,10 @@ public struct TodayDashboard: View {
     @Environment(\.modelContext) var modelContext
     // Internal (not `private`): read from the `+EmbeddedToday` extension file.
     @Environment(\.taskRepository) var taskRepository
-    @Environment(\.aiRouter) private var aiRouter
-    @Environment(\.agentBriefService) private var agentBriefService
+    // Internal (not `private`): read from the `+DigestData` extension file.
+    @Environment(\.aiRouter) var aiRouter
+    // Internal (not `private`): read from the `+DigestData` extension file.
+    @Environment(\.agentBriefService) var agentBriefService
     @Environment(\.calendarEventProvider) var calendarProvider
     @Environment(\.calendarEventWriter) var calendarWriter
     // The embedded-Today NowCard "Focus" pill routes to this existing
@@ -118,20 +123,25 @@ public struct TodayDashboard: View {
     // `FocusModeEnvironment` contract. No new behaviour invented.
     // Internal (not `private`): read from the `+EmbeddedToday` extension.
     @Environment(\.focusModeState) var focusModeState
+    // Internal (not `private`): read from the `+Insights` extension file.
+    @Environment(\.pendingInsightStore) var pendingInsightStore
+    // Internal (not `private`): read from the `+Insights` extension file.
+    @Environment(\.insightProposalCoordinator) var insightProposalCoordinator
+    // Internal (not `private`): read from the `+Insights` extension file.
+    @Environment(\.insightCooldownStore) var insightCooldownStore
     @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
     @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) var calendarEventsEnabled = false
-    @AppStorage(NexusPreferences.Keys.agentEnabled) private var agentEnabled = true
+    // Internal (not `private`): read from the `+DigestData` extension file.
+    @AppStorage(NexusPreferences.Keys.agentEnabled) var agentEnabled = true
     // Internal (not `private`): read from the `+Standalone` extension file.
     @AppStorage(NexusPreferences.Keys.workspaceDisplayName) var workspaceDisplayName: String = ""
-    #if os(macOS)
-    @Environment(\.openSettings) var openSettings
-    #endif
     @Query(sort: \Project.name) private var taskFilterProjects: [Project]
     @Query(sort: \ProjectSection.orderIndex) private var taskFilterSections: [ProjectSection]
     @Query(sort: \SavedFilter.orderIndex) private var taskFilterSavedFilters: [SavedFilter]
+    @Query(sort: \Cycle.startAt) private var taskFilterCycles: [Cycle]
 
     let selection: Binding<TodayNavSelection>?
     // Internal (not `private`): read from the `+Standalone` extension file.
@@ -175,7 +185,8 @@ public struct TodayDashboard: View {
     @State var deadlineRiskTopTask: TaskItem?
     @State private var digestText: String = ""
     @State private var digestTimestamp: Date = .now
-    @State private var heroService: HeroBriefService?
+    // Internal (not `private`): written from the `+DigestData` extension file.
+    @State var heroService: HeroBriefService?
     @State private var reloadGeneration = 0
     // Internal (not `private`): bound from the `+Standalone` extension file.
     @State var taskFilter: TaskFilter = .all  // .upcoming hides overdue/today/undated → empty Tasks view
@@ -334,7 +345,7 @@ public struct TodayDashboard: View {
     /// Route content with a cross-fade between nav destinations (audit C1).
     ///
     /// First attempt relied solely on the nav-rail's ambient
-    /// `withAnimation(NexusMotion.nav)` reaching this deep identity swap; it
+    /// `withAnimation(DS.Motion.nav)` reaching this deep identity swap; it
     /// did not propagate reliably (user: "C1 was not working"). Now the
     /// cross-fade is self-contained: an explicit `.animation(_:value:)`
     /// keyed on the resolved route drives the `.id`/`.transition(.opacity)`
@@ -352,7 +363,7 @@ public struct TodayDashboard: View {
             .transition(
                 .opacity.combined(with: .offset(y: 6))
             )
-            .animation(NexusMotion.standard, value: route)
+            .animation(DS.Motion.standard, value: route)
     }
 
     @ViewBuilder
@@ -403,7 +414,12 @@ public struct TodayDashboard: View {
         case .productivity:
             ProductivityDashboardView()
         case .settings:
-            settingsRoute
+            // On Mac, Settings is a shell destination handled upstream;
+            // this arm is unreached. On iOS compact the tab shell handles
+            // navigation; on iOS regular the notification fires and selection
+            // resets to .today so this is momentarily visible then replaced.
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -421,29 +437,6 @@ public struct TodayDashboard: View {
                 .fill(NexusColor.Line.hairline)
                 .frame(width: 1)
         }
-    }
-
-    @MainActor
-    private func digestText(input: DigestInput, now: Date) async -> String {
-        if agentEnabled, let agentBriefService {
-            return await agentBriefService.brief(for: input.agentBriefRequest(now: now))
-        }
-        return await legacyDigestText(input: input, now: now)
-    }
-
-    @MainActor
-    private func legacyDigestText(input: DigestInput, now: Date) async -> String {
-        guard let aiRouter else {
-            return ""
-        }
-        if heroService == nil {
-            heroService = HeroBriefService(router: aiRouter)
-        }
-        return await heroService?.brief(
-            for: input.counts,
-            firstTitles: input.firstTitles,
-            now: now
-        ) ?? ""
     }
 
     private var title: String {
@@ -484,6 +477,9 @@ public struct TodayDashboard: View {
             },
             savedFilterName: { filterID in
                 savedFilterName(filterID)
+            },
+            cycleName: { cycleID in
+                cycleName(cycleID)
             }
         )
     }
@@ -499,6 +495,12 @@ public struct TodayDashboard: View {
 
     private func savedFilterName(_ id: UUID) -> String? {
         taskFilterSavedFilters.first {
+            $0.id == id && $0.deletedAt == nil
+        }?.name
+    }
+
+    private func cycleName(_ id: UUID) -> String? {
+        taskFilterCycles.first {
             $0.id == id && $0.deletedAt == nil
         }?.name
     }

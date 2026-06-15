@@ -65,4 +65,16 @@ struct TaskListEmptyStateTests {
             #expect(!message.isEmpty)
         }
     }
+
+    @Test("cycle filter resolves the cycle empty state")
+    func cycleEmptyState() {
+        #expect(
+            TaskListEmptyState.resolve(filter: .cycle(UUID()), isEmpty: true, hasError: false)
+                == .empty(
+                    title: "No tasks in this cycle",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    message: "Assign open tasks from the cycle planner."
+                ))
+        #expect(TaskListEmptyState.resolve(filter: .cycle(UUID()), isEmpty: false, hasError: false) == .none)
+    }
 }

@@ -16,6 +16,13 @@ struct NoteReconcilerTests {
         return ModelContext(container)
     }
 
+    private func makeAttachmentContext() throws -> ModelContext {
+        let schema = Schema([Note.self, TaskItem.self, Link.self, Project.self, Section.self, AttachmentAsset.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        return ModelContext(container)
+    }
+
     private func insertNote(_ context: ModelContext, blocks: [Block], role: NoteRole = .free) throws -> Note {
         let note = Note(contentData: try NoteContentCoder.encode(blocks), role: role)
         context.insert(note)
@@ -201,6 +208,50 @@ struct NoteReconcilerTests {
         #expect(changed)
         #expect(try outgoing(context, from: note.id).filter { $0.linkKind == .containsTask }.count == 1)
         #expect(try reconciler.reconcile(note) == false)
+    }
+
+    @Test func imageAttachmentCreatesAttachmentLink() throws {
+        let context = try makeAttachmentContext()
+        let asset = AttachmentAsset(
+            originalFilename: "a.png",
+            mimeType: "image/png",
+            byteCount: 1,
+            sha256: "h",
+            storagePath: "p"
+        )
+        context.insert(asset)
+        let note = try insertNote(context, blocks: [Block(kind: .image(ref: asset.id, asset: asset.storagePath))])
+
+        let changed = try NoteReconciler(context: context).reconcile(note)
+        try context.save()
+
+        #expect(changed)
+        let links = try outgoing(context, from: note.id).filter { $0.linkKind == .attachment }
+        #expect(links.count == 1)
+        #expect(links.first?.toKind == .attachment)
+        #expect(links.first?.toID == asset.id)
+    }
+
+    @Test func removedImageAttachmentRemovesOwnedAttachmentLink() throws {
+        let context = try makeAttachmentContext()
+        let asset = AttachmentAsset(
+            originalFilename: "a.png",
+            mimeType: "image/png",
+            byteCount: 1,
+            sha256: "h",
+            storagePath: "p"
+        )
+        context.insert(asset)
+        let note = try insertNote(context, blocks: [Block(kind: .image(ref: asset.id, asset: asset.storagePath))])
+        try NoteReconciler(context: context).reconcile(note)
+        try context.save()
+
+        note.contentData = try NoteContentCoder.encode([])
+        let changed = try NoteReconciler(context: context).reconcile(note)
+        try context.save()
+
+        #expect(changed)
+        #expect(try outgoing(context, from: note.id).filter { $0.linkKind == .attachment }.isEmpty)
     }
 
     // MARK: - Checkbox lifecycle (§7, §8, §17)

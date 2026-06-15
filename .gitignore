@@ -52,4 +52,6 @@ DESIGN.md
 RESEARCH_linear_notion_vs_nexus.md
 theme.css
 tokens.json
-variables.css.workflows/
+variables.css
+.workflows/
+liquid_productivity_design_system/

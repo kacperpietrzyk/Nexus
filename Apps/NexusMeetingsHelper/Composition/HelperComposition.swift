@@ -91,6 +91,14 @@ final class HelperComposition {
         xpcDelegate.stopRecording(meetingID: meetingID.uuidString as NSString, reply: reply)
     }
 
+    func pauseRecording(meetingID: UUID, reply: @escaping (Error?) -> Void) {
+        xpcDelegate.pauseRecording(meetingID: meetingID.uuidString as NSString, reply: reply)
+    }
+
+    func resumeRecording(meetingID: UUID, reply: @escaping (Error?) -> Void) {
+        xpcDelegate.resumeRecording(meetingID: meetingID.uuidString as NSString, reply: reply)
+    }
+
     func currentRecordingState() -> RecordingStateSnapshot {
         xpcDelegate.recordingStateSnapshot()
     }
@@ -114,9 +122,10 @@ final class HelperComposition {
             }
 
             let audioFolder = candidate.audioFolder
+            let meetingID = candidate.meetingID
             let pipeline = meetingsComposition.pipeline
             Task {
-                await meetingsComposition.pipelineQueue.enqueue {
+                await meetingsComposition.pipelineQueue.enqueue(meetingID: meetingID) {
                     try? await pipeline.process(meeting: meeting, audioFolder: audioFolder)
                 }
             }

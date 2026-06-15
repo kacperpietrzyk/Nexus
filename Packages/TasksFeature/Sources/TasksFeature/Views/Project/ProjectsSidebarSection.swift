@@ -16,6 +16,7 @@ public struct ProjectsSidebarSection: View {
     @State private var editorProject: ProjectEditorMode?
     @State private var sectionDraft: SectionDraft?
     @State private var error: String?
+    @State private var archivedExpanded = false
 
     public init(selection: Binding<TaskFilter>, onSelect: @escaping () -> Void = {}) {
         self._selection = selection
@@ -34,6 +35,10 @@ public struct ProjectsSidebarSection: View {
                         projectBlock(project)
                     }
                 }
+            }
+
+            if !archivedProjects.isEmpty {
+                archivedSection
             }
 
             if let error {
@@ -57,6 +62,61 @@ public struct ProjectsSidebarSection: View {
         queriedProjects.filter {
             $0.deletedAt == nil && $0.archivedAt == nil && $0.parentProjectID == nil
         }
+    }
+
+    /// Top-level archived projects (recoverable). Mirrors `projects` but with the
+    /// archived predicate flipped — archived children surface only via their
+    /// archived root being restored (unarchive is non-cascading by design).
+    private var archivedProjects: [Project] {
+        queriedProjects.filter {
+            $0.deletedAt == nil && $0.archivedAt != nil && $0.parentProjectID == nil
+        }
+    }
+
+    /// Collapsible "Archived" group so archived projects are viewable/recoverable
+    /// from the sidebar without being mistaken for active ones. Archived rows do
+    /// NOT drive `selection` (every task surface filters archived projects out via
+    /// `archivedProjectIDs()`, so selecting one would land on an empty list); the
+    /// row's only affordance is the "Unarchive Project" context action.
+    private var archivedSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                archivedExpanded.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: archivedExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("Archived")
+                        .nexusType(.eyebrow)
+                    Text("\(archivedProjects.count)")
+                        .nexusType(.caption)
+                    Spacer()
+                }
+                .foregroundStyle(NexusColor.Text.muted)
+                .frame(height: 24)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .nexusRowHover()
+            .accessibilityLabel("Archived projects")
+
+            if archivedExpanded {
+                ForEach(archivedProjects) { project in
+                    ProjectSidebarRow(
+                        title: project.name,
+                        systemImage: nexusProjectGlyph(named: project.color),
+                        isSelected: false,
+                        isDropTargeted: false,
+                        depth: 0,
+                        action: {}
+                    )
+                    .contextMenu {
+                        Button("Unarchive Project") { unarchive(project) }
+                    }
+                }
+            }
+        }
+        .padding(.top, 4)
     }
 
     private var header: some View {
@@ -188,6 +248,16 @@ public struct ProjectsSidebarSection: View {
         do {
             try ProjectRepository(context: modelContext).archive(project)
             selection = selection.replacingArchivedProject(project.id)
+            error = nil
+        } catch {
+            self.error = String(describing: error)
+        }
+    }
+
+    @MainActor
+    private func unarchive(_ project: Project) {
+        do {
+            try ProjectRepository(context: modelContext).unarchive(project)
             error = nil
         } catch {
             self.error = String(describing: error)

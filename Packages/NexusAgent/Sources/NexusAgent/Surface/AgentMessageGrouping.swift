@@ -48,6 +48,11 @@ struct AgentMessageBlock: Identifiable, Equatable {
     /// "summarised" badge (see `AgentMessageStreamView`). Always `false` for
     /// `.user`.
     let redacted: Bool
+    /// Parsed `Proposal` for this block. Non-nil only for `.agent` blocks whose
+    /// assistant message contained a valid `nexus-proposal` block that was stripped
+    /// from `content` before persistence. Rendered as a `ProposalConfirmCard`.
+    /// Always `nil` for `.user` blocks.
+    let proposal: Proposal?
 }
 
 // MARK: - Per-tool SF-symbol map
@@ -113,9 +118,14 @@ enum AgentMessageGrouping {
     ///     `text` carrying those rows so the work isn't invisible (SwiftUI
     ///     collapses `Text("")` to zero height — the rows are the content; no
     ///     placeholder prose is faked).
+    /// Walk the already-loaded `messages` (chronological) and derive the oracle's flat
+    /// block stream. The optional `proposals` map attaches a parsed `Proposal` to the
+    /// matching `.agent` block by message id (used by `AgentChatViewModel` to render
+    /// a `ProposalConfirmCard`). Default empty so existing callers are unchanged.
     static func blocks(
         from messages: [AgentMessage],
-        isThinking: Bool
+        isThinking: Bool,
+        proposals: [UUID: Proposal] = [:]
     ) -> [AgentMessageBlock] {
         var result: [AgentMessageBlock] = []
         var buffer: [AgentToolRow] = []
@@ -123,16 +133,7 @@ enum AgentMessageGrouping {
         for message in messages {
             switch message.role {
             case .user:
-                result.append(
-                    AgentMessageBlock(
-                        id: message.id,
-                        kind: .user,
-                        eyebrow: "YOU",
-                        text: message.content,
-                        tools: [],
-                        redacted: false
-                    )
-                )
+                result.append(userBlock(for: message))
             case .tool:
                 guard let data = message.toolCallJSON,
                     let transcript = try? JSONDecoder().decode(
@@ -143,24 +144,13 @@ enum AgentMessageGrouping {
                     // Malformed / legacy `.tool` row — skip, never crash.
                     continue
                 }
-                let name = transcript.call.name
                 buffer.append(
                     AgentToolRow(
-                        icon: AgentToolIcon.symbol(for: name),
-                        name: name
-                    )
-                )
+                        icon: AgentToolIcon.symbol(for: transcript.call.name),
+                        name: transcript.call.name
+                    ))
             case .agent:
-                result.append(
-                    AgentMessageBlock(
-                        id: message.id,
-                        kind: .agent,
-                        eyebrow: "NEXUS",
-                        text: message.content,
-                        tools: buffer,
-                        redacted: message.redactedContent
-                    )
-                )
+                result.append(agentBlock(for: message, tools: buffer, proposals: proposals))
                 buffer.removeAll(keepingCapacity: true)
             case .system:
                 // §10-class omission: no oracle system idiom.
@@ -172,20 +162,40 @@ enum AgentMessageGrouping {
         // derived from the last source message (NOT a fresh `UUID()`) so the
         // function is genuinely pure/referentially-transparent — its identity
         // is stable across `body` re-evaluations.
-        if !buffer.isEmpty && !isThinking {
-            result.append(
-                AgentMessageBlock(
-                    id: messages.last?.id ?? UUID(),
-                    kind: .agent,
-                    eyebrow: "NEXUS",
-                    text: "",
-                    tools: buffer,
-                    redacted: false
-                )
-            )
-        }
         // (isThinking == true → buffer suppressed by falling through.)
+        if !buffer.isEmpty && !isThinking {
+            result.append(trailingAgentBlock(lastMessageID: messages.last?.id, tools: buffer))
+        }
 
         return result
+    }
+
+    private static func userBlock(for message: AgentMessage) -> AgentMessageBlock {
+        AgentMessageBlock(
+            id: message.id, kind: .user, eyebrow: "YOU",
+            text: message.content, tools: [], redacted: false, proposal: nil
+        )
+    }
+
+    private static func agentBlock(
+        for message: AgentMessage,
+        tools: [AgentToolRow],
+        proposals: [UUID: Proposal]
+    ) -> AgentMessageBlock {
+        AgentMessageBlock(
+            id: message.id, kind: .agent, eyebrow: "NEXUS",
+            text: message.content, tools: tools,
+            redacted: message.redactedContent, proposal: proposals[message.id]
+        )
+    }
+
+    private static func trailingAgentBlock(
+        lastMessageID: UUID?,
+        tools: [AgentToolRow]
+    ) -> AgentMessageBlock {
+        AgentMessageBlock(
+            id: lastMessageID ?? UUID(), kind: .agent, eyebrow: "NEXUS",
+            text: "", tools: tools, redacted: false, proposal: nil
+        )
     }
 }

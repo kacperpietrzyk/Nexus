@@ -39,10 +39,13 @@ public struct CommandPaletteView: View {
         .containerRelativeFrame(.horizontal) { length, _ in
             min(Self.maxPaletteWidth, length)
         }
-        .background(NexusColor.Background.raised, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(NexusColor.Line.regular, lineWidth: 1))
-        .nexusShadow(NexusShadow.pop)
+        // Liquid re-skin (container level): the strong liquid glass recipe
+        // replaces the opaque `Background.raised` panel + manual Line.regular
+        // stroke + pop shadow, so the palette floats as glass over the scrim.
+        // DS.Radius.xl: the shared radius of all three `.strong` glass modal
+        // surfaces (command palette, capture overlay, task modal).
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.xl, style: .continuous))
+        .liquidGlass(.strong, radius: DS.Radius.xl)
         .nexusOverlayEnter()
         .padding(.bottom, 120)
         .task { await reload(for: query) }
@@ -216,7 +219,7 @@ public struct CommandPaletteView: View {
         #if os(macOS)
         .onHover { hovering in
             guard hovering, isEnabled else { return }
-            withAnimation(.easeOut(duration: 0.12)) {
+            withAnimation(DS.Motion.hover) {
                 selectedIndex = index
             }
         }

@@ -39,10 +39,10 @@ struct TagsEditor: View {
     @ViewBuilder
     private var tagDraftField: some View {
         #if os(iOS)
-        TextField("New tag", text: $draft)
+        NexusTextField("New tag", text: $draft)
             .textInputAutocapitalization(.never)
         #else
-        TextField("New tag", text: $draft)
+        NexusTextField("New tag", text: $draft)
         #endif
     }
 }

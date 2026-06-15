@@ -29,10 +29,14 @@ public enum TaskListEmptyState: Equatable, Sendable {
         // shadowed by the celebratory empty-state.
         if hasError { return .none }
         guard isEmpty else { return .none }
+        return emptyCopy(for: filter)
+    }
 
-        // User-facing copy in English — consistent with the rest of the app's
-        // empty-state vocabulary (Today "All clear", the DAY rail's
-        // "No blocks scheduled", the capture bar's "What to add?").
+    /// Per-filter empty copy, split out of `resolve` for the function-body
+    /// lint budget. User-facing copy in English — consistent with the rest of
+    /// the app's empty-state vocabulary (Today "All clear", the DAY rail's
+    /// "No blocks scheduled", the capture bar's "What to add?").
+    private static func emptyCopy(for filter: TaskFilter) -> TaskListEmptyState {
         switch filter {
         case .all:
             return .empty(
@@ -64,6 +68,15 @@ public enum TaskListEmptyState: Equatable, Sendable {
                 systemImage: "checkmark.circle",
                 message: "Completed tasks will appear here."
             )
+        case .byTag, .project, .projectSection, .templates, .cycle, .savedFilter:
+            return scopedEmptyCopy(for: filter)
+        }
+    }
+
+    /// Scoped-filter empty copy (tag/project/section/templates/cycle), split
+    /// from `emptyCopy` for the function-body lint budget.
+    private static func scopedEmptyCopy(for filter: TaskFilter) -> TaskListEmptyState {
+        switch filter {
         case .byTag(let tag):
             return .empty(
                 title: "No tasks with #\(tag)",
@@ -82,8 +95,19 @@ public enum TaskListEmptyState: Equatable, Sendable {
                 systemImage: "folder",
                 message: "This section has no open tasks."
             )
-        case .savedFilter:
-            // Unreachable — handled above; kept for exhaustiveness.
+        case .templates:
+            return .empty(
+                title: "No templates",
+                systemImage: "doc.on.doc",
+                message: "Save a task as a template and it will appear here."
+            )
+        case .cycle:
+            return .empty(
+                title: "No tasks in this cycle",
+                systemImage: "arrow.triangle.2.circlepath",
+                message: "Assign open tasks from the cycle planner."
+            )
+        default:
             return .none
         }
     }

@@ -89,6 +89,18 @@ public final class LinkRepository {
         try backlinks(to: endpoint).filter { $0.linkKind == .blocks }
     }
 
+    /// Every `Link` row, oldest first. The O1 graph view consumes the whole
+    /// edge table in one fetch; deterministic `createdAt` order keeps graph
+    /// assembly reproducible. No kind filter is needed, so no enum lands in
+    /// the predicate.
+    public func allLinks() throws -> [Link] {
+        try context.fetch(
+            FetchDescriptor<Link>(
+                sortBy: [SortDescriptor(\.createdAt, order: .forward)]
+            )
+        )
+    }
+
     public func delete(_ link: Link) throws {
         context.delete(link)
         try context.save()

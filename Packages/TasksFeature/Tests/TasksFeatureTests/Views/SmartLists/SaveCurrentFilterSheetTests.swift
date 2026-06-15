@@ -39,4 +39,11 @@ struct SaveCurrentFilterSheetTests {
                 .contains("cannot be saved as another Smart List")
         )
     }
+
+    @Test("cycle filter is not encodable as a Smart List")
+    func cycleFilterIsUnsupported() {
+        let filter = TaskFilter.cycle(UUID())
+        #expect(SaveCurrentFilterDescriptor.make(for: filter) == nil)
+        #expect(!SaveCurrentFilterUnsupportedReason.message(for: filter).isEmpty)
+    }
 }

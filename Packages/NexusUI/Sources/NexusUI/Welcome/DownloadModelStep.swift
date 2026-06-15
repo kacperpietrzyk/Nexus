@@ -141,12 +141,24 @@ public struct DownloadModelStep: View {
                     recommendedChatRow
                     recommendedEmbedderRow
                 }
+                // Liquid re-skin (macOS): translucent glass fill so the panel
+                // reads as part of the welcome glass card instead of a flat dark
+                // slab on it. iOS keeps the opaque panel until the touch pass.
+                #if os(macOS)
+                .background(DS.ColorToken.glassCard)
+                .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous)
+                        .strokeBorder(DS.ColorToken.strokeHairline, lineWidth: 1)
+                )
+                #else
                 .background(NexusColor.Background.panel)
                 .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: NexusRadius.r4, style: .continuous)
                         .strokeBorder(NexusColor.Line.regular, lineWidth: 1)
                 )
+                #endif
                 .frame(maxWidth: 440)
 
                 manualOverrideSection

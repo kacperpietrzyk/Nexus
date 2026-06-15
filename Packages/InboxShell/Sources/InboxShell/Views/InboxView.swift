@@ -140,10 +140,9 @@ public struct InboxView: View {
                         } label: {
                             Label("Archive", systemImage: "archivebox")
                         }
-                        // §2 value-identical rename: Semantic.positive == Text.secondary (0xC7C8CE);
-                        // §3 categorical swipe action → Text.secondary (glyph+label carry distinction,
-                        // never two hues for sibling actions — MP-4.1 .tint-don't-drop precedent).
-                        .tint(NexusColor.Text.secondary)
+                        // Categorical swipe action → secondary ink (glyph+label carry
+                        // distinction; sibling actions share one ink step, tint never dropped).
+                        .tint(DS.ColorToken.textSecondary)
                     }
                     .swipeActions(edge: .trailing) {
                         Button {
@@ -151,9 +150,8 @@ public struct InboxView: View {
                         } label: {
                             Label("1h", systemImage: "clock")
                         }
-                        // §3 categorical swipe sibling → same Text.secondary as Archive above
-                        // (MP-4.1 .tint-don't-drop precedent; two sibling actions share one ink step).
-                        .tint(NexusColor.Text.secondary)
+                        // Sibling action shares Archive's ink step (tint never dropped).
+                        .tint(DS.ColorToken.textSecondary)
                     }
                 }
             }
@@ -313,21 +311,20 @@ private struct InboxCompactRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(item.title)
-                .nexusType(.bodySmall)
-                .foregroundStyle(NexusColor.Text.primary)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textPrimary)
             if let body = item.body, !body.isEmpty {
                 Text(body)
-                    .nexusType(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
                     .lineLimit(2)
             }
             if !item.tags.isEmpty {
                 Text(item.tags.map { "#\($0)" }.joined(separator: " "))
-                    .nexusType(.caption)
-                    // §3 Mac-mirror: InboxReaderPane uses NexusChip(tone:.neutral) for tags,
-                    // which resolves to Text.tertiary (NexusChip.swift:72). Caption-level metadata
-                    // below title (primary) and snippet (tertiary) — Text.tertiary is the matched step.
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    // Tag metadata sits one ink step below the snippet — matches the
+                    // Mac reader pane's neutral LiquidPill tags.
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

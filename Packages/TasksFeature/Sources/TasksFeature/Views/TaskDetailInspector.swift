@@ -24,11 +24,20 @@ public struct TaskDetailInspector: View {
     public let layout: Layout
 
     @State private var allDay: Bool
-    @State private var recurrenceChoice: RecurrenceChoice
-    @State private var customRRule: String
+    @State var recurrenceChoice: RecurrenceChoice
+    @State var customRRule: String
+    @State var completionAnchored: Bool
     @State private var saveTask: _Concurrency.Task<Void, Never>?
     @State private var notesDraft: String
     @State private var notesSaveTask: _Concurrency.Task<Void, Never>?
+    /// Editable estimate (minutes string) bound by `+Estimate`; persists to
+    /// `estimatedDurationSeconds`. Internal so the extension can render it.
+    @State var estimateMinutesDraft: String
+    /// Focus of the estimate field. Blur (clicking X / another row / a different
+    /// field) commits the typed estimate while `task` still points to the current
+    /// task — so closing the Mac modal the normal way (which removes the view
+    /// rather than calling `onClose`) doesn't drop an un-submitted edit.
+    @FocusState var estimateFocused: Bool
     @State var outgoingBlockedTasks: [TaskItem] = []
     @State var incomingBlockerTasks: [TaskItem] = []
     @State var blockSearchText: String = ""
@@ -52,7 +61,11 @@ public struct TaskDetailInspector: View {
             initialValue: RecurrenceChoice.from(rrule: task.recurrenceRule)
         )
         self._customRRule = State(initialValue: task.recurrenceRule ?? "")
+        self._completionAnchored = State(
+            initialValue: RRuleAnchorToken.isCompletionAnchored(task.recurrenceRule ?? "")
+        )
         self._notesDraft = State(initialValue: task.body)
+        self._estimateMinutesDraft = State(initialValue: Self.minutesString(fromSeconds: task.estimatedDurationSeconds))
     }
 
     /// Re-derives the editor's `@State` from the current `task`. Mirrors the
@@ -63,16 +76,18 @@ public struct TaskDetailInspector: View {
         allDay = task.startAt == nil
         recurrenceChoice = RecurrenceChoice.from(rrule: task.recurrenceRule)
         customRRule = task.recurrenceRule ?? ""
+        completionAnchored = RRuleAnchorToken.isCompletionAnchored(task.recurrenceRule ?? "")
+        estimateMinutesDraft = Self.minutesString(fromSeconds: task.estimatedDurationSeconds)
     }
 
     public var body: some View {
         layoutBody
-            .background(NexusColor.Background.base)
-            // This panel hosts in a detached overlay (Mac modal) / sheet that does
-            // NOT inherit the app-root `.tint`, so its native controls (segmented
-            // Priority picker, toggles, DatePickers) would fall back to system blue.
-            // Re-assert the achromatic control tint here (lime stays for actions).
-            .tint(NexusColor.Text.primary)
+            // Liquid re-skin: `.wide` is transparent (the Mac modal host paints
+            // liquid glass behind it); `.column` (iOS) keeps the opaque base.
+            .background(layout == .wide ? Color.clear : NexusColor.Background.base)
+            // Detached overlay/sheet hosts don't inherit the app-root `.tint`;
+            // re-assert the liquid accent for native controls (was Text.primary).
+            .tint(DS.ColorToken.accentPrimary)
             .navigationTitle(task.title.isEmpty ? "Task" : task.title)
             .task {
                 loadLinkState()
@@ -138,7 +153,7 @@ public struct TaskDetailInspector: View {
 
             priorityPicker
 
-            Toggle("Pin as focus", isOn: $task.pinnedAsFocus)
+            NexusToggle("Pin as focus", isOn: $task.pinnedAsFocus)
                 .onChange(of: task.pinnedAsFocus) { _, _ in save() }
 
             TagsEditor(tags: $task.tags) { save() }
@@ -153,7 +168,7 @@ public struct TaskDetailInspector: View {
 
     var scheduleCard: some View {
         inspectorCard("Schedule") {
-            Toggle("All-day", isOn: $allDay)
+            NexusToggle("All-day", isOn: $allDay)
                 .onChange(of: allDay) { _, isAllDay in
                     if isAllDay {
                         task.startAt = nil
@@ -204,6 +219,8 @@ public struct TaskDetailInspector: View {
                         .foregroundStyle(NexusColor.Text.tertiary)
                 }
             }
+
+            estimateRow
         }
     }
 
@@ -219,55 +236,9 @@ public struct TaskDetailInspector: View {
         }
     }
 
-    var recurrenceCard: some View {
-        inspectorCard("Recurrence") {
-            Picker("Repeat", selection: $recurrenceChoice) {
-                ForEach(RecurrenceChoice.allCases) { choice in
-                    Text(choice.label).tag(choice)
-                }
-            }
-            .onChange(of: recurrenceChoice) { _, choice in
-                if let rule = choice.rrule {
-                    task.recurrenceRule = rule
-                } else if choice == .custom {
-                    customRRule = task.recurrenceRule ?? ""
-                } else {
-                    task.recurrenceRule = nil
-                }
-                save()
-            }
-            if recurrenceChoice == .custom {
-                TextField("RRULE", text: $customRRule)
-                    .textFieldStyle(.plain)
-                    .padding(10)
-                    .background(
-                        NexusColor.Background.control,
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    )
-                    .onSubmit {
-                        task.recurrenceRule = customRRule.isEmpty ? nil : customRRule
-                        save()
-                    }
-            }
-        }
-    }
-
     var notesCard: some View {
         inspectorCard("Notes") {
-            TextEditor(text: $notesDraft)
-                .font(NexusType.body)
-                .foregroundStyle(NexusColor.Text.primary)
-                .scrollContentBackground(.hidden)
-                .padding(10)
-                .frame(minHeight: 120)
-                .background(
-                    NexusColor.Background.control,
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(NexusColor.Line.hairline, lineWidth: 1)
-                }
+            NexusTextEditor(text: $notesDraft, minHeight: 120)
                 .onChange(of: notesDraft) { _, _ in saveNotesDebounced() }
         }
     }
@@ -276,15 +247,22 @@ public struct TaskDetailInspector: View {
         _ title: String,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        NexusCard(.elev2, padding: 18) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(title.uppercased())
-                    .font(NexusType.eyebrow)
-                    .foregroundStyle(NexusColor.Text.tertiary)
-                content()
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        let inner = VStack(alignment: .leading, spacing: 12) {
+            Text(title.uppercased())
+                .font(NexusType.eyebrow)
+                .foregroundStyle(NexusColor.Text.tertiary)
+            content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Liquid re-skin: macOS flattens the inspector — the modal host is one
+        // light glass panel and each section is a borderless labeled group
+        // (eyebrow + content), so there is no dark "card in a card". iOS keeps the
+        // legacy `NexusCard(.elev2)` slab until the touch Liquid pass.
+        #if os(macOS)
+        return inner
+        #else
+        return NexusCard(.elev2, padding: 18) { inner }
+        #endif
     }
 
     private var priorityStatusChip: some View {
@@ -380,19 +358,6 @@ public struct TaskDetailInspector: View {
         )
     }
 
-    private var durationLabel: String? {
-        guard let startAt = task.startAt, let endAt = task.endAt, endAt > startAt else {
-            return nil
-        }
-
-        let formatter = DateComponentsFormatter()
-        formatter.allowedUnits = [.hour, .minute]
-        formatter.unitsStyle = .abbreviated
-        formatter.maximumUnitCount = 2
-        formatter.zeroFormattingBehavior = .dropAll
-        return formatter.string(from: endAt.timeIntervalSince(startAt))
-    }
-
     private var priorityBinding: Binding<TaskPriority> {
         Binding(
             get: { task.priority },
@@ -415,7 +380,7 @@ public struct TaskDetailInspector: View {
     }
 
     @MainActor
-    private func save() {
+    func save() {
         guard let repository else { return }
         try? repository.update(task) { _ in }
     }
@@ -460,38 +425,6 @@ public struct TaskDetailInspector: View {
     }
 }
 
-enum TaskDetailRecurrenceChoice: String, Identifiable, CaseIterable {
-    case none, daily, weekly, monthly, custom
-    var id: String { rawValue }
-    var label: String {
-        switch self {
-        case .none: return "None"
-        case .daily: return "Daily"
-        case .weekly: return "Weekly"
-        case .monthly: return "Monthly"
-        case .custom: return "Custom RRULE"
-        }
-    }
-    var rrule: String? {
-        switch self {
-        case .none: return nil
-        case .daily: return "FREQ=DAILY"
-        case .weekly: return "FREQ=WEEKLY"
-        case .monthly: return "FREQ=MONTHLY"
-        case .custom: return nil
-        }
-    }
-    static func from(rrule: String?) -> Self {
-        guard let rrule else { return .none }
-        switch rrule {
-        case "FREQ=DAILY": return .daily
-        case "FREQ=WEEKLY": return .weekly
-        case "FREQ=MONTHLY": return .monthly
-        default: return .custom
-        }
-    }
-}
-
 extension TaskDetailInspector {
     /// Eyebrow over a full-width segmented control: a leading picker label
     /// hyphenated "Priority" → "Priori-ty" in the ~360 panel.
@@ -500,21 +433,22 @@ extension TaskDetailInspector {
             Text("PRIORITY")
                 .font(NexusType.eyebrow)
                 .foregroundStyle(NexusColor.Text.tertiary)
-            Picker("Priority", selection: priorityBinding) {
-                Text("None").tag(TaskPriority.none)
-                Text("Low").tag(TaskPriority.low)
-                Text("Medium").tag(TaskPriority.medium)
-                Text("High").tag(TaskPriority.high)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
+            NexusSegmentedControl(
+                items: [
+                    .init(id: TaskPriority.none, label: "None"),
+                    .init(id: TaskPriority.low, label: "Low"),
+                    .init(id: TaskPriority.medium, label: "Medium"),
+                    .init(id: TaskPriority.high, label: "High"),
+                ],
+                selection: priorityBinding
+            )
             .onChange(of: task.priorityRaw) { _, _ in save() }
         }
     }
 
     var deadlineCard: some View {
         inspectorCard("Deadline") {
-            Toggle("Deadline", isOn: deadlineEnabledBinding)
+            NexusToggle("Deadline", isOn: deadlineEnabledBinding)
             if task.deadlineAt != nil {
                 deadlineRiskRow()  // spec §19.1 D1; see +DeadlineRisk
                 dateRow("Date") {

@@ -11,6 +11,7 @@ public struct ByTagQuery: Sendable {
         let predicate = #Predicate<TaskItem> { task in
             task.deletedAt == nil
                 && task.statusRaw == openStatus
+                && task.isTemplate == false
         }
         return TaskBucket(
             predicate: predicate,

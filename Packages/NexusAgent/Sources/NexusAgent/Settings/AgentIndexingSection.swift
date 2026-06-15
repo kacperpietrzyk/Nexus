@@ -16,60 +16,56 @@ public struct AgentIndexingSection: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader("Search index")
-            NexusSettingsCard {
-                VStack(alignment: .leading, spacing: NexusSpacing.s4) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("Indexed")
-                                .font(NexusType.bodySmall.weight(.medium))
-                                .foregroundStyle(NexusColor.Text.primary)
+        LiquidGlassCard("Search index") {
+            VStack(alignment: .leading, spacing: DS.Space.l) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Indexed")
+                            .font(DS.FontToken.body.weight(.medium))
+                            .foregroundStyle(DS.ColorToken.textPrimary)
 
-                            Spacer(minLength: 12)
+                        Spacer(minLength: 12)
 
-                            Text("\(viewModel.coverage.indexed) / \(viewModel.coverage.total)")
-                                .font(NexusType.meta)
-                                .foregroundStyle(NexusColor.Text.secondary)
-                        }
-
-                        // §3 activity: Accent.solid → Text.primary. The .tint
-                        // modifier is retained (dropping it falls back to system
-                        // accent hue, slice-1 NexusMacApp precedent). The oracle
-                        // has no coverage-bar vocabulary (it shows "✓ zsync"
-                        // text), so this is an oracle-gap primitive resolved to
-                        // the achromatic ink ladder (§2 LabPalette.ink).
-                        ProgressView(value: viewModel.coverage.ratio)
-                            .tint(NexusColor.Text.primary)
+                        Text("\(viewModel.coverage.indexed) / \(viewModel.coverage.total)")
+                            .font(DS.FontToken.metadata)
+                            .foregroundStyle(DS.ColorToken.textSecondary)
                     }
 
-                    HStack(spacing: 10) {
-                        NexusButton(variant: .outline, size: .sm, action: rebuild) {
-                            Text("Rebuild full index")
-                        }
-                        .disabled(viewModel.isRebuilding)
+                    // §3 activity: Accent.solid → Text.primary. The .tint
+                    // modifier is retained (dropping it falls back to system
+                    // accent hue, slice-1 NexusMacApp precedent). The oracle
+                    // has no coverage-bar vocabulary (it shows "✓ zsync"
+                    // text), so this is an oracle-gap primitive resolved to
+                    // the achromatic ink ladder (§2 LabPalette.ink).
+                    ProgressView(value: viewModel.coverage.ratio)
+                        .tint(DS.ColorToken.textPrimary)
+                }
 
-                        if viewModel.isRebuilding {
-                            // §3 activity: Accent.solid → Text.primary. .tint
-                            // retained (slice-1 NexusMacApp precedent — dropping
-                            // it re-introduces the system accent hue); the
-                            // spinner conveys "live" by motion, ink only (§2
-                            // LabPalette.ink).
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(NexusColor.Text.primary)
-                        }
+                HStack(spacing: 10) {
+                    NexusButton(variant: .outline, size: .sm, action: rebuild) {
+                        Text("Rebuild full index")
                     }
+                    .disabled(viewModel.isRebuilding)
 
-                    if let lastProgress = viewModel.lastProgress {
-                        Text(lastRebuildSummary(lastProgress))
-                            .font(NexusType.caption)
-                            .foregroundStyle(NexusColor.Text.muted)
+                    if viewModel.isRebuilding {
+                        // §3 activity: Accent.solid → Text.primary. .tint
+                        // retained (slice-1 NexusMacApp precedent — dropping
+                        // it re-introduces the system accent hue); the
+                        // spinner conveys "live" by motion, ink only (§2
+                        // LabPalette.ink).
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(DS.ColorToken.textPrimary)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(NexusSpacing.s4)
+
+                if let lastProgress = viewModel.lastProgress {
+                    Text(lastRebuildSummary(lastProgress))
+                        .font(DS.FontToken.caption)
+                        .foregroundStyle(DS.ColorToken.textMuted)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .onAppear {
             viewModel.refresh()

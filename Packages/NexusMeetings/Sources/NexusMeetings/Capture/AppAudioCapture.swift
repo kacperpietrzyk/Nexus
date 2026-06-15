@@ -22,6 +22,8 @@ public final class AppAudioCapture: @unchecked Sendable {
     private var converter: AVAudioConverter?
     private var converterSourceFormat: AVAudioFormat?
     private let levelSink: (@Sendable (Float) -> Void)?
+    private let pausedLock = NSLock()
+    private var paused = false
 
     public init(
         writer: AudioFileWriter,
@@ -47,7 +49,23 @@ public final class AppAudioCapture: @unchecked Sendable {
         converterQueue.sync {}
     }
 
+    /// Suspend/resume writing without destroying the process tap: while paused
+    /// the tapped buffers are dropped (the file gets a silent gap), so resuming
+    /// continues the same file.
+    public func setPaused(_ paused: Bool) {
+        pausedLock.lock()
+        self.paused = paused
+        pausedLock.unlock()
+    }
+
+    private var isPaused: Bool {
+        pausedLock.lock()
+        defer { pausedLock.unlock() }
+        return paused
+    }
+
     public func handle(rawBuffer: AVAudioPCMBuffer) throws {
+        guard isPaused == false else { return }
         levelSink?(meter.rmsLevel(rawBuffer))
         try converterQueue.sync {
             try convertAndWrite(rawBuffer)
@@ -55,6 +73,7 @@ public final class AppAudioCapture: @unchecked Sendable {
     }
 
     public func enqueue(rawBuffer: AVAudioPCMBuffer, onError: (@Sendable (any Error) -> Void)? = nil) {
+        guard isPaused == false else { return }
         levelSink?(meter.rmsLevel(rawBuffer))
         do {
             let queuedBuffer = CaptureAudioQueuedBuffer(try rawBuffer.copyForCaptureQueue())

@@ -44,4 +44,48 @@ struct HandcodedParserRecurrenceTests {
         #expect(result.recurrence == "FREQ=WEEKLY;BYDAY=MO")
         #expect(result.startAt != nil)
     }
+
+    @Test("English 'every! day' yields completion-anchored FREQ=DAILY")
+    func everyBangDay() async {
+        let result = await parser.parse(
+            "water plants every! day", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.title == "water plants")
+        #expect(result.recurrence == "FREQ=DAILY;ANCHOR=COMPLETION")
+    }
+
+    @Test("English 'every! monday' yields completion-anchored weekly BYDAY=MO")
+    func everyBangMonday() async {
+        let result = await parser.parse(
+            "standup every! monday", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.recurrence == "FREQ=WEEKLY;BYDAY=MO;ANCHOR=COMPLETION")
+    }
+
+    @Test("English 'daily!' yields completion-anchored FREQ=DAILY")
+    func dailyBang() async {
+        let result = await parser.parse(
+            "stretch daily!", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.recurrence == "FREQ=DAILY;ANCHOR=COMPLETION")
+    }
+
+    @Test("Polish 'co! dzień' yields completion-anchored FREQ=DAILY")
+    func coBangDzien() async {
+        let result = await parser.parse(
+            "medytacja co! dzień", locale: Locale(identifier: "pl"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.title == "medytacja")
+        #expect(result.recurrence == "FREQ=DAILY;ANCHOR=COMPLETION")
+    }
+
+    @Test("Polish 'codziennie!' yields completion-anchored FREQ=DAILY")
+    func codziennieBang() async {
+        let result = await parser.parse(
+            "medytacja codziennie!", locale: Locale(identifier: "pl"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.recurrence == "FREQ=DAILY;ANCHOR=COMPLETION")
+    }
+
+    @Test("plain 'every day' stays due-date anchored — regression lock")
+    func everyDayUnanchored() async {
+        let result = await parser.parse(
+            "water plants every day", locale: Locale(identifier: "en"), now: now, calendar: ParserCalendar.deterministic)
+        #expect(result.recurrence == "FREQ=DAILY")
+    }
 }

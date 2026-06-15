@@ -36,7 +36,8 @@ public enum TasksComposition {
         TaskItemRepository(
             context: context,
             scheduler: RRuleScheduler(),
-            now: { .now }
+            now: { .now },
+            activity: ActivityRecorder(context: context)
         )
     }
 
@@ -68,6 +69,7 @@ public enum TasksComposition {
             scheduler: RRuleScheduler(),
             now: { .now },
             notifications: notifications,
+            activity: ActivityRecorder(context: context),
             snapshotPusher: snapshotPusher == nil ? noopWatchSnapshotPusher : closure
         )
     }

@@ -31,11 +31,14 @@ struct MeetingsCompositionTests {
         #expect(
             toolNames == [
                 "meetings.action_items_for_meeting",
+                "meetings.create",
+                "meetings.delete",
                 "meetings.get_summary",
                 "meetings.get_transcript",
                 "meetings.list_by_date",
                 "meetings.recent",
                 "meetings.search",
+                "meetings.update",
             ])
     }
 }

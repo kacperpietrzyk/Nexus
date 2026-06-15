@@ -10,6 +10,12 @@ struct NoteRoleTests {
         #expect(NoteRole.free.rawValue == "free")
         #expect(NoteRole.projectPage.rawValue == "projectPage")
         #expect(NoteRole.dailyNote.rawValue == "dailyNote")
+        #expect(NoteRole.template.rawValue == "template")
+    }
+
+    @Test("allCases order is stable — new cases append, existing never move or rename")
+    func allCasesOrderIsStable() {
+        #expect(NoteRole.allCases == [.free, .projectPage, .dailyNote, .template])
     }
 
     @Test("is Codable round-trip")

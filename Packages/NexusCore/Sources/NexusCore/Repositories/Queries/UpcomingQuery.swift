@@ -24,6 +24,7 @@ public struct UpcomingQuery: Sendable {
             task.deletedAt == nil
                 && task.statusRaw == openStatus
                 && task.dueAt != nil
+                && task.isTemplate == false
         }
         return TaskBucket(
             predicate: predicate,

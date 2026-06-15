@@ -12,18 +12,24 @@ struct NoteDetailLoader: View {
     @Environment(\.noteRepository) private var noteRepository
     let noteID: UUID
     let onOpenNote: (UUID) -> Void
+    let onOpenGraph: ((UUID) -> Void)?
 
     @Query private var notes: [Note]
 
-    init(noteID: UUID, onOpenNote: @escaping (UUID) -> Void = { _ in }) {
+    init(
+        noteID: UUID,
+        onOpenNote: @escaping (UUID) -> Void = { _ in },
+        onOpenGraph: ((UUID) -> Void)? = nil
+    ) {
         self.noteID = noteID
         self.onOpenNote = onOpenNote
+        self.onOpenGraph = onOpenGraph
         _notes = Query(filter: #Predicate<Note> { $0.id == noteID && $0.deletedAt == nil })
     }
 
     var body: some View {
         if let note = notes.first {
-            NoteEditorView(note: note, onOpenNote: onOpenNote)
+            NoteEditorView(note: note, onOpenNote: onOpenNote, onOpenGraph: onOpenGraph)
                 .task(id: note.id) {
                     _ = try? noteRepository?.reconcileOnLoad(note)
                 }

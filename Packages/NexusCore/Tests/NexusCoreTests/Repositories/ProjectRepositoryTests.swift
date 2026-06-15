@@ -50,6 +50,89 @@ struct ProjectRepositoryTests {
     }
 
     @MainActor
+    @Test("findActive(matchingToken:) matches case-insensitively, with space-stripped names, active only")
+    func findActiveMatchingToken() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let nexus = try repo.create(name: "Nexus")
+        let side = try repo.create(name: "Side Project")
+        let archived = try repo.create(name: "Frozen")
+        try repo.archive(archived)
+        let deleted = try repo.create(name: "Gone")
+        deleted.deletedAt = .now
+        try context.save()
+
+        // exact, case-insensitive
+        #expect(try repo.findActive(matchingToken: "nexus")?.id == nexus.id)
+        #expect(try repo.findActive(matchingToken: "NEXUS")?.id == nexus.id)
+        // multi-word project reachable via space-stripped form
+        #expect(try repo.findActive(matchingToken: "SideProject")?.id == side.id)
+        #expect(try repo.findActive(matchingToken: "sideproject")?.id == side.id)
+        // archived / deleted / unknown / empty ⇒ nil
+        #expect(try repo.findActive(matchingToken: "frozen") == nil)
+        #expect(try repo.findActive(matchingToken: "gone") == nil)
+        #expect(try repo.findActive(matchingToken: "missing") == nil)
+        #expect(try repo.findActive(matchingToken: "") == nil)
+    }
+
+    @MainActor
+    @Test("findActive(matchingToken:) prefers an exact name match over a space-stripped match")
+    func findActiveExactBeatsStripped() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        // "A BC" sorts before "ABC" and matches "abc" via space-stripping, but
+        // the exact-match pass must win regardless of sort order.
+        let spaced = try repo.create(name: "A BC")
+        let exact = try repo.create(name: "ABC")
+
+        #expect(try repo.findActive(matchingToken: "ABC")?.id == exact.id)
+        #expect(try repo.findActive(matchingToken: "abc")?.id == exact.id)
+        // Without an exact candidate the stripped pass still resolves.
+        try repo.softDelete(exact)
+        #expect(try repo.findActive(matchingToken: "abc")?.id == spaced.id)
+    }
+
+    @MainActor
+    @Test("findActive(matchingToken:) tie-break is deterministic: name, then UUID string")
+    func findActiveTieBreakDeterministic() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let first = try repo.create(name: "Dup")
+        let second = try repo.create(name: "Dup")
+        let expected = [first, second].min { $0.id.uuidString < $1.id.uuidString }
+
+        for _ in 0..<5 {
+            #expect(try repo.findActive(matchingToken: "dup")?.id == expected?.id)
+        }
+    }
+
+    @MainActor
+    @Test("findActive(matchingToken:) resolves a multi-word token via the exact pass (FM-path shape)")
+    func findActiveMultiWordToken() throws {
+        // The handcoded parser only emits single-word tokens, but the FM path
+        // can return a project's full multi-word name as the token. Pin: such
+        // a token resolves through the exact lowercased-name match.
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let side = try repo.create(name: "Side Project")
+
+        #expect(try repo.findActive(matchingToken: "Side Project")?.id == side.id)
+        #expect(try repo.findActive(matchingToken: "side project")?.id == side.id)
+    }
+
+    @MainActor
+    @Test("findActive(matchingToken:) matches diacritic names case-insensitively")
+    func findActiveDiacriticName() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "Prząśnik")
+
+        #expect(try repo.findActive(matchingToken: "Prząśnik")?.id == project.id)
+        #expect(try repo.findActive(matchingToken: "prząśnik")?.id == project.id)
+        #expect(try repo.findActive(matchingToken: "PRZĄŚNIK")?.id == project.id)
+    }
+
+    @MainActor
     @Test("archive cascades to child projects")
     func archiveCascade() throws {
         let stamp = Date(timeIntervalSince1970: 1_800_000_000)
@@ -142,5 +225,119 @@ struct ProjectRepositoryTests {
         try repo.unarchive(project)
         #expect(project.archivedAt == nil)
         #expect(project.updatedAt == current)
+    }
+
+    // MARK: - Scaffold context (Project + Section schema)
+
+    @MainActor
+    private func makeScaffoldContext() throws -> ModelContext {
+        let schema = Schema([Project.self, Section.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        return ModelContext(try ModelContainer(for: schema, configurations: [config]))
+    }
+
+    @MainActor
+    @Test("create with implementation type seeds default sections")
+    func createSeedsSections() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+
+        let project = try repo.create(name: "AKMF", type: .implementation)
+
+        #expect(project.type == .implementation)
+        let sections = try context.fetch(
+            FetchDescriptor<Section>(predicate: #Predicate { $0.deletedAt == nil })
+        ).sorted { $0.orderIndex < $1.orderIndex }
+        #expect(sections.map(\.name) == ["Deliverables", "Environment", "Risks"])
+        #expect(sections.allSatisfy { $0.projectID == project.id })
+    }
+
+    @MainActor
+    @Test("create with generic type seeds no sections (current behavior)")
+    func createGenericNoScaffold() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+
+        _ = try repo.create(name: "Blank", type: .generic)
+
+        let sections = try context.fetch(FetchDescriptor<Section>())
+        #expect(sections.isEmpty)
+    }
+
+    // MARK: - setStage / setType
+
+    @MainActor
+    @Test("setStage validates membership and syncs coarse status")
+    func setStageSyncsStatus() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "Sale", type: .sales)
+
+        try repo.setStage(.proposal, on: project)
+        #expect(project.stage == .proposal)
+        #expect(project.status == .active)
+
+        try repo.setStage(.won, on: project)
+        #expect(project.status == .completed)
+    }
+
+    @MainActor
+    @Test("setStage rejects a stage not in the project's type preset")
+    func setStageRejectsForeignStage() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "Sale", type: .sales)
+
+        #expect(throws: ProjectStageError.self) {
+            try repo.setStage(.kickoff, on: project)
+        }
+    }
+
+    @MainActor
+    @Test("setType clears a now-invalid stage")
+    func setTypeClampsStage() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "P", type: .sales)
+        try repo.setStage(.proposal, on: project)
+
+        try repo.setType(.audit, on: project)
+        #expect(project.type == .audit)
+        #expect(project.stage == nil)
+    }
+
+    // MARK: - client / vendor / customField setters
+
+    @MainActor
+    @Test("setClient / setVendor / setCustomField persist and bump updatedAt")
+    func fieldSetters() throws {
+        let stamp = Date(timeIntervalSince1970: 1_800_000_000)
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context, now: { stamp })
+        let project = try repo.create(name: "AKMF", type: .implementation)
+        let clientID = UUID()
+
+        try repo.setClient(clientID, on: project)
+        try repo.setVendor("Proofpoint DLP", on: project)
+        try repo.setCustomField(key: "dealValue", value: "690891 PLN", on: project)
+        try repo.setCustomField(key: "competitor", value: "Apius", on: project)
+
+        #expect(project.clientID == clientID)
+        #expect(project.vendor == "Proofpoint DLP")
+        #expect(project.customFields["dealValue"] == "690891 PLN")
+        #expect(project.customFields["competitor"] == "Apius")
+        #expect(project.updatedAt == stamp)
+    }
+
+    @MainActor
+    @Test("setCustomField with nil value removes the key")
+    func removeCustomField() throws {
+        let context = try makeScaffoldContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "P", type: .sales)
+        try repo.setCustomField(key: "k", value: "v", on: project)
+
+        try repo.setCustomField(key: "k", value: nil, on: project)
+        #expect(project.customFields["k"] == nil)
     }
 }

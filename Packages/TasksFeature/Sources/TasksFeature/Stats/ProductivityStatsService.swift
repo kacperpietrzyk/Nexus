@@ -33,6 +33,73 @@ public final class ProductivityStatsService {
         public let completedCount: Int
     }
 
+    /// Snapshot of goal attainment for the dashboard (T5).
+    public struct GoalProgress: Equatable, Sendable {
+        public let dailyCompleted: Int
+        public let weeklyCompleted: Int
+        public let dailyTarget: Int
+        public let weeklyTarget: Int
+        /// Streak (in days, ending yesterday) that breaks if nothing gets
+        /// completed today. nil when today already has a completion or no
+        /// streak exists.
+        public let streakAtRisk: Int?
+
+        public init(
+            dailyCompleted: Int,
+            weeklyCompleted: Int,
+            dailyTarget: Int,
+            weeklyTarget: Int,
+            streakAtRisk: Int?
+        ) {
+            self.dailyCompleted = dailyCompleted
+            self.weeklyCompleted = weeklyCompleted
+            self.dailyTarget = dailyTarget
+            self.weeklyTarget = weeklyTarget
+            self.streakAtRisk = streakAtRisk
+        }
+
+        /// 0...1, clamped; 0 when the target is disabled (≤ 0).
+        public var dailyFraction: Double { Self.fraction(dailyCompleted, of: dailyTarget) }
+        /// 0...1, clamped; 0 when the target is disabled (≤ 0).
+        public var weeklyFraction: Double { Self.fraction(weeklyCompleted, of: weeklyTarget) }
+
+        private static func fraction(_ completed: Int, of target: Int) -> Double {
+            guard target > 0 else { return 0 }
+            return min(1, Double(completed) / Double(target))
+        }
+    }
+
+    /// Derives today's and the current calendar week's completion counts
+    /// against the configured targets. The week window is the service
+    /// calendar's `weekOfYear` interval, so locale first-weekday rules apply.
+    public func goalProgress(preferences: GoalsPreferences, now: Date = .now) throws -> GoalProgress {
+        let dailyCompleted = try completedPerDay(last: 1, now: now).first?.count ?? 0
+
+        let week = calendar.dateInterval(of: .weekOfYear, for: now)
+        let weeklyCompleted = try completedTasks()
+            .compactMap(\.lastCompletedAt)
+            .filter { completion in week?.contains(completion) ?? false }
+            .count
+
+        // Streak protection is part of the DAILY goal: a disabled daily target
+        // (0 = off) must stay fully silent, never cross-firing streak-at-risk
+        // state past it (e.g. onto a weekly-only Goals card).
+        var streakAtRisk: Int?
+        let dailyGoalEnabled = preferences.dailyCompletionTarget > 0
+        if dailyGoalEnabled, dailyCompleted == 0, let yesterday = calendar.date(byAdding: .day, value: -1, to: now) {
+            let streakEndingYesterday = try currentStreakDays(now: yesterday)
+            streakAtRisk = streakEndingYesterday > 0 ? streakEndingYesterday : nil
+        }
+
+        return GoalProgress(
+            dailyCompleted: dailyCompleted,
+            weeklyCompleted: weeklyCompleted,
+            dailyTarget: preferences.dailyCompletionTarget,
+            weeklyTarget: preferences.weeklyCompletionTarget,
+            streakAtRisk: streakAtRisk
+        )
+    }
+
     public func completedPerDay(last days: Int = 30, now: Date = .now) throws -> [DailyCount] {
         guard days > 0 else { return [] }
 
@@ -99,7 +166,7 @@ public final class ProductivityStatsService {
         let doneStatus = TaskStatus.done.rawValue
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate { task in
-                task.deletedAt == nil && task.statusRaw == doneStatus
+                task.deletedAt == nil && task.statusRaw == doneStatus && task.isTemplate == false
             }
         )
         return try context.fetch(descriptor).filter { $0.lastCompletedAt != nil }

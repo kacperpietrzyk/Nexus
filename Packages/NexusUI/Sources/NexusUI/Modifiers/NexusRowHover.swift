@@ -19,7 +19,7 @@ private struct RowHoverModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(hovering ? NexusColor.Text.primary.opacity(0.04) : .clear)
             )
-            .animation(.easeOut(duration: 0.15), value: hovering)
+            .animation(DS.Motion.hover, value: hovering)
         #if os(watchOS)
         return base
         #else

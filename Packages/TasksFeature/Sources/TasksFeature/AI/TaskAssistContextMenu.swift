@@ -1,5 +1,6 @@
 import Foundation
 import NexusAI
+import NexusAgent
 import NexusCore
 import NexusUI
 import SwiftData
@@ -30,31 +31,21 @@ enum TaskAssistUIAction: CaseIterable, Identifiable, Equatable {
         case .suggestDueDate: return "calendar.badge.clock"
         }
     }
+
+    var serviceAction: TaskAssistService.Action {
+        switch self {
+        case .refineTitle: return .refine(field: .title)
+        case .refineBody: return .refine(field: .body)
+        case .breakIntoSubtasks: return .breakIntoSubtasks()
+        case .suggestDueDate: return .suggestDueDate(now: .now)
+        }
+    }
 }
 
 enum TaskAssistUIError: Error, Equatable {
     case aiUnavailable
     case repositoryUnavailable
     case emptySubtasks
-}
-
-@MainActor
-struct TaskAssistSchedule {
-    static func applySuggestedDueDate(_ date: Date, to task: TaskItem) {
-        let previousStart = task.startAt
-        let previousEnd = task.endAt
-
-        task.dueAt = date
-        guard let previousStart else { return }
-
-        task.startAt = date
-        guard let previousEnd, previousEnd > previousStart else {
-            task.endAt = nil
-            return
-        }
-
-        task.endAt = date.addingTimeInterval(previousEnd.timeIntervalSince(previousStart))
-    }
 }
 
 enum TaskAssistErrorCopy {
@@ -129,91 +120,37 @@ enum TaskAssistErrorCopy {
     }
 }
 
+/// Wrapper making a Proposal identifiable for `.sheet(item:)`.
+/// Carries the action so the card title = `action.label`.
+@MainActor
+struct PendingProposal: Identifiable {
+    let id = UUID()
+    let action: TaskAssistUIAction
+    let proposal: Proposal
+}
+
 @MainActor
 struct TaskAssistActionHandler {
     let task: TaskItem
     let router: AIRouter?
     let modelContext: ModelContext
-    let repository: TaskItemRepository?
 
-    func perform(_ action: TaskAssistUIAction) async throws {
+    /// Obtain a Proposal for the given action via `TaskAssistService.proposal(for:on:)`.
+    /// Throws `TaskAssistUIError.aiUnavailable` if the router is not available.
+    func propose(_ action: TaskAssistUIAction) async throws -> Proposal {
         guard let router else {
             throw TaskAssistUIError.aiUnavailable
         }
-
         let service = TaskAssistService(router: router)
-        switch action {
-        case .refineTitle:
-            try await refine(.title, service: service)
-        case .refineBody:
-            try await refine(.body, service: service)
-        case .breakIntoSubtasks:
-            try await breakIntoSubtasks(service: service)
-        case .suggestDueDate:
-            try await suggestDueDate(service: service)
-        }
+        return try await service.proposal(for: action.serviceAction, on: task)
     }
 
-    private func refine(_ field: TaskAssistService.RefineField, service: TaskAssistService) async throws {
-        let result = try await service.run(.refine(field: field), on: task)
-        guard case .refinedText(let text) = result else { return }
-
-        try persistTaskUpdate {
-            switch field {
-            case .title:
-                $0.title = text
-            case .body:
-                break
-            }
-        }
-        if field == .body {
-            let noteRepository = NoteRepository(context: modelContext, tasks: repository, now: Date.init)
-            try TaskNoteContent.replaceMarkdown(text, for: task, in: modelContext, repository: noteRepository)
-        } else if field == .title, let note = try TaskNoteContent.note(for: task, in: modelContext) {
-            try NoteRepository(context: modelContext, tasks: repository, now: Date.init)
-                .updateFields(note, title: task.title)
-        }
-    }
-
-    private func breakIntoSubtasks(service: TaskAssistService) async throws {
-        guard let repository else {
-            throw TaskAssistUIError.repositoryUnavailable
-        }
-
-        let result = try await service.run(.breakIntoSubtasks(maxCount: 5), on: task)
-        guard case .subtaskTitles(let titles) = result else { return }
-
-        let cleanedTitles =
-            titles
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        guard !cleanedTitles.isEmpty else {
-            throw TaskAssistUIError.emptySubtasks
-        }
-
-        for title in cleanedTitles {
-            _ = try TaskSubtaskAction.createChild(under: task, repository: repository, title: title)
-        }
-    }
-
-    private func suggestDueDate(service: TaskAssistService) async throws {
-        let result = try await service.run(.suggestDueDate(now: .now), on: task)
-        guard case .dueDate(let date) = result else { return }
-
-        try persistTaskUpdate {
-            TaskAssistSchedule.applySuggestedDueDate(date, to: $0)
-        }
-    }
-
-    private func persistTaskUpdate(_ mutations: (TaskItem) -> Void) throws {
-        if let repository {
-            try repository.update(task, mutations: mutations)
-        } else {
-            mutations(task)
-            task.updatedAt = .now
-            try modelContext.save()
-        }
+    /// Accept a Proposal through the audited `ToolDispatcher` → `ProposalCoordinator`.
+    /// Uses `FoundationComposition.makeLocalDispatcher` so the accept is audited and undoable.
+    @discardableResult
+    func accept(_ proposal: Proposal) async throws -> [ToolDispatchResult] {
+        let coordinator = FoundationComposition.makeLocalDispatcher(modelContext: modelContext)
+        return try await coordinator.accept(proposal, threadID: nil)
     }
 }
 
@@ -265,8 +202,8 @@ struct TaskAssistMenuSurface<MenuContent: View>: ViewModifier {
 
     @Environment(\.aiRouter) private var router
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.taskRepository) private var repository
     @State private var inFlightAction: TaskAssistUIAction?
+    @State private var pendingProposal: PendingProposal?
     @State private var errorMessage: String?
 
     func body(content: Content) -> some View {
@@ -283,6 +220,9 @@ struct TaskAssistMenuSurface<MenuContent: View>: ViewModifier {
                         .padding(4)
                 }
             }
+            .sheet(item: $pendingProposal) { pending in
+                proposalCard(for: pending)
+            }
             .taskAssistErrorAlert(message: $errorMessage)
     }
 
@@ -294,22 +234,48 @@ struct TaskAssistMenuSurface<MenuContent: View>: ViewModifier {
         guard inFlightAction == nil else { return }
         inFlightAction = action
         _Concurrency.Task { @MainActor in
-            await perform(action)
+            await fetchProposal(for: action)
         }
     }
 
-    private func perform(_ action: TaskAssistUIAction) async {
+    private func fetchProposal(for action: TaskAssistUIAction) async {
         defer { inFlightAction = nil }
         do {
-            try await TaskAssistActionHandler(
+            let proposal = try await TaskAssistActionHandler(
                 task: task,
                 router: router,
-                modelContext: modelContext,
-                repository: repository
-            ).perform(action)
+                modelContext: modelContext
+            ).propose(action)
+            pendingProposal = PendingProposal(action: action, proposal: proposal)
         } catch {
             errorMessage = TaskAssistErrorCopy.message(for: error)
         }
+    }
+
+    @MainActor
+    private func proposalCard(for pending: PendingProposal) -> some View {
+        let handler = TaskAssistActionHandler(
+            task: task,
+            router: router,
+            modelContext: modelContext
+        )
+        let model = ProposalConfirmCardModel(
+            title: pending.action.label,
+            rationale: pending.proposal.rationale,
+            previews: pending.proposal.previews.map(\.summary),
+            onAccept: {
+                do {
+                    try await handler.accept(pending.proposal)
+                } catch {
+                    errorMessage = TaskAssistErrorCopy.message(for: error)
+                }
+                pendingProposal = nil
+            },
+            onReject: {
+                pendingProposal = nil
+            }
+        )
+        return ProposalConfirmCard(model: model)
     }
 }
 
@@ -318,8 +284,8 @@ struct TaskAssistButtonGroup: View {
 
     @Environment(\.aiRouter) private var router
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.taskRepository) private var repository
     @State private var inFlightAction: TaskAssistUIAction?
+    @State private var pendingProposal: PendingProposal?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -327,6 +293,9 @@ struct TaskAssistButtonGroup: View {
             ForEach(TaskAssistUIAction.allCases) { action in
                 actionButton(action)
             }
+        }
+        .sheet(item: $pendingProposal) { pending in
+            proposalCard(for: pending)
         }
         .taskAssistErrorAlert(message: $errorMessage)
     }
@@ -374,22 +343,48 @@ struct TaskAssistButtonGroup: View {
         guard inFlightAction == nil else { return }
         inFlightAction = action
         _Concurrency.Task { @MainActor in
-            await perform(action)
+            await fetchProposal(for: action)
         }
     }
 
-    private func perform(_ action: TaskAssistUIAction) async {
+    private func fetchProposal(for action: TaskAssistUIAction) async {
         defer { inFlightAction = nil }
         do {
-            try await TaskAssistActionHandler(
+            let proposal = try await TaskAssistActionHandler(
                 task: task,
                 router: router,
-                modelContext: modelContext,
-                repository: repository
-            ).perform(action)
+                modelContext: modelContext
+            ).propose(action)
+            pendingProposal = PendingProposal(action: action, proposal: proposal)
         } catch {
             errorMessage = TaskAssistErrorCopy.message(for: error)
         }
+    }
+
+    @MainActor
+    private func proposalCard(for pending: PendingProposal) -> some View {
+        let handler = TaskAssistActionHandler(
+            task: task,
+            router: router,
+            modelContext: modelContext
+        )
+        let model = ProposalConfirmCardModel(
+            title: pending.action.label,
+            rationale: pending.proposal.rationale,
+            previews: pending.proposal.previews.map(\.summary),
+            onAccept: {
+                do {
+                    try await handler.accept(pending.proposal)
+                } catch {
+                    errorMessage = TaskAssistErrorCopy.message(for: error)
+                }
+                pendingProposal = nil
+            },
+            onReject: {
+                pendingProposal = nil
+            }
+        )
+        return ProposalConfirmCard(model: model)
     }
 }
 

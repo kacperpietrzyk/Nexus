@@ -19,6 +19,9 @@ private struct RequestSnapshot: Sendable {
     /// Non-nil when the request uses a `UNTimeIntervalNotificationTrigger`
     /// (the overdue "fire soon" fallback) instead of a calendar trigger.
     let triggerInterval: TimeInterval?
+    let triggerWeekday: Int?
+    /// `repeats` flag of a calendar trigger; nil for non-calendar triggers.
+    let triggerRepeats: Bool?
 }
 
 /// Recording fake. The `NotificationDelivering` protocol exposes
@@ -60,7 +63,9 @@ private final class RecordingNotificationCenter: NotificationDelivering {
                     triggerDay: trigger?.dateComponents.day,
                     triggerHour: trigger?.dateComponents.hour,
                     triggerMinute: trigger?.dateComponents.minute,
-                    triggerInterval: interval?.timeInterval
+                    triggerInterval: interval?.timeInterval,
+                    triggerWeekday: trigger?.dateComponents.weekday,
+                    triggerRepeats: trigger?.repeats
                 )
             }
         }
@@ -296,6 +301,88 @@ struct NotificationSchedulerTests {
         try await scheduler.schedule(task)
 
         #expect(center.snapshots().isEmpty)
+    }
+
+    @Test("Repeating daily absolute schedules a repeating hour+minute calendar trigger, even with a past anchor and no dueAt")
+    func repeatingDailyAbsoluteSchedulesRepeatingTrigger() async throws {
+        let center = RecordingNotificationCenter()
+        let now = date("2026-06-11T12:00:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center, quietHours: { nil }, calendar: cal(),
+            now: { now }
+        )
+        let task = TaskItem(title: "Stretch")  // deliberately NO dueAt (gap (b))
+        task.reminders = [.absolute(at: date("2026-06-10T09:30:00Z"), repeats: .daily)]
+
+        try await scheduler.schedule(task)
+
+        let snapshot = try #require(center.snapshots().first)
+        #expect(center.snapshots().count == 1)
+        #expect(snapshot.identifier == "task-\(task.id.uuidString)-r0")
+        #expect(snapshot.triggerRepeats == true)
+        #expect(snapshot.triggerHour == 9)
+        #expect(snapshot.triggerMinute == 30)
+        #expect(snapshot.triggerDay == nil)
+        #expect(snapshot.triggerWeekday == nil)
+        #expect(snapshot.triggerInterval == nil)  // no overdue time-interval fallback
+    }
+
+    @Test("Repeating weekly absolute pins the anchor's weekday")
+    func repeatingWeeklyAbsolutePinsWeekday() async throws {
+        let center = RecordingNotificationCenter()
+        let now = date("2026-06-11T12:00:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center, quietHours: { nil }, calendar: cal(),
+            now: { now }
+        )
+        let task = TaskItem(title: "Weekly review")
+        // 2026-06-10 is a Wednesday → weekday 4 (Sunday = 1).
+        task.reminders = [.absolute(at: date("2026-06-10T17:00:00Z"), repeats: .weekly)]
+
+        try await scheduler.schedule(task)
+
+        let snapshot = try #require(center.snapshots().first)
+        #expect(snapshot.triggerRepeats == true)
+        #expect(snapshot.triggerWeekday == 4)
+        #expect(snapshot.triggerHour == 17)
+        #expect(snapshot.triggerMinute == 0)
+    }
+
+    @Test("Repeating absolute inside quiet hours shifts to the window end")
+    func repeatingAbsoluteDefersOutOfQuietHours() async throws {
+        let center = RecordingNotificationCenter()
+        let quiet = QuietHours(startHour: 22, startMinute: 0, endHour: 7, endMinute: 0)
+        let now = date("2026-06-11T12:00:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center, quietHours: { quiet }, calendar: cal(),
+            now: { now }
+        )
+        let task = TaskItem(title: "Night nudge")
+        task.reminders = [.absolute(at: date("2026-06-10T23:00:00Z"), repeats: .daily)]
+
+        try await scheduler.schedule(task)
+
+        let snapshot = try #require(center.snapshots().first)
+        #expect(snapshot.triggerRepeats == true)
+        #expect(snapshot.triggerHour == 7)
+        #expect(snapshot.triggerMinute == 0)
+    }
+
+    @Test("One-shot absolute reminder still uses a non-repeating trigger")
+    func oneShotAbsoluteStaysNonRepeating() async throws {
+        let center = RecordingNotificationCenter()
+        let now = date("2026-06-11T12:00:00Z")
+        let scheduler = NotificationScheduler(
+            delivery: center, quietHours: { nil }, calendar: cal(),
+            now: { now }
+        )
+        let task = TaskItem(title: "Once")
+        task.reminders = [.absolute(date("2026-06-12T09:00:00Z"))]
+
+        try await scheduler.schedule(task)
+
+        let snapshot = try #require(center.snapshots().first)
+        #expect(snapshot.triggerRepeats == false)
     }
 
     @Test("empty reminders falls back to the legacy task-<uuid> request")

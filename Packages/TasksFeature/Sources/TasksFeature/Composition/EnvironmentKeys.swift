@@ -37,3 +37,33 @@ extension EnvironmentValues {
         set { self[NotificationSchedulerKey.self] = newValue }
     }
 }
+
+/// Resolves a raw `@project` capture token to a `Project`. Wraps a closure so
+/// composition roots decide the lookup strategy (production: case-insensitive
+/// match via `ProjectRepository.findActive(matchingToken:)`). nil environment
+/// value (the default) disables NL project assignment gracefully.
+@MainActor
+public struct ProjectTokenResolver {
+    private let lookup: @MainActor (String) -> Project?
+
+    public init(lookup: @escaping @MainActor (String) -> Project?) {
+        self.lookup = lookup
+    }
+
+    public func project(for token: String) -> Project? {
+        lookup(token)
+    }
+}
+
+private struct ProjectTokenResolverEnvironmentKey: EnvironmentKey {
+    static let defaultValue: ProjectTokenResolver? = nil
+}
+
+extension EnvironmentValues {
+    /// Injected by app composition roots. Views access via
+    /// `@Environment(\.projectTokenResolver)`.
+    public var projectTokenResolver: ProjectTokenResolver? {
+        get { self[ProjectTokenResolverEnvironmentKey.self] }
+        set { self[ProjectTokenResolverEnvironmentKey.self] = newValue }
+    }
+}

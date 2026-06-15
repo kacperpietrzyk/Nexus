@@ -21,4 +21,9 @@ public enum WatchPayload {
     /// Watch accepts a proposed `ScheduledBlock` → relayed to iPhone, which
     /// materializes the mirror event (spec §7 / §11 — Watch has no EventKit).
     public static let acceptBlockType = "accept-block"
+    /// Watch requests the N most recent meetings. NexusMeetings has no watchOS
+    /// platform, so the iPhone replies with a JSON `WatchMeetingGlanceSnapshot`
+    /// carried in the reply `text` field; the Watch caches it for glanceable
+    /// offline reads.
+    public static let meetingsRecentQueryType = "meetings-recent-query"
 }

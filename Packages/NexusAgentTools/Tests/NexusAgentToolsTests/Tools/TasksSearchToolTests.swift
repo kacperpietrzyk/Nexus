@@ -92,6 +92,26 @@ struct TasksSearchToolTests {
         }
     }
 
+    @MainActor
+    @Test("search excludes templates by default and includes them on request")
+    func searchTemplateExclusion() async throws {
+        let live = TaskItem(title: "Quarterly report")
+        let template = TaskItem(title: "Quarterly report template", isTemplate: true)
+        let fixture = try await InMemoryAgentContext.make(tasks: [live, template])
+
+        let defaultResult = try await callSearch(
+            args: .object(["query": .string("Quarterly")]),
+            context: fixture.context
+        )
+        #expect(defaultResult.map(\.title) == ["Quarterly report"])
+
+        let optIn = try await callSearch(
+            args: .object(["query": .string("Quarterly"), "include_templates": .bool(true)]),
+            context: fixture.context
+        )
+        #expect(Set(optIn.map(\.title)) == ["Quarterly report", "Quarterly report template"])
+    }
+
     private func callSearch(args: JSONValue, context: AgentContext) async throws -> [TaskDTO] {
         let result = try await TasksSearchTool().call(args: args, context: context)
         let data = try JSONEncoder().encode(result)

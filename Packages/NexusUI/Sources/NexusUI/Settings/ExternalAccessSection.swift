@@ -22,55 +22,93 @@ public struct ExternalAccessSection: View {
     }
 
     public var body: some View {
-        Section {
-            Text(
-                """
-                Claude Desktop, Claude Code, and other MCP clients can access tasks through a local Model Context Protocol \
-                server. Single-machine, no network exposure.
-                """
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+            LiquidGlassCard("External Access") {
+                VStack(spacing: 0) {
+                    // Description
+                    Text(
+                        """
+                        Claude Desktop, Claude Code, and other MCP clients can access tasks through a local Model \
+                        Context Protocol server. Single-machine, no network exposure.
+                        """
+                    )
+                    .font(DS.FontToken.caption)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, DS.Space.s)
 
-            Toggle("MCP server", isOn: $enabled)
+                    Divider()
+                        .overlay(DS.ColorToken.strokeHairline)
 
-            LabeledContent("Status") {
-                // §3 emphasis: Accent.solid → Text.primary; the oracle
-                // conveys active state by ink brightness (§2 LabPalette.ink),
-                // never hue. Enabled is the salient state → Text.primary;
-                // off is settled-low → Text.secondary (§2 LabPalette.read).
-                Text(enabled ? "running" : "off")
-                    .foregroundStyle(enabled ? NexusColor.Text.primary : NexusColor.Text.secondary)
+                    // MCP server toggle
+                    NexusToggle("MCP server", isOn: $enabled)
+                        .frame(minHeight: 44)
+
+                    Divider()
+                        .overlay(DS.ColorToken.strokeHairline)
+
+                    // Status row
+                    HStack {
+                        Text("Status")
+                            .font(DS.FontToken.body)
+                            .foregroundStyle(DS.ColorToken.textPrimary)
+                        Spacer()
+                        // §3 emphasis: conveys active state by ink brightness;
+                        // enabled is the salient state → textPrimary;
+                        // off is settled-low → textSecondary.
+                        Text(enabled ? "running" : "off")
+                            .font(DS.FontToken.body)
+                            .foregroundStyle(enabled ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
+                    }
+                    .frame(minHeight: 44)
+
+                    Divider()
+                        .overlay(DS.ColorToken.strokeHairline)
+
+                    // Sidecar path row
+                    HStack {
+                        Text("Sidecar")
+                            .font(DS.FontToken.body)
+                            .foregroundStyle(DS.ColorToken.textPrimary)
+                        Spacer()
+                        Text(sidecarPath)
+                            .font(DS.FontToken.metadata.monospaced())
+                            .foregroundStyle(DS.ColorToken.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .frame(minHeight: 44)
+
+                    Divider()
+                        .overlay(DS.ColorToken.strokeHairline)
+
+                    // Copy buttons
+                    HStack(spacing: DS.Space.m) {
+                        NexusButton(
+                            variant: .primary,
+                            size: .sm,
+                            action: { copyClaudeDesktopConfig() },
+                            label: { Text("Copy Claude Desktop config") }
+                        )
+                        NexusButton(
+                            variant: .default,
+                            size: .sm,
+                            action: { copyClaudeCodeCommand() },
+                            label: { Text("Copy Claude Code command") }
+                        )
+                        Spacer()
+                    }
+                    .padding(.vertical, DS.Space.s)
+
+                    // Copy feedback
+                    copyStatusView
+                    commandCopyStatusView
+                }
             }
 
-            LabeledContent("Sidecar") {
-                Text(sidecarPath)
-                    .font(.system(.caption, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-
-            HStack(spacing: 12) {
-                Button("Copy Claude Desktop config") { copyClaudeDesktopConfig() }
-                    .buttonStyle(.borderedProminent)
-
-                Button("Copy Claude Code command") { copyClaudeCodeCommand() }
-                    .buttonStyle(.bordered)
-            }
-            .padding(.vertical, 4)
-
-            copyStatusView
-            commandCopyStatusView
-        } header: {
-            nexusSettingsSectionHeader("External Access")
-        }
-
-        Section {
-            NexusCard(.elev2, padding: 16) {
+            LiquidGlassCard("Recent activity") {
                 AgentActivityLogView(log: activityLog)
             }
-        } header: {
-            nexusSettingsSectionHeader("Recent activity")
         }
     }
 
@@ -80,22 +118,20 @@ public struct ExternalAccessSection: View {
         case .idle:
             EmptyView()
         case .copied:
-            // §3 categorical: Accent.solid → Text.secondary; the
-            // `checkmark.circle.fill` glyph shape carries the success
-            // semantic (oracle has no hue, §2 LabPalette.read).
+            // §3 categorical: checkmark.circle.fill glyph carries success
+            // semantic; no hue.
             Label(
                 "Copied. Paste into ~/Library/Application Support/Claude/claude_desktop_config.json",
                 systemImage: "checkmark.circle.fill"
             )
-            .foregroundStyle(NexusColor.Text.secondary)
-            .font(.caption)
+            .foregroundStyle(DS.ColorToken.textSecondary)
+            .font(DS.FontToken.caption)
         case .failed(let message):
-            // §3 categorical: Semantic.negative → Text.primary; the
-            // `exclamationmark.triangle` glyph shape carries the error
-            // semantic, ink steps to the most-salient (§2 LabPalette.ink).
+            // §3 categorical: exclamationmark.triangle carries error semantic;
+            // ink steps to most-salient.
             Label(message, systemImage: "exclamationmark.triangle")
-                .foregroundStyle(NexusColor.Text.primary)
-                .font(.caption)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+                .font(DS.FontToken.caption)
         }
     }
 
@@ -105,19 +141,13 @@ public struct ExternalAccessSection: View {
         case .idle:
             EmptyView()
         case .copied:
-            // §3 categorical: Accent.solid → Text.secondary; the
-            // `checkmark.circle.fill` glyph shape carries the success
-            // semantic (oracle has no hue, §2 LabPalette.read).
             Label("Copied. Paste into a terminal, then restart Claude Code.", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(NexusColor.Text.secondary)
-                .font(.caption)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .font(DS.FontToken.caption)
         case .failed(let message):
-            // §3 categorical: Semantic.negative → Text.primary; the
-            // `exclamationmark.triangle` glyph shape carries the error
-            // semantic, ink steps to the most-salient (§2 LabPalette.ink).
             Label(message, systemImage: "exclamationmark.triangle")
-                .foregroundStyle(NexusColor.Text.primary)
-                .font(.caption)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+                .font(DS.FontToken.caption)
         }
     }
 

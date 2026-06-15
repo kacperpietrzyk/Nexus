@@ -3,10 +3,11 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
-/// The capture surface. Used both as the Mac floating-window content
-/// (CaptureWindowController hosts it via NSHostingView) and as the iOS
-/// quick-capture sheet body. Built around `CapturePaneState` — drives parsing
-/// debounced on input change.
+/// The capture surface. Used both as the Mac in-window capture overlay
+/// (`captureOverlay` in the app's `ContentView+CaptureAndPeek` extension
+/// hosts it over a dimmed scrim) and as the iOS quick-capture sheet body.
+/// Built around `CapturePaneState` — drives parsing debounced on input
+/// change.
 public struct CapturePane: View {
     public enum Mode: String, Sendable, Hashable {
         case task
@@ -36,6 +37,8 @@ public struct CapturePane: View {
 
     @Environment(\.taskParser) private var parser
     @Environment(\.taskRepository) private var repository
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.projectTokenResolver) private var projectTokenResolver
     @Environment(\.dismiss) private var dismiss
 
     public let mode: Mode
@@ -47,6 +50,7 @@ public struct CapturePane: View {
     @State private var isSaving = false
     @State private var saveFeedbackVisible = false
     @State private var saveError: String?
+    @State private var templates: [TaskItem] = []
     @FocusState private var inputFocused: Bool
 
     public init(
@@ -72,6 +76,7 @@ public struct CapturePane: View {
         .onAppear {
             inputFocused = true
             ensureState()
+            loadTemplates()
         }
         .onKeyPress(.escape) {
             cancel()
@@ -119,6 +124,7 @@ public struct CapturePane: View {
                     .tracking(1.8)
                     .foregroundStyle(NexusColor.Text.muted)
                 Spacer()
+                templatesMenu
                 Button(action: cancel) {
                     Text("esc")
                         .font(NexusType.metaMono)
@@ -160,7 +166,12 @@ public struct CapturePane: View {
                 .padding(.bottom, 12)
 
                 HStack(spacing: 8) {
-                    ForEach(Array(CaptureChipModel.chips(for: result, now: .now).enumerated()), id: \.offset) { i, entry in
+                    ForEach(
+                        Array(
+                            CaptureChipModel.chips(for: result, now: .now, resolvedProjectName: resolvedProjectName)
+                                .enumerated()),
+                        id: \.offset
+                    ) { i, entry in
                         CaptureChipModel.chip(icon: entry.icon, label: entry.label)
                             .nexusReveal(i + 1)
                     }
@@ -217,8 +228,9 @@ public struct CapturePane: View {
     private var iosCapturePanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             inputField
-            CaptureChipsView(result: state?.lastResult)
+            CaptureChipsView(result: state?.lastResult, resolvedProjectName: resolvedProjectName)
             HStack(spacing: 10) {
+                templatesMenu
                 if showsCancelAction {
                     NexusButton(variant: .outline, size: .lg, action: cancel) {
                         Label("Cancel", systemImage: "xmark")
@@ -289,9 +301,68 @@ public struct CapturePane: View {
     }
 
     @MainActor
+    private func loadTemplates() {
+        guard mode == .task else { return }
+        templates = (try? TaskTemplateQuery.rootTemplates(in: modelContext)) ?? []
+    }
+
+    /// Template picker chip (spec §5 row D): one tap instantiates the template
+    /// through the same saved/dismiss flow `commit()` uses. Hidden when no
+    /// templates exist (the affordance has no empty state — §10-omit).
+    @ViewBuilder
+    private var templatesMenu: some View {
+        if mode == .task, !templates.isEmpty, repository != nil {
+            Menu {
+                ForEach(templates, id: \.persistentModelID) { template in
+                    Button(template.title.isEmpty ? "Untitled template" : template.title) {
+                        instantiate(template)
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.on.doc")
+                        .accessibilityHidden(true)
+                    Text("Templates")
+                }
+                .font(NexusType.metaMono)
+                .foregroundStyle(NexusColor.Text.muted)
+            }
+            .fixedSize()
+            .accessibilityLabel("New task from template")
+        }
+    }
+
+    @MainActor
+    private func instantiate(_ template: TaskItem) {
+        guard let repository, !isSaving else { return }
+        isSaving = true
+        do {
+            _ = try TemplateInstantiator(tasks: repository).instantiate(template)
+            onSaved?()
+            dismiss()
+        } catch {
+            saveError = "Couldn’t create a task from the template. Please try again."
+        }
+        isSaving = false
+    }
+
+    @MainActor
     private func ensureState() {
         guard state == nil, let parser else { return }
-        state = CapturePaneState(parser: parser)
+        state = CapturePaneState(parser: parser, projectResolver: makeProjectIDResolver())
+    }
+
+    @MainActor
+    private func makeProjectIDResolver() -> (@MainActor (String) -> UUID?)? {
+        guard let resolver = projectTokenResolver else { return nil }
+        return { token in resolver.project(for: token)?.id }
+    }
+
+    /// Canonical name of the project matched by the current parse's @token;
+    /// nil while unresolved (drives the chip's resolved/unresolved appearance).
+    private var resolvedProjectName: String? {
+        guard let token = state?.lastResult?.projectToken else { return nil }
+        return projectTokenResolver?.project(for: token)?.name
     }
 
     @MainActor

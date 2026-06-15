@@ -256,7 +256,9 @@ public final class AgentRuntime {
         try await contextBuilder.build(
             threadID: request.threadID,
             scope: request.scope,
-            userPrompt: request.userMessage
+            userPrompt: request.userMessage,
+            toolAllowlist: request.toolAllowlist,
+            systemPromptOverride: request.systemPromptOverride
         )
     }
 
@@ -307,7 +309,7 @@ public final class AgentRuntime {
             context: window.retrievedHits.map(\.itemID.uuidString),
             attachments: effectiveAttachments,
             messages: structuredMessages(from: window),
-            tools: toolSpecs(from: dispatcher.toolManifest),
+            tools: toolSpecs(from: dispatcher.toolManifest, allowlist: request.toolAllowlist),
             systemPrompt: window.systemPrompt
         )
     }
@@ -340,8 +342,11 @@ public final class AgentRuntime {
 
     /// Converts the dispatcher's tool manifest into `[AIToolSpec]` so native
     /// tool-calling providers can advertise callable tools to the model.
-    private func toolSpecs(from manifest: ToolManifestDTO) -> [AIToolSpec] {
-        manifest.tools.map { entry in
+    /// When `allowlist` is non-nil, only entries whose `name` is in the list
+    /// are included; `nil` passes the full manifest unchanged.
+    private func toolSpecs(from manifest: ToolManifestDTO, allowlist: [String]? = nil) -> [AIToolSpec] {
+        let entries = allowlist.map { a in manifest.tools.filter { a.contains($0.name) } } ?? manifest.tools
+        return entries.map { entry in
             let encodedSchema =
                 (try? encoder.encode(entry.inputSchema)).flatMap {
                     String(data: $0, encoding: .utf8)

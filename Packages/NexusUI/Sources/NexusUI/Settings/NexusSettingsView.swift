@@ -2,10 +2,7 @@ import SwiftUI
 
 #if !os(watchOS)
 
-// swiftlint:disable file_length
-
 import NexusAI
-import NexusAgentTools
 import NexusCore
 
 #if canImport(UIKit)
@@ -14,10 +11,13 @@ import UIKit
 import AppKit
 #endif
 
-// swiftlint:disable type_body_length
-/// Single SwiftUI scene shared by Mac (`Settings { }`) and iOS (`.sheet { }`). Sections are
-/// stacked vertically inside a `Form` — SwiftUI renders this as a side-by-side panel on Mac and a
-/// grouped form on iOS without further conditionals.
+// The iOS Settings form grows by ~1 section/row per feature by design, so it
+// crosses the per-type and per-file line budgets — same rationale as the app
+// composition roots.
+// swiftlint:disable type_body_length file_length
+/// iOS Settings root (mounted by `NexusiOSApp` → `SettingsTab`). On macOS,
+/// Settings now lives in-shell as `LiquidSettingsView`; this view's former
+/// macOS branch was retired, so the body is the iOS scrollable form.
 public struct NexusSettingsView: View {
     public let cloudKitEnabled: Bool
     public let containerIdentifier: String
@@ -25,9 +25,11 @@ public struct NexusSettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var liveData: AISettingsLiveData?
     @State private var calendarPermission = CalendarPermissionState()
+    @State private var goalsState = GoalsSettingsState()
     @AppStorage(NexusPreferences.Keys.theme) private var theme: String = NexusTheme.amberDark.rawValue
     @AppStorage(NexusPreferences.Keys.advancedEnabled) private var advancedEnabled: Bool = false
     @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) private var calendarEventsInTodayEnabled = false
+    @AppStorage(NexusPreferences.Keys.keepScreenAwakeEnabled) private var keepScreenAwakeEnabled = false
 
     /// Optional Tasks-section wiring. When `notificationsAuthorized` is non-nil
     /// the Tasks section renders — apps inject this from a
@@ -36,23 +38,9 @@ public struct NexusSettingsView: View {
     private let notificationsAuthorized: Bool?
     private let quietHoursStartTime: Binding<Date>?
     private let quietHoursEndTime: Binding<Date>?
-    private let externalAccessConfig: ExternalAccessConfig?
     private let agentSettingsContent: AnyView?
     private let meetingsSettingsContent: AnyView?
     private let manageModelsContent: AnyView?
-
-    public struct ExternalAccessConfig {
-        public let sidecarPath: String
-        public let activityLog: AgentActivityLog
-
-        public init(
-            sidecarPath: String,
-            activityLog: AgentActivityLog
-        ) {
-            self.sidecarPath = sidecarPath
-            self.activityLog = activityLog
-        }
-    }
 
     public init(
         cloudKitEnabled: Bool,
@@ -61,7 +49,6 @@ public struct NexusSettingsView: View {
         notificationsAuthorized: Bool? = nil,
         quietHoursStartTime: Binding<Date>? = nil,
         quietHoursEndTime: Binding<Date>? = nil,
-        externalAccessConfig: ExternalAccessConfig? = nil,
         agentSettingsContent: AnyView? = nil,
         meetingsSettingsContent: AnyView? = nil,
         manageModelsContent: AnyView? = nil,
@@ -72,7 +59,6 @@ public struct NexusSettingsView: View {
         self.notificationsAuthorized = notificationsAuthorized
         self.quietHoursStartTime = quietHoursStartTime
         self.quietHoursEndTime = quietHoursEndTime
-        self.externalAccessConfig = externalAccessConfig
         self.agentSettingsContent = agentSettingsContent
         self.meetingsSettingsContent = meetingsSettingsContent
         self.manageModelsContent = manageModelsContent
@@ -81,379 +67,11 @@ public struct NexusSettingsView: View {
     }
 
     public var body: some View {
-        #if os(macOS)
-        ZStack {
-            NexusWallpaper()
-            macSettingsScroll
-        }
-        .background(NexusColor.Background.base)
-        .frame(minWidth: 620, minHeight: 520)
-        #else
+        // macOS now renders Settings via the in-shell `LiquidSettingsView`
+        // (NexusUI/Settings/Liquid). This view is mounted only on iOS
+        // (`NexusiOSApp` → `SettingsTab`), so the body is the iOS form.
         settingsForm
-        #endif
     }
-
-    #if os(macOS)
-    private var macSettingsScroll: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: NexusSpacing.s7) {
-                macSettingsContent
-            }
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, NexusSpacing.s5)
-            .padding(.top, NexusSpacing.s7)
-            .padding(.bottom, NexusSpacing.s8)
-        }
-        .scrollContentBackground(.hidden)
-        .onAppear {
-            calendarPermission.refresh()
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                calendarPermission.refresh()
-            }
-        }
-        .task { await liveData?.refresh() }
-    }
-
-    @ViewBuilder
-    private var macSettingsContent: some View {
-        macGeneralSection
-        macSyncSection
-        macTasksSection
-        macProvidersSection
-        macVoiceSection
-        macNavigationSection(
-            title: "Models",
-            label: "Manage Models",
-            systemImage: "cpu",
-            destination: manageModelsContent,
-            footer: "Downloaded local models, chat/embedder assignment, memory, and resource release."
-        )
-        macNavigationSection(
-            title: "Agent",
-            label: "Agent",
-            systemImage: "sparkles",
-            destination: agentSettingsContent,
-            footer: "Agent memory, indexing, schedules, audit, and provider routing."
-        )
-        macNavigationSection(
-            title: "Meetings",
-            label: "Meetings",
-            systemImage: "person.wave.2",
-            destination: meetingsSettingsContent,
-            footer: "Recording, transcription, summary prompts, retention, and imports."
-        )
-        if advancedEnabled, let config = externalAccessConfig {
-            ExternalAccessSection(
-                sidecarPath: config.sidecarPath,
-                activityLog: config.activityLog
-            )
-        }
-        macAdvancedSection
-        macAboutSection
-    }
-
-    private var macGeneralSection: some View {
-        macSettingsSection("General") {
-            VStack(spacing: 0) {
-                NexusSettingsRow("Theme") {
-                    Picker("Theme", selection: $theme) {
-                        ForEach(NexusTheme.allCases, id: \.rawValue) { value in
-                            Text(label(for: value)).tag(value.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(width: 142)
-                }
-                NexusSettingsDivider()
-                macHelperText("Light mode arrives once the base tokens stabilize.")
-                NexusSettingsDivider()
-                NexusSettingsRow("Show advanced features") {
-                    Toggle("", isOn: $advancedEnabled)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-                NexusSettingsDivider()
-                macHelperText("Reveals external access and advanced cloud-provider settings.")
-            }
-        }
-    }
-
-    private var macSyncSection: some View {
-        macSettingsSection("Sync") {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: cloudKitEnabled ? "checkmark.icloud.fill" : "icloud.slash")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(cloudKitEnabled ? NexusColor.Text.tertiary : NexusColor.Text.secondary)
-                    .frame(width: 18, alignment: .center)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(cloudKitEnabled ? "iCloud active" : "iCloud unavailable")
-                        .font(NexusType.bodySmall.weight(.semibold))
-                        .foregroundStyle(NexusColor.Text.primary)
-                    Text(containerIdentifier)
-                        .font(NexusType.mono)
-                        .foregroundStyle(NexusColor.Text.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(cloudKitEnabled ? "CloudKit private database is enabled." : "Disabled in the local development environment.")
-                        .font(NexusType.caption)
-                        .foregroundStyle(NexusColor.Text.tertiary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-        }
-    }
-
-    @ViewBuilder
-    private var macTasksSection: some View {
-        if let config = tasksConfig {
-            macSettingsSection(
-                "Tasks",
-                footer: "Nexus reads events from the system Calendar in read-only mode. It never creates or modifies anything."
-            ) {
-                VStack(spacing: 0) {
-                    if !config.authorized {
-                        deniedBanner
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                        NexusSettingsDivider()
-                    }
-                    NexusSettingsRow("Quiet hours from") {
-                        DatePicker("", selection: config.start, displayedComponents: .hourAndMinute)
-                            .labelsHidden()
-                            .frame(width: 102)
-                    }
-                    NexusSettingsDivider()
-                    NexusSettingsRow("Quiet hours until") {
-                        DatePicker("", selection: config.end, displayedComponents: .hourAndMinute)
-                            .labelsHidden()
-                            .frame(width: 102)
-                    }
-                    NexusSettingsDivider()
-                    NexusSettingsRow("Show Calendar events in Today") {
-                        Toggle("", isOn: $calendarEventsInTodayEnabled)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
-                            .onChange(of: calendarEventsInTodayEnabled) { _, newValue in
-                                handleCalendarToggleChange(newValue)
-                            }
-                    }
-                    NexusSettingsDivider()
-                    if calendarPermission.status == .denied || calendarPermission.status == .restricted {
-                        macCalendarDeniedRow
-                        NexusSettingsDivider()
-                    }
-                    NexusSettingsRow("Calendar permissions") {
-                        HStack(spacing: 12) {
-                            calendarPermissionStatusLabel
-                                .font(NexusType.bodySmall.weight(.medium))
-                            if calendarPermission.status == .denied || calendarPermission.status == .restricted {
-                                openCalendarSettingsButton
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var macCalendarDeniedRow: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(NexusColor.Text.secondary)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Calendar access disabled")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(NexusColor.Text.primary)
-                Text("Enable permission in System Settings to see events in Today.")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
-            }
-            Spacer(minLength: 8)
-            openCalendarSettingsButton
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-
-    private var macProvidersSection: some View {
-        macSettingsSection("On-device providers", footer: "Phase 1l-MLX adds a local LLM for longer-context work.") {
-            VStack(spacing: 0) {
-                macProviderRow(
-                    title: "Apple Intelligence",
-                    subtitle: "Local generation",
-                    state: liveData?.appleIntelligenceAvailability ?? .unavailable(reason: .modelNotAvailable)
-                )
-                NexusSettingsDivider()
-                macProviderRow(
-                    title: "Embeddings",
-                    subtitle: "NLEmbedding semantic index",
-                    state: liveData?.embeddingAvailability ?? .unavailable(reason: .modelNotAvailable)
-                )
-            }
-        }
-    }
-
-    private var macVoiceSection: some View {
-        macSettingsSection("Voice") {
-            VStack(spacing: 0) {
-                macProviderRow(
-                    title: "Transcription",
-                    subtitle: "WhisperKit local speech-to-text",
-                    state: liveData?.whisperKitAvailability ?? .unavailable(reason: .modelNotAvailable)
-                )
-                NexusSettingsDivider()
-                // macOS previously lacked any download affordance, so transcription
-                // was stuck at "Not available on this device" with no way to fetch
-                // the model — iOS had the button via `AISettingsSection`. Same
-                // shared control here closes the gap.
-                WhisperKitDownloadControl(onRefresh: { await liveData?.refresh() })
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                NexusSettingsDivider()
-                NexusSettingsRow("Preload transcription model at launch") {
-                    WhisperKitPreloadToggle()
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func macNavigationSection(
-        title: String,
-        label: String,
-        systemImage: String,
-        destination: AnyView?,
-        footer: String
-    ) -> some View {
-        if let destination {
-            macSettingsSection(title, footer: footer) {
-                NavigationLink {
-                    destination
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: systemImage)
-                            .frame(width: 18)
-                        Text(label)
-                            .font(NexusType.bodySmall.weight(.semibold))
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(NexusColor.Text.muted)
-                    }
-                    .foregroundStyle(NexusColor.Text.primary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 13)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var macAdvancedSection: some View {
-        macSettingsSection("Advanced") {
-            Button(action: onExportRequested) {
-                HStack(spacing: 12) {
-                    Image(systemName: "square.and.arrow.up")
-                        .frame(width: 18)
-                    Text("Export to Folder...")
-                        .font(NexusType.bodySmall.weight(.semibold))
-                    Spacer()
-                }
-                .foregroundStyle(NexusColor.Text.primary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 13)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var macAboutSection: some View {
-        macSettingsSection("About") {
-            VStack(spacing: 0) {
-                macReadOnlyRow("Nexus", value: bundleShortVersion)
-                NexusSettingsDivider()
-                macReadOnlyRow("Build", value: bundleVersion)
-                NexusSettingsDivider()
-                macReadOnlyRow("Core", value: NexusCore.version)
-            }
-        }
-    }
-
-    private func macProviderRow(title: String, subtitle: String, state: AvailabilityState) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(NexusType.bodySmall.weight(.semibold))
-                    .foregroundStyle(NexusColor.Text.primary)
-                Text(subtitle)
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
-            }
-            Spacer(minLength: 16)
-            switch state {
-            case .available:
-                NexusBadge("Local", systemImage: "checkmark.circle.fill", tone: .pos)
-            case .unavailable(let reason):
-                NexusBadge(reasonLabel(reason), systemImage: "exclamationmark.circle", tone: .warn)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 13)
-    }
-
-    private func macReadOnlyRow(_ title: String, value: String) -> some View {
-        NexusSettingsRow(title) {
-            Text(value)
-                .font(NexusType.bodySmall.weight(.medium))
-                .foregroundStyle(NexusColor.Text.secondary)
-        }
-    }
-
-    private func macSettingsSection<Content: View>(
-        _ title: String,
-        footer: String? = nil,
-        @ViewBuilder content: @escaping () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: NexusSpacing.s3) {
-            nexusSettingsCardSectionHeader(title)
-            NexusSettingsCard {
-                content()
-            }
-            if let footer {
-                Text(footer)
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
-                    .padding(.horizontal, 16)
-            }
-        }
-    }
-
-    private func macHelperText(_ text: String) -> some View {
-        Text(text)
-            .font(NexusType.caption)
-            .foregroundStyle(NexusColor.Text.muted)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func reasonLabel(_ reason: AvailabilityState.UnavailableReason) -> String {
-        switch reason {
-        case .modelNotAvailable: return "Not available on this device"
-        case .modelDownloading: return "Downloading..."
-        case .userDisabled: return "Disabled in System Settings"
-        }
-    }
-
-    #endif
 
     private func handleCalendarToggleChange(_ newValue: Bool) {
         guard newValue else { return }
@@ -493,6 +111,7 @@ public struct NexusSettingsView: View {
                 iosGeneralSection
                 iosSyncSection
                 iosTasksSection
+                iosGoalsSection
                 #if os(iOS)
                 iosAppleWatchSection
                 #endif
@@ -573,26 +192,44 @@ public struct NexusSettingsView: View {
         iosSettingsSection("General") {
             VStack(spacing: 0) {
                 NexusSettingsRow("Theme") {
-                    Picker("Theme", selection: $theme) {
-                        ForEach(NexusTheme.allCases, id: \.rawValue) { value in
-                            Text(label(for: value)).tag(value.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .tint(NexusColor.Text.primary)
+                    NexusSelect(
+                        selection: $theme,
+                        options: NexusTheme.allCases.map(\.rawValue),
+                        label: { rawValue in
+                            NexusTheme(rawValue: rawValue).map(label(for:)) ?? rawValue
+                        },
+                        accessibilityLabel: "Theme"
+                    )
                 }
                 NexusSettingsDivider()
                 iosHelperText("Light mode arrives once the base tokens stabilize.")
                 NexusSettingsDivider()
-                NexusSettingsRow("Show advanced features") {
-                    Toggle("", isOn: $advancedEnabled)
-                        .labelsHidden()
-                }
+                NexusToggle("Show advanced features", isOn: $advancedEnabled)
+                    .padding(.horizontal, NexusSpacing.s4)
+                    .frame(minHeight: 44)
                 NexusSettingsDivider()
                 iosHelperText("Reveals external access and advanced cloud-provider settings.")
+                keepScreenAwakeRow
             }
         }
+    }
+
+    /// iPad-only: a desk-side always-on companion. Suppresses Auto-Lock while
+    /// Nexus is foreground-active (see `KeepScreenAwakeLifecycleModifier`).
+    @ViewBuilder
+    private var keepScreenAwakeRow: some View {
+        #if os(iOS)
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            NexusSettingsDivider()
+            NexusToggle(
+                "Keep screen awake",
+                caption: "Prevents Auto-Lock while Nexus is open — for a desk-side iPad.",
+                isOn: $keepScreenAwakeEnabled
+            )
+            .padding(.horizontal, NexusSpacing.s4)
+            .frame(minHeight: 44)
+        }
+        #endif
     }
 
     private var iosSyncSection: some View {
@@ -637,22 +274,27 @@ public struct NexusSettingsView: View {
                         NexusSettingsDivider()
                     }
                     NexusSettingsRow("Quiet hours from") {
-                        DatePicker("", selection: config.start, displayedComponents: .hourAndMinute)
-                            .labelsHidden()
+                        NexusDateField(
+                            date: config.start,
+                            components: [.hourAndMinute],
+                            accessibilityLabel: "Quiet hours from"
+                        )
                     }
                     NexusSettingsDivider()
                     NexusSettingsRow("Quiet hours until") {
-                        DatePicker("", selection: config.end, displayedComponents: .hourAndMinute)
-                            .labelsHidden()
+                        NexusDateField(
+                            date: config.end,
+                            components: [.hourAndMinute],
+                            accessibilityLabel: "Quiet hours until"
+                        )
                     }
                     NexusSettingsDivider()
-                    NexusSettingsRow("Show Calendar events in Today") {
-                        Toggle("", isOn: $calendarEventsInTodayEnabled)
-                            .labelsHidden()
-                            .onChange(of: calendarEventsInTodayEnabled) { _, newValue in
-                                handleCalendarToggleChange(newValue)
-                            }
-                    }
+                    NexusToggle("Show Calendar events in Today", isOn: $calendarEventsInTodayEnabled)
+                        .padding(.horizontal, NexusSpacing.s4)
+                        .frame(minHeight: 44)
+                        .onChange(of: calendarEventsInTodayEnabled) { _, newValue in
+                            handleCalendarToggleChange(newValue)
+                        }
                     if calendarPermission.status == .denied || calendarPermission.status == .restricted {
                         NexusSettingsDivider()
                         iosCalendarDeniedRow
@@ -669,6 +311,29 @@ public struct NexusSettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var iosGoalsSection: some View {
+        iosSettingsSection(
+            "Goals",
+            footer: "Daily and weekly completion targets drive the Goals card on the productivity dashboard. "
+                + "Set a target to 0 to hide it."
+        ) {
+            goalsRows
+        }
+    }
+
+    private var goalsRows: some View {
+        @Bindable var goals = goalsState
+        return VStack(spacing: 0) {
+            NexusStepper("Daily goal", value: $goals.dailyTarget, in: 0...99, unit: "tasks")
+                .padding(.horizontal, NexusSpacing.s4)
+                .frame(minHeight: 44)
+            NexusSettingsDivider()
+            NexusStepper("Weekly goal", value: $goals.weeklyTarget, in: 0...99, unit: "tasks")
+                .padding(.horizontal, NexusSpacing.s4)
+                .frame(minHeight: 44)
         }
     }
 
