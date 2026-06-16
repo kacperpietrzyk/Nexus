@@ -7,9 +7,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ## [0.3.3] - 2026-06-16
-Adds a local Obsidian vault importer and unblocks the CI lint gate.
+Adds on-device meeting summaries with manual recording, a local Obsidian vault
+importer, and back-datable MCP task creation; fixes device-tier model selection on
+8 GB iPhones and unblocks the CI lint gate.
 
 ### Added
+- **On-device meeting summaries with manual recording.** Meetings now summarize on
+  device first: the helper transcribes and hands the transcript to the app, where the
+  resident Gemma assistant model writes the summary and action items, falling back to
+  Apple Intelligence if the model can't produce one within ~25 s. A manual record
+  button lets you start a recording from the system picker without granting
+  Accessibility, and the app now actively prompts for Accessibility permission (once)
+  when automatic meeting detection needs it.
 - **Import an Obsidian vault.** A new importer (Settings → Advanced, next to Export
   on macOS) reads `.md` files straight from disk and creates Nexus notes locally —
   no network, no LLM. It strips leading YAML frontmatter, preserves the vault's
@@ -19,8 +28,16 @@ Adds a local Obsidian vault importer and unblocks the CI lint gate.
   so re-running only adds what's missing. Because the note body never passes through
   a model, content the usage-policy classifier blocks during MCP/agent writes
   imports cleanly.
+- **Back-dated task creation over MCP.** The MCP task-creation tools now accept an
+  explicit `created_at`, so an agent importing historical items can preserve their
+  original chronology instead of stamping everything with the import time.
 
 ### Fixed
+- **8 GB iPhones were missing the Assistant model.** Device tiering floored the
+  reported RAM (iOS reports ~7.98 GiB, which truncated to 7 and failed the `>= 8`
+  check), so 8 GB iPhones only offered the Search model. Memory is now rounded to the
+  nearest gigabyte, and the iOS RAM floor was lowered to 7 GB so selection no longer
+  depends on the under-report.
 - **CI lint gate was stuck red.** A multi-line `if` condition in `TierDetector`
   deadlocked swift-format (which wanted the brace on its own line) against SwiftLint
   (which wanted it on the same line), keeping the Lint job red since 0.3.1.
