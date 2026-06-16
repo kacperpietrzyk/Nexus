@@ -56,6 +56,7 @@ struct NexusMacApp: App {
     private let meetingNavigationRouter: MeetingNavigationRouter
     private let meetingsHelperXPCClient: MeetingsHelperXPCClient
     private let helperToastBridge: HelperToastBridge
+    private let manualRecordingStarter: ManualRecordingStarter
     private let agentSocketServer: AgentSocketServer
     // Retained for the process lifetime — its kicked-off MLX downloads
     // (multi-GB) must outlive the welcome sheet.
@@ -132,6 +133,7 @@ struct NexusMacApp: App {
         self.meetingsHelperXPCClient = meetingNavigation.xpcClient
         self.meetingNavigationRouter = meetingNavigation.router
         self.helperToastBridge = meetingNavigation.bridge
+        self.manualRecordingStarter = ManualRecordingStarter(xpcClient: meetingNavigation.xpcClient)
         let heroBriefService = HeroBriefService(router: self.aiRouter)
         TaskIntentRuntime.configure(parser: self.taskParser, repository: self.taskRepository)
         let agentRouter = self.aiRouter
@@ -447,6 +449,9 @@ struct NexusMacApp: App {
                     syncAgentListener(
                         enabled: UserDefaults.standard.bool(forKey: AgentServiceConstants.mcpEnabledKey)
                     )
+                }
+                .onReceive(NotificationCenter.default.publisher(for: MeetingRecordingRequest.startManual)) { _ in
+                    Task { @MainActor in manualRecordingStarter.startWithPicker() }
                 }
                 .sheet(
                     isPresented: Binding(
@@ -1013,6 +1018,11 @@ private struct NexusMenuBarContent: View {
             }
         }
         .keyboardShortcut("k", modifiers: [.command])
+
+        Button("Record Meeting…") {
+            NotificationCenter.default.post(name: MeetingRecordingRequest.startManual, object: nil)
+        }
+        .keyboardShortcut("r", modifiers: [.command, .shift])
 
         Button("Open Nexus") {
             openWindow(id: "main")

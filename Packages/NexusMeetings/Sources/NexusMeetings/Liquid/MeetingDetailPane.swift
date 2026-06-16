@@ -81,6 +81,13 @@ struct MeetingDetailPane: View {
                 ForEach(statusBadges(meeting), id: \.label) { badge in
                     LiquidPill(badge.label, color: badge.color)
                 }
+                Button {
+                    NotificationCenter.default.post(name: MeetingRecordingRequest.startManual, object: nil)
+                } label: {
+                    Label("Record", systemImage: "record.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Start a recording by picking a meeting window")
                 shareButton(meeting)
             }
         }
