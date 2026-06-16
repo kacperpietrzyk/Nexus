@@ -44,9 +44,17 @@ public final class MeetingSummaryClaimer {
     }
 
     public func sweep() {
-        for meeting in pendingMeetings() where SummaryClaimDecision.canClaim(currentStatus: meeting.processingStatus) {
-            claimAndRun(meetingID: meeting.id, audioFolder: folderForMeeting(meeting.id))
+        for meeting in pendingMeetings() {
+            guard SummaryClaimDecision.canRecoverOnLaunch(currentStatus: meeting.processingStatus) else { continue }
+            recover(meetingID: meeting.id, audioFolder: folderForMeeting(meeting.id))
         }
+    }
+
+    private func recover(meetingID: UUID, audioFolder: URL) {
+        guard let meeting = find(meetingID) else { return }
+        guard SummaryClaimDecision.canRecoverOnLaunch(currentStatus: meeting.processingStatus) else { return }
+        claim(meeting)
+        runContinuation(meetingID, audioFolder)
     }
 
     public func claimAndRun(meetingID: UUID, audioFolder: URL) {

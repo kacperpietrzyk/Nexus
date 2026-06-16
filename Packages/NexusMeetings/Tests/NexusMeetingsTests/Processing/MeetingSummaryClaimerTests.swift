@@ -63,4 +63,38 @@ import Testing
         c.sweep()
         #expect(claimedIDs == [awaiting.id])
     }
+
+    @Test func sweepRecoversStuckClaimed() {
+        let stuck = awaitingMeeting()
+        stuck.processingStatus = MeetingProcessingStatus.claimedExternalSummary.rawValue
+        var claimed = false
+        var ran = false
+        let c = MeetingSummaryClaimer(
+            pendingMeetings: { [stuck] },
+            find: { _ in stuck },
+            claim: { _ in claimed = true },
+            runContinuation: { _, _ in ran = true },
+            folderForMeeting: { _ in URL(fileURLWithPath: "/tmp") }
+        )
+        c.sweep()
+        #expect(claimed)
+        #expect(ran)
+    }
+
+    @Test func liveClaimAndRunSkipsAlreadyClaimed() {
+        let stuck = awaitingMeeting()
+        stuck.processingStatus = MeetingProcessingStatus.claimedExternalSummary.rawValue
+        var claimed = false
+        var ran = false
+        let c = MeetingSummaryClaimer(
+            pendingMeetings: { [stuck] },
+            find: { _ in stuck },
+            claim: { _ in claimed = true },
+            runContinuation: { _, _ in ran = true },
+            folderForMeeting: { _ in URL(fileURLWithPath: "/tmp") }
+        )
+        c.claimAndRun(meetingID: stuck.id, audioFolder: URL(fileURLWithPath: "/tmp"))
+        #expect(!claimed)
+        #expect(!ran)
+    }
 }

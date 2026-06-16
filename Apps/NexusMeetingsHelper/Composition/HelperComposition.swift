@@ -53,7 +53,7 @@ final class HelperComposition {
         )
         meetingsComposition.registerInboxSource()
 
-        let (scheduler, processor) = Self.makeDeferralProcessor(composition: meetingsComposition)
+        let (scheduler, processor) = Self.makeDeferralProcessor(composition: meetingsComposition, container: container)
         summaryFallbackScheduler = scheduler
         meetingProcessor = processor
 
@@ -111,12 +111,17 @@ final class HelperComposition {
     }
 
     private static func makeDeferralProcessor(
-        composition: MeetingsComposition
+        composition: MeetingsComposition,
+        container: ModelContainer
     ) -> (SummaryFallbackScheduler, MeetingSummaryDeferralProcessor) {
         let pipeline = composition.pipeline
         let repo = composition.meetingRepository
         let scheduler = SummaryFallbackScheduler(
-            status: { (try? repo.find(id: $0))?.processingStatus },
+            status: { meetingID in
+                let fresh = ModelContext(container)
+                let descriptor = FetchDescriptor<Meeting>(predicate: #Predicate { $0.id == meetingID })
+                return (try? fresh.fetch(descriptor))?.first?.processingStatus
+            },
             run: { meetingID, folder in
                 guard let meeting = try? repo.find(id: meetingID) else { return }
                 try? await pipeline.processSummaryAndActions(meeting: meeting, audioFolder: folder)

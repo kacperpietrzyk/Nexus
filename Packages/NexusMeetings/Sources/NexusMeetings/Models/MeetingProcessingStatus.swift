@@ -30,9 +30,6 @@ public enum MeetingProcessingStatus: String, Sendable, Codable, CaseIterable {
     /// gate the in-app "Cancel processing" control, which drives the helper's
     /// `PipelineQueue` over XPC.
     public static func isInFlight(_ raw: String) -> Bool {
-        raw == queued.rawValue
-            || raw.hasPrefix("processing-")
-            || raw == awaitingExternalSummary.rawValue
-            || raw == claimedExternalSummary.rawValue
+        raw == queued.rawValue || raw.hasPrefix("processing-")
     }
 }

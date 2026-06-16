@@ -3,9 +3,9 @@ import Testing
 @testable import NexusMeetings
 
 @Suite struct MeetingProcessingStatusHandoffTests {
-    @Test func awaitingAndClaimedAreInFlight() {
-        #expect(MeetingProcessingStatus.isInFlight(MeetingProcessingStatus.awaitingExternalSummary.rawValue))
-        #expect(MeetingProcessingStatus.isInFlight(MeetingProcessingStatus.claimedExternalSummary.rawValue))
+    @Test func awaitingAndClaimedAreNotInFlight() {
+        #expect(!MeetingProcessingStatus.isInFlight(MeetingProcessingStatus.awaitingExternalSummary.rawValue))
+        #expect(!MeetingProcessingStatus.isInFlight(MeetingProcessingStatus.claimedExternalSummary.rawValue))
     }
 
     @Test func rawValuesAreStable() {
