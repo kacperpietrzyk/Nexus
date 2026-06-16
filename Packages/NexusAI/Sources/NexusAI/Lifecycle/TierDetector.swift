@@ -72,8 +72,7 @@ public enum TierDetector {
             // a heavy reasoner — E4B is sufficient there. WHEN mlx-swift-lm adds
             // `gemma4_unified`, collapse both tiers to a single ~7 GB 12B entry (fits
             // 16 GB) and drop the RAM split.
-            if physicalMemoryGB >= 24,
-                storageAllows(modelSizeGB: 14.6, availableGB: availableStorageGB) {
+            if physicalMemoryGB >= 24, storageAllows(modelSizeGB: 14.6, availableGB: availableStorageGB) {
                 return DeviceTier(
                     recommendedChat: "gemma-4-26b-a4b",
                     recommendedEmbedder: e5LargeID)

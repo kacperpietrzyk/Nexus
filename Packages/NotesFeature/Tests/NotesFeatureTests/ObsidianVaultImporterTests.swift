@@ -29,15 +29,17 @@ private func makeVault(_ files: [String: String]) throws -> URL {
 // MARK: - Pure derivations
 
 @Test func title_stripsMdExtension_preservingAmpersandAndSpaces() {
-    #expect(ObsidianVaultImporter.title(forFileName: "CrowdStrike Strategy & Roadmap.md")
-        == "CrowdStrike Strategy & Roadmap")
+    #expect(
+        ObsidianVaultImporter.title(forFileName: "CrowdStrike Strategy & Roadmap.md")
+            == "CrowdStrike Strategy & Roadmap")
     #expect(ObsidianVaultImporter.title(forFileName: "Plain.md") == "Plain")
 }
 
 @Test func body_stripsLeadingFrontmatter() {
     let content = "---\ntitle: X\ntags: []\n---\n\nHello world\n\nSecond para"
-    #expect(ObsidianVaultImporter.body(strippingFrontmatterFrom: content)
-        == "Hello world\n\nSecond para")
+    #expect(
+        ObsidianVaultImporter.body(strippingFrontmatterFrom: content)
+            == "Hello world\n\nSecond para")
 }
 
 @Test func body_withoutFrontmatter_isUnchanged() {
@@ -57,9 +59,10 @@ private func makeVault(_ files: [String: String]) throws -> URL {
 }
 
 @Test func folderPath_nested_isNormalizedDir() {
-    #expect(ObsidianVaultImporter.folderPath(
-        forRelativePath: "20 - Softinet Internal/Strategy/Talking Points.md")
-        == "20 - Softinet Internal/Strategy")
+    #expect(
+        ObsidianVaultImporter.folderPath(
+            forRelativePath: "20 - Softinet Internal/Strategy/Talking Points.md")
+            == "20 - Softinet Internal/Strategy")
 }
 
 @Test func folderPath_rootFile_isNil() {
@@ -104,7 +107,7 @@ private func makeVault(_ files: [String: String]) throws -> URL {
         "Root.md": "x",
         "A/Nested.md": "y",
         "A/image.png": "binary",
-        ".obsidian/config.md": "should be skipped"
+        ".obsidian/config.md": "should be skipped",
     ])
     defer { try? FileManager.default.removeItem(at: vault) }
     let found = try ObsidianVaultImporter.discover(vaultRoot: vault).map(\.relativePath)
@@ -118,7 +121,7 @@ private func makeVault(_ files: [String: String]) throws -> URL {
     let vault = try makeVault([
         "20 - Softinet Internal/Strategy/Talking Points.md": "---\ntitle: ignored\n---\n\nBoard talking points body",
         "90 - Templates/Project Hub.md": "Template body",
-        "Root Note.md": "at the root"
+        "Root Note.md": "at the root",
     ])
     defer { try? FileManager.default.removeItem(at: vault) }
     let repo = try makeRepo()
