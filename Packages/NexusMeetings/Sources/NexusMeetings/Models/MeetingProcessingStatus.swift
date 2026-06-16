@@ -9,6 +9,8 @@ public enum MeetingProcessingStatus: String, Sendable, Codable, CaseIterable {
     case processingMerge = "processing-merge"
     case processingSummary = "processing-summary"
     case processingActions = "processing-actions"
+    case awaitingExternalSummary = "awaiting-external-summary"
+    case claimedExternalSummary = "claimed-external-summary"
     case ready
     case failed
 

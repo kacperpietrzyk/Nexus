@@ -58,11 +58,18 @@ public final class MeetingProcessingPipeline {
     }
 
     public func process(meeting: Meeting, audioFolder: URL) async throws {
+        try await processTranscriptionOnly(meeting: meeting, audioFolder: audioFolder)
+        try await processSummaryAndActions(meeting: meeting, audioFolder: audioFolder)
+    }
+
+    /// VAD → ASR → diarization → merge. Persists the transcript and provider
+    /// profile. Leaves the LLM stages (summary + action items) untouched so the
+    /// caller can decide where they run.
+    public func processTranscriptionOnly(meeting: Meeting, audioFolder: URL) async throws {
         let meURL = audioFolder.appendingPathComponent("me.wav")
         let othersURL = audioFolder.appendingPathComponent("others.wav")
         let durationMs = max(0, meeting.durationSec) * 1_000
         var currentStage = MeetingProcessingStatus.processingVAD.rawValue
-
         do {
             // Each `setStatus` first runs `try Task.checkCancellation()`, so
             // cancellation (see `PipelineQueue.cancelProcessing`) is observed at
@@ -75,9 +82,7 @@ public final class MeetingProcessingPipeline {
             currentStage = MeetingProcessingStatus.processingASR.rawValue
             try setStatus(meeting, .processingASR)
             let transcriptionOutput = try await transcription.run(
-                meURL: meURL,
-                othersURL: othersURL,
-                languageHint: meeting.languageCode
+                meURL: meURL, othersURL: othersURL, languageHint: meeting.languageCode
             )
             meeting.languageCode = transcriptionOutput.detectedLanguage
 
@@ -88,18 +93,32 @@ public final class MeetingProcessingPipeline {
             currentStage = MeetingProcessingStatus.processingMerge.rawValue
             try setStatus(meeting, .processingMerge)
             try mergeAndPersistTranscript(
-                meeting: meeting,
-                transcription: transcriptionOutput,
-                diarization: diarizationOutput,
-                audioFolder: audioFolder
+                meeting: meeting, transcription: transcriptionOutput,
+                diarization: diarizationOutput, audioFolder: audioFolder
             )
+            meeting.providerProfile = Self.providerProfile(
+                transcriptionProfile: transcriptionOutput.providerProfile,
+                diarizationProfile: providerProfile()
+            )
+            meeting.updatedAt = now()
+            try repo.upsert(meeting)
+        } catch {
+            try? setFailureStatus(meeting, stage: currentStage)
+            throw error
+        }
+    }
 
+    /// Summary + action items + finalize(.ready). Runs through whichever AI
+    /// router this pipeline was built with (MLX/Gemma in the main app, Apple
+    /// Intelligence in the helper). Safe to call on an already-transcribed meeting.
+    public func processSummaryAndActions(meeting: Meeting, audioFolder: URL) async throws {
+        var currentStage = MeetingProcessingStatus.processingSummary.rawValue
+        do {
             // Screen-OCR context (spec §7): recording-time OCR text bridged via a
             // text-only sidecar in the audio folder (no schema field). `nil` when
             // the opt-in feature was off, so the prompts are byte-unchanged.
             let screenContext = screenContextStore.combinedText(folder: audioFolder)
 
-            currentStage = MeetingProcessingStatus.processingSummary.rawValue
             try setStatus(meeting, .processingSummary)
             meeting.summaryText = try await summary.run(
                 transcript: meeting.transcriptText,
@@ -113,17 +132,11 @@ public final class MeetingProcessingPipeline {
             currentStage = MeetingProcessingStatus.processingActions.rawValue
             try setStatus(meeting, .processingActions)
             _ = try await actionItems.run(
-                meeting: meeting,
-                transcript: meeting.transcriptText,
-                summary: meeting.summaryText,
-                screenContext: screenContext
+                meeting: meeting, transcript: meeting.transcriptText,
+                summary: meeting.summaryText, screenContext: screenContext
             )
 
             let stamp = now()
-            meeting.providerProfile = Self.providerProfile(
-                transcriptionProfile: transcriptionOutput.providerProfile,
-                diarizationProfile: providerProfile()
-            )
             meeting.processingStatus = MeetingProcessingStatus.ready.rawValue
             meeting.processedAt = stamp
             meeting.updatedAt = stamp

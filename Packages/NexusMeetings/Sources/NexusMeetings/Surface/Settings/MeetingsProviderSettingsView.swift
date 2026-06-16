@@ -7,7 +7,7 @@ public struct MeetingsProviderSettingsView: View {
     private var transcription = MeetingsTranscriptionProviderPreference.parakeetTDTv3.rawValue
 
     @AppStorage(MeetingsSettingsKeys.summaryProvider, store: .nexusGroup)
-    private var summary = MeetingsSummaryProviderPreference.auto.rawValue
+    private var summary = MeetingsSummaryProviderPreference.assistantModel.rawValue
 
     private let composition: MeetingsComposition
 
@@ -54,13 +54,15 @@ public struct MeetingsProviderSettingsView: View {
                     NexusSelect(
                         selection: $summary,
                         options: [
-                            MeetingsSummaryProviderPreference.auto.rawValue,
+                            MeetingsSummaryProviderPreference.assistantModel.rawValue,
+                            MeetingsSummaryProviderPreference.appleIntelligence.rawValue,
                             MeetingsSummaryProviderPreference.disabled.rawValue,
                         ],
                         label: { raw in
                             switch MeetingsSummaryProviderPreference(rawValue: raw) {
-                            case .auto: "Apple Intelligence (default)"
-                            case .disabled: "Disabled"
+                            case .assistantModel: "Asystent (Gemma, on-device) — domyślnie"
+                            case .appleIntelligence: "Apple Intelligence"
+                            case .disabled: "Wyłączone"
                             default: raw
                             }
                         },

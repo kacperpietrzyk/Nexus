@@ -14,6 +14,8 @@ final class HelperComposition {
     let statusBar: StatusBarController
     let xpcService: MeetingsHelperXPCService
     let readinessCoordinator: HelperReadinessCoordinator
+    let meetingProcessor: MeetingSummaryDeferralProcessor
+    let summaryFallbackScheduler: SummaryFallbackScheduler
 
     private let xpcDelegate: MeetingsHelperXPCDelegate
     private let appPatternRegistryStore: UserDefaultsAppPatternRegistryStore
@@ -51,6 +53,10 @@ final class HelperComposition {
         )
         meetingsComposition.registerInboxSource()
 
+        let (scheduler, processor) = Self.makeDeferralProcessor(composition: meetingsComposition, container: container)
+        summaryFallbackScheduler = scheduler
+        meetingProcessor = processor
+
         statusBar = StatusBarController()
         xpcDelegate = MeetingsHelperXPCDelegate(
             recorder: meetingsComposition.recorder,
@@ -58,6 +64,7 @@ final class HelperComposition {
             pipelineQueue: meetingsComposition.pipelineQueue,
             meetingRepository: meetingsComposition.meetingRepository,
             audioStorageRepository: meetingsComposition.audioStorageRepository,
+            meetingProcessor: processor,
             retentionPolicyProvider: { retentionStore.load() }
         )
         xpcService = MeetingsHelperXPCService(delegate: xpcDelegate)
@@ -103,6 +110,38 @@ final class HelperComposition {
         xpcDelegate.recordingStateSnapshot()
     }
 
+    private static func makeDeferralProcessor(
+        composition: MeetingsComposition,
+        container: ModelContainer
+    ) -> (SummaryFallbackScheduler, MeetingSummaryDeferralProcessor) {
+        let pipeline = composition.pipeline
+        let repo = composition.meetingRepository
+        let scheduler = SummaryFallbackScheduler(
+            status: { meetingID in
+                let fresh = ModelContext(container)
+                let descriptor = FetchDescriptor<Meeting>(predicate: #Predicate { $0.id == meetingID })
+                return (try? fresh.fetch(descriptor))?.first?.processingStatus
+            },
+            run: { meetingID, folder in
+                guard let meeting = try? repo.find(id: meetingID) else { return }
+                try? await pipeline.processSummaryAndActions(meeting: meeting, audioFolder: folder)
+            }
+        )
+        let processor = MeetingSummaryDeferralProcessor(
+            transcribe: { try await pipeline.processTranscriptionOnly(meeting: $0, audioFolder: $1) },
+            summarize: { try await pipeline.processSummaryAndActions(meeting: $0, audioFolder: $1) },
+            preference: { MeetingsProviderSettingsStore.shared.summaryProvider() },
+            markAwaiting: { meeting in
+                meeting.processingStatus = MeetingProcessingStatus.awaitingExternalSummary.rawValue
+                meeting.updatedAt = Date()
+                try? repo.upsert(meeting)
+            },
+            postNeedsSummary: { MeetingSummaryHandoffNotification.post(meetingID: $0, folderPath: $1) },
+            scheduleFallback: { scheduler.schedule(meetingID: $0, audioFolder: $1) }
+        )
+        return (scheduler, processor)
+    }
+
     private static func rootAudioFolder() -> URL {
         MeetingAudioRootResolver.rootFolder()
     }
@@ -123,10 +162,9 @@ final class HelperComposition {
 
             let audioFolder = candidate.audioFolder
             let meetingID = candidate.meetingID
-            let pipeline = meetingsComposition.pipeline
             Task {
-                await meetingsComposition.pipelineQueue.enqueue(meetingID: meetingID) {
-                    try? await pipeline.process(meeting: meeting, audioFolder: audioFolder)
+                await meetingsComposition.pipelineQueue.enqueue(meetingID: meetingID) { [meetingProcessor] in
+                    await meetingProcessor.process(meeting: meeting, audioFolder: audioFolder)
                 }
             }
         }

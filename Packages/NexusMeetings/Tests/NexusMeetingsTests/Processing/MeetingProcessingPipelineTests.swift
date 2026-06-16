@@ -98,7 +98,7 @@ import Testing
         ),
         providerProfile: { "parakeet-tdt-v3+sortformer" },
         customSummaryTemplateProvider: { "Custom {{title}} -> {{transcript}}" },
-        summaryProviderPreference: { .auto }
+        summaryProviderPreference: { .assistantModel }
     )
 
     let audioFolder = FileManager.default.temporaryDirectory
@@ -141,7 +141,7 @@ import Testing
             sourceID: "meetings.action-items"
         ),
         providerProfile: { "parakeet-tdt-v3+sortformer" },
-        summaryProviderPreference: { .auto }
+        summaryProviderPreference: { .assistantModel }
     )
 
     let audioFolder = FileManager.default.temporaryDirectory
@@ -188,7 +188,7 @@ import Testing
             sourceID: "meetings.action-items"
         ),
         providerProfile: { "parakeet-tdt-v3+sortformer" },
-        summaryProviderPreference: { .auto }
+        summaryProviderPreference: { .assistantModel }
     )
 
     let audioFolder = FileManager.default.temporaryDirectory
@@ -324,4 +324,74 @@ private actor CapturingMeetingProcessingRouter: MeetingProcessingRouting {
         requests.append(request)
         return AIResponse(text: "[]", providerUsed: .appleIntelligence)
     }
+}
+
+// MARK: - Pipeline split tests
+
+private actor StaticSummaryRouter: MeetingProcessingRouting {
+    let summaryText: String
+    private var callCount = 0
+
+    init(summaryText: String) {
+        self.summaryText = summaryText
+    }
+
+    func route(_ request: AIRequest) async throws -> AIResponse {
+        // First call is the summary request; subsequent calls are action-items.
+        callCount += 1
+        if callCount == 1 {
+            return AIResponse(text: summaryText, providerUsed: .appleIntelligence)
+        }
+        return AIResponse(text: "[]", providerUsed: .appleIntelligence)
+    }
+}
+
+@MainActor
+@Test func processSummaryAndActionsRunsLLMStagesOnAlreadyTranscribedMeeting() async throws {
+    let context = try MeetingsTestSupport.makeContext()
+    let meetingRepo = MeetingRepository(context: context)
+    let knownSummary = "This is the generated summary."
+    let router = StaticSummaryRouter(summaryText: knownSummary)
+
+    let meeting = MeetingsTestSupport.meeting(
+        title: "Sprint Review",
+        status: .queued,
+        transcript: "Alice: We shipped the feature. Bob: Great work."
+    )
+    try meetingRepo.insert(meeting)
+
+    let pipeline = MeetingProcessingPipeline(
+        repo: meetingRepo,
+        vad: VADTrimStage(sileroLoader: { TestNoopVADSession() }),
+        transcription: TranscriptionStage(
+            primary: EmptyTranscriptionProvider(identifier: "parakeet"),
+            fallback: EmptyTranscriptionProvider(identifier: "whisperkit")
+        ),
+        diarization: DiarizationStage(sessionLoader: { TestNoopSortformerSession() }),
+        merge: MergeStage(),
+        summary: SummaryStage(router: router),
+        actionItems: ActionItemsStage(
+            router: router,
+            taskRepository: TaskItemRepository(
+                context: context,
+                scheduler: RRuleScheduler(),
+                now: Date.init
+            ),
+            meetingRepository: meetingRepo,
+            linkRepository: LinkRepository(context: context),
+            sourceID: "meetings.action-items"
+        ),
+        providerProfile: { "test-provider" },
+        summaryProviderPreference: { .assistantModel }
+    )
+
+    let audioFolder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pipeline-split-\(UUID().uuidString)", isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: audioFolder) }
+
+    try await pipeline.processSummaryAndActions(meeting: meeting, audioFolder: audioFolder)
+
+    let updated = try #require(try meetingRepo.find(id: meeting.id))
+    #expect(updated.summaryText == knownSummary)
+    #expect(updated.processingStatus == MeetingProcessingStatus.ready.rawValue)
 }

@@ -38,7 +38,7 @@ import Testing
     #expect(request.providerPreference == .auto)
 }
 
-@Test func summaryStageRoutesAutoProviderPreference() async throws {
+@Test func summaryStageRoutesAssistantModelProviderPreference() async throws {
     let router = StubMeetingSummaryRouter(text: "## TL;DR\nDone.")
     let stage = SummaryStage(router: router)
 
@@ -47,7 +47,7 @@ import Testing
         title: "Daily",
         durationSec: 600,
         customTemplate: nil,
-        providerPreference: .auto
+        providerPreference: .assistantModel
     )
 
     let request = try #require(await router.capturedRequest)

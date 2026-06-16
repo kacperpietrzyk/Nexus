@@ -20,12 +20,13 @@ public enum MeetingsTranscriptionProviderPreference: String, CaseIterable, Senda
 }
 
 public enum MeetingsSummaryProviderPreference: String, CaseIterable, Sendable {
-    case auto
+    case assistantModel
+    case appleIntelligence
     case disabled
 
     public var providerPreference: ProviderPreference? {
         switch self {
-        case .auto:
+        case .assistantModel, .appleIntelligence:
             .auto
         case .disabled:
             nil
@@ -136,13 +137,11 @@ public final class MeetingsProviderSettingsStore: @unchecked Sendable {
     }
 
     public func summaryProvider() -> MeetingsSummaryProviderPreference {
-        guard
-            let rawValue = defaults.string(forKey: MeetingsSettingsKeys.summaryProvider),
-            let preference = MeetingsSummaryProviderPreference(rawValue: rawValue)
-        else {
-            return .auto
+        guard let rawValue = defaults.string(forKey: MeetingsSettingsKeys.summaryProvider) else {
+            return .assistantModel
         }
-        return preference
+        if rawValue == "auto" { return .assistantModel }  // legacy value
+        return MeetingsSummaryProviderPreference(rawValue: rawValue) ?? .assistantModel
     }
 
     public func saveSummaryProvider(_ preference: MeetingsSummaryProviderPreference) {

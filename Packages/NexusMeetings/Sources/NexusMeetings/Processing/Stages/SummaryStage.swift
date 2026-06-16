@@ -19,7 +19,7 @@ public final class SummaryStage: Sendable {
         title: String,
         durationSec: Int,
         customTemplate: String?,
-        providerPreference: MeetingsSummaryProviderPreference = .auto,
+        providerPreference: MeetingsSummaryProviderPreference = .assistantModel,
         screenContext: String? = nil
     ) async throws -> String {
         guard let aiProviderPreference = providerPreference.providerPreference else {

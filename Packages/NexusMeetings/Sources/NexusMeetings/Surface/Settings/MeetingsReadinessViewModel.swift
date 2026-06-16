@@ -115,9 +115,7 @@ public final class MeetingsReadinessViewModel {
             // Helper-only concern (the helper owns Accessibility-gated window
             // detection). We can still open the pane directly (no helper needed),
             // and post to the helper as a fallback.
-            // TODO: route this through the helper's XPC interface
-            // (`MeetingsHelperXPCService`) once it vends a permission entry point;
-            // an XPC connect also launches the agent on demand.
+            // The running helper (AX owner) consumes `requestPermissions` and shows the prompt.
             openAccessibilitySettings()
             post(MeetingsReadinessNotification.requestPermissions)
         case .downloadModel(let id):

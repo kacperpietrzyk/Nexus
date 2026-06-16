@@ -17,6 +17,7 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
     private let pipelineQueue: PipelineQueue
     private let meetingRepository: MeetingRepository
     private let audioStorageRepository: MeetingAudioStorageRepository
+    private let meetingProcessor: MeetingSummaryDeferralProcessor
     private let recordingService: MeetingRecordingService
     private let connectionValidator: MeetingsHelperXPCConnectionValidator
     private let now: @MainActor () -> Date
@@ -33,6 +34,7 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
         pipelineQueue: PipelineQueue,
         meetingRepository: MeetingRepository,
         audioStorageRepository: MeetingAudioStorageRepository,
+        meetingProcessor: MeetingSummaryDeferralProcessor,
         connectionValidator: MeetingsHelperXPCConnectionValidator = MeetingsHelperXPCConnectionValidator(),
         retentionPolicyProvider: @escaping @MainActor () -> MeetingAudioStorage.RetentionPolicy = {
             UserDefaultsMeetingRetentionPolicyStore.shared.load()
@@ -46,6 +48,7 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
         self.pipelineQueue = pipelineQueue
         self.meetingRepository = meetingRepository
         self.audioStorageRepository = audioStorageRepository
+        self.meetingProcessor = meetingProcessor
         self.recordingService = MeetingRecordingService(
             recorder: recorder,
             meetingRepository: meetingRepository,
@@ -141,11 +144,10 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
                 let id = try Self.uuid(from: meetingID)
                 screenContextRecorder.stop()
                 let stoppedRecording = try recordingService.stopRecording(meetingID: id)
-                await pipelineQueue.enqueue(meetingID: id) { [pipeline] in
-                    try? await pipeline.process(
-                        meeting: stoppedRecording.meeting,
-                        audioFolder: stoppedRecording.audioFolder
-                    )
+                let meeting = stoppedRecording.meeting
+                let audioFolder = stoppedRecording.audioFolder
+                await pipelineQueue.enqueue(meetingID: id) { [meetingProcessor] in
+                    await meetingProcessor.process(meeting: meeting, audioFolder: audioFolder)
                 }
                 reply.send(nil)
             } catch let error as MeetingRecordingServiceError {
