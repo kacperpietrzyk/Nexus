@@ -17,6 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.composition = composition
             composition.readinessCoordinator.start()
             startDetectionLoop(composition)
+            if UserDefaultsHelperAutoRecordStore.shared.isEnabled() {
+                AccessibilityPromptGate().promptIfNeeded()
+            }
+            observeAccessibilityRequests()
         } catch {
             NSAlert(error: error).runModal()
             NSApp.terminate(nil)
@@ -26,6 +30,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         detectionTask?.cancel()
         recordingRefreshTask?.cancel()
+    }
+
+    private func observeAccessibilityRequests() {
+        DistributedNotificationCenter.default().addObserver(
+            forName: MeetingsReadinessNotification.requestPermissions,
+            object: nil,
+            queue: .main
+        ) { _ in
+            // The app's readiness "Open Settings" asks us (the AX owner) to prompt.
+            // Force the prompt regardless of the one-shot flag since the user
+            // explicitly requested it.
+            Task { @MainActor in
+                AccessibilityPromptGate(hasPrompted: { false }, markPrompted: {}).promptIfNeeded()
+            }
+        }
     }
 
     private func startDetectionLoop(_ composition: HelperComposition) {
