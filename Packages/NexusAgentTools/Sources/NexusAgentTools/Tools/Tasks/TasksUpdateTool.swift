@@ -91,6 +91,9 @@ public struct TasksUpdateTool: AgentTool {
                         [.string(description: "Cycle UUID."), .null(description: "Clear the cycle assignment.")],
                         description: "Cycle UUID; null to clear. Applied via the cycle-assignment write path."
                     ),
+                    "created_at": .string(
+                        description: "ISO8601 creation timestamp; back-dates the task to its true event date for inbox/timeline chronology."
+                    ),
                 ],
                 required: []
             ),
@@ -232,6 +235,10 @@ private struct TasksUpdatePatch {
     let recurrenceAnchorIsCompletion: Bool?
     let estimatedDurationSeconds: Int??
     let reminders: [ReminderRule]??
+    // Single-optional, not nullable: createdAt is non-optional on the model and
+    // cannot be cleared — an omitted arg leaves it unchanged (nil), a present
+    // ISO8601 string back-dates it.
+    let createdAt: Date?
 
     static func parse(_ patch: [String: JSONValue]) throws -> Self {
         let anchorIsCompletion = try TasksStructuredCreateArguments.optionalRecurrenceAnchorIsCompletion(
@@ -258,7 +265,8 @@ private struct TasksUpdatePatch {
             recurrenceRule: try nullableRecurrenceRule(patch["recurrence_rule"]),
             recurrenceAnchorIsCompletion: anchorIsCompletion,
             estimatedDurationSeconds: try nullableEstimatedDurationSeconds(patch["estimated_duration_minutes"]),
-            reminders: try nullableReminders(patch["reminders"])
+            reminders: try nullableReminders(patch["reminders"]),
+            createdAt: try TasksMutationToolSupport.iso8601Date(patch["created_at"], field: "created_at")
         )
     }
 
@@ -309,6 +317,9 @@ private struct TasksUpdatePatch {
         }
         if let reminders {
             task.reminders = reminders ?? []
+        }
+        if let createdAt {
+            task.createdAt = createdAt
         }
     }
 

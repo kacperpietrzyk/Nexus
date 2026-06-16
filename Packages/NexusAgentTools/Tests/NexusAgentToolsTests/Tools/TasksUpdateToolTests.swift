@@ -495,3 +495,31 @@ struct TasksUpdateToolCycleTests {
         }
     }
 }
+
+/// createdAt back-dating coverage, a separate suite to keep the main
+/// `TasksUpdateToolTests` struct inside the type-body lint budget.
+@Suite("TasksUpdateTool created_at patch")
+struct TasksUpdateToolCreatedAtTests {
+    @MainActor
+    @Test("sets created_at for chronology back-dating")
+    func setsCreatedAt() async throws {
+        let task = TaskItem(title: "Backdate me")
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+
+        let result = try await TasksUpdateTool().call(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object([
+                    "created_at": .string("2020-01-15T08:00:00Z")
+                ]),
+            ]),
+            context: fixture.context
+        )
+        let data = try JSONEncoder().encode(result)
+        let dto = try JSONDecoder().decode(TaskDTO.self, from: data)
+
+        #expect(dto.createdAt == "2020-01-15T08:00:00.000Z")
+        let stored = try TasksMutationToolSupport.liveTask(id: task.id, context: fixture.context)
+        #expect(stored.createdAt == Date(timeIntervalSince1970: 1_579_075_200))
+    }
+}

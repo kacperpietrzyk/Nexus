@@ -502,3 +502,34 @@ struct TaskItemRepositoryReorderTests {
         #expect(b.orderIndex == 2.0)
     }
 }
+
+/// createdAt back-dating coverage, a separate suite to keep the main
+/// `TaskItemRepositoryTests` struct inside the type-body lint budget.
+@Suite("TaskItemRepository createdAt")
+struct TaskItemRepositoryCreatedAtTests {
+    @MainActor
+    private func makeContext() throws -> ModelContext {
+        let schema = Schema([TaskItem.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        let container = try ModelContainer(for: schema, configurations: [config])
+        return ModelContext(container)
+    }
+
+    @MainActor
+    @Test("update can back-date createdAt for chronology")
+    func updateBackdatesCreatedAt() throws {
+        let context = try makeContext()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let repo = TaskItemRepository(context: context, scheduler: RRuleScheduler(), now: { now })
+        let task = TaskItem(title: "x")
+        try repo.insert(task)
+
+        let pastDate = Date(timeIntervalSince1970: 1_577_836_800)  // 2020-01-01
+        try repo.update(task) {
+            $0.createdAt = pastDate
+        }
+
+        let fetched = try #require(try context.fetch(FetchDescriptor<TaskItem>()).first)
+        #expect(fetched.createdAt == pastDate)
+    }
+}
