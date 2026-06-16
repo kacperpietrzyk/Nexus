@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "lastUpdated": "2026-06-14",
+  "lastUpdated": "2026-06-16",
   "chat": [
     {
-      "id": "gemma-4.5-12b-1m",
-      "hfPath": "mlx-community/gemma-4.5-12b-it-1m-4bit",
+      "id": "gemma-4-26b-a4b",
+      "hfPath": "mlx-community/gemma-4-26B-A4B-it-qat-4bit",
       "family": "gemma4",
-      "displayName": "Gemma 4.5 12B (1M)",
-      "sizeGB": 7.0,
-      "recommendedRAMGB": 24,
-      "contextLength": 1048576,
+      "displayName": "Gemma 4 26B (A4B)",
+      "sizeGB": 14.6,
+      "recommendedRAMGB": 32,
+      "contextLength": 262144,
       "supportsTools": true,
       "supportsVision": false,
       "supportedLocales": ["pl", "en", "de", "fr", "es"]

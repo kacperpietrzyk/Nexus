@@ -50,18 +50,21 @@ public struct AssistantStorageSection: View {
     private let tone: AssistantReadinessTone
     private let rows: [AssistantStorageRow]
     private let onFreeUp: (AssistantStorageRow) -> Void
+    private let onDownload: (AssistantStorageRow) -> Void
     @State private var confirming: AssistantStorageRow.ID?
 
     public init(
         headline: String,
         tone: AssistantReadinessTone,
         rows: [AssistantStorageRow],
-        onFreeUp: @escaping (AssistantStorageRow) -> Void
+        onFreeUp: @escaping (AssistantStorageRow) -> Void,
+        onDownload: @escaping (AssistantStorageRow) -> Void = { _ in }
     ) {
         self.headline = headline
         self.tone = tone
         self.rows = rows
         self.onFreeUp = onFreeUp
+        self.onDownload = onDownload
     }
 
     public var body: some View {
@@ -113,7 +116,12 @@ public struct AssistantStorageSection: View {
                     .foregroundStyle(DS.ColorToken.textSecondary)
             }
             Spacer(minLength: DS.Space.l)
-            if canFreeUp(row) {
+            if let label = downloadLabel(for: row) {
+                Button(label) { onDownload(row) }
+                    .font(DS.FontToken.button)
+                    .foregroundStyle(DS.ColorToken.statusInfo)
+                    .buttonStyle(LiquidPressButtonStyle())
+            } else if canFreeUp(row) {
                 Button("Free up space") { confirming = row.id }
                     .font(DS.FontToken.button)
                     .foregroundStyle(DS.ColorToken.textPrimary)
@@ -143,6 +151,21 @@ public struct AssistantStorageSection: View {
     /// last working copy mid-update — never for a missing or downloading model.
     private func canFreeUp(_ row: AssistantStorageRow) -> Bool {
         row.health == .ready && row.sizeBytes > 0
+    }
+
+    /// The download affordance label for an actionable row, or `nil` when the row
+    /// needs no action (ready, or already downloading). A failed model offers a
+    /// retry; a missing one a download; a model still running on an older build
+    /// (`updating`) offers to fetch the new canonical. Transcription has no
+    /// download here (it is fetched on first meeting use).
+    private func downloadLabel(for row: AssistantStorageRow) -> String? {
+        guard row.kind != .transcription else { return nil }
+        switch row.health {
+        case .missing: return "Download"
+        case .failed: return "Retry"
+        case .updating: return "Update"
+        case .ready, .downloading: return nil
+        }
     }
 
     private func detail(for row: AssistantStorageRow) -> String {

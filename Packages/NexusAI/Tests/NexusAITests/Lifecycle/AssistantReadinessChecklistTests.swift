@@ -154,6 +154,24 @@ import Testing
         #expect(summary.overall != .incomplete)
     }
 
+    @Test func staleChatDirDoesNotMaskMissingEmbedder() {
+        // The 0.3.0 upgrade bug, reproduced: an old chat model is on disk tagged
+        // `.unknown`/`.staleButActive`, while the required embedder ("Search model")
+        // was never downloaded. The `.unknown` allowance must NOT leak across roles —
+        // the embedder must read `.missing`, not borrow the chat's `.updating`, and the
+        // summary must drop off the false-green "ready" so the missing model is honest.
+        let s = store("acl-10")
+        let tier = DeviceTier(recommendedChat: "gemma-chat", recommendedEmbedder: "e5-embed")
+        let checklist = AssistantReadinessChecklist(tier: tier, resolvedSet: makeSet(), store: s)
+        let items = checklist.items(scanEntries: [
+            entry(id: "old-gemma", kind: .unknown, classification: .staleButActive)
+            // e5-embed absent on disk → must be missing
+        ])
+        #expect(items.first { $0.role == .chat }?.status == .updating)
+        #expect(items.first { $0.role == .embedder }?.status == .missing)
+        #expect(checklist.summary(for: items).overall == .incomplete)
+    }
+
     @Test func incompleteWhenMixedReadyAndMissing() {
         let s = store("acl-8")
         s.save(manifestID: "gemma-chat", state: .init(status: .downloaded))

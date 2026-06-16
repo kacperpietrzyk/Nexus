@@ -16,13 +16,13 @@ import Testing
     #expect(catalog.chat.count >= 2)
     #expect(catalog.embedders.count >= 1)
 
-    let gemma12b = catalog.chat.first { $0.id == "gemma-4.5-12b-1m" }
-    #expect(gemma12b != nil)
-    #expect(gemma12b?.hfPath == "mlx-community/gemma-4.5-12b-it-1m-4bit")
-    #expect(gemma12b?.family == "gemma4")
-    #expect(gemma12b?.sizeGB == 7.0)
-    #expect(gemma12b?.recommendedRAMGB == 24)
-    #expect(gemma12b?.supportsTools == true)
+    let gemma26b = catalog.chat.first { $0.id == "gemma-4-26b-a4b" }
+    #expect(gemma26b != nil)
+    #expect(gemma26b?.hfPath == "mlx-community/gemma-4-26B-A4B-it-qat-4bit")
+    #expect(gemma26b?.family == "gemma4")
+    #expect(gemma26b?.sizeGB == 14.6)
+    #expect(gemma26b?.recommendedRAMGB == 32)
+    #expect(gemma26b?.supportsTools == true)
 
     // Regression guard: no qwen2.5 family, no capital-I "Instruct" in hfPath.
     #expect(!catalog.chat.contains { $0.family == "qwen2.5" })
@@ -38,7 +38,7 @@ import Testing
     try ModelCatalog.bootstrap.seed(into: ctx)
     let manifests = try ctx.fetch(FetchDescriptor<ModelManifest>())
     #expect(manifests.count >= 3)  // 2 Gemma chat + 1 embedder
-    #expect(manifests.contains { $0.id == "gemma-4.5-12b-1m" })
+    #expect(manifests.contains { $0.id == "gemma-4-26b-a4b" })
     #expect(manifests.contains { $0.id == "gemma-4-e4b" })
     #expect(manifests.contains { $0.id == "multilingual-e5-large" })
 }
