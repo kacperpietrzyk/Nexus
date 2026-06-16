@@ -142,22 +142,22 @@ public actor HeroBriefService {
     private func makePrompt(counts: Counts, firstTitles: [String]) -> String {
         let titles = firstTitles.prefix(3).map { "- \($0)" }.joined(separator: "\n")
         return """
-            Write a brief for the user in English, in two paragraphs:
+            Write a brief for the user in English, in two paragraphs. Base it ONLY on \
+            the user's real tasks listed under "Top tasks" below. Never invent tasks, \
+            names, projects, or topics that are not in that list.
 
             First paragraph (10-18 words): a narrative headline like \
-            "Three things matter today - ...". Wrap the key actions in \
-            [[accent]]...[[/accent]] (max 2). \
-            Example: "Three things matter today - [[accent]]push the auth flow[[/accent]], \
-            review Sam's PR."
+            "Three things matter today - ...", naming up to two of the user's actual \
+            top tasks. Wrap the key actions in [[accent]]...[[/accent]] (max 2).
 
             Second paragraph (10-25 words): a short sentence summarizing context or a \
-            commitment. No markers.
+            commitment, derived from the numbers below. No markers.
 
             Separate paragraphs with a double newline.
 
             Numbers: \(counts.overdue) overdue, \(counts.today) today, \
             \(counts.noDate) with no date, \(counts.awaiting) blocking.
-            Top titles:
+            Top tasks (use these verbatim; do not invent others):
             \(titles)
             """
     }
