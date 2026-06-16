@@ -6,6 +6,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-16
+Stability fixes for heavy and automated use of the MCP server, plus a more honest
+daily brief.
+
+### Fixed
+- **The app could be terminated during a burst of writes.** Rapid back-to-back
+  changes — for example an MCP/agent bulk import — re-ran the Today reload, and with
+  it the on-device AI brief, on *every single save*. That dirtied gigabytes of memory
+  until macOS resource-killed the app ("Nexus quit unexpectedly"). Store-change
+  reloads are now coalesced, so a burst of writes triggers a single refresh once the
+  writes settle.
+- **The daily brief could invent tasks.** The offline brief sometimes regurgitated a
+  hard-coded example ("review Sam's PR") or hallucinated unrelated work. It is now
+  grounded strictly on your real tasks and told not to invent any.
+- **Tasks were listed twice over MCP.** The MCP task list now collapses CloudKit
+  "ghost" duplicate rows by id, matching what the app's own task views already showed.
+
 ## [0.3.1] - 2026-06-16
 A focused fix for the on-device assistant: 0.3.0 shipped a chat-model entry that
 could neither download nor load, so the assistant silently never updated.

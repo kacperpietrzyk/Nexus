@@ -97,7 +97,11 @@ public struct TasksListTool: AgentTool {
         let calendar = Calendar.current
         let startOfTomorrow = calendar.dateInterval(of: .day, for: now)?.end ?? now
 
-        var tasks = try context.modelContext.context.fetch(descriptor)
+        // Collapse CloudKit "ghost" rows (two rows sharing one `id` from a stale
+        // entity migration) so the MCP read path matches what the UI shows. The UI
+        // query paths already apply this; the direct SwiftData fetch here did not,
+        // which is why every task was returned twice over MCP.
+        var tasks = try context.modelContext.context.fetch(descriptor).dedupedByID()
         tasks = tasks.filter { task in
             matches(task, state: state)
                 && matches(task, bucket: bucket, startOfTomorrow: startOfTomorrow)
