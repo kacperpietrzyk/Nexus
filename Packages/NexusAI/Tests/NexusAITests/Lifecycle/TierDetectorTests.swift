@@ -56,6 +56,39 @@ import Testing
     #expect(tier.recommendedEmbedder == nil)
 }
 
+// MARK: - Byte→GB conversion (the shipped iOS bug)
+
+/// iOS reports `physicalMemory` a little UNDER nominal installed RAM (the kernel
+/// reserves a slice), so an 8 GB iPhone returns ~7.98 GiB. `Int(bytes / 1 GiB)`
+/// floors that to 7, dropping the device below the `>= 8` chat tier — the exact
+/// reason an iPhone 16 Pro showed the embedder ("Search model") but no assistant
+/// model. Rounding to nearest GB maps it back to 8. RAM classes are ≥1 GB apart
+/// (4/6/8/12/16/24/32), so nearest-GB rounding never misclassifies.
+@Test func eightGBDeviceUnderReportRoundsTo8NotFlooredTo7() {
+    // iPhone 16 Pro–class reported value: 8 GiB minus a ~17 MiB kernel carve-out.
+    let reported: UInt64 = 8_589_934_592 - 18_616_320  // ≈ 7.98 GiB
+    #expect(TierDetector.gigabytes(fromBytes: reported) == 8)
+}
+
+@Test func sixGBDeviceUnderReportRoundsTo6() {
+    let reported: UInt64 = 6_442_450_944 - 16_000_000  // ≈ 5.99 GiB
+    #expect(TierDetector.gigabytes(fromBytes: reported) == 6)
+}
+
+@Test func exactBinaryGiBValuesAreUnchanged() {
+    #expect(TierDetector.gigabytes(fromBytes: 8_589_934_592) == 8)  // Macs report exact
+    #expect(TierDetector.gigabytes(fromBytes: 17_179_869_184) == 16)
+    #expect(TierDetector.gigabytes(fromBytes: 25_769_803_776) == 24)
+}
+
+/// End-to-end: the under-reported 8 GB byte count, once converted, must yield the
+/// iOS chat model — proving the floor was what dropped it.
+@Test func eightGBUnderReportYieldsChatModel() {
+    let gb = TierDetector.gigabytes(fromBytes: 8_589_934_592 - 18_616_320)
+    let tier = TierDetector.recommend(platform: .iOS, physicalMemoryGB: gb, availableStorageGB: 20)
+    #expect(tier.recommendedChat == "gemma-4-e4b")
+}
+
 /// Every chat/embedder ID `recommend` can return must resolve against the
 /// bundled catalog — guards against the #15-class hallucinated-name bug where
 /// the recommended ID (e.g. a stray `-instruct` infix) silently fails the

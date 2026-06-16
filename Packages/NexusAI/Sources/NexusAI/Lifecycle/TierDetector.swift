@@ -100,9 +100,25 @@ public enum TierDetector {
             return .macOS
             #endif
         }()
-        let ramGB = Int(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
+        let ramGB = gigabytes(fromBytes: ProcessInfo.processInfo.physicalMemory)
         let availableGB = (try? FileManager.default.availableCapacityGBForAppSupport()) ?? 0
         return recommend(platform: platform, physicalMemoryGB: ramGB, availableStorageGB: availableGB)
+    }
+
+    /// Converts a raw `physicalMemory` byte count to whole gigabytes by ROUNDING,
+    /// not truncating.
+    ///
+    /// iOS reports `physicalMemory` slightly UNDER the nominal installed RAM (the
+    /// kernel reserves a slice), so an 8 GB iPhone returns ~7.98 GiB. The old
+    /// `Int(bytes / 1_073_741_824)` floored that to 7, which fell below the `>= 8`
+    /// iOS chat tier and silently dropped the assistant model on every 8 GB iPhone
+    /// (the embedder, gated at only `>= 4 GB`, still passed — so Settings showed a
+    /// "Search model" row but no "Assistant model" row). Rounding maps the
+    /// under-report back to 8. RAM classes are ≥1 GB apart (4/6/8/12/16/24/32), so
+    /// nearest-GB rounding never crosses a tier boundary the wrong way. Macs report
+    /// exact binary RAM, so rounding is a no-op there.
+    public static func gigabytes(fromBytes bytes: UInt64) -> Int {
+        Int((Double(bytes) / 1_073_741_824).rounded())
     }
 
     // MARK: - Helpers

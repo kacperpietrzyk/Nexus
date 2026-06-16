@@ -176,7 +176,9 @@ public struct DownloadModelStep: View {
 
     @ViewBuilder
     private var deviceMemoryLabel: some View {
-        let ramGB = Int(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
+        // Round (not floor): iOS under-reports physicalMemory, so an 8 GB iPhone
+        // would otherwise read as "7 GB RAM". Matches TierDetector's tiering input.
+        let ramGB = TierDetector.gigabytes(fromBytes: ProcessInfo.processInfo.physicalMemory)
         Text("Device memory: \(ramGB) GB RAM")
             .font(NexusType.meta)
             .foregroundStyle(NexusColor.Text.muted)
