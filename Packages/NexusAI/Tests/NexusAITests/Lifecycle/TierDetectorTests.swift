@@ -89,6 +89,23 @@ import Testing
     #expect(tier.recommendedChat == "gemma-4-e4b")
 }
 
+// The `>= 7` iOS RAM floor (not `>= 8`) is what makes the fix independent of the
+// exact under-report magnitude. These two lock that margin from both sides: an
+// 8 GB device must keep chat even if it converts as low as 7, and a 6 GB device
+// must still be excluded. No iOS device ships with 7 GB, so 7 is a safe divider.
+@Test func iOSEightGBConvertingAsLowAs7StillGetsChat() {
+    // Worst-case heavy under-report on an 8 GB device → rounds to 7.
+    let tier = TierDetector.recommend(platform: .iOS, physicalMemoryGB: 7, availableStorageGB: 20)
+    #expect(tier.recommendedChat == "gemma-4-e4b")
+}
+
+@Test func iOSSixGBStillExcludedFromChat() {
+    // A 6 GB iPhone (rounds to ≤ 6) must NOT be offered the e4b chat model.
+    let tier = TierDetector.recommend(platform: .iOS, physicalMemoryGB: 6, availableStorageGB: 20)
+    #expect(tier.recommendedChat == nil)
+    #expect(tier.recommendedEmbedder == "multilingual-e5-large")  // 1.1 GB embedder still fits
+}
+
 /// Every chat/embedder ID `recommend` can return must resolve against the
 /// bundled catalog — guards against the #15-class hallucinated-name bug where
 /// the recommended ID (e.g. a stray `-instruct` infix) silently fails the
