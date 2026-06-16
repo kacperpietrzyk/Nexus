@@ -6,6 +6,25 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-16
+A focused fix for the on-device assistant: 0.3.0 shipped a chat-model entry that
+could neither download nor load, so the assistant silently never updated.
+
+### Fixed
+- **On-device chat model wouldn't download or load.** The macOS catalog pointed at a
+  non-existent Hugging Face repo (HTTP 401), and every Gemma-4 12B build uses an
+  architecture (`gemma4_unified`) the bundled MLX runtime can't load. Replaced with
+  loadable, RAM-tiered Gemma 4 models: a 26B/A4B mixture-of-experts on Macs with
+  ≥24 GB RAM and the compact E4B below that (and on iPhone/iPad).
+- **Misleading model status.** A leftover older model no longer makes a genuinely
+  missing model read as "Updating…", and the readiness summary no longer shows a
+  false-green "Assistant ready" when required models are absent.
+
+### Added
+- **Settings → Models** now has per-model Download / Retry / Update actions with live
+  progress — including on iPhone/iPad, which previously had no in-app way to fetch the
+  assistant model.
+
 ## [0.3.0] - 2026-06-15
 The big redesign-and-intelligence release (PR #78). A new design system across every platform,
 the on-device AI assistant, and an expanded MCP server. The AI is experimental.
