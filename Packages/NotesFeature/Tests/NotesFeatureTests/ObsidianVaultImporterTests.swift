@@ -158,3 +158,51 @@ private func makeVault(_ files: [String: String]) throws -> URL {
     #expect(result2.skipped == 3)
     #expect(try repo.context.fetch(FetchDescriptor<Note>()).count == 3)
 }
+
+// MARK: - Import model (state machine that survives view teardown)
+
+@MainActor
+@Test func model_startsIdle() {
+    #expect(ObsidianImportModel().phase == .idle)
+}
+
+@MainActor
+@Test func model_scan_movesToPreviewedWithCounts() async throws {
+    let vault = try makeVault(["A/One.md": "x", "B/Two.md": "y"])
+    defer { try? FileManager.default.removeItem(at: vault) }
+    let model = ObsidianImportModel()
+    await model.performScan(vaultRoot: vault, repository: try makeRepo())
+    #expect(model.phase == .previewed)
+    #expect(model.toCreate == 2)
+    #expect(model.toSkip == 0)
+}
+
+@MainActor
+@Test func model_import_createsThenReportsDone_andRescanShowsAllSkipped() async throws {
+    let vault = try makeVault(["A/One.md": "x", "B/Two.md": "y"])
+    defer { try? FileManager.default.removeItem(at: vault) }
+    let repo = try makeRepo()
+    let model = ObsidianImportModel()
+
+    await model.performScan(vaultRoot: vault, repository: repo)
+    await model.performImport(vaultRoot: vault, repository: repo)
+    #expect(model.phase == .done)
+    #expect(model.created == 2)
+    #expect(model.failed == 0)
+    #expect(try repo.context.fetch(FetchDescriptor<Note>()).count == 2)
+
+    await model.performScan(vaultRoot: vault, repository: repo)
+    #expect(model.toCreate == 0)
+    #expect(model.toSkip == 2)
+}
+
+@MainActor
+@Test func model_importWithoutScan_isNoOp() async throws {
+    let vault = try makeVault(["A/One.md": "x"])
+    defer { try? FileManager.default.removeItem(at: vault) }
+    let repo = try makeRepo()
+    let model = ObsidianImportModel()
+    await model.performImport(vaultRoot: vault, repository: repo)  // no scan first
+    #expect(model.phase == .idle)
+    #expect(try repo.context.fetch(FetchDescriptor<Note>()).isEmpty)
+}
