@@ -30,6 +30,9 @@ public final class MeetingSummaryClaimer {
 
     public func start() {
         guard observer == nil else { return }
+        // The live handoff arrives via DistributedNotificationCenter (macOS-only).
+        // On iOS there is no recorder helper, so only the launch sweep runs.
+        #if os(macOS)
         observer = DistributedNotificationCenter.default().addObserver(
             forName: MeetingSummaryHandoffNotification.needsExternalSummary,
             object: nil,
@@ -40,6 +43,7 @@ public final class MeetingSummaryClaimer {
                 self?.claimAndRun(meetingID: parsed.id, audioFolder: parsed.folder)
             }
         }
+        #endif
         sweep()
     }
 

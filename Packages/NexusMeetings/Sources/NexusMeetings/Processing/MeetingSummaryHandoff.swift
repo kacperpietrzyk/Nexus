@@ -8,12 +8,16 @@ public enum MeetingSummaryHandoffNotification {
     )
 
     public static func post(meetingID: UUID, folderPath: String) {
+        // Cross-process handoff is macOS-only (the recorder helper exists only on
+        // macOS); `DistributedNotificationCenter` is unavailable on iOS.
+        #if os(macOS)
         DistributedNotificationCenter.default().postNotificationName(
             needsExternalSummary,
             object: nil,
             userInfo: ["meetingID": meetingID.uuidString, "folderPath": folderPath],
             deliverImmediately: true
         )
+        #endif
     }
 
     public static func parse(_ note: Notification) -> (id: UUID, folder: URL)? {
