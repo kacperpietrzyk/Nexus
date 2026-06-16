@@ -52,6 +52,48 @@ public struct LivePermissionProbe: PermissionProbing {
     }
 }
 
+public struct AccessibilityPromptGate {
+    private let isTrusted: () -> Bool
+    private let hasPrompted: () -> Bool
+    private let markPrompted: () -> Void
+    private let prompt: () -> Void
+
+    public init(
+        isTrusted: @escaping () -> Bool = { LivePermissionProbe.systemAccessibilityTrusted() },
+        hasPrompted: @escaping () -> Bool = {
+            UserDefaults.nexusGroup.bool(forKey: "nexus.meetings.ax.didPrompt")
+        },
+        markPrompted: @escaping () -> Void = {
+            UserDefaults.nexusGroup.set(true, forKey: "nexus.meetings.ax.didPrompt")
+        },
+        prompt: @escaping () -> Void = { LivePermissionProbe.requestAccessibilityPrompt() }
+    ) {
+        self.isTrusted = isTrusted
+        self.hasPrompted = hasPrompted
+        self.markPrompted = markPrompted
+        self.prompt = prompt
+    }
+
+    /// Shows the macOS Accessibility dialog once, only while untrusted.
+    public func promptIfNeeded() {
+        guard !isTrusted() else { return }
+        guard !hasPrompted() else { return }
+        markPrompted()
+        prompt()
+    }
+}
+
+extension LivePermissionProbe {
+    /// Triggers the system "grant Accessibility" dialog (deep link), unlike the
+    /// silent `AXIsProcessTrusted()` used for read-only probing.
+    public static func requestAccessibilityPrompt() {
+        #if canImport(ApplicationServices)
+        let key = "AXTrustedCheckOptionPrompt" as CFString
+        _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+        #endif
+    }
+}
+
 /// Persists the outcome of the most recent system-audio process-tap attempt,
 /// since macOS exposes no public authorization-status API for Core Audio taps.
 public final class AudioCaptureConsentStore: @unchecked Sendable {
