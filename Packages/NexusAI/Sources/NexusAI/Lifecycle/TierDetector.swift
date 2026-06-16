@@ -63,9 +63,24 @@ public enum TierDetector {
                     recommendedChat: nil,
                     recommendedEmbedder: embedderFits ? e5LargeID : nil)
             }
-            if storageAllows(modelSizeGB: 7.0, availableGB: availableStorageGB) {
+            // Two loadable Gemma-4 tiers (both `model_type: gemma4`, supported by the
+            // pinned mlx-swift-lm; the dense 12B is `gemma4_unified`, unsupported by the
+            // Swift runtime today). ≥24 GB RAM gets the big MoE 26B/A4B (~14.6 GB
+            // resident — MoE keeps every expert in memory, so this is a RAM tier, not a
+            // compute one); 16–24 GB gets the elastic E4B (~4.9 GB). The assistant is a
+            // lightweight in-app helper (recommendations, calendar, task breakdown), not
+            // a heavy reasoner — E4B is sufficient there. WHEN mlx-swift-lm adds
+            // `gemma4_unified`, collapse both tiers to a single ~7 GB 12B entry (fits
+            // 16 GB) and drop the RAM split.
+            if physicalMemoryGB >= 24,
+                storageAllows(modelSizeGB: 14.6, availableGB: availableStorageGB) {
                 return DeviceTier(
-                    recommendedChat: "gemma-4.5-12b-1m",
+                    recommendedChat: "gemma-4-26b-a4b",
+                    recommendedEmbedder: e5LargeID)
+            }
+            if storageAllows(modelSizeGB: 4.9, availableGB: availableStorageGB) {
+                return DeviceTier(
+                    recommendedChat: "gemma-4-e4b",
                     recommendedEmbedder: e5LargeID)
             }
             return DeviceTier(

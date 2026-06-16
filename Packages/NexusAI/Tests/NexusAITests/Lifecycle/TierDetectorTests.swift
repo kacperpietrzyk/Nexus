@@ -4,23 +4,34 @@ import Testing
 @testable import NexusAI
 
 // NOTE: Task 11 (2026-06-14) — all Qwen IDs replaced by Gemma IDs.
-// Mac now has a single model (gemma-4.5-12b-1m) for all RAM tiers that meet
-// the storage floor; iOS always recommends gemma-4-e4b when hardware qualifies.
+// 2026-06-16 — Mac chat corrected from the fabricated `gemma-4.5-12b-1m`
+// (HF 401) to a RAM-tiered pair of loadable Gemma-4 models (both `model_type:
+// gemma4`): ≥24 GB → `gemma-4-26b-a4b` (MoE, ~14.6 GB resident); 16–24 GB →
+// `gemma-4-e4b` (elastic, ~4.9 GB). The dense 12B (`gemma4_unified`) is absent
+// from the pinned mlx-swift-lm registry — would download but never load — so it
+// is deliberately not used until Swift-runtime support lands.
 
-@Test func macStudioRecommendsGemma12B() {
+@Test func macHighRAMRecommends26BA4B() {
     let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 64, availableStorageGB: 200)
-    #expect(tier.recommendedChat == "gemma-4.5-12b-1m")
+    #expect(tier.recommendedChat == "gemma-4-26b-a4b")
     #expect(tier.recommendedEmbedder == "multilingual-e5-large")
 }
 
-@Test func macMidTierRecommendsGemma12B() {
-    let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 36, availableStorageGB: 50)
-    #expect(tier.recommendedChat == "gemma-4.5-12b-1m")
+@Test func mac24GBBoundaryGets26BA4B() {
+    let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 24, availableStorageGB: 50)
+    #expect(tier.recommendedChat == "gemma-4-26b-a4b")
 }
 
-@Test func macLowRAMRecommendsGemma12B() {
+@Test func macLowRAMRecommendsE4B() {
+    // 16–24 GB RAM is below the 26B/A4B floor → the elastic E4B that fits.
     let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 16, availableStorageGB: 20)
-    #expect(tier.recommendedChat == "gemma-4.5-12b-1m")
+    #expect(tier.recommendedChat == "gemma-4-e4b")
+}
+
+@Test func macHighRAMLowStorageFallsToE4B() {
+    // ≥24 GB RAM but not enough disk for the 26B (needs ~29 GB) → E4B, not nil.
+    let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 32, availableStorageGB: 15)
+    #expect(tier.recommendedChat == "gemma-4-e4b")
 }
 
 @Test func lowStorageFallsBackToAppleFM() {

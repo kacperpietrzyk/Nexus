@@ -131,9 +131,13 @@ public struct AssistantReadinessChecklist: Sendable {
         // A superseded-but-working chat model is tagged `.staleButActive` by the
         // reconciler; because it is non-canonical its `kind` resolves to `.unknown`
         // (it matches neither canonical chat nor embedder id). Accept that tag so a
-        // working older chat model reads as `updating`, not `missing`/broken.
+        // working older chat model reads as `updating`, not `missing`/broken — but
+        // ONLY for the chat role. `.staleButActive` is never produced for an embedder,
+        // so letting the embedder match a `.unknown`-tagged stale *chat* dir would mask
+        // a genuinely missing "Search model" as `updating` (the 0.3.x Qwen→Gemma
+        // upgrade bug: a leftover chat dir lit up both rows + a false-green summary).
         let staleActive = scanEntries.contains {
-            ($0.kind == kind || $0.kind == .unknown)
+            ($0.kind == kind || (role == .chat && $0.kind == .unknown))
                 && $0.classification == .staleButActive && $0.sizeBytes > 0
         }
 

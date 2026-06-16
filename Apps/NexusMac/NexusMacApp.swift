@@ -266,6 +266,14 @@ struct NexusMacApp: App {
                             onReloadChat: { [aiRouter] in try? await aiRouter.reloadMLXChat() },
                             onReloadEmbedder: { [aiRouter] in
                                 try? await aiRouter.reloadMLXEmbedder()
+                            },
+                            onPrepare: { [welcomeMLXDownloads, resolvedSet = inputs.resolvedSet] in
+                                let preparer = AssistantPreparer(
+                                    resolvedSet: resolvedSet,
+                                    downloadManager: welcomeMLXDownloads.manager,
+                                    localStateStore: ModelManifestLocalState.Store()
+                                )
+                                try? await preparer.prepareIfNeeded()
                             }
                         )
                     )

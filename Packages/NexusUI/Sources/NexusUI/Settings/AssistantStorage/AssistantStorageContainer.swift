@@ -29,6 +29,7 @@ public struct AssistantStorageContainer: View {
     private let tier: DeviceTier
     private let onReloadChat: () async -> Void
     private let onReloadEmbedder: () async -> Void
+    private let onPrepare: @MainActor () async -> Void
 
     @State private var rows: [AssistantStorageRow] = []
     @State private var headline: String = ""
@@ -39,13 +40,15 @@ public struct AssistantStorageContainer: View {
         resolvedSet: ResolvedModelSet,
         tier: DeviceTier,
         onReloadChat: @escaping () async -> Void,
-        onReloadEmbedder: @escaping () async -> Void
+        onReloadEmbedder: @escaping () async -> Void,
+        onPrepare: @MainActor @escaping () async -> Void = {}
     ) {
         self.reconciler = reconciler
         self.resolvedSet = resolvedSet
         self.tier = tier
         self.onReloadChat = onReloadChat
         self.onReloadEmbedder = onReloadEmbedder
+        self.onPrepare = onPrepare
     }
 
     public var body: some View {
@@ -53,9 +56,30 @@ public struct AssistantStorageContainer: View {
             headline: headline,
             tone: tone,
             rows: rows,
-            onFreeUp: freeUp
+            onFreeUp: freeUp,
+            onDownload: { _ in download() }
         )
-        .task { await refresh() }
+        // Poll while the pane is open so a download started here (or from the chat
+        // band) shows live progress; SwiftUI cancels this `.task` on disappear.
+        .task {
+            while !Task.isCancelled {
+                await refresh()
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    // MARK: - Download / retry
+
+    /// Kicks off `prepareIfNeeded` for any role not yet downloaded (download, retry
+    /// a failed one, or fetch the new canonical for a model still on an older build).
+    /// The polling `.task` reflects the resulting `downloading` state; one immediate
+    /// refresh flips the row out of its idle state without waiting for the next tick.
+    private func download() {
+        Task {
+            await onPrepare()
+            await refresh()
+        }
     }
 
     // MARK: - Scan → checklist + disk rows
