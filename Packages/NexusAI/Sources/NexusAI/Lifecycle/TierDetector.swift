@@ -47,7 +47,14 @@ public enum TierDetector {
             return DeviceTier(recommendedChat: nil, recommendedEmbedder: nil)
 
         case .iOS:
-            guard physicalMemoryGB >= 8, availableStorageGB >= 6 else {
+            // Chat targets 8 GB-class iPhones (e4b ~4.5 GB). The RAM floor is `>= 7`,
+            // not `>= 8`, on purpose: iOS under-reports `physicalMemory` by an amount
+            // we cannot measure ahead of time, so an 8 GB device can convert to 7 even
+            // after rounding. No iOS device ships with 7 GB, so `>= 7` still cleanly
+            // excludes the 6 GB class (which rounds to ≤ 6) while surviving even a heavy
+            // ~1.5 GB under-report on an 8 GB device — making the tier independent of the
+            // exact reported value rather than betting on a narrow rounding margin.
+            guard physicalMemoryGB >= 7, availableStorageGB >= 6 else {
                 return DeviceTier(
                     recommendedChat: nil,
                     recommendedEmbedder: embedderFits ? e5LargeID : nil)
@@ -100,9 +107,29 @@ public enum TierDetector {
             return .macOS
             #endif
         }()
-        let ramGB = Int(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
+        let ramGB = gigabytes(fromBytes: ProcessInfo.processInfo.physicalMemory)
         let availableGB = (try? FileManager.default.availableCapacityGBForAppSupport()) ?? 0
         return recommend(platform: platform, physicalMemoryGB: ramGB, availableStorageGB: availableGB)
+    }
+
+    /// Converts a raw `physicalMemory` byte count to whole gigabytes by ROUNDING,
+    /// not truncating.
+    ///
+    /// iOS reports `physicalMemory` slightly UNDER the nominal installed RAM (the
+    /// kernel reserves a slice), so an 8 GB iPhone returns ~7.98 GiB. The old
+    /// `Int(bytes / 1_073_741_824)` floored that to 7, which fell below the (then
+    /// `>= 8`) iOS chat tier and silently dropped the assistant model on every 8 GB
+    /// iPhone (the embedder, gated at only `>= 4 GB`, still passed — so Settings
+    /// showed a "Search model" row but no "Assistant model" row). Rounding gives a
+    /// truthful figure for the "Device memory: N GB" label and a sane tiering input.
+    ///
+    /// Rounding is NOT load-bearing for the chat-tier decision on its own — that
+    /// would only hold if the under-report stays under 0.5 GiB, which we cannot
+    /// guarantee. The robustness comes from the `>= 7` iOS RAM floor (see the iOS
+    /// branch of `recommend`), which tolerates a much larger under-report. Macs
+    /// report exact binary RAM, so rounding is a no-op there.
+    public static func gigabytes(fromBytes bytes: UInt64) -> Int {
+        Int((Double(bytes) / 1_073_741_824).rounded())
     }
 
     // MARK: - Helpers
