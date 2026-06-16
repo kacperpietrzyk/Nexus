@@ -52,6 +52,7 @@ struct NexusMacApp: App {
     private let agentActivityLog: AgentActivityLog
     private let agentComposition: AgentComposition
     private let meetingsComposition: MeetingsComposition
+    private let meetingSummaryClaimer: MeetingSummaryClaimer
     private let meetingNavigationRouter: MeetingNavigationRouter
     private let meetingsHelperXPCClient: MeetingsHelperXPCClient
     private let helperToastBridge: HelperToastBridge
@@ -120,6 +121,13 @@ struct NexusMacApp: App {
             router: self.aiRouter,
             taskRepository: self.taskRepository
         )
+        self.meetingSummaryClaimer = MeetingSummaryClaimer(
+            pipeline: self.meetingsComposition.pipeline,
+            repo: self.meetingsComposition.meetingRepository,
+            queue: self.meetingsComposition.pipelineQueue,
+            rootFolder: Self.meetingsRootFolder()
+        )
+        self.meetingSummaryClaimer.start()
         let meetingNavigation = Self.makeMeetingNavigationInfrastructure()
         self.meetingsHelperXPCClient = meetingNavigation.xpcClient
         self.meetingNavigationRouter = meetingNavigation.router
