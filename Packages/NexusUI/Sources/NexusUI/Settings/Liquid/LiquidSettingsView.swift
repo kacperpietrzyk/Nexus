@@ -476,6 +476,9 @@ private struct AdvancedPanel: View {
                     .frame(minHeight: 44)
                 }
             }
+
+            deps.notesImportContent()
+                .environment(\.settingsDetailEmbedded, true)
         }
     }
 }

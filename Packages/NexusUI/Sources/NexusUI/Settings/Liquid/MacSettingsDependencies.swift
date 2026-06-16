@@ -14,6 +14,7 @@ public struct MacSettingsDependencies: @unchecked Sendable {
     public var agentSettingsContent: () -> AnyView
     public var meetingsSettingsContent: () -> AnyView
     public var externalAccessContent: () -> AnyView
+    public var notesImportContent: () -> AnyView
 
     public init(
         cloudKitEnabled: Bool,
@@ -25,7 +26,8 @@ public struct MacSettingsDependencies: @unchecked Sendable {
         manageModelsContent: @escaping () -> AnyView,
         agentSettingsContent: @escaping () -> AnyView,
         meetingsSettingsContent: @escaping () -> AnyView,
-        externalAccessContent: @escaping () -> AnyView
+        externalAccessContent: @escaping () -> AnyView,
+        notesImportContent: @escaping () -> AnyView = { AnyView(EmptyView()) }
     ) {
         self.cloudKitEnabled = cloudKitEnabled
         self.cloudKitContainerIdentifier = cloudKitContainerIdentifier
@@ -37,6 +39,7 @@ public struct MacSettingsDependencies: @unchecked Sendable {
         self.agentSettingsContent = agentSettingsContent
         self.meetingsSettingsContent = meetingsSettingsContent
         self.externalAccessContent = externalAccessContent
+        self.notesImportContent = notesImportContent
     }
 
     /// Inert default so previews / non-injecting hosts compile.
@@ -51,7 +54,8 @@ public struct MacSettingsDependencies: @unchecked Sendable {
             manageModelsContent: { AnyView(EmptyView()) },
             agentSettingsContent: { AnyView(EmptyView()) },
             meetingsSettingsContent: { AnyView(EmptyView()) },
-            externalAccessContent: { AnyView(EmptyView()) }
+            externalAccessContent: { AnyView(EmptyView()) },
+            notesImportContent: { AnyView(EmptyView()) }
         )
     }
 }

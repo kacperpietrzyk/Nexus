@@ -6,6 +6,26 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-06-16
+Adds a local Obsidian vault importer and unblocks the CI lint gate.
+
+### Added
+- **Import an Obsidian vault.** A new importer (Settings → Advanced, next to Export
+  on macOS) reads `.md` files straight from disk and creates Nexus notes locally —
+  no network, no LLM. It strips leading YAML frontmatter, preserves the vault's
+  folder layout, maps `90 - Templates` to the template role, and skips hidden
+  entries (`.obsidian`) and non-markdown files. A two-phase flow scans and shows a
+  create-vs-skip preview before any write; the import is idempotent and resume-safe,
+  so re-running only adds what's missing. Because the note body never passes through
+  a model, content the usage-policy classifier blocks during MCP/agent writes
+  imports cleanly.
+
+### Fixed
+- **CI lint gate was stuck red.** A multi-line `if` condition in `TierDetector`
+  deadlocked swift-format (which wanted the brace on its own line) against SwiftLint
+  (which wanted it on the same line), keeping the Lint job red since 0.3.1.
+  Collapsing the condition to a single line satisfies both with no behavior change.
+
 ## [0.3.2] - 2026-06-16
 Stability fixes for heavy and automated use of the MCP server, plus a more honest
 daily brief.
