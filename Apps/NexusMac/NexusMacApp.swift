@@ -301,6 +301,9 @@ struct NexusMacApp: App {
                         activityLog: agentActivityLog
                     )
                 )
+            },
+            notesImportContent: { [noteRepository] in
+                AnyView(ObsidianImportSettingsView(repository: noteRepository))
             }
         )
     }
