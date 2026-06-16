@@ -98,7 +98,7 @@ import Testing
         ),
         providerProfile: { "parakeet-tdt-v3+sortformer" },
         customSummaryTemplateProvider: { "Custom {{title}} -> {{transcript}}" },
-        summaryProviderPreference: { .auto }
+        summaryProviderPreference: { .assistantModel }
     )
 
     let audioFolder = FileManager.default.temporaryDirectory
@@ -141,7 +141,7 @@ import Testing
             sourceID: "meetings.action-items"
         ),
         providerProfile: { "parakeet-tdt-v3+sortformer" },
-        summaryProviderPreference: { .auto }
+        summaryProviderPreference: { .assistantModel }
     )
 
     let audioFolder = FileManager.default.temporaryDirectory
@@ -188,7 +188,7 @@ import Testing
             sourceID: "meetings.action-items"
         ),
         providerProfile: { "parakeet-tdt-v3+sortformer" },
-        summaryProviderPreference: { .auto }
+        summaryProviderPreference: { .assistantModel }
     )
 
     let audioFolder = FileManager.default.temporaryDirectory

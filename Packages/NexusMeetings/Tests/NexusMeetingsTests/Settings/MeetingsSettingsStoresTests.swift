@@ -28,7 +28,8 @@ import Testing
     #expect(MeetingsTranscriptionProviderPreference.whisperKitLarge.rawValue == "whisperkit-large")
     #expect(MeetingsTranscriptionProviderPreference.ask.rawValue == "ask")
 
-    #expect(MeetingsSummaryProviderPreference.auto.rawValue == ProviderPreference.auto.rawValue)
+    #expect(MeetingsSummaryProviderPreference.assistantModel.rawValue == "assistantModel")
+    #expect(MeetingsSummaryProviderPreference.appleIntelligence.rawValue == "appleIntelligence")
     #expect(MeetingsSummaryProviderPreference.disabled.rawValue == "disabled")
     #expect(MeetingsSummaryProviderPreference.disabled.providerPreference == nil)
 }
@@ -43,7 +44,7 @@ import Testing
 
     let store = MeetingsProviderSettingsStore(defaults: defaults)
 
-    #expect(store.summaryProvider() == .auto)
+    #expect(store.summaryProvider() == .assistantModel)
     #expect(store.transcriptionProvider() == .parakeetTDTv3)
 }
 
