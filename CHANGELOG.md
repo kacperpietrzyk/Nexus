@@ -131,7 +131,8 @@ the app, alongside a Linear-inspired redesign and a broad correctness pass.
 - First TestFlight beta: tasks (quick capture ⌘N, Today, Inbox), Mac/iPhone/iPad/Watch,
   CloudKit sync, on-device AI assist, MCP external access (Mac).
 
-[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.0...v0.3.3
 [0.3.0]: https://github.com/kacperpietrzyk/Nexus/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kacperpietrzyk/Nexus/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kacperpietrzyk/Nexus/releases/tag/v0.1.0
