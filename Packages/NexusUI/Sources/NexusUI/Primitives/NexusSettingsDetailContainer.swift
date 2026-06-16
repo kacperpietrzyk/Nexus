@@ -30,11 +30,13 @@ public struct NexusSettingsDetailContainer<Content: View>: View {
             // Render the bare content: no custom header, no own `ScrollView`, no
             // opaque background (let the host glass/wallpaper show through), and no
             // `HiddenNativeChrome` (the host's `NavigationStack` owns chrome — see
-            // `LiquidSettingsView`). Padding is preserved so the embedded sub-views
-            // align with the host's surrounding cards.
+            // `LiquidSettingsView`). No own padding either: the host pane already
+            // insets its content (`DS.Space.l`), and the sibling direct cards sit
+            // flush at that inset — so adding `s5` here would push the embedded
+            // cards 20pt further right than their neighbours (the Agent/Meetings
+            // cards drifting right of the Models cards). Stay flush to align.
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(NexusSpacing.s5)
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 header
