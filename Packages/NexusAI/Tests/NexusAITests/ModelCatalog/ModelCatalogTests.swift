@@ -92,6 +92,35 @@ import Testing
     #expect(firstCount == secondCount, "Re-seed must not duplicate rows.")
 }
 
+/// Characterization for the `loadDefault()` memoization (perf/today-data-scaling):
+/// two default-bundle calls must return the same decoded catalog, and the cached
+/// value must equal a fresh decode read directly from the bundle JSON. Guards
+/// against the memoization ever serving content that differs from a cold decode.
+@MainActor
+@Test func loadDefaultIsMemoizedAndEqualsFreshDecode() throws {
+    let first = try ModelCatalog.loadDefault()
+    let second = try ModelCatalog.loadDefault()
+
+    // A fresh, un-cached decode straight from the module bundle JSON.
+    let url = try #require(Bundle.module.url(forResource: "DefaultCatalog", withExtension: "json"))
+    let data = try Data(contentsOf: url)
+    let fresh = try JSONDecoder().decode(ModelCatalog.CatalogDoc.self, from: data)
+
+    func key(_ doc: ModelCatalog.CatalogDoc) -> String {
+        func entries(_ list: [ModelCatalog.Entry]) -> String {
+            list.map {
+                "\($0.id)|\($0.hfPath)|\($0.family)|\($0.displayName)|\($0.sizeGB)|"
+                    + "\($0.recommendedRAMGB)|\($0.contextLength)|\($0.supportsTools)|"
+                    + "\($0.supportsVision)|\($0.supportedLocales.joined(separator: ","))"
+            }.joined(separator: ";")
+        }
+        return "\(doc.version)|\(doc.lastUpdated)|\(entries(doc.chat))|\(entries(doc.embedders))"
+    }
+
+    #expect(key(first) == key(second), "Repeat loadDefault() must return the same catalog.")
+    #expect(key(first) == key(fresh), "Memoized catalog must equal a fresh decode of the bundle JSON.")
+}
+
 /// Single-source enforcement (LabKit 1l#3): the fallback embedder ID used by
 /// `MLXLifecycleController.embedderFolderURL()` / `TierDetector` must stay a
 /// real catalog entry. If `DefaultCatalog.json` renames the embedder without

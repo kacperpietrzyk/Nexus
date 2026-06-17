@@ -39,9 +39,13 @@ public final class BackfillEmbeddingsJob {
     public func run() async throws -> BackfillProgress {
         let tasks = try liveTasks()
         let memories = try liveMemories()
-        let embeddedIDs = try existingEmbeddingIDs()
+        // Single fetch of the ItemEmbedding table, reused for both the
+        // existence check (embeddedIDs) and stale detection — previously the
+        // whole table was fetched twice per run.
+        let existingEmbeddings = try context.fetch(FetchDescriptor<ItemEmbedding>())
+        let embeddedIDs = Set(existingEmbeddings.map(\.itemID))
         let liveIDs = Set(tasks.map(\.id)).union(memories.map(\.id))
-        try cleanupStaleEmbeddings(liveIDs: liveIDs)
+        try cleanupStaleEmbeddings(existingEmbeddings, liveIDs: liveIDs)
         var processed = 0
         var skipped = 0
 
@@ -104,12 +108,7 @@ public final class BackfillEmbeddingsJob {
             .filter { $0.deletedAt == nil }
     }
 
-    private func existingEmbeddingIDs() throws -> Set<UUID> {
-        Set(try context.fetch(FetchDescriptor<ItemEmbedding>()).map(\.itemID))
-    }
-
-    private func cleanupStaleEmbeddings(liveIDs: Set<UUID>) throws {
-        let embeddings = try context.fetch(FetchDescriptor<ItemEmbedding>())
+    private func cleanupStaleEmbeddings(_ embeddings: [ItemEmbedding], liveIDs: Set<UUID>) throws {
         let staleEmbeddings = embeddings.filter { !liveIDs.contains($0.itemID) }
         guard !staleEmbeddings.isEmpty else {
             return

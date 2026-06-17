@@ -21,8 +21,13 @@ public final class ContextAssembler {
         if recipe.linkGraphDepth > 0, let links = renderLinkSection(focus: focus, depth: recipe.linkGraphDepth) {
             sections.append(links)
         }
+        // Live tasks (deletedAt == nil) are fetched at most once per assembly and
+        // reused across every task-backed slice (.tasksDueWithin, .overdueTasks),
+        // instead of re-fetching the whole TaskItem table per slice. Lazy: stays
+        // nil — and the fetch never runs — when no slice needs tasks.
+        var liveTasks: [TaskItem]?
         for slice in recipe.repoSlices {
-            if let section = renderSlice(slice, now: now) { sections.append(section) }
+            if let section = renderSlice(slice, now: now, liveTasks: &liveTasks) { sections.append(section) }
         }
         if let rag = recipe.ragQuery, let section = await renderRagSection(rag) {
             sections.append(section)
@@ -90,20 +95,33 @@ public final class ContextAssembler {
         return .init(title: "Linked items (\(edges.count))", body: body)
     }
 
-    private func renderSlice(_ slice: RepoSlice, now: Date) -> AssembledContext.Section? {
+    /// Fetches the live-task set (deletedAt == nil) once per assembly, caching it
+    /// in `cache` so a second task-backed slice reuses the same array (same query,
+    /// same order) instead of re-fetching the whole TaskItem table.
+    private func liveTasks(_ cache: inout [TaskItem]?) -> [TaskItem] {
+        if let cached = cache { return cached }
+        let mc = agentContext.modelContext.context
+        // Fetch-then-filter: no force-unwrap inside #Predicate (see Verified contracts).
+        let fetched = (try? mc.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.deletedAt == nil }))) ?? []
+        cache = fetched
+        return fetched
+    }
+
+    private func renderSlice(
+        _ slice: RepoSlice, now: Date, liveTasks cache: inout [TaskItem]?
+    ) -> AssembledContext.Section? {
         let mc = agentContext.modelContext.context
         switch slice {
         case .tasksDueWithin(let days):
             let end = Calendar.current.date(byAdding: .day, value: days, to: now) ?? now
-            // Fetch-then-filter: no force-unwrap inside #Predicate (see Verified contracts).
-            let all = (try? mc.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.deletedAt == nil }))) ?? []
+            let all = liveTasks(&cache)
             let tasks = all.filter { if let d = $0.dueAt { return d >= now && d <= end } else { return false } }
             guard !tasks.isEmpty else { return nil }
             return .init(
                 title: "Tasks due in \(days)d (\(tasks.count))",
                 body: tasks.prefix(30).map { "- \($0.title)" }.joined(separator: "\n"))
         case .overdueTasks:
-            let all = (try? mc.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.deletedAt == nil }))) ?? []
+            let all = liveTasks(&cache)
             let tasks = all.filter { if let d = $0.dueAt { return d < now } else { return false } }
             guard !tasks.isEmpty else { return nil }
             return .init(

@@ -165,6 +165,66 @@ import Testing
         #expect(hits.first?.itemID == task.id)
     }
 
+    /// Characterization (perf/today-data-scaling): the ItemEmbedding table is now
+    /// fetched ONCE and reused for both the already-embedded skip check and stale
+    /// detection. Seed a stale embedding AND an already-embedded live task in the
+    /// same run, plus a brand-new task, and assert the single-fetch path produces
+    /// the same enqueue counts and the same stale removal as two separate fetches.
+    @Test func singleFetchSkipsEmbeddedProcessesNewAndRemovesStale() async throws {
+        let harness = try BackfillHarness.make()
+
+        let embeddedTask = TaskItem(title: "Already embedded")
+        let newTask = TaskItem(title: "Brand new")
+        harness.context.insert(embeddedTask)
+        harness.context.insert(newTask)
+        harness.context.insert(
+            ItemEmbedding(
+                itemID: embeddedTask.id,
+                kind: ItemKind.task.rawValue,
+                vector: FakeBackfillEmbeddingClient.vector(for: embeddedTask.searchableText),
+                textHash: FakeBackfillEmbeddingClient.hash(embeddedTask.searchableText),
+                language: "test",
+                vectorDimension: 4
+            )
+        )
+
+        let staleID = UUID()
+        let staleVector = FakeBackfillEmbeddingClient.vector(for: "stale text")
+        harness.context.insert(
+            ItemEmbedding(
+                itemID: staleID,
+                kind: ItemKind.task.rawValue,
+                vector: staleVector,
+                textHash: FakeBackfillEmbeddingClient.hash("stale text"),
+                language: "test",
+                vectorDimension: 4
+            )
+        )
+        try harness.index.upsert(id: staleID, vector: staleVector)
+        try harness.context.save()
+
+        let progress = try await BackfillEmbeddingsJob(
+            context: harness.context,
+            dispatcher: harness.dispatcher,
+            index: harness.index
+        ).run()
+        try await harness.waitForQueueDrain()
+
+        // 1 new task processed, 1 already-embedded task skipped, total = 2 live tasks.
+        #expect(progress == BackfillProgress(processed: 1, skipped: 1, total: 2))
+        // Both live tasks were enqueued; the stale (non-live) id was not.
+        #expect(
+            Set(harness.client.calls)
+                == Set([embeddedTask.searchableText, newTask.searchableText]))
+        // Stale embedding removed from the store; live embeddings remain.
+        // (Index-search is not asserted here: the two enqueued live embeddings are
+        // added to the same index, so a nearest-neighbour query is not a clean
+        // stale-removal signal — see removesEmbeddingsForItemsMissingFromLiveStore
+        // for the index-eviction characterization with no live embeddings present.)
+        #expect(try harness.embedding(itemID: staleID) == nil)
+        #expect(try harness.embedding(itemID: embeddedTask.id) != nil)
+    }
+
     @Test func removesEmbeddingsForItemsMissingFromLiveStore() async throws {
         let harness = try BackfillHarness.make()
         let staleID = UUID()
