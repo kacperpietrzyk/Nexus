@@ -22,6 +22,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Cheap Ubuntu gate: decide whether the heavy macOS build/test jobs need to
+  # run at all. A docs-only / metadata-only change skips every build + test
+  # (they all `needs: changes`), so a README PR no longer burns ~11 macOS
+  # runners. `lint` deliberately does NOT gate on this — it is a REQUIRED check
+  # (branch protection), and a skipped required check leaves a PR stuck pending;
+  # the build/test jobs are NOT required, so skipping them is safe.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # Allowlist of paths that actually affect a build/test. Anything not
+          # matched here (Markdown, docs/, LICENSE, issue templates, images,
+          # the dco workflow…) leaves `code` false and skips the heavy jobs.
+          filters: |
+            code:
+              - 'Apps/**'
+              - 'Packages/**'
+              - 'project.yml'
+              - 'Nexus.xcworkspace/**'
+              - '.github/workflows/ci.yml'
+
   lint:
     name: Lint (SwiftLint + swift-format)
     runs-on: macos-26
@@ -39,6 +66,8 @@ jobs:
 
   packages:
     name: Test Swift Packages
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-26
     strategy:
       fail-fast: false
@@ -47,15 +76,56 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Shared dependency checkouts (one cache entry, restored by every job) so
+      # the heavy graph — mlx-swift, swift-transformers, swift-syntax, … — is
+      # cloned once, not re-fetched per job. Lives in GitHub's Actions cache,
+      # nothing on a developer's machine.
+      - name: Cache SwiftPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-checkouts-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-checkouts-${{ runner.os }}-
+
+      # Per-package compiled artifacts: caching `.build` lets `swift test` reuse
+      # the already-compiled dependency graph instead of rebuilding mlx-swift et
+      # al. from scratch every run — the single biggest CI time sink.
+      - name: Cache build (${{ matrix.package }})
+        uses: actions/cache@v4
+        with:
+          path: Packages/${{ matrix.package }}/.build
+          key: spm-build-${{ matrix.package }}-${{ runner.os }}-${{ hashFiles(format('Packages/{0}/Package.resolved', matrix.package)) }}
+          restore-keys: |
+            spm-build-${{ matrix.package }}-${{ runner.os }}-
+
       - name: Test ${{ matrix.package }}
         working-directory: Packages/${{ matrix.package }}
         run: swift test --enable-code-coverage
 
   test-mcp-sidecar:
     name: Test NexusMCPSidecar (SPM)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
+
+      - name: Cache SwiftPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-checkouts-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-checkouts-${{ runner.os }}-
+
+      - name: Cache build (MCPSidecar)
+        uses: actions/cache@v4
+        with:
+          path: Apps/NexusMCPSidecar/.build
+          key: spm-build-mcpsidecar-${{ runner.os }}-${{ hashFiles('Apps/NexusMCPSidecar/Package.resolved') }}
+          restore-keys: |
+            spm-build-mcpsidecar-${{ runner.os }}-
 
       # NexusMCPSidecar has no Xcode test target; its tests live in
       # Apps/NexusMCPSidecar/Tests/NexusMCPSidecarTests and only run via SPM.
@@ -65,12 +135,29 @@ jobs:
 
   build-mac:
     name: Build NexusMac
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
 
       - name: Install XcodeGen + xcbeautify
         run: brew install xcodegen xcbeautify
+
+      # Cache the whole DerivedData tree (a fixed `-derivedDataPath`), which
+      # holds the cloned packages AND their compiled products + module cache.
+      # Unlike caching only the source checkouts, this lets xcodebuild reuse the
+      # already-compiled dependency graph (mlx-swift, swift-syntax, …) and do an
+      # incremental build — the long-pole build jobs otherwise recompile the
+      # whole graph every run. Keyed per scheme + on the resolved pins / project
+      # shape so a dependency or target change busts it. Lives in GitHub's cache.
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: DerivedData
+          key: xcode-dd-NexusMac-${{ runner.os }}-${{ hashFiles('Nexus.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'project.yml') }}
+          restore-keys: |
+            xcode-dd-NexusMac-${{ runner.os }}-
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -83,6 +170,7 @@ jobs:
             -scheme NexusMac \
             -destination 'platform=macOS' \
             -configuration Debug \
+            -derivedDataPath DerivedData \
             build \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
@@ -91,12 +179,25 @@ jobs:
 
   build-ios:
     name: Build NexusiOS
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
 
       - name: Install XcodeGen + xcbeautify
         run: brew install xcodegen xcbeautify
+
+      # See build-mac: cache the whole DerivedData so the dependency graph is
+      # compiled once and reused (this is the long-pole job — it builds both
+      # NexusiOS and NexusiOSShare on top of the full graph).
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: DerivedData
+          key: xcode-dd-NexusiOS-${{ runner.os }}-${{ hashFiles('Nexus.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'project.yml') }}
+          restore-keys: |
+            xcode-dd-NexusiOS-${{ runner.os }}-
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -109,6 +210,7 @@ jobs:
             -scheme NexusiOS \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
+            -derivedDataPath DerivedData \
             build \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
@@ -123,6 +225,7 @@ jobs:
             -scheme NexusiOSShare \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
+            -derivedDataPath DerivedData \
             build \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
@@ -131,12 +234,24 @@ jobs:
 
   build-watch:
     name: Build NexusWatch
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
 
       - name: Install XcodeGen + xcbeautify
         run: brew install xcodegen xcbeautify
+
+      # See build-mac: cache the whole DerivedData so the dependency graph is
+      # compiled once and reused across runs.
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: DerivedData
+          key: xcode-dd-NexusWatch-${{ runner.os }}-${{ hashFiles('Nexus.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'project.yml') }}
+          restore-keys: |
+            xcode-dd-NexusWatch-${{ runner.os }}-
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -149,6 +264,7 @@ jobs:
             -scheme NexusWatch \
             -destination 'generic/platform=watchOS Simulator' \
             -configuration Debug \
+            -derivedDataPath DerivedData \
             build \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
