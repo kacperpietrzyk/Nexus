@@ -324,6 +324,24 @@ struct LiquidTodayModelTests {
         #expect(model.storeLoadCount == 2)
     }
 
+    @Test("isLoaded is false before the first reload and true after a successful load")
+    @MainActor
+    func isLoadedFlipsAfterFirstLoad() async throws {
+        let (context, now) = try makeGateContext()
+        let model = LiquidTodayModel()
+
+        // Cold start: no load has completed -> the card must suppress its placeholder.
+        #expect(model.isLoaded == false)
+
+        await reloadGate(model, context, now: now)
+        #expect(model.isLoaded)
+
+        // A gated return-navigation (early-return, no re-read) must NOT reset it.
+        await reloadGate(model, context, now: now)
+        #expect(model.storeLoadCount == 1)
+        #expect(model.isLoaded)
+    }
+
     @Test("Changing calendarEventsEnabled forces the next reload to re-read the store")
     @MainActor
     func calendarToggleForcesReload() async throws {

@@ -13,6 +13,11 @@ private let prioritySectionRowCap = 5
 struct TopPrioritiesCard: View {
 
     let groups: [LiquidPriorityGroup]
+    /// False until the model's first store load completes. While false the card
+    /// renders a layout-stable empty body (no placeholder rows) so the genuine
+    /// empty state isn't flashed during the ~100ms cold-start before real rows
+    /// arrive — preventing the "two looks" dimension shift.
+    let isLoaded: Bool
     let now: Date
     let projectName: (UUID) -> String?
     let onToggle: (TaskItem) -> Void
@@ -22,7 +27,13 @@ struct TopPrioritiesCard: View {
 
     var body: some View {
         TodayGlassCard("Top Priorities") {
-            if groups.isEmpty {
+            if !isLoaded {
+                // Pre-first-load: keep the card frame present but show nothing —
+                // no divergent placeholder, no dimension flash. Same fill frame
+                // as the real / empty bodies so the card height never collapses.
+                VStack(alignment: .leading, spacing: DS.Space.m) {}
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else if groups.isEmpty {
                 emptySummary
             } else {
                 VStack(alignment: .leading, spacing: DS.Space.m) {

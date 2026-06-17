@@ -28,8 +28,14 @@ public actor MeetingActionItemsInboxSource: InboxSource {
         let sourceID = id
         return try await MainActor.run {
             let meetings = try meetingRepository.allChronological().filter { $0.deletedAt == nil }
-            let taskIDsByMeetingID = try meetings.reduce(into: [UUID: Set<UUID>]()) { result, meeting in
-                let links = try linkRepository.outgoing(from: (.meeting, meeting.id))
+            // Batched outgoing-link fetch (one query for ALL meetings) replaces the
+            // per-meeting `outgoing(from:)` N+1 storm. `outgoing(fromKind:fromIDs:)`
+            // returns the same per-id links the single-endpoint method does, so the
+            // per-meeting action-item filter below is byte-identical.
+            let meetingIDs = meetings.map(\.id)
+            let linksByMeetingID = try linkRepository.outgoing(fromKind: .meeting, fromIDs: meetingIDs)
+            let taskIDsByMeetingID = meetings.reduce(into: [UUID: Set<UUID>]()) { result, meeting in
+                let links = linksByMeetingID[meeting.id] ?? []
                 let taskIDs = links.compactMap { link -> UUID? in
                     guard link.linkKind == .actionItem, link.toKind == .task else { return nil }
                     return link.toID
@@ -42,16 +48,19 @@ public actor MeetingActionItemsInboxSource: InboxSource {
             guard allTaskIDs.isEmpty == false else { return [] }
 
             let openStatus = TaskStatus.open.rawValue
+            let idSet = allTaskIDs
+            // Predicate the fetch on the action-item id set (UUID-set `contains` is
+            // SwiftData-translatable — same shape as `LinkRepository.outgoing`) so
+            // the store only returns the open tasks we surface, not every open task.
             let taskDescriptor = FetchDescriptor<TaskItem>(
                 predicate: #Predicate { task in
-                    task.deletedAt == nil && task.statusRaw == openStatus
+                    task.deletedAt == nil && task.statusRaw == openStatus && idSet.contains(task.id)
                 }
             )
             // Synced TaskItem ids are not unique (CloudKit forbids @Attribute(.unique)); a sync
             // conflict can yield duplicate ids. Dedup keep-first instead of trapping on the dup.
             let tasksByID = Dictionary(
                 try taskRepository.context.fetch(taskDescriptor)
-                    .filter { allTaskIDs.contains($0.id) }
                     .map { ($0.id, $0) },
                 uniquingKeysWith: { current, _ in current }
             )

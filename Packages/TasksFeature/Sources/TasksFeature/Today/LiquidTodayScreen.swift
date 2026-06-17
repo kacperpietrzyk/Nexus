@@ -286,6 +286,9 @@ public struct LiquidTodayScreen: View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
         return TopPrioritiesCard(
             groups: reference?.priorityGroups ?? model.priorityGroups,
+            // Reference/preview mode supplies data without a model load — treat it
+            // as loaded so previews and reference snapshots are unaffected.
+            isLoaded: reference != nil || model.isLoaded,
             now: .now,
             projectName: { projectID in
                 reference?.projectNamesByID[projectID] ?? model.projectNamesByID[projectID]

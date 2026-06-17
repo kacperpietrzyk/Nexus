@@ -204,18 +204,19 @@ public final class LiquidTodayModel {
 
     private var reloadGeneration = 0
     private var lastBriefInput: LiquidTodayBriefInput?
-
-    /// Test-visible count of full store snapshot reads. A gated (early-return)
-    /// return-navigation leaves this unchanged — drives the FIX-1 characterization.
+    /// Test-visible count of full store snapshot reads; a gated (early-return)
+    /// return-navigation leaves it unchanged — drives the skip-reload tests.
     public private(set) var storeLoadCount = 0
-
-    // Skip-redundant-reload gate provenance: the day-start + calendar-visibility
-    // the held snapshot was built for, plus a dirty flag the store-change path
-    // raises. A return-navigation matching all three early-returns (no re-read).
+    // Skip-redundant-reload gate provenance: day-start + calendar-visibility the
+    // snapshot was built for + a dirty flag (all three match → early-return).
     private var loadedSnapshot = false
     private var loadedDayStart: Date?
     private var loadedCalendarEventsEnabled: Bool?
     private var needsReload = true
+    // First-successful-load latch (never reset by the skip-reload early-return);
+    // suppresses TopPrioritiesCard's cold-start placeholder before the first load.
+    private var hasLoadedOnce = false
+    public var isLoaded: Bool { hasLoadedOnce }
 
     /// Marks the held snapshot stale so the next `reload()` re-reads the store
     /// (store-change hook, scene-active, in-screen toggle/cascade mutations).
@@ -272,6 +273,7 @@ public final class LiquidTodayModel {
             // Record snapshot provenance + clear the dirty flag so the next
             // unchanged return-navigation hits the early-return above.
             loadedSnapshot = true
+            hasLoadedOnce = true
             loadedDayStart = dayStart
             loadedCalendarEventsEnabled = calendarEventsEnabled
             needsReload = false
