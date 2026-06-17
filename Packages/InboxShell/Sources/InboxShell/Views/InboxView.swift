@@ -16,6 +16,22 @@ public struct InboxView: View {
     // Mirrors TodayDashboard.reloadGeneration (§5 contract).
     @State private var reloadGeneration = 0
     @State private var readItemIDs: Set<UUID> = []
+    // Windowing state. The Inbox no longer materializes every no-date task
+    // (~1383) on entry — it fetches a page and grows it on scroll. `totalItemCount`
+    // / `sourceTotals` carry the TRUE uncapped counts so the badge + section
+    // pills stay accurate while the rendered list is only a window.
+    @State private var windowLimit = InboxView.initialWindow
+    @State private var totalItemCount = 0
+    @State private var sourceTotals: [String: Int] = [:]
+    // `reachedEnd` latches once a grow yields no new rows (the no-date `count()`
+    // over-counts archived-project tasks the list post-filter drops, so the
+    // window can plateau below `totalItemCount`); `isLoadingMore` debounces the
+    // fire-on-appear so a burst of `.onAppear` doesn't stack grows.
+    @State private var reachedEnd = false
+    @State private var isLoadingMore = false
+
+    private static let initialWindow = 50
+    private static let pageGrowth = 100
     // Internal fallback owner for the active filter when the host does not
     // hoist it. macOS hoists it (the §1a control-mode top bar in the Mac
     // shell drives this same state); iOS keeps the internal owner so its
@@ -62,8 +78,10 @@ public struct InboxView: View {
             InboxListPanel(
                 items: filteredItems,
                 error: error,
+                totalsBySourceID: sourceTotals,
                 readItemIDs: $readItemIDs,
-                selectedItem: $selectedItem
+                selectedItem: $selectedItem,
+                onReachEnd: { Task { await loadMore() } }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
@@ -145,6 +163,10 @@ public struct InboxView: View {
                     .buttonStyle(.plain)
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     .listRowBackground(Color.clear)
+                    .onAppear {
+                        // Scroll-to-grow: the last visible row pages the window in.
+                        if item.id == filteredItems.last?.id { Task { await loadMore() } }
+                    }
                     .swipeActions(edge: .leading) {
                         Button {
                             Task { await archive(item) }
@@ -184,32 +206,65 @@ public struct InboxView: View {
     private func reload(selectFirstItem: Bool) async {
         reloadGeneration += 1
         let generation = reloadGeneration
+        // A fresh reload re-opens paging: new data (or a larger window) may have
+        // more rows than the last grow saw. `loadMore` re-latches `reachedEnd`
+        // after its own grow if there is still nothing new.
+        reachedEnd = false
         do {
-            let loaded = try await registry.allItems()
+            let window = try await registry.window(limit: windowLimit)
             guard generation == reloadGeneration else { return }
-            items = loaded
+            items = window.items
+            sourceTotals = window.totalsBySourceID
+            totalItemCount = window.totalItemCount
             error = nil
             // Rehydrate read state from durable storage (survives the tab-switch
-            // remount that resets `@State`), merge any marks made this session,
-            // then prune to the currently-loaded ids so the set can't grow
-            // unbounded. `InboxItem.id` is stable (== underlying TaskItem.id),
-            // so persisted marks line up with reloaded items.
-            let loadedIDs = Set(loaded.map(\.id))
-            readItemIDs = readStateStore.load()
-                .union(readItemIDs)
-                .intersection(loadedIDs)
+            // remount that resets `@State`) and merge any marks made this
+            // session. NO pruning to loaded ids: `items` is now only a window,
+            // so intersecting would drop marks for items outside the page and
+            // they'd re-appear unread on scroll. The set is bounded by the inbox
+            // id space and `InboxItem.id` is stable, so unbounded growth is a
+            // non-issue. Trade-off: ids of items that LEFT the inbox
+            // (archived/snoozed/completed) linger, so `totalItemCount - readCount`
+            // can undercount — the badge errs low, an accepted approximation.
+            readItemIDs = readStateStore.load().union(readItemIDs)
             readStateStore.save(readItemIDs)
             reconcileSelection(selectFirstItem: selectFirstItem)
-            // Only the winning reload publishes its set: a stale reload must
-            // not call back at all (§5 — both writes after the stale-guard).
+            // Only the winning reload publishes: a stale reload must not call
+            // back at all (§5 — all reports after the stale-guard). The unread
+            // badge now depends on `totalItemCount`, which only a reload sets, so
+            // it must be re-reported here (not only on `readItemIDs` change).
             onItemsChanged(items)
+            onUnreadCountChanged(unreadCount)
         } catch {
             guard generation == reloadGeneration else { return }
             items = []
+            sourceTotals = [:]
+            totalItemCount = 0
             selectedItem = nil
             self.error = String(describing: error)
             onItemsChanged(items)
+            onUnreadCountChanged(unreadCount)
         }
+    }
+
+    /// Grow the window by one page when the last row scrolls into view. Latches
+    /// `reachedEnd` once a grow yields no new rows so the fire-on-appear can't
+    /// loop at the bottom (the no-date `count()` over-counts archived-project
+    /// tasks the list post-filter drops, so the window plateaus below
+    /// `totalItemCount`).
+    @MainActor
+    private func loadMore() async {
+        guard !reachedEnd, !isLoadingMore else { return }
+        guard items.count < totalItemCount else {
+            reachedEnd = true
+            return
+        }
+        isLoadingMore = true
+        let before = items.count
+        windowLimit += Self.pageGrowth
+        await reload(selectFirstItem: false)
+        if items.count <= before { reachedEnd = true }
+        isLoadingMore = false
     }
 
     @MainActor
@@ -266,14 +321,23 @@ public struct InboxView: View {
 
     @MainActor
     private func markAllRead() async {
-        readItemIDs.formUnion(items.map(\.id))
+        // Windowing means `items` is only a page — marking just the visible
+        // window would leave the badge (total − readCount) high. Mark EVERY
+        // inbox id read via a one-shot full fetch. This is rare + user-initiated
+        // (off the hot navigation path), so the full materialization is fine;
+        // it falls back to the loaded window if the fetch fails.
+        let allIDs = (try? await registry.allItems().map(\.id)) ?? items.map(\.id)
+        readItemIDs.formUnion(allIDs)
         // Persist immediately: the user may switch tabs (unmounting this view)
         // before any reload/`didSave` would otherwise flush the set.
         readStateStore.save(readItemIDs)
+        onUnreadCountChanged(unreadCount)
     }
 
     private var unreadCount: Int {
-        items.filter { !readItemIDs.contains($0.id) }.count
+        // True total minus everything marked read. Mirrors `ContentView`'s
+        // closed-Inbox formula exactly so the badge doesn't jump on enter/exit.
+        max(0, totalItemCount - readItemIDs.count)
     }
 }
 

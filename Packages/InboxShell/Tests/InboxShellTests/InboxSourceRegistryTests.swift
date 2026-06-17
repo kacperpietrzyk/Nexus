@@ -28,6 +28,33 @@ struct InboxSourceRegistryTests {
         #expect(offsets == [30, 25, 20])
     }
 
+    @Test("window(limit:) windows the dominant source but keeps small sources whole + reports true totals")
+    func windowKeepsSmallSourcesWhole() async throws {
+        let registry = InboxSourceRegistry()
+        // Dominant source: 5 items, all NEWER than the small source — a global
+        // prefix(2) merge would fill the window entirely from here and starve
+        // the small source out of its section.
+        await registry.register(
+            RecordingInboxSource(
+                id: "big",
+                items: [item("big", 100), item("big", 90), item("big", 80), item("big", 70), item("big", 60)]
+            )
+        )
+        // Small source: 2 OLDER items.
+        await registry.register(RecordingInboxSource(id: "small", items: [item("small", 20), item("small", 10)]))
+
+        let window = try await registry.window(limit: 2)
+        let bySource = Dictionary(grouping: window.items, by: \.sourceID).mapValues(\.count)
+        // Big source windowed to `limit`; small source NOT starved (full set kept).
+        #expect(bySource["big"] == 2)
+        #expect(bySource["small"] == 2)
+        // True totals are uncapped, regardless of the window size.
+        #expect(window.totalsBySourceID == ["big": 5, "small": 2])
+        #expect(window.totalItemCount == 7)
+        // Merge is globally sorted newest-first across both sources.
+        #expect(window.items.map(\.sourceID) == ["big", "big", "small", "small"])
+    }
+
     @Test("totalCount sums sources' count() without materializing items")
     func totalCountSumsWithoutMaterializing() async throws {
         let registry = InboxSourceRegistry()

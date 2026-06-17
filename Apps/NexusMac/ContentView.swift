@@ -56,6 +56,12 @@ struct ContentView: View {
     // renders (handed up via `InboxView.onItemsChanged`) — no new query.
     @State private var inboxActiveFilter: InboxFilter = .all
     @State private var inboxItems: [InboxItem] = []
+    // TRUE inbox total (sum of every source's count, uncapped). The Inbox list
+    // is now windowed, so `inboxItems` is only a page — the "All" filter tab
+    // reads this instead so its count stays the real total. Maintained by
+    // `reloadInboxCount` (the total only changes on a store write, which that
+    // store-change path already covers).
+    @State private var inboxTotalCount = 0
     // Calendar surface view-model. Lazily built once from the live container +
     // the shared EventKit provider so its scope/anchor state survives rail
     // switches. Internal (not `private`): read from `ContentView+LiquidCalendar`.
@@ -267,7 +273,10 @@ struct ContentView: View {
                 ForEach(InboxFilter.allCases, id: \.self) { filter in
                     InboxFilterTab(
                         label: filter.displayLabel,
-                        count: filter.count(in: inboxItems),
+                        // "All" = the true windowed total; the category tabs derive
+                        // from the loaded set (no people/digests/mention source is
+                        // registered, so those are 0 today regardless of windowing).
+                        count: filter == .all ? inboxTotalCount : filter.count(in: inboxItems),
                         isActive: inboxActiveFilter == filter
                     ) {
                         inboxActiveFilter = filter
@@ -587,9 +596,15 @@ struct ContentView: View {
         // it recomputes (e.g. after navigating away from the Inbox), even though
         // InboxView itself shows them read. Reads the same persisted store
         // InboxView writes (id == stable TaskItem.id).
-        let items = (try? await InboxSourceRegistry.shared.allItems()) ?? []
+        //
+        // Uses the cheap `totalCount()` (a `fetchCount`, no materialization)
+        // instead of `allItems()` — the Inbox is windowed now, and recomputing
+        // the badge must not re-materialize ~1383 rows. Formula is identical to
+        // `InboxView.unreadCount` so the badge doesn't jump on Inbox enter/exit.
+        let total = (try? await InboxSourceRegistry.shared.totalCount()) ?? 0
         let read = InboxReadStateStore.shared.load()
-        inboxUnreadCount = items.filter { !read.contains($0.id) }.count
+        inboxTotalCount = total
+        inboxUnreadCount = max(0, total - read.count)
     }
 
     @MainActor

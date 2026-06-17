@@ -168,6 +168,32 @@ struct InboxSectionBuilderTests {
         #expect(wzmianki?.items.map(\.id) == [mentionID])
     }
 
+    // MARK: - True-count pill (windowing)
+
+    @Test("section pill total comes from the source's true count, not the windowed item count")
+    func sectionTotalUsesTrueCount() {
+        // The window materialized only 2 no-date rows, but the source's true
+        // total is 1383 — the pill must read the total, not the window size.
+        let windowed = [
+            item(sourceID: "tasks.no-date", title: "A"),
+            item(sourceID: "tasks.no-date", title: "B"),
+        ]
+        let sections = InboxSectionBuilder.sections(
+            from: windowed,
+            totalsBySourceID: ["tasks.no-date": 1383]
+        )
+        #expect(sections.count == 1)
+        #expect(sections[0].items.count == 2)
+        #expect(sections[0].totalCount == 1383)
+    }
+
+    @Test("section total falls back to item count when no true total is provided")
+    func sectionTotalFallsBack() {
+        let one = item(sourceID: "tasks.snoozed")
+        let sections = InboxSectionBuilder.sections(from: [one])
+        #expect(sections[0].totalCount == 1)
+    }
+
     // MARK: - Intra-section ordering
 
     @Test("items within a bucket preserve input order (stable filter)")

@@ -6,6 +6,28 @@ public enum InboxSourceRegistryError: Error, Equatable {
     case missingSource(String)
 }
 
+/// A windowed snapshot of the inbox for the sectioned (macOS) view: the merged
+/// + globally-sorted item window PLUS each registered source's TRUE total count
+/// (uncapped), so the section/tab/badge counts stay accurate while the rendered
+/// list only materializes a page. Unlike the flat `items(limit:)`, this does NOT
+/// prefix-cap the merge — a small source whose items have older `createdAt` than
+/// the dominant no-date source must not be starved out of its section.
+public struct InboxWindow: Sendable {
+    public let items: [InboxItem]
+    public let totalsBySourceID: [String: Int]
+
+    public init(items: [InboxItem], totalsBySourceID: [String: Int]) {
+        self.items = items
+        self.totalsBySourceID = totalsBySourceID
+    }
+
+    /// Sum of every source's true count — the accurate grand total used for the
+    /// unread badge (`max(0, totalItemCount - readCount)`) and the "All" tab.
+    public var totalItemCount: Int {
+        totalsBySourceID.values.reduce(0, +)
+    }
+}
+
 public actor InboxSourceRegistry {
     public static let shared = InboxSourceRegistry()
 
@@ -116,6 +138,27 @@ public actor InboxSourceRegistry {
             return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
         }
         return Array(sorted.prefix(limit))
+    }
+
+    /// Windowed snapshot for the sectioned view: each source's first `limit`
+    /// items (small sources return their full set) merged + globally sorted,
+    /// with NO prefix cap, plus every source's true `count()`. Dropping the cap
+    /// (vs `items(limit:)`) is what keeps a small, older-`createdAt` source from
+    /// being starved out of its section by the dominant no-date source — the
+    /// merge holds at most `limit` per source, which is bounded and cheap.
+    public func window(limit: Int) async throws -> InboxWindow {
+        startObservingStoreChangesIfNeeded()
+        var merged: [InboxItem] = []
+        var totals: [String: Int] = [:]
+        for source in sources.values {
+            merged.append(contentsOf: try await source.items(limit: limit))
+            totals[source.id] = try await source.count()
+        }
+        let sorted = merged.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+        }
+        return InboxWindow(items: sorted, totalsBySourceID: totals)
     }
 
     /// Sum of every source's true `count()` — the accurate Inbox total WITHOUT
