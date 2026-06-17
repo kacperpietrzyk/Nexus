@@ -1,5 +1,4 @@
 import NexusUI
-import SwiftData
 import SwiftUI
 
 public struct InboxView: View {
@@ -85,9 +84,7 @@ public struct InboxView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task { await reload(selectFirstItem: true) }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            Task { await reload(selectFirstItem: false) }
-        }
+        .reloadOnStoreChange { Task { await reload(selectFirstItem: false) } }
         .onReceive(NotificationCenter.default.publisher(for: .nexusMarkInboxRead)) { _ in
             Task { await markAllRead() }
         }
@@ -107,9 +104,7 @@ public struct InboxView: View {
         .background(Color.clear)
         .task { await reload(selectFirstItem: false) }
         .refreshable { await reload(selectFirstItem: false) }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            Task { await reload(selectFirstItem: false) }
-        }
+        .reloadOnStoreChange { Task { await reload(selectFirstItem: false) } }
     }
 
     private var listContent: some View {

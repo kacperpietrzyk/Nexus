@@ -1,7 +1,5 @@
-import CoreData
 import NexusCore
 import NexusUI
-import SwiftData
 import SwiftUI
 
 #if os(macOS)
@@ -80,19 +78,15 @@ public struct LiquidMeetingsScreen: View {
         }
         .task { reloadSelectingDefault() }
         .task(id: router.selectedMeetingID) { reload() }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            reload()
-        }
-        // The MeetingsHelper records into a SEPARATE persistent container, so its
-        // writes never post this process's `ModelContext.didSave`; the only
-        // cross-process signal is the store-level `NSPersistentStoreRemoteChange`
-        // (also how CloudKit imports arrive). Observe it too so the Cancel card /
-        // processing state refreshes instead of going stale. This notification is
-        // posted on the coordinator's background queue, so hop to the main actor
-        // before touching the @MainActor model.
-        .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
-            Task { @MainActor in reload() }
-        }
+        // Coalesce local saves AND cross-process / CloudKit imports into one
+        // debounced reload. The MeetingsHelper records into a SEPARATE persistent
+        // container, so its writes never post this process's
+        // `ModelContext.didSave`; the only cross-process signal is the store-level
+        // `NSPersistentStoreRemoteChange` (also how CloudKit imports arrive) —
+        // `reloadOnStoreChange` observes both and hops to the main actor before
+        // calling `action`, so the Cancel card / processing state refreshes
+        // instead of going stale, without a reload storm during bulk writes.
+        .reloadOnStoreChange { reload() }
     }
 
     @ViewBuilder
