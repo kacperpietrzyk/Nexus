@@ -54,11 +54,13 @@ public final class LinkRepository {
     public func backlinks(to endpoint: (ItemKind, UUID)) throws -> [Link] {
         let kind = endpoint.0
         let id = endpoint.1
-        // TODO(phase-1): when Link table grows past hundreds of rows per endpoint,
-        // switch to a rawValue string predicate (e.g. let rawKind = kind.rawValue;
-        // #Predicate { $0.toKind.rawValue == rawKind }) — pushes kind discrimination
-        // back into SQLite and removes the in-memory scan.
-        // SwiftData #Predicate cannot capture enum values; pre-filter by UUID, refine in-memory.
+        // NOTE: the kind filter stays in Swift. SwiftData's predicate→SQL translator
+        // rejects an enum-rawValue keypath (`\Link.toKind.rawValue` traps at fetch:
+        // "rawValue is not a member of ItemKind"), and `Link` stores `toKind` as the
+        // enum itself with no raw-String column. Pushing the discriminator into SQLite
+        // would require a `@Model` schema change (a new stored `toKindRaw`), which is
+        // out of scope (CloudKit/migration risk). Fan-out is killed by the batched
+        // `backlinks(toKind:toIDs:)` fetch instead; per-endpoint it's a small scan.
         let descriptor = FetchDescriptor<Link>(
             predicate: #Predicate { link in link.toID == id },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
@@ -69,16 +71,52 @@ public final class LinkRepository {
     public func outgoing(from endpoint: (ItemKind, UUID)) throws -> [Link] {
         let kind = endpoint.0
         let id = endpoint.1
-        // TODO(phase-1): when Link table grows past hundreds of rows per endpoint,
-        // switch to a rawValue string predicate (e.g. let rawKind = kind.rawValue;
-        // #Predicate { $0.fromKind.rawValue == rawKind }) — pushes kind discrimination
-        // back into SQLite and removes the in-memory scan.
-        // SwiftData #Predicate cannot capture enum values; pre-filter by UUID, refine in-memory.
+        // See `backlinks(to:)` — the enum-rawValue predicate isn't translatable by
+        // SwiftData, so kind discrimination stays in Swift; the N+1 storm is removed
+        // by the batched `outgoing(fromKind:fromIDs:)` fetch.
         let descriptor = FetchDescriptor<Link>(
             predicate: #Predicate { link in link.fromID == id },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
         return try context.fetch(descriptor).filter { $0.fromKind == kind }
+    }
+
+    /// Batched form of ``outgoing(from:)``: resolves outgoing links for MANY
+    /// endpoints of the same `fromKind` in ONE fetch, returning a `[fromID: [Link]]`
+    /// grouping. For each id the resulting array is byte-for-byte identical to
+    /// `outgoing(from: (fromKind, id))` — same links, same `createdAt`-reverse order.
+    /// Replaces the N+1 per-endpoint fetch storm on the Today screen.
+    public func outgoing(fromKind: ItemKind, fromIDs: [UUID]) throws -> [UUID: [Link]] {
+        let idSet = Set(fromIDs)
+        guard !idSet.isEmpty else { return [:] }
+        let descriptor = FetchDescriptor<Link>(
+            predicate: #Predicate { link in idSet.contains(link.fromID) },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        // One sorted fetch; group by fromID after the in-Swift kind filter. SwiftData
+        // preserves the descriptor sort across the whole result set, so each per-id
+        // slice keeps createdAt-reverse order — matching the single-endpoint method.
+        return Dictionary(
+            grouping: try context.fetch(descriptor).filter { $0.fromKind == fromKind },
+            by: \.fromID
+        )
+    }
+
+    /// Batched form of ``backlinks(to:)``: resolves incoming links for MANY
+    /// endpoints of the same `toKind` in ONE fetch, returning a `[toID: [Link]]`
+    /// grouping. For each id the resulting array is byte-for-byte identical to
+    /// `backlinks(to: (toKind, id))`.
+    public func backlinks(toKind: ItemKind, toIDs: [UUID]) throws -> [UUID: [Link]] {
+        let idSet = Set(toIDs)
+        guard !idSet.isEmpty else { return [:] }
+        let descriptor = FetchDescriptor<Link>(
+            predicate: #Predicate { link in idSet.contains(link.toID) },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        return Dictionary(
+            grouping: try context.fetch(descriptor).filter { $0.toKind == toKind },
+            by: \.toID
+        )
     }
 
     public func outgoingBlocks(from endpoint: (ItemKind, UUID)) throws -> [Link] {

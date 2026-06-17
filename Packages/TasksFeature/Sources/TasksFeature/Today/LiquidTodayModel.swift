@@ -447,9 +447,14 @@ public final class LiquidTodayModel {
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
         descriptor.fetchLimit = 4
-        return try modelContext.fetch(descriptor).map { note in
-            let outgoing = (try? linkRepository.outgoing(from: (.note, note.id)).count) ?? 0
-            let incoming = (try? linkRepository.backlinks(to: (.note, note.id)).count) ?? 0
+        let notes = try modelContext.fetch(descriptor)
+        let noteIDs = notes.map(\.id)
+        // Batched link reads: two fetches total instead of two per note.
+        let outgoingByNote = (try? linkRepository.outgoing(fromKind: .note, fromIDs: noteIDs)) ?? [:]
+        let incomingByNote = (try? linkRepository.backlinks(toKind: .note, toIDs: noteIDs)) ?? [:]
+        return notes.map { note in
+            let outgoing = outgoingByNote[note.id]?.count ?? 0
+            let incoming = incomingByNote[note.id]?.count ?? 0
             return LiquidNoteSummary(note: note, linkCount: outgoing + incoming)
         }
     }
@@ -463,14 +468,16 @@ public final class LiquidTodayModel {
     ) throws -> [Note] {
         var noteIDs: Set<UUID> = []
         // Cap the walk: the inspector card shows 3 notes; a dozen tasks of
-        // link reads is plenty and keeps reloads cheap.
-        for task in tasks.prefix(12) {
-            let outgoing = (try? linkRepository.outgoing(from: (.task, task.id))) ?? []
-            for link in outgoing where link.toKind == .note {
+        // link reads is plenty and keeps reloads cheap. Two batched fetches
+        // over the capped task set replace the per-task outgoing+backlinks pair.
+        let walkTaskIDs = tasks.prefix(12).map(\.id)
+        let outgoingByTask = (try? linkRepository.outgoing(fromKind: .task, fromIDs: walkTaskIDs)) ?? [:]
+        let incomingByTask = (try? linkRepository.backlinks(toKind: .task, toIDs: walkTaskIDs)) ?? [:]
+        for taskID in walkTaskIDs {
+            for link in outgoingByTask[taskID] ?? [] where link.toKind == .note {
                 noteIDs.insert(link.toID)
             }
-            let incoming = (try? linkRepository.backlinks(to: (.task, task.id))) ?? []
-            for link in incoming where link.fromKind == .note {
+            for link in incomingByTask[taskID] ?? [] where link.fromKind == .note {
                 noteIDs.insert(link.fromID)
             }
         }

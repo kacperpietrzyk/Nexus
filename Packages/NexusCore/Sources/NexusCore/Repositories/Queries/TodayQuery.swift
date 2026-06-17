@@ -98,9 +98,14 @@ public struct TodayQuery: Sendable {
         // trap on the duplicate; dedup keep-first instead (behavior-identical when ids unique).
         let openTaskByID = Dictionary(openTasks.map { ($0.id, $0) }, uniquingKeysWith: { current, _ in current })
 
+        // One batched fetch of every open task's outgoing edges instead of an
+        // N+1 storm (one fetch per open task). The per-task `.blocks` + open-target
+        // discrimination below is byte-for-byte the same work the old loop did.
+        let outgoingByTask = try linkRepository.outgoing(fromKind: .task, fromIDs: openTasks.map(\.id))
+
         var entries: [AwaitingEntry] = []
         for task in openTasks {
-            let outgoing = try linkRepository.outgoingBlocks(from: (.task, task.id))
+            let outgoing = (outgoingByTask[task.id] ?? []).filter { $0.linkKind == .blocks }
             let openBlockedTaskIDs = outgoing.reduce(into: Set<UUID>()) { ids, link in
                 if link.toKind == .task && openTaskByID[link.toID] != nil {
                     ids.insert(link.toID)
