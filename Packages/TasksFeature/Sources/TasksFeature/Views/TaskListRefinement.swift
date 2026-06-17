@@ -36,6 +36,39 @@ struct TaskListRefinement: Equatable {
     }
 }
 
+/// Memoizes the labeled-task-id resolution so a reload that does NOT change the
+/// selected label (a `now` tick, a store-change refresh, an agent-axis flip)
+/// reuses the cached id-set instead of re-querying `LinkRepository.backlinks`.
+/// The resolved set is purely a function of `labelID`, so caching on it is
+/// pixel-identical: the same ids feed `keeps(_:)` either way. A `nil` `labelID`
+/// resolves to `nil` (no label constraint) and is cached the same way.
+struct LabeledTaskIDCache {
+    private var cachedLabelID: UUID??
+    private var cachedIDs: Set<UUID>?
+
+    /// Returns the id-set for `labelID`, re-running `fetch` only when `labelID`
+    /// differs from the last resolved value. `fetch` is the `LinkRepository`
+    /// backlink walk (`TaskListRefinement.labeledTaskIDs`).
+    mutating func ids(for labelID: UUID?, fetch: (UUID?) -> Set<UUID>?) -> Set<UUID>? {
+        if let cachedLabelID, cachedLabelID == labelID {
+            return cachedIDs
+        }
+        let resolved = fetch(labelID)
+        cachedLabelID = labelID
+        cachedIDs = resolved
+        return resolved
+    }
+
+    /// Drops the cached resolution so the next `ids(for:)` re-queries. Called on a
+    /// store change: the label→task graph can mutate (CloudKit sync, agent tool,
+    /// Task Assist) WITHOUT `labelID` changing, so caching on `labelID` alone would
+    /// return a stale set. Mirrors the FIX-1 `markDirty()` invalidation.
+    mutating func invalidate() {
+        cachedLabelID = nil
+        cachedIDs = nil
+    }
+}
+
 extension TaskListView {
 
     /// Loads the label set offered by the filter bar (all active labels). Cheap;
@@ -64,7 +97,12 @@ extension TaskListView {
 
     func applyRefinement() {
         guard refinement.isActive else { return }
-        let labeledIDs = refinement.labeledTaskIDs(in: modelContext)
+        // Memoized label resolution: re-query LinkRepository only when the
+        // selected label changes (FIX 3a). Same id-set otherwise → identical filter.
+        let labeledIDs = labeledTaskIDCache.ids(for: refinement.labelID) { labelID in
+            guard labelID != nil else { return nil }
+            return refinement.labeledTaskIDs(in: modelContext)
+        }
         func keep(_ task: TaskItem) -> Bool {
             refinement.keeps(task, labeledTaskIDs: labeledIDs)
         }

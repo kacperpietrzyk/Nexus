@@ -204,6 +204,24 @@ public final class LiquidTodayModel {
 
     private var reloadGeneration = 0
     private var lastBriefInput: LiquidTodayBriefInput?
+
+    /// Test-visible count of full store snapshot reads. A gated (early-return)
+    /// return-navigation leaves this unchanged — drives the FIX-1 characterization.
+    public private(set) var storeLoadCount = 0
+
+    // Skip-redundant-reload gate provenance: the day-start + calendar-visibility
+    // the held snapshot was built for, plus a dirty flag the store-change path
+    // raises. A return-navigation matching all three early-returns (no re-read).
+    private var loadedSnapshot = false
+    private var loadedDayStart: Date?
+    private var loadedCalendarEventsEnabled: Bool?
+    private var needsReload = true
+
+    /// Marks the held snapshot stale so the next `reload()` re-reads the store
+    /// (store-change hook, scene-active, in-screen toggle/cascade mutations).
+    public func markDirty() {
+        needsReload = true
+    }
     /// Calendar visibility preferences — held (not constructed per reload) so
     /// tests can inject a store with controlled defaults.
     private let calendarPreferencesStore: UserDefaultsCalendarPreferencesStore
@@ -223,6 +241,17 @@ public final class LiquidTodayModel {
         focusGapProvider: LiquidTodayFocusGapProvider? = nil,
         now: Date = .now
     ) async {
+        // Skip-redundant-reload gate (FIX 1): an unchanged return-navigation
+        // (snapshot loaded, dirty flag clean, same day, same calendar-visibility)
+        // shows the held snapshot without re-reading the store — pixel-identical.
+        // markDirty (store-change/scene-active/mutation), a calendar toggle, or a
+        // midnight day-rollover all bypass it and force a fresh read.
+        let dayStart = Calendar.current.startOfDay(for: now)
+        let snapshotStillValid =
+            loadedSnapshot && !needsReload && loadedDayStart == dayStart
+            && loadedCalendarEventsEnabled == calendarEventsEnabled
+        if snapshotStillValid { return }
+
         reloadGeneration += 1
         let generation = reloadGeneration
 
@@ -239,6 +268,13 @@ public final class LiquidTodayModel {
 
         do {
             let snapshot = try Self.loadStoreSnapshot(modelContext: modelContext, now: now)
+            storeLoadCount += 1
+            // Record snapshot provenance + clear the dirty flag so the next
+            // unchanged return-navigation hits the early-return above.
+            loadedSnapshot = true
+            loadedDayStart = dayStart
+            loadedCalendarEventsEnabled = calendarEventsEnabled
+            needsReload = false
             events = fetchedEvents
             focusSuggestion = focusGap
             agendaItems = Self.agendaItems(events: fetchedEvents, blocks: snapshot.acceptedBlocks)

@@ -70,10 +70,16 @@ public actor TasksNoDateSource: InboxSource {
 func taskInboxNoteTextByID(for tasks: [TaskItem], in context: ModelContext) -> [UUID: String] {
     let noteIDs = Set(tasks.compactMap(\.noteRef))
     guard !noteIDs.isEmpty else { return [:] }
-    guard let notes = try? context.fetch(FetchDescriptor<Note>()) else { return [:] }
+    // Predicated fetch: only the referenced live notes, instead of scanning the
+    // whole Note table and filtering in memory. UUID `contains` over an array is
+    // translatable by SwiftData. Output is identical to the old all-fetch path.
+    let ids = Array(noteIDs)
+    let descriptor = FetchDescriptor<Note>(
+        predicate: #Predicate { $0.deletedAt == nil && ids.contains($0.id) }
+    )
+    guard let notes = try? context.fetch(descriptor) else { return [:] }
     return Dictionary(
-        uniqueKeysWithValues: notes.compactMap { note in
-            guard note.deletedAt == nil, noteIDs.contains(note.id) else { return nil }
+        uniqueKeysWithValues: notes.map { note in
             if !note.plainText.isEmpty {
                 return (note.id, note.plainText)
             }

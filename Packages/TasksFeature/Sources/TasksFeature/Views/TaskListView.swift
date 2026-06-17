@@ -31,6 +31,9 @@ public struct TaskListView: View {
     @State private var error: String?
     @State var refinement = TaskListRefinement()
     @State var refinementLabels: [TaskLabel] = []
+    // Memoized labeled-task-id resolution (FIX 3a): only re-queries
+    // LinkRepository when `refinement.labelID` changes.
+    @State var labeledTaskIDCache = LabeledTaskIDCache()
 
     public init(
         filter: TaskFilter,
@@ -71,7 +74,12 @@ public struct TaskListView: View {
         .task { loadRefinementLabels() }
         .onChange(of: now) { _, _ in reload() }
         .onChange(of: refinement) { _, _ in reload() }
-        .reloadOnStoreChange { reload() }
+        .reloadOnStoreChange {
+            // A store change can mutate the label→task graph without changing the
+            // selected label, so drop the memoized id-set before re-filtering.
+            labeledTaskIDCache.invalidate()
+            reload()
+        }
         .sheet(item: $parentPickerTarget) { item in
             ParentTaskPickerSheet(task: item) {
                 reload()

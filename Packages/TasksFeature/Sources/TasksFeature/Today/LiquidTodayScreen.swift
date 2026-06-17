@@ -108,9 +108,16 @@ public struct LiquidTodayScreen: View {
         #endif
         .task { await reload() }
         .task(id: calendarEventsEnabled) { await reload() }
-        .reloadOnStoreChange { _Concurrency.Task { await reload() } }
+        .reloadOnStoreChange {
+            // A real store change must bypass the skip-redundant-reload gate.
+            model.markDirty()
+            _Concurrency.Task { await reload() }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
+            // Returning to the foreground may carry external (sync) changes the
+            // store-change hook didn't observe in-process — force a fresh read.
+            model.markDirty()
             _Concurrency.Task { await reload() }
         }
         .cascadeCompletionConfirmation($cascadePrompt) { prompt in
@@ -424,6 +431,8 @@ public struct LiquidTodayScreen: View {
             actionError = nil
             // Refresh the buckets immediately (mirrors the store-change hook;
             // don't leave the row stale until the autosave notification lands).
+            // Mark dirty so this post-write reload bypasses the redundant-reload gate.
+            model.markDirty()
             _Concurrency.Task { await reload() }
         } catch let error as TaskItemRepositoryError {
             if case .parentHasOpenSubtasks(let parentID, let openCount) = error, parentID == task.id {
@@ -442,6 +451,7 @@ public struct LiquidTodayScreen: View {
             try TaskCompletionAction.cascadeComplete(prompt.task, repository: taskRepository)
             actionError = nil
             // Same immediate refresh as toggleDone's success path.
+            model.markDirty()
             _Concurrency.Task { await reload() }
         } catch {
             actionError = String(describing: error)
