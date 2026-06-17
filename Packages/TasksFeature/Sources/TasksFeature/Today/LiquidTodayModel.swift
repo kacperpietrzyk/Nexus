@@ -204,6 +204,25 @@ public final class LiquidTodayModel {
 
     private var reloadGeneration = 0
     private var lastBriefInput: LiquidTodayBriefInput?
+    /// Test-visible count of full store snapshot reads; a gated (early-return)
+    /// return-navigation leaves it unchanged — drives the skip-reload tests.
+    public private(set) var storeLoadCount = 0
+    // Skip-redundant-reload gate provenance: day-start + calendar-visibility the
+    // snapshot was built for + a dirty flag (all three match → early-return).
+    private var loadedSnapshot = false
+    private var loadedDayStart: Date?
+    private var loadedCalendarEventsEnabled: Bool?
+    private var needsReload = true
+    // First-successful-load latch (never reset by the skip-reload early-return);
+    // suppresses TopPrioritiesCard's cold-start placeholder before the first load.
+    private var hasLoadedOnce = false
+    public var isLoaded: Bool { hasLoadedOnce }
+
+    /// Marks the held snapshot stale so the next `reload()` re-reads the store
+    /// (store-change hook, scene-active, in-screen toggle/cascade mutations).
+    public func markDirty() {
+        needsReload = true
+    }
     /// Calendar visibility preferences — held (not constructed per reload) so
     /// tests can inject a store with controlled defaults.
     private let calendarPreferencesStore: UserDefaultsCalendarPreferencesStore
@@ -223,6 +242,17 @@ public final class LiquidTodayModel {
         focusGapProvider: LiquidTodayFocusGapProvider? = nil,
         now: Date = .now
     ) async {
+        // Skip-redundant-reload gate (FIX 1): an unchanged return-navigation
+        // (snapshot loaded, dirty flag clean, same day, same calendar-visibility)
+        // shows the held snapshot without re-reading the store — pixel-identical.
+        // markDirty (store-change/scene-active/mutation), a calendar toggle, or a
+        // midnight day-rollover all bypass it and force a fresh read.
+        let dayStart = Calendar.current.startOfDay(for: now)
+        let snapshotStillValid =
+            loadedSnapshot && !needsReload && loadedDayStart == dayStart
+            && loadedCalendarEventsEnabled == calendarEventsEnabled
+        if snapshotStillValid { return }
+
         reloadGeneration += 1
         let generation = reloadGeneration
 
@@ -239,6 +269,14 @@ public final class LiquidTodayModel {
 
         do {
             let snapshot = try Self.loadStoreSnapshot(modelContext: modelContext, now: now)
+            storeLoadCount += 1
+            // Record snapshot provenance + clear the dirty flag so the next
+            // unchanged return-navigation hits the early-return above.
+            loadedSnapshot = true
+            hasLoadedOnce = true
+            loadedDayStart = dayStart
+            loadedCalendarEventsEnabled = calendarEventsEnabled
+            needsReload = false
             events = fetchedEvents
             focusSuggestion = focusGap
             agendaItems = Self.agendaItems(events: fetchedEvents, blocks: snapshot.acceptedBlocks)
@@ -447,9 +485,14 @@ public final class LiquidTodayModel {
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
         descriptor.fetchLimit = 4
-        return try modelContext.fetch(descriptor).map { note in
-            let outgoing = (try? linkRepository.outgoing(from: (.note, note.id)).count) ?? 0
-            let incoming = (try? linkRepository.backlinks(to: (.note, note.id)).count) ?? 0
+        let notes = try modelContext.fetch(descriptor)
+        let noteIDs = notes.map(\.id)
+        // Batched link reads: two fetches total instead of two per note.
+        let outgoingByNote = (try? linkRepository.outgoing(fromKind: .note, fromIDs: noteIDs)) ?? [:]
+        let incomingByNote = (try? linkRepository.backlinks(toKind: .note, toIDs: noteIDs)) ?? [:]
+        return notes.map { note in
+            let outgoing = outgoingByNote[note.id]?.count ?? 0
+            let incoming = incomingByNote[note.id]?.count ?? 0
             return LiquidNoteSummary(note: note, linkCount: outgoing + incoming)
         }
     }
@@ -463,14 +506,16 @@ public final class LiquidTodayModel {
     ) throws -> [Note] {
         var noteIDs: Set<UUID> = []
         // Cap the walk: the inspector card shows 3 notes; a dozen tasks of
-        // link reads is plenty and keeps reloads cheap.
-        for task in tasks.prefix(12) {
-            let outgoing = (try? linkRepository.outgoing(from: (.task, task.id))) ?? []
-            for link in outgoing where link.toKind == .note {
+        // link reads is plenty and keeps reloads cheap. Two batched fetches
+        // over the capped task set replace the per-task outgoing+backlinks pair.
+        let walkTaskIDs = tasks.prefix(12).map(\.id)
+        let outgoingByTask = (try? linkRepository.outgoing(fromKind: .task, fromIDs: walkTaskIDs)) ?? [:]
+        let incomingByTask = (try? linkRepository.backlinks(toKind: .task, toIDs: walkTaskIDs)) ?? [:]
+        for taskID in walkTaskIDs {
+            for link in outgoingByTask[taskID] ?? [] where link.toKind == .note {
                 noteIDs.insert(link.toID)
             }
-            let incoming = (try? linkRepository.backlinks(to: (.task, task.id))) ?? []
-            for link in incoming where link.fromKind == .note {
+            for link in incomingByTask[taskID] ?? [] where link.fromKind == .note {
                 noteIDs.insert(link.fromID)
             }
         }

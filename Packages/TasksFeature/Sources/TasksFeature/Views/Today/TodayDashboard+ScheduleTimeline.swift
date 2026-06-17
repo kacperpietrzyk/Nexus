@@ -235,6 +235,7 @@ extension TodayDashboard {
         _Concurrency.Task { @MainActor in
             let reconciler = CalendarSyncReconciler(context: context, writer: writer)
             _ = try? await reconciler.accept(block)
+            deadlineRiskModel.markDirty()
             await reloadScheduleData()
         }
     }
@@ -251,6 +252,7 @@ extension TodayDashboard {
             if let eventID, let writer {
                 try? await writer.deleteEvent(id: eventID)
             }
+            deadlineRiskModel.markDirty()
             await reloadScheduleData()
         }
     }
@@ -267,6 +269,7 @@ extension TodayDashboard {
             let prefs = UserDefaultsCalendarPreferencesStore().load()
             let planner = DayPlanner(context: context)
             _ = try? planner.planDay(events: events, prefs: prefs, now: now, calendar: .current)
+            deadlineRiskModel.markDirty()
             await reloadScheduleData()
         }
     }

@@ -20,6 +20,11 @@ struct InboxSection: Identifiable {
     let id: String
     let title: String
     let items: [InboxItem]
+    /// TRUE total for this section's source, independent of how many `items`
+    /// the window currently materialized. The count pill renders this so it
+    /// reads e.g. "1383" while the list shows only a 50-item page — the
+    /// windowing fix must not make the pill undercount.
+    let totalCount: Int
 }
 
 enum InboxSectionBuilder {
@@ -41,7 +46,16 @@ enum InboxSectionBuilder {
     /// not appear; that is correct, not a bug.
     ///
     /// Pure: inputs → `[InboxSection]`. Independently testable.
-    static func sections(from items: [InboxItem]) -> [InboxSection] {
+    ///
+    /// `totalsBySourceID` carries each source's TRUE (uncapped) count so the
+    /// section pill reflects the real total while `items` is only the rendered
+    /// window. The two source-backed sections (NO DATE / SNOOZED) read their
+    /// total from the map; the category-derived sections (E-MAIL / MENTIONS)
+    /// have no single backing source, so they fall back to their item count —
+    /// correct today because no digest/mention source is registered (those
+    /// sections never appear), and those sources, when added, will be small
+    /// enough to return their full set unwindowed.
+    static func sections(from items: [InboxItem], totalsBySourceID: [String: Int] = [:]) -> [InboxSection] {
         // Items whose sourceID/category map to none of the 4 oracle sections
         // (e.g. a future `.people` source, or an orphan `.tasks` item from an
         // unregistered source) have no destination and are dropped here. With
@@ -55,10 +69,20 @@ enum InboxSectionBuilder {
         let mentions = rest.filter { $0.category == .mentions }
 
         let ordered: [InboxSection] = [
-            InboxSection(id: "tasks.no-date", title: "NO DATE", items: noDate),
-            InboxSection(id: "tasks.snoozed", title: "SNOOZED", items: snoozed),
-            InboxSection(id: "digests", title: "E-MAIL", items: mail),
-            InboxSection(id: "mentions", title: "MENTIONS", items: mentions),
+            InboxSection(
+                id: "tasks.no-date",
+                title: "NO DATE",
+                items: noDate,
+                totalCount: totalsBySourceID["tasks.no-date"] ?? noDate.count
+            ),
+            InboxSection(
+                id: "tasks.snoozed",
+                title: "SNOOZED",
+                items: snoozed,
+                totalCount: totalsBySourceID["tasks.snoozed"] ?? snoozed.count
+            ),
+            InboxSection(id: "digests", title: "E-MAIL", items: mail, totalCount: mail.count),
+            InboxSection(id: "mentions", title: "MENTIONS", items: mentions, totalCount: mentions.count),
         ]
         return ordered.filter { !$0.items.isEmpty }
     }
@@ -78,11 +102,17 @@ enum InboxLayout {
 struct InboxListPanel: View {
     let items: [InboxItem]
     let error: String?
+    /// Per-source true totals so each section pill reads the real count while
+    /// the list only renders the current window.
+    let totalsBySourceID: [String: Int]
     @Binding var readItemIDs: Set<UUID>
     @Binding var selectedItem: InboxItem?
+    /// Fired when the scroll nears the bottom — grows the window page so the
+    /// no-date section pages in on scroll instead of materializing ~1383 rows.
+    let onReachEnd: () -> Void
 
     private var sections: [InboxSection] {
-        InboxSectionBuilder.sections(from: items)
+        InboxSectionBuilder.sections(from: items, totalsBySourceID: totalsBySourceID)
     }
 
     var body: some View {
@@ -125,8 +155,23 @@ struct InboxListPanel: View {
             }
         }
         .scrollContentBackground(.hidden)
+        // Reliable scroll-to-grow for the non-lazy section stack: `.onAppear` on
+        // the last row is unreliable here (a plain `VStack` in a `ScrollView`
+        // doesn't re-fire `onAppear` for off-screen rows on scroll), so observe
+        // the scroll geometry instead and grow when the offset crosses into the
+        // bottom prefetch zone. The `false → true` edge (wasNear → isNear) fires
+        // `onReachEnd` once per approach; with a tall list it stays false at
+        // entry (no premature grow), and `loadMore` itself guards the end.
+        .onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentOffset.y + geo.containerSize.height >= geo.contentSize.height - Self.prefetchZone
+        } action: { wasNear, isNear in
+            if isNear && !wasNear { onReachEnd() }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+
+    /// Distance from the bottom (≈ a dozen rows) at which the next page prefetches.
+    private static let prefetchZone: CGFloat = 600
 }
 
 // MARK: - Section (Liquid idiom — caption eyebrow + count pill + staggered rows)
@@ -143,7 +188,7 @@ struct InboxSectionView: View {
                     .font(DS.FontToken.caption)
                     .tracking(1.4)
                     .foregroundStyle(DS.ColorToken.textTertiary)
-                LiquidPill("\(section.items.count)", color: DS.ColorToken.statusNeutral)
+                LiquidPill("\(section.totalCount)", color: DS.ColorToken.statusNeutral)
                 Spacer()
             }
             .padding(.horizontal, 10)

@@ -179,6 +179,214 @@ struct LiquidTodayModelTests {
         #expect(TodayInspector.elapsedText(for: unstarted, now: now) == "0:00")
     }
 
+    // MARK: - Batched link reads (recentNotes + linkedNotes via reload)
+
+    @Test("reload surfaces linked notes (both link directions) + recent-note link degrees via batched reads")
+    @MainActor
+    func batchedLinkReadsMatchPerItemSemantics() async throws {
+        let container = try ModelContainer(
+            for: TaskItem.self, Link.self, Project.self, Note.self, ScheduledBlock.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let now = Date.now
+
+        // Two tasks due today (these feed linkedNotes via overdue + today).
+        let taskA = TaskItem(title: "task A", dueAt: now)
+        let taskB = TaskItem(title: "task B", dueAt: now)
+        context.insert(taskA)
+        context.insert(taskB)
+
+        // noteOut: task -> note (outgoing). noteIn: note -> task (backlink).
+        // noteRecentOnly: not linked to any task, but linked to noteOut (gives it degree).
+        let noteOut = Note(title: "out")
+        let noteIn = Note(title: "in")
+        let noteRecentOnly = Note(title: "recent only")
+        // Distinct updatedAt so recentNotes (updatedAt desc, limit 4) is deterministic.
+        noteOut.updatedAt = Date(timeIntervalSince1970: 3_000)
+        noteIn.updatedAt = Date(timeIntervalSince1970: 2_000)
+        noteRecentOnly.updatedAt = Date(timeIntervalSince1970: 1_000)
+        context.insert(noteOut)
+        context.insert(noteIn)
+        context.insert(noteRecentOnly)
+        try context.save()
+
+        let repo = LinkRepository(context: context)
+        try repo.create(from: (.task, taskA.id), to: (.note, noteOut.id), linkKind: .mentions)
+        try repo.create(from: (.note, noteIn.id), to: (.task, taskB.id), linkKind: .mentions)
+        // Give noteOut a backlink from noteRecentOnly so recentNotes degree > 0.
+        try repo.create(from: (.note, noteRecentOnly.id), to: (.note, noteOut.id), linkKind: .mentions)
+
+        // Ground truth: compute expected results with the per-item API directly.
+        let expectedLinkedNoteIDs = Set([noteOut.id, noteIn.id])
+        // recentNotes degree (outgoing + backlinks) per note, per-item API.
+        func degree(_ id: UUID) throws -> Int {
+            try repo.outgoing(from: (.note, id)).count + repo.backlinks(to: (.note, id)).count
+        }
+        let expectedDegrees = [
+            noteOut.id: try degree(noteOut.id),
+            noteIn.id: try degree(noteIn.id),
+            noteRecentOnly.id: try degree(noteRecentOnly.id),
+        ]
+
+        let model = LiquidTodayModel()
+        await model.reload(
+            modelContext: context,
+            calendarProvider: MockCalendarEventProvider(status: .denied),
+            calendarEventsEnabled: false,
+            meetingIntelProvider: nil,
+            briefProvider: nil,
+            now: now
+        )
+
+        #expect(model.loadError == nil)
+        // linkedNotes: collected from both task link directions.
+        #expect(Set(model.linkedNotes.map(\.id)) == expectedLinkedNoteIDs)
+        // recentNotes link degrees match the per-item computation byte-for-byte.
+        for summary in model.notes {
+            #expect(summary.linkCount == expectedDegrees[summary.note.id])
+        }
+        // noteOut carries two backlinks (from taskA and from noteRecentOnly).
+        let outSummary = model.notes.first { $0.note.id == noteOut.id }
+        #expect(outSummary?.linkCount == 2)
+    }
+
+    // MARK: - Skip-redundant-reload gate (return-navigation, FIX 1)
+
+    @MainActor
+    private func makeGateContext() throws -> (ModelContext, Date) {
+        let container = try ModelContainer(
+            for: TaskItem.self, Link.self, Project.self, Note.self, ScheduledBlock.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let context = ModelContext(container)
+        let task = TaskItem(title: "due today", dueAt: .now)
+        context.insert(task)
+        try context.save()
+        return (context, .now)
+    }
+
+    @MainActor
+    private func reloadGate(_ model: LiquidTodayModel, _ context: ModelContext, now: Date) async {
+        await model.reload(
+            modelContext: context,
+            calendarProvider: MockCalendarEventProvider(status: .denied),
+            calendarEventsEnabled: false,
+            meetingIntelProvider: nil,
+            briefProvider: nil,
+            now: now
+        )
+    }
+
+    @Test("Second reload with same day + clean dirty flag does NOT re-read the store")
+    @MainActor
+    func skipRedundantReload() async throws {
+        let (context, now) = try makeGateContext()
+        let model = LiquidTodayModel()
+
+        await reloadGate(model, context, now: now)
+        #expect(model.storeLoadCount == 1)
+        let snapshotPriorities = model.priorityGroups
+
+        // Return-navigation: same day, no change -> early return, no re-read.
+        await reloadGate(model, context, now: now)
+        #expect(model.storeLoadCount == 1)
+        // Snapshot is preserved exactly.
+        #expect(model.priorityGroups == snapshotPriorities)
+    }
+
+    @Test("markDirty forces the next reload to re-read the store")
+    @MainActor
+    func markDirtyForcesReload() async throws {
+        let (context, now) = try makeGateContext()
+        let model = LiquidTodayModel()
+
+        await reloadGate(model, context, now: now)
+        #expect(model.storeLoadCount == 1)
+
+        model.markDirty()
+        await reloadGate(model, context, now: now)
+        #expect(model.storeLoadCount == 2)
+    }
+
+    @Test("Day rollover forces the next reload to re-read the store")
+    @MainActor
+    func dayRolloverForcesReload() async throws {
+        let (context, now) = try makeGateContext()
+        let model = LiquidTodayModel()
+
+        await reloadGate(model, context, now: now)
+        #expect(model.storeLoadCount == 1)
+
+        // Cross midnight: a new day-start must force a recompute.
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: now) ?? now
+        await reloadGate(model, context, now: tomorrow)
+        #expect(model.storeLoadCount == 2)
+    }
+
+    @Test("isLoaded is false before the first reload and true after a successful load")
+    @MainActor
+    func isLoadedFlipsAfterFirstLoad() async throws {
+        let (context, now) = try makeGateContext()
+        let model = LiquidTodayModel()
+
+        // Cold start: no load has completed -> the card must suppress its placeholder.
+        #expect(model.isLoaded == false)
+
+        await reloadGate(model, context, now: now)
+        #expect(model.isLoaded)
+
+        // A gated return-navigation (early-return, no re-read) must NOT reset it.
+        await reloadGate(model, context, now: now)
+        #expect(model.storeLoadCount == 1)
+        #expect(model.isLoaded)
+    }
+
+    @Test("Changing calendarEventsEnabled forces the next reload to re-read the store")
+    @MainActor
+    func calendarToggleForcesReload() async throws {
+        let (context, now) = try makeGateContext()
+        let model = LiquidTodayModel()
+
+        await reloadGate(model, context, now: now)
+        #expect(model.storeLoadCount == 1)
+
+        // Same day, clean flag, but calendar toggle flips -> must recompute.
+        await model.reload(
+            modelContext: context,
+            calendarProvider: MockCalendarEventProvider(status: .denied),
+            calendarEventsEnabled: true,
+            meetingIntelProvider: nil,
+            briefProvider: nil,
+            now: now
+        )
+        #expect(model.storeLoadCount == 2)
+    }
+
+    @Test("Gate preserves the exact snapshot the un-gated reload produced")
+    @MainActor
+    func gateSnapshotIsIdentical() async throws {
+        let (context, now) = try makeGateContext()
+
+        // Baseline: a fresh model that reloads once (the gate never trips on a
+        // first load) captures the canonical snapshot.
+        let baseline = LiquidTodayModel()
+        await reloadGate(baseline, context, now: now)
+
+        // A second model reloaded twice (second is gated) must match field-for-field.
+        let gated = LiquidTodayModel()
+        await reloadGate(gated, context, now: now)
+        await reloadGate(gated, context, now: now)
+
+        #expect(gated.priorityGroups == baseline.priorityGroups)
+        #expect(gated.projects == baseline.projects)
+        #expect(gated.notes == baseline.notes)
+        #expect(gated.agendaItems == baseline.agendaItems)
+        #expect(gated.linkedNotes.map(\.id) == baseline.linkedNotes.map(\.id))
+        #expect(gated.projectNamesByID == baseline.projectNamesByID)
+        #expect(gated.storeLoadCount == 1)
+    }
+
     // MARK: - Reference data
 
     @Test("Reference snapshot supplies dense Today data without persistence")

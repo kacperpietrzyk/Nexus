@@ -22,20 +22,54 @@ public actor TasksNoDateSource: InboxSource {
             let tasks = try TodayQuery()
                 .noDate(excludingProjectIDs: archivedProjectIDs)
                 .apply(in: repository.context)
-            let noteTextByID = taskInboxNoteTextByID(for: tasks, in: repository.context)
-            return
-                tasks
-                .map { task in
-                    return InboxItem(
-                        id: task.id,
-                        sourceID: sourceID,
-                        title: task.title,
-                        body: taskInboxBody(for: task, noteTextByID: noteTextByID),
-                        due: task.dueAt,
-                        tags: task.tags,
-                        createdAt: task.createdAt
-                    )
-                }
+            return Self.makeItems(from: tasks, sourceID: sourceID, context: repository.context)
+        }
+    }
+
+    /// Cheap COUNT path (no materialization) for the unread/tab badges, so the
+    /// Inbox can window the item list while the counts stay true. NOTE: this
+    /// counts via `fetchCount` on the storage predicate, so it includes the few
+    /// archived-project no-date tasks the post-filter would drop — a documented,
+    /// negligible over-count vs the windowed list.
+    public func count() async throws -> Int {
+        try await MainActor.run {
+            try TodayQuery().noDateInboxWindow().count(in: repository.context)
+        }
+    }
+
+    /// Windowed fetch: the first `limit` no-date tasks in `createdAt`-desc order
+    /// (the Inbox's global comparator), so a cold entry materializes a page, not
+    /// ~1383 rows. Uses the raw-cursor page so the archived-project post-filter
+    /// stays gap-free.
+    public func items(limit: Int) async throws -> [InboxItem] {
+        let sourceID = id
+        return try await MainActor.run {
+            let archivedProjectIDs =
+                (try? ProjectRepository(context: repository.context).archivedProjectIDs()) ?? []
+            let page = try TodayQuery()
+                .noDateInboxWindow(excludingProjectIDs: archivedProjectIDs)
+                .page(in: repository.context, rawOffset: 0, rawLimit: limit)
+            return Self.makeItems(from: page.items, sourceID: sourceID, context: repository.context)
+        }
+    }
+
+    @MainActor
+    private static func makeItems(
+        from tasks: [TaskItem],
+        sourceID: String,
+        context: ModelContext
+    ) -> [InboxItem] {
+        let noteTextByID = taskInboxNoteTextByID(for: tasks, in: context)
+        return tasks.map { task in
+            InboxItem(
+                id: task.id,
+                sourceID: sourceID,
+                title: task.title,
+                body: taskInboxBody(for: task, noteTextByID: noteTextByID),
+                due: task.dueAt,
+                tags: task.tags,
+                createdAt: task.createdAt
+            )
         }
     }
 
@@ -70,10 +104,16 @@ public actor TasksNoDateSource: InboxSource {
 func taskInboxNoteTextByID(for tasks: [TaskItem], in context: ModelContext) -> [UUID: String] {
     let noteIDs = Set(tasks.compactMap(\.noteRef))
     guard !noteIDs.isEmpty else { return [:] }
-    guard let notes = try? context.fetch(FetchDescriptor<Note>()) else { return [:] }
+    // Predicated fetch: only the referenced live notes, instead of scanning the
+    // whole Note table and filtering in memory. UUID `contains` over an array is
+    // translatable by SwiftData. Output is identical to the old all-fetch path.
+    let ids = Array(noteIDs)
+    let descriptor = FetchDescriptor<Note>(
+        predicate: #Predicate { $0.deletedAt == nil && ids.contains($0.id) }
+    )
+    guard let notes = try? context.fetch(descriptor) else { return [:] }
     return Dictionary(
-        uniqueKeysWithValues: notes.compactMap { note in
-            guard note.deletedAt == nil, noteIDs.contains(note.id) else { return nil }
+        uniqueKeysWithValues: notes.map { note in
             if !note.plainText.isEmpty {
                 return (note.id, note.plainText)
             }

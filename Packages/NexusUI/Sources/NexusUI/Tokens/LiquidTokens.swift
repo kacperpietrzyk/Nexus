@@ -166,15 +166,15 @@ public enum DS {
         public static let panelReveal = Animation.easeInOut(duration: 0.20)
         public static let selection = Animation.easeInOut(duration: 0.16)
         /// view/destination transition
-        public static let nav = Animation.smooth(duration: 0.28)
+        public static let nav = Animation.smooth(duration: 0.32)
         /// general state change
-        public static let standard = Animation.easeOut(duration: 0.22)
+        public static let standard = Animation.easeOut(duration: 0.26)
         /// entrance transition (consolidated from NexusMotion.enter)
-        public static let enter = Animation.easeOut(duration: 0.34)
+        public static let enter = Animation.easeOut(duration: 0.40)
         /// exit transition (consolidated from NexusMotion.exit)
         public static let exit = Animation.easeIn(duration: 0.16)
         /// per-item stagger delay in seconds (consolidated from NexusMotion.staggerStep)
-        public static let staggerStep = 0.055
+        public static let staggerStep = 0.065
         /// breathing/pulse period in seconds (consolidated from NexusMotion.breathePeriod)
         public static let breathePeriod = 2.4
     }

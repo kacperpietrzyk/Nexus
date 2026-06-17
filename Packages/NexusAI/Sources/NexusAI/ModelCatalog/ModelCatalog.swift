@@ -53,20 +53,52 @@ public enum ModelCatalog {
 
     // MARK: - Loader
 
+    /// Memoization for the default (`Bundle.module`) catalog. The bundled
+    /// `DefaultCatalog.json` is immutable for the process lifetime, so the
+    /// decoded value can be cached and shared. `loadDefault()` is called per
+    /// brief-readiness probe (many times/min on the main actor); without this it
+    /// re-runs `Data(contentsOf:)` + `JSONDecoder().decode` on every call.
+    ///
+    /// Only the `bundle == nil` path is cached — an explicit test bundle bypasses
+    /// the cache entirely so test-injected resources are never served stale.
+    /// `NSLock`-guarded for thread safety; `CatalogDoc` is `Sendable`.
+    private static let defaultCacheLock = NSLock()
+    nonisolated(unsafe) private static var cachedDefault: CatalogDoc?
+
     /// Reads and decodes `DefaultCatalog.json` from `Bundle.module`.
+    ///
+    /// The default (`bundle == nil`) result is memoized after the first decode;
+    /// repeat calls return the same value without re-reading the bundle.
     ///
     /// - Parameter bundle: Override for testing; pass `nil` to use the NexusAI module bundle.
     public static func loadDefault(bundle: Bundle? = nil) throws -> CatalogDoc {
+        if bundle == nil {
+            defaultCacheLock.lock()
+            if let cached = cachedDefault {
+                defaultCacheLock.unlock()
+                return cached
+            }
+            defaultCacheLock.unlock()
+        }
+
         let resolvedBundle = bundle ?? .module
         guard let url = resolvedBundle.url(forResource: "DefaultCatalog", withExtension: "json") else {
             throw LoadError.resourceMissing("DefaultCatalog.json")
         }
         let data = try Data(contentsOf: url)
+        let decoded: CatalogDoc
         do {
-            return try JSONDecoder().decode(CatalogDoc.self, from: data)
+            decoded = try JSONDecoder().decode(CatalogDoc.self, from: data)
         } catch {
             throw LoadError.decodeFailed(String(describing: error))
         }
+
+        if bundle == nil {
+            defaultCacheLock.lock()
+            cachedDefault = decoded
+            defaultCacheLock.unlock()
+        }
+        return decoded
     }
 
     // MARK: - Seeder

@@ -39,4 +39,70 @@ public struct TaskBucket: Sendable {
         guard let comparator else { return filtered }
         return filtered.sorted(by: comparator)
     }
+
+    /// One page of a windowed bucket fetch: the surviving (deduped, post-filtered)
+    /// tasks for this raw window plus the cursor a caller advances to fetch the next
+    /// page.
+    ///
+    /// `rawCursor` is the *raw* DB offset to resume from — it counts every row the
+    /// storage fetch returned for this window, NOT just the rows that survived the
+    /// in-memory `postFilter`/dedup. Advancing by the raw cursor (rather than by the
+    /// number of surviving rows) is what keeps consecutive pages gap-free and
+    /// overlap-free when a `postFilter` is present: the next page picks up exactly
+    /// where the storage scan left off. `hasMore` is true iff the storage fetch
+    /// returned a full `rawLimit` worth of rows (so another window may exist).
+    public struct Page {
+        public let items: [TaskItem]
+        public let rawCursor: Int
+        public let hasMore: Bool
+
+        public init(items: [TaskItem], rawCursor: Int, hasMore: Bool) {
+            self.items = items
+            self.rawCursor = rawCursor
+            self.hasMore = hasMore
+        }
+    }
+
+    /// Fetches a single window of this bucket, DB-sorted, starting at the raw DB
+    /// offset `rawOffset` and reading at most `rawLimit` rows from storage before
+    /// the in-memory `postFilter` + dedup run.
+    ///
+    /// Only valid for buckets WITHOUT a `comparator`: a comparator reorders the
+    /// whole result set in memory, which a per-window fetch cannot honor (the
+    /// storage `sort` is the only ordering a window can preserve). The Today
+    /// `noDate` bucket and the `.all` flat list both sort purely storage-side, so
+    /// windowing them is order-identical to the full fetch's corresponding slice.
+    /// Callers must NOT window the `today` bucket (it carries `manualThenDueOrder`).
+    @MainActor
+    public func page(in context: ModelContext, rawOffset: Int, rawLimit: Int) throws -> Page {
+        precondition(comparator == nil, "TaskBucket.page is undefined for buckets with a comparator")
+        var descriptor = FetchDescriptor<TaskItem>(predicate: predicate, sortBy: sort)
+        descriptor.fetchOffset = rawOffset
+        descriptor.fetchLimit = rawLimit
+        let rawRows = try context.fetch(descriptor)
+        let items = rawRows.dedupedByID().filter(postFilter)
+        return Page(
+            items: items,
+            rawCursor: rawOffset + rawRows.count,
+            hasMore: rawRows.count == rawLimit
+        )
+    }
+
+    /// Storage-side count of this bucket's predicate WITHOUT materializing any
+    /// row (`ModelContext.fetchCount`). This is the cheap COUNT path the Inbox
+    /// badge + "All" tab use so a windowed list still reports the TRUE total
+    /// instead of the loaded window's size.
+    ///
+    /// Two documented divergences from a materialized `apply().count`, both
+    /// upward and both intrinsic to counting without fetching:
+    ///   1. The in-memory `postFilter` (e.g. the archived-project exclusion) is
+    ///      NOT applied — `fetchCount` evaluates only the storage predicate, so
+    ///      archived-project no-date tasks are included in the count.
+    ///   2. No `.dedupedByID()` — on a synced store a single logical task can be
+    ///      materialized as two same-`id` rows; `fetchCount` counts both.
+    /// On a clean, non-archived store the count equals the materialized count.
+    @MainActor
+    public func count(in context: ModelContext) throws -> Int {
+        try context.fetchCount(FetchDescriptor<TaskItem>(predicate: predicate))
+    }
 }

@@ -1,7 +1,6 @@
 import Combine
 import Foundation
 import NexusUI
-import SwiftData
 import SwiftUI
 
 /// Presentation style for the re-usable meeting surfaces (`SummaryView`,
@@ -88,9 +87,7 @@ public struct SummaryView: View {
         .onAppear {
             viewModel.load()
         }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            viewModel.load(force: true)
-        }
+        .reloadOnStoreChange { viewModel.load(force: true) }
     }
 
     /// In `.liquid` the enclosing `LiquidGlassCard("Notes")` already supplies the

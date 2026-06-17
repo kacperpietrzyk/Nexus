@@ -2,7 +2,6 @@ import Combine
 import Foundation
 import NexusCore
 import NexusUI
-import SwiftData
 import SwiftUI
 
 @MainActor
@@ -191,9 +190,7 @@ public struct TranscriptView: View {
         .task {
             await viewModel.loadAttendeeSuggestions()
         }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            viewModel.load()
-        }
+        .reloadOnStoreChange { viewModel.load() }
         .sheet(
             isPresented: Binding(
                 get: { renaming != nil },

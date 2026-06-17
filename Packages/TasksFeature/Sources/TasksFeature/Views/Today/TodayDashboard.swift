@@ -181,8 +181,14 @@ public struct TodayDashboard: View {
     // Calendar/Motion-AI blocks for today (spec §7), read via NexusCore.
     @State var scheduleBlocks: [ScheduledBlock] = []
     // Forward-looking deadline-risk signal (spec §19.1 D1); see +EmbeddedAlerts.
-    @State var deadlineRiskSummary = DeadlineRiskSummary(atRiskTaskIDs: [], tightTaskIDs: [], mostUrgent: nil)
-    @State var deadlineRiskTopTask: TaskItem?
+    // Held in an `@Observable` model (not raw `@State`) so the projection — the
+    // proven hottest path on a return-to-Today appear — carries a skip-redundant-
+    // reload gate. `deadlineRiskSummary`/`deadlineRiskTopTask` forward to it so the
+    // banner copy reads byte-for-byte unchanged values.
+    @State var deadlineRiskModel = TodayDeadlineRiskModel()
+    // Internal (not `private`): read from the `+EmbeddedAlerts` extension file.
+    var deadlineRiskSummary: DeadlineRiskSummary { deadlineRiskModel.summary }
+    var deadlineRiskTopTask: TaskItem? { deadlineRiskModel.topTask }
     @State private var digestText: String = ""
     @State private var digestTimestamp: Date = .now
     // Internal (not `private`): written from the `+DigestData` extension file.
@@ -246,9 +252,15 @@ public struct TodayDashboard: View {
         .modifier(DashboardFrame(chrome: chrome))
         .task { await reloadScheduleData() }
         .task(id: calendarEventsEnabled) { await reloadScheduleData() }
-        .reloadOnStoreChange { _Concurrency.Task { await reloadScheduleData() } }
+        .reloadOnStoreChange {
+            // A real store mutation invalidates the held deadline-risk projection.
+            deadlineRiskModel.markDirty()
+            _Concurrency.Task { await reloadScheduleData() }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
+            // Re-entry may have mutated the store from elsewhere; recompute.
+            deadlineRiskModel.markDirty()
             _Concurrency.Task { await reloadScheduleData() }
         }
     }
@@ -513,6 +525,13 @@ public struct TodayDashboard: View {
 
     @MainActor
     func reloadScheduleData() async {
+        // The data assembled below (day buckets, digest, the O(open-tasks)
+        // DeadlineRiskProjector projection) surfaces ONLY on the `.today` route.
+        // On `.inbox`/`.tasks`/`.productivity`/`.meetings` it is never rendered, so
+        // assembling it just blocks the main thread on entry (a `sample` showed the
+        // deadline-risk projection dominating Inbox entry). Skip off Today —
+        // pixel-identical.
+        guard TodayDashboardContentRoute.route(for: activeSelection.wrappedValue) == .today else { return }
         reloadGeneration += 1
         let generation = reloadGeneration
         let now = Date.now
