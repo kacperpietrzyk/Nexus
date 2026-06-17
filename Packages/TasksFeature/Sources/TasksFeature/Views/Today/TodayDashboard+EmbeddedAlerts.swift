@@ -34,52 +34,21 @@ extension TodayDashboard {
             .padding(.vertical, 8)
     }
 
-    /// Horizon (days) the risk projection looks ahead. Matches the
-    /// `schedule.deadline_risks` agent-tool default (spec §19.1).
-    static let deadlineRiskHorizonDays = 14
-
     /// Refresh the deadline-risk signal from the current store + calendar horizon
     /// and publish it to the banner state. Called from `reloadScheduleData` on
     /// the same triggers as the rest of the Today data (last-writer-wins; the
-    /// projection is idempotent over the live store).
+    /// projection is idempotent over the live store). Delegates to
+    /// `TodayDeadlineRiskModel`, which fronts the projection (the proven hottest
+    /// return-to-Today path) with a skip-redundant-reload gate; an unchanged
+    /// return-navigation reuses the held summary instead of recomputing.
     @MainActor
     func refreshDeadlineRisk(now: Date) async {
-        let days = Self.deadlineRiskHorizonDays
-        // Obstacles across the whole horizon (not just today) so the free-time
-        // math sees future events; `[]` when the feed is off or access absent.
-        var events: [CalendarEvent] = []
-        let prefs = UserDefaultsCalendarPreferencesStore().load()
-        if calendarEventsEnabled {
-            let end = now.addingTimeInterval(TimeInterval(days * 24 * 60 * 60))
-            let fetched = (try? await calendarProvider.eventsBetween(start: now, end: end)) ?? []
-            // #6: deadline-risk free-time math must ignore disabled calendars too.
-            events = prefs.visibleEvents(fetched)
-        }
-        let risks = DeadlineRiskProjector.project(
-            context: modelContext,
-            events: events,
-            prefs: prefs,
-            horizon: TimeInterval(days * 24 * 60 * 60),
-            now: now,
-            calendar: .current
+        await deadlineRiskModel.refresh(
+            modelContext: modelContext,
+            calendarProvider: calendarProvider,
+            calendarEventsEnabled: calendarEventsEnabled,
+            now: now
         )
-        let summary = DeadlineRiskSummary.make(from: risks)
-        deadlineRiskSummary = summary
-        deadlineRiskTopTask = Self.deadlineRiskTopTask(summary: summary, modelContext: modelContext)
-    }
-
-    /// Resolve the single most-urgent risk task (for the banner copy + tap
-    /// target), or nil when nothing is under pressure.
-    @MainActor
-    static func deadlineRiskTopTask(
-        summary: DeadlineRiskSummary,
-        modelContext: ModelContext
-    ) -> TaskItem? {
-        guard let taskID = summary.mostUrgent?.taskID else { return nil }
-        let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { $0.id == taskID && $0.deletedAt == nil }
-        )
-        return (try? modelContext.fetch(descriptor))?.first
     }
 
     /// Forward-looking deadline-risk banner (spec §19.1): one tappable strip that

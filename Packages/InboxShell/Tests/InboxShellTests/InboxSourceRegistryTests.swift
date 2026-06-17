@@ -56,6 +56,125 @@ struct InboxSourceRegistryTests {
         #expect(events == ["archive:Buy milk", "snooze:Buy milk:400"])
     }
 
+    @Test("allItems caches: a second call without invalidation does not re-query sources")
+    func allItemsCachesAcrossCalls() async throws {
+        let registry = InboxSourceRegistry()
+        let old = InboxItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000011")!,
+            sourceID: "a",
+            title: "Old",
+            body: nil,
+            due: nil,
+            tags: [],
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let new = InboxItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000012")!,
+            sourceID: "b",
+            title: "New",
+            body: nil,
+            due: nil,
+            tags: [],
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        let sourceA = CountingInboxSource(id: "a", items: [old])
+        let sourceB = CountingInboxSource(id: "b", items: [new])
+        await registry.register(sourceA)
+        await registry.register(sourceB)
+
+        let first = try await registry.allItems()
+        let second = try await registry.allItems()
+
+        // Identical sorted output served from the cache.
+        #expect(first.map(\.id) == second.map(\.id))
+        #expect(second.map(\.title) == ["New", "Old"])
+        // Each source was queried exactly once — the second call hit the cache.
+        #expect(await sourceA.itemsCallCount == 1)
+        #expect(await sourceB.itemsCallCount == 1)
+    }
+
+    @Test("invalidateCache forces the next allItems to re-query sources")
+    func invalidateCacheForcesRequery() async throws {
+        let registry = InboxSourceRegistry()
+        let item = InboxItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000021")!,
+            sourceID: "a",
+            title: "Only",
+            body: nil,
+            due: nil,
+            tags: [],
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let source = CountingInboxSource(id: "a", items: [item])
+        await registry.register(source)
+
+        _ = try await registry.allItems()
+        await registry.invalidateCache()
+        _ = try await registry.allItems()
+
+        #expect(await source.itemsCallCount == 2)
+    }
+
+    @Test("cached output is identical to the un-cached sort of scrambled input")
+    func cachedOutputMatchesUncachedSort() async throws {
+        // Seed sources in scrambled createdAt/title order; the cache must
+        // preserve the exact comparator: createdAt desc, then title ascending.
+        let alpha = InboxItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000031")!,
+            sourceID: "a",
+            title: "Alpha",
+            body: nil,
+            due: nil,
+            tags: [],
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        let bravo = InboxItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000032")!,
+            sourceID: "a",
+            title: "Bravo",
+            body: nil,
+            due: nil,
+            tags: [],
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        let charlie = InboxItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000033")!,
+            sourceID: "b",
+            title: "Charlie",
+            body: nil,
+            due: nil,
+            tags: [],
+            createdAt: Date(timeIntervalSince1970: 500)
+        )
+        let delta = InboxItem(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000034")!,
+            sourceID: "b",
+            title: "Delta",
+            body: nil,
+            due: nil,
+            tags: [],
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        // Scrambled within each source.
+        let registry = InboxSourceRegistry()
+        await registry.register(CountingInboxSource(id: "a", items: [bravo, alpha]))
+        await registry.register(CountingInboxSource(id: "b", items: [delta, charlie]))
+
+        let all = [alpha, bravo, charlie, delta]
+        let expected = all.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+        }
+
+        // First call computes; second serves the cache. Both equal the
+        // reference sort. Expected order: Charlie(500), Alpha(300), Bravo(300), Delta(100).
+        let cached = try await registry.allItems()
+        let cachedAgain = try await registry.allItems()
+        #expect(cached.map(\.id) == expected.map(\.id))
+        #expect(cachedAgain.map(\.id) == expected.map(\.id))
+        #expect(cached.map(\.title) == ["Charlie", "Alpha", "Bravo", "Delta"])
+    }
+
     @Test("archive throws missingSource when no source matches")
     func archiveThrowsForUnknownSource() async throws {
         let registry = InboxSourceRegistry()
@@ -98,4 +217,30 @@ private actor RecordingInboxSource: InboxSource {
     func snooze(_ item: InboxItem, until date: Date) async throws {
         events.append("snooze:\(item.title):\(Int(date.timeIntervalSince1970))")
     }
+}
+
+/// Counts how many times `items()` is invoked so caching can be proven: a
+/// cache hit must NOT re-enter the source, an invalidation MUST re-query.
+private actor CountingInboxSource: InboxSource {
+    let id: String
+    let displayName: String
+    let iconName: String
+    private let storedItems: [InboxItem]
+    private(set) var itemsCallCount = 0
+
+    init(id: String, items: [InboxItem]) {
+        self.id = id
+        self.displayName = id
+        self.iconName = "tray"
+        self.storedItems = items
+    }
+
+    func items() async throws -> [InboxItem] {
+        itemsCallCount += 1
+        return storedItems
+    }
+
+    func archive(_ item: InboxItem) async throws {}
+
+    func snooze(_ item: InboxItem, until date: Date) async throws {}
 }

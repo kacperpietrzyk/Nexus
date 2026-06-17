@@ -84,7 +84,12 @@ public struct InboxView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task { await reload(selectFirstItem: true) }
-        .reloadOnStoreChange { Task { await reload(selectFirstItem: false) } }
+        .reloadOnStoreChange {
+            Task {
+                await registry.invalidateCache()
+                await reload(selectFirstItem: false)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .nexusMarkInboxRead)) { _ in
             Task { await markAllRead() }
         }
@@ -103,8 +108,19 @@ public struct InboxView: View {
         }
         .background(Color.clear)
         .task { await reload(selectFirstItem: false) }
-        .refreshable { await reload(selectFirstItem: false) }
-        .reloadOnStoreChange { Task { await reload(selectFirstItem: false) } }
+        // Pull-to-refresh means "force fresh": invalidate so sources whose data
+        // can change without a ModelContext.didSave (e.g. network-backed
+        // digests/mentions) re-query, matching today's always-fresh behaviour.
+        .refreshable {
+            await registry.invalidateCache()
+            await reload(selectFirstItem: false)
+        }
+        .reloadOnStoreChange {
+            Task {
+                await registry.invalidateCache()
+                await reload(selectFirstItem: false)
+            }
+        }
     }
 
     private var listContent: some View {
@@ -229,6 +245,10 @@ public struct InboxView: View {
     @MainActor
     private func archive(_ item: InboxItem) async {
         try? await registry.archive(item)
+        // The mutation changes the source's items; drop the cache so the reload
+        // below reflects the removal immediately (don't wait for the debounced
+        // store-change observer).
+        await registry.invalidateCache()
         await reload(selectFirstItem: true)
         onUnreadCountChanged(unreadCount)
     }
@@ -237,6 +257,9 @@ public struct InboxView: View {
     private func snooze(_ item: InboxItem, hours: Int) async {
         let date = Date().addingTimeInterval(TimeInterval(hours * 60 * 60))
         try? await registry.snooze(item, until: date)
+        // Snooze removes the item from the live list; drop the cache so the
+        // reload reflects it immediately (mirrors archive).
+        await registry.invalidateCache()
         await reload(selectFirstItem: true)
         onUnreadCountChanged(unreadCount)
     }
