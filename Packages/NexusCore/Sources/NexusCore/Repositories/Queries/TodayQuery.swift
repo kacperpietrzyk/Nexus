@@ -82,6 +82,44 @@ public struct TodayQuery: Sendable {
         )
     }
 
+    /// Inbox-ordered variant of `noDate` for WINDOWED loading: identical
+    /// predicate + post-filter (so the SET of surfaced tasks is byte-for-byte the
+    /// same as `noDate()` — subtasks included, archived-project tasks excluded
+    /// in-memory), but sorted to match the Inbox's GLOBAL comparator
+    /// (`createdAt` desc, then a stable `id` tiebreak) instead of `noDate()`'s
+    /// `priorityRaw`-first Today ordering.
+    ///
+    /// This sort is what makes paging composable with the Inbox merge: a window
+    /// streamed in `createdAt`-desc order always extends the loaded prefix at the
+    /// tail (a later page never carries a *newer* item that belongs above an
+    /// already-shown row). The `id` tiebreak gives offset/limit paging a unique
+    /// total order so consecutive windows are gap-free and overlap-free even when
+    /// many tasks share a `createdAt` (true here — the migration back-dated
+    /// `created_at`). Kept SEPARATE from `noDate()` so its many non-windowed
+    /// callers stay byte-for-byte unchanged.
+    public func noDateInboxWindow(excludingProjectIDs: Set<UUID> = []) -> TaskBucket {
+        let openStatus = TaskStatus.open.rawValue
+        let predicate = #Predicate<TaskItem> { task in
+            task.deletedAt == nil
+                && task.statusRaw == openStatus
+                && task.dueAt == nil
+                && task.isTemplate == false
+        }
+        return TaskBucket(
+            predicate: predicate,
+            postFilter: { task in
+                if let projectID = task.projectID, excludingProjectIDs.contains(projectID) {
+                    return false
+                }
+                return true
+            },
+            sort: [
+                SortDescriptor(\TaskItem.createdAt, order: .reverse),
+                SortDescriptor(\TaskItem.id, order: .forward),
+            ]
+        )
+    }
+
     /// Root-only variant of `noDate` for WINDOWED loading: identical predicate
     /// plus `parentTaskID == nil` hoisted DB-side, so a `TaskBucket.page` fetch
     /// pages only root tasks and doesn't burn a raw page on no-date subtasks that

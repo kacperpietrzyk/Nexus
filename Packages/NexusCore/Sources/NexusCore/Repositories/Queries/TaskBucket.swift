@@ -87,4 +87,22 @@ public struct TaskBucket: Sendable {
             hasMore: rawRows.count == rawLimit
         )
     }
+
+    /// Storage-side count of this bucket's predicate WITHOUT materializing any
+    /// row (`ModelContext.fetchCount`). This is the cheap COUNT path the Inbox
+    /// badge + "All" tab use so a windowed list still reports the TRUE total
+    /// instead of the loaded window's size.
+    ///
+    /// Two documented divergences from a materialized `apply().count`, both
+    /// upward and both intrinsic to counting without fetching:
+    ///   1. The in-memory `postFilter` (e.g. the archived-project exclusion) is
+    ///      NOT applied — `fetchCount` evaluates only the storage predicate, so
+    ///      archived-project no-date tasks are included in the count.
+    ///   2. No `.dedupedByID()` — on a synced store a single logical task can be
+    ///      materialized as two same-`id` rows; `fetchCount` counts both.
+    /// On a clean, non-archived store the count equals the materialized count.
+    @MainActor
+    public func count(in context: ModelContext) throws -> Int {
+        try context.fetchCount(FetchDescriptor<TaskItem>(predicate: predicate))
+    }
 }

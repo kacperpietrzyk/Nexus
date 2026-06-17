@@ -98,6 +98,37 @@ public actor InboxSourceRegistry {
         cachedItems = nil
     }
 
+    /// Windowed merge: every source is asked for at most `limit` items (small
+    /// sources return their full set; the dominant no-date source returns only
+    /// its first `limit` in `createdAt`-desc order), then merged + globally
+    /// sorted and capped to `limit`. The result is the TRUE global first
+    /// `limit` (each source can contribute at most `limit` to the head, so
+    /// asking each for `limit` is sufficient). Uncached — materializing only
+    /// `limit` rows is cheap, so a cold Inbox entry no longer hangs on ~1383.
+    public func items(limit: Int) async throws -> [InboxItem] {
+        startObservingStoreChangesIfNeeded()
+        var result: [InboxItem] = []
+        for source in sources.values {
+            result.append(contentsOf: try await source.items(limit: limit))
+        }
+        let sorted = result.sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+        }
+        return Array(sorted.prefix(limit))
+    }
+
+    /// Sum of every source's true `count()` — the accurate Inbox total WITHOUT
+    /// materializing the items, so the unread/tab badges stay correct while the
+    /// list is only windowed.
+    public func totalCount() async throws -> Int {
+        var total = 0
+        for source in sources.values {
+            total += try await source.count()
+        }
+        return total
+    }
+
     public func archive(_ item: InboxItem) async throws {
         guard let source = sources[item.sourceID] else {
             throw InboxSourceRegistryError.missingSource(item.sourceID)

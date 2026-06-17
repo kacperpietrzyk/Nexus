@@ -5,6 +5,42 @@ import Testing
 @Suite("InboxSourceRegistry")
 struct InboxSourceRegistryTests {
 
+    private func item(_ source: String, _ offset: TimeInterval) -> InboxItem {
+        InboxItem(
+            id: UUID(),
+            sourceID: source,
+            title: "\(source)-\(Int(offset))",
+            body: nil,
+            due: nil,
+            tags: [],
+            createdAt: Date(timeIntervalSince1970: 1_000_000).addingTimeInterval(offset)
+        )
+    }
+
+    @Test("items(limit:) returns the global-first-N, merged + sorted, capped to limit")
+    func windowedItemsReturnsGlobalFirstN() async throws {
+        let registry = InboxSourceRegistry()
+        await registry.register(RecordingInboxSource(id: "A", items: [item("A", 30), item("A", 20), item("A", 10)]))
+        await registry.register(RecordingInboxSource(id: "B", items: [item("B", 25), item("B", 5)]))
+        // Global createdAt-desc order across both sources: 30, 25, 20, 10, 5.
+        let window = try await registry.items(limit: 3)
+        let offsets = window.map { Int($0.createdAt.timeIntervalSince1970 - 1_000_000) }
+        #expect(offsets == [30, 25, 20])
+    }
+
+    @Test("totalCount sums sources' count() without materializing items")
+    func totalCountSumsWithoutMaterializing() async throws {
+        let registry = InboxSourceRegistry()
+        let big = CountOnlyInboxSource(id: "big", count: 1000)
+        let small = CountOnlyInboxSource(id: "small", count: 7)
+        await registry.register(big)
+        await registry.register(small)
+        let total = try await registry.totalCount()
+        #expect(total == 1007)
+        #expect(await big.itemsWasMaterialized == false)
+        #expect(await small.itemsWasMaterialized == false)
+    }
+
     @Test("allItems aggregates registered sources and sorts newest first")
     func allItemsAggregatesSources() async throws {
         let registry = InboxSourceRegistry()
@@ -239,6 +275,34 @@ private actor CountingInboxSource: InboxSource {
         itemsCallCount += 1
         return storedItems
     }
+
+    func archive(_ item: InboxItem) async throws {}
+
+    func snooze(_ item: InboxItem, until date: Date) async throws {}
+}
+
+/// Reports a `count()` without ever materializing `items()`, proving the
+/// registry's `totalCount()` uses the cheap count path (no fetch of the list).
+private actor CountOnlyInboxSource: InboxSource {
+    let id: String
+    let displayName: String
+    let iconName: String
+    private let total: Int
+    private(set) var itemsWasMaterialized = false
+
+    init(id: String, count: Int) {
+        self.id = id
+        self.displayName = id
+        self.iconName = "tray"
+        self.total = count
+    }
+
+    func items() async throws -> [InboxItem] {
+        itemsWasMaterialized = true
+        return []
+    }
+
+    func count() async throws -> Int { total }
 
     func archive(_ item: InboxItem) async throws {}
 
