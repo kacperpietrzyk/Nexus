@@ -203,8 +203,15 @@ struct ContentView: View {
                 await bootstrapNavigation()
                 await reloadInboxCount()
             }
-            .task(id: selection) {
-                await reloadInboxCount()
+            // The unread badge tracks Inbox DATA, which changes on a store write —
+            // not on navigation. Recompute on store-change (the registry caches
+            // allItems and self-invalidates on didSave) instead of on every
+            // `selection` change, which re-materialized the whole inbox + walked
+            // the Link graph on each view switch. While the Inbox is open it also
+            // reports its own count via onInboxUnreadCountChanged, so this only
+            // carries the closed-Inbox case.
+            .reloadOnStoreChange {
+                _Concurrency.Task { await reloadInboxCount() }
             }
     }
 
