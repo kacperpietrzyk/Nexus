@@ -82,6 +82,43 @@ public struct TodayQuery: Sendable {
         )
     }
 
+    /// Root-only variant of `noDate` for WINDOWED loading: identical predicate
+    /// plus `parentTaskID == nil` hoisted DB-side, so a `TaskBucket.page` fetch
+    /// pages only root tasks and doesn't burn a raw page on no-date subtasks that
+    /// the Tasks list drops afterward (which would badly undershoot the page size
+    /// on a store with many subtasks). Order-identical to `rootTasks(noDate())`:
+    /// the only DB-visible difference is excluding the same subtasks the caller's
+    /// root reduction already removes. Kept SEPARATE from `noDate()` so the many
+    /// non-windowed callers that consume the raw bucket (Inbox source, HeroBrief
+    /// counts, digest, embedded Today) are byte-for-byte unchanged.
+    ///
+    /// `deletedAt`/`isTemplate` move to the post-filter here only because a fourth
+    /// `== nil` predicate conjunct (`deletedAt`, `dueAt`, `parentTaskID`) blows the
+    /// `#Predicate` type-checker budget; the resulting set is identical.
+    public func noDateRoots(excludingProjectIDs: Set<UUID> = []) -> TaskBucket {
+        let openStatus = TaskStatus.open.rawValue
+        let predicate = #Predicate<TaskItem> { task in
+            task.statusRaw == openStatus
+                && task.dueAt == nil
+                && task.parentTaskID == nil
+        }
+        return TaskBucket(
+            predicate: predicate,
+            postFilter: { task in
+                if task.deletedAt != nil { return false }
+                if task.isTemplate { return false }
+                if let projectID = task.projectID, excludingProjectIDs.contains(projectID) {
+                    return false
+                }
+                return true
+            },
+            sort: [
+                SortDescriptor(\TaskItem.priorityRaw, order: .reverse),
+                SortDescriptor(\TaskItem.createdAt, order: .reverse),
+            ]
+        )
+    }
+
     @MainActor
     public func awaiting(
         now: Date,

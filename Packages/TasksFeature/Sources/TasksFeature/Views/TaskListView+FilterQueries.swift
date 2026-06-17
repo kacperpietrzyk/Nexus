@@ -48,6 +48,48 @@ extension TaskListView {
         SubtaskTreeDataSource.rootTasks(from: tasks).dedupedByID()
     }
 
+    /// Predicate+sort for the `.all` flat list (open, non-template root tasks),
+    /// extracted so the full fetch and the windowed page below share ONE source of
+    /// truth for the ordering that must stay byte-identical between them.
+    static func allTasksDescriptor() -> FetchDescriptor<TaskItem> {
+        let doneStatus = TaskStatus.done.rawValue
+        let predicate = #Predicate<TaskItem> { task in
+            task.deletedAt == nil && task.statusRaw != doneStatus && task.parentTaskID == nil
+                && task.isTemplate == false
+        }
+        return FetchDescriptor(
+            predicate: predicate,
+            sortBy: [
+                SortDescriptor(\TaskItem.dueAt, order: .forward),
+                SortDescriptor(\TaskItem.createdAt, order: .reverse),
+            ]
+        )
+    }
+
+    /// One windowed page of the `.all` flat list. The descriptor is DB-sorted with
+    /// `parentTaskID == nil` already in the predicate (so the raw fetch returns
+    /// only root tasks — no in-memory root reduction needed) and `.all` carries NO
+    /// archived-project exclusion, so a raw `fetchLimit(N)` returns exactly N rows
+    /// in the same order as the full fetch's corresponding slice. `dedupedByID()`
+    /// is a clean-store no-op; on a duplicated store it can shrink a page slightly,
+    /// the same approximate-page-size slack the Today `noDate` window carries.
+    @MainActor
+    static func allTasksPage(
+        rawOffset: Int,
+        rawLimit: Int,
+        modelContext: ModelContext
+    ) throws -> TaskBucket.Page {
+        var descriptor = allTasksDescriptor()
+        descriptor.fetchOffset = rawOffset
+        descriptor.fetchLimit = rawLimit
+        let rawRows = try modelContext.fetch(descriptor)
+        return TaskBucket.Page(
+            items: rawRows.dedupedByID(),
+            rawCursor: rawOffset + rawRows.count,
+            hasMore: rawRows.count == rawLimit
+        )
+    }
+
     @MainActor
     static func tasks(status: TaskStatus?, modelContext: ModelContext) throws -> [TaskItem] {
         if let status {
@@ -66,19 +108,9 @@ extension TaskListView {
             return try modelContext.fetch(descriptor).dedupedByID()
         }
 
-        let doneStatus = TaskStatus.done.rawValue
-        let predicate = #Predicate<TaskItem> { task in
-            task.deletedAt == nil && task.statusRaw != doneStatus && task.parentTaskID == nil
-                && task.isTemplate == false
-        }
-        let descriptor = FetchDescriptor(
-            predicate: predicate,
-            sortBy: [
-                SortDescriptor(\TaskItem.dueAt, order: .forward),
-                SortDescriptor(\TaskItem.createdAt, order: .reverse),
-            ]
-        )
-        return try modelContext.fetch(descriptor).dedupedByID()
+        // Shares `allTasksDescriptor()` with `allTasksPage` so the full and
+        // windowed `.all` fetches are guaranteed identically ordered.
+        return try modelContext.fetch(allTasksDescriptor()).dedupedByID()
     }
 
     @MainActor

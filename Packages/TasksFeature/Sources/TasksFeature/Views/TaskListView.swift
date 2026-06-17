@@ -24,11 +24,17 @@ public struct TaskListView: View {
     @State var today: [TaskItem] = []
     @State var noDate: [TaskItem] = []
     @State var flatList: [TaskItem] = []
+    // Windowed-loading cursor for the high-volume `.all`/`.today` filters. Only
+    // those two (DB-sorted) filters page; everything else loads fully and leaves
+    // this untouched. See `TaskListPageState`.
+    @State var pageState = TaskListPageState()
     @State private var expandedTaskIDs: Set<UUID> = []
-    @State private var subtaskProgressByTaskID: [UUID: SubtaskProgress] = [:]
+    // `internal` so the +Paging extension can refresh progress after an append.
+    @State var subtaskProgressByTaskID: [UUID: SubtaskProgress] = [:]
     @State private var parentPickerTarget: TaskItem?
     @State private var cascadePrompt: CascadeCompletionPrompt?
-    @State private var error: String?
+    // `internal` so the +Paging extension can surface a load-more failure.
+    @State var error: String?
     @State var refinement = TaskListRefinement()
     @State var refinementLabels: [TaskLabel] = []
     // Memoized labeled-task-id resolution (FIX 3a): only re-queries
@@ -108,7 +114,13 @@ public struct TaskListView: View {
             case .today:
                 section("Overdue", items: overdue)
                 todaySection
-                section("No date", items: noDate)
+                noDateSection
+            case .all where isWindowing:
+                // Windowed flat list: capped stagger + a prefetch trigger near the
+                // tail. `windowedRow` appends the next page on appear.
+                ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
+                    windowedRow(for: item, index: i, loadedCount: flatList.count)
+                }
             case .all, .upcoming, .completed, .templates, .byTag:
                 // MP-2 motion pass: staggered row enter via .nexusAppear(i)
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
@@ -207,7 +219,7 @@ public struct TaskListView: View {
     }
 
     @ViewBuilder
-    private func section(_ title: String, items: [TaskItem]) -> some View {
+    func section(_ title: String, items: [TaskItem]) -> some View {
         if !items.isEmpty {
             Section {
                 // MP-2 motion pass: staggered row enter via .nexusAppear(i)
@@ -221,7 +233,7 @@ public struct TaskListView: View {
     }
 
     /// Tracked-caps Liquid section header (01_FOUNDATIONS §Gęstość informacji).
-    private func sectionHeader(_ title: String) -> some View {
+    func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(DS.FontToken.caption)
             .tracking(0.8)
@@ -229,7 +241,7 @@ public struct TaskListView: View {
     }
 
     @ViewBuilder
-    private func row(for item: TaskItem, appearIndex: Int? = nil) -> some View {
+    func row(for item: TaskItem, appearIndex: Int? = nil) -> some View {
         // MP-2 motion pass: only the row itself gets the staggered enter — the
         // subtask list expands on tap, not on appear, so it stays unindexed.
         if let appearIndex {
@@ -284,9 +296,16 @@ public struct TaskListView: View {
     @MainActor
     private func reload() {
         do {
+            // A reload re-resolves the data set from scratch, so the windowed
+            // cursors must reset too — otherwise a `now` tick or store-change
+            // refresh would keep a stale "already loaded N" cursor and the first
+            // page would skip rows.
+            pageState.reset()
             let archivedProjectIDs =
                 (try? ProjectRepository(context: modelContext).archivedProjectIDs()) ?? []
             switch filter {
+            case .all where isWindowing:
+                flatList = try loadFirstFlatPage()
             case .all:
                 flatList = try Self.tasks(status: nil, modelContext: modelContext)
             case .today:
@@ -336,7 +355,7 @@ public struct TaskListView: View {
     }
 
     @MainActor
-    private var visibleRootTasks: [TaskItem] {
+    var visibleRootTasks: [TaskItem] {
         switch filter {
         case .today:
             return overdue + today + noDate
@@ -536,7 +555,9 @@ extension TaskListView {
     }
 
     /// Loads the Today view's three buckets; split out of `reload()` for the
-    /// function-body lint budget.
+    /// function-body lint budget. The `overdue`/`today` buckets are tiny (only the
+    /// dated tasks) so they always load fully; only the high-volume `noDate` bucket
+    /// is windowed (and only when `isWindowing`).
     @MainActor
     private func reloadTodayBuckets(archivedProjectIDs: Set<UUID>) throws {
         let query = TodayQuery()
@@ -548,9 +569,13 @@ extension TaskListView {
             from: try query.today(now: now, excludingProjectIDs: archivedProjectIDs)
                 .apply(in: modelContext)
         )
-        noDate = Self.rootTasks(
-            from: try query.noDate(excludingProjectIDs: archivedProjectIDs)
-                .apply(in: modelContext)
-        )
+        if isWindowing {
+            noDate = try loadFirstNoDatePage(archivedProjectIDs: archivedProjectIDs)
+        } else {
+            noDate = Self.rootTasks(
+                from: try query.noDate(excludingProjectIDs: archivedProjectIDs)
+                    .apply(in: modelContext)
+            )
+        }
     }
 }
