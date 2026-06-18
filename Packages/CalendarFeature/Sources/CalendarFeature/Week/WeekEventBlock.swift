@@ -63,12 +63,15 @@ public enum WeekEventClassifier {
 /// `event.*` tokens by kind, 12 pt semibold title, 10–11 pt secondary time
 /// line, radius 8 (`DS.Radius.s`), padding 8 (`DS.Space.s`). Hovering shows a
 /// stronger stroke (§Interaction rules); clicking routes to the existing event
-/// editor seam via `onTap`.
+/// editor seam via `onTap`. Right-click / long-press reveals a context menu
+/// (Open / Edit, Reschedule quick options, Convert to Task, Copy, Delete).
 struct WeekEventBlock: View {
 
     let item: TimelineItem
     let height: CGFloat
     let onTap: () -> Void
+    /// Nil hides the context menu (e.g. reference-mode snapshots).
+    var onContextAction: ((EventContextMenuAction) -> Void)?
 
     @State private var hovering = false
 
@@ -134,6 +137,7 @@ struct WeekEventBlock: View {
             withAnimation(DS.Motion.hover) { hovering = value }
         }
         #endif
+        .modifier(EventContextMenuModifier(item: item, onAction: onContextAction))
     }
 
     /// Proposed (not yet accepted) blocks keep the dashed-border affordance the

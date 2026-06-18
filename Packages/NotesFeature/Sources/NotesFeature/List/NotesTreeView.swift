@@ -20,6 +20,12 @@ struct NotesTreeView: View {
     @State private var moveFolderText = ""
     @State private var showingTrash = false
 
+    // Multi-select state.
+    @State private var selection = SelectionModel<UUID>()
+    @State private var undo = UndoController()
+    @State private var bulkMoveText = ""
+    @State private var showBulkMoveAlert = false
+
     @Query(filter: #Predicate<Note> { $0.deletedAt == nil }, sort: \Note.updatedAt, order: .reverse)
     private var notes: [Note]
 
@@ -36,7 +42,7 @@ struct NotesTreeView: View {
     /// externally — the editor pushes linked notes via `path.append`, the graph
     /// flow clears via `path.removeAll` — so deriving keeps the tree highlight in
     /// sync with whatever is actually on screen (and degrades to nil off-tree).
-    private var selection: UUID? { path.last }
+    private var highlightedID: UUID? { path.last }
 
     /// Serialised as newline-joined folder paths. A path in this set means the
     /// `DisclosureGroup` is collapsed (name is `collapsed` not `expanded` so the
@@ -66,6 +72,20 @@ struct NotesTreeView: View {
                     .padding(DS.Space.s)
             }
         }
+        .overlay(alignment: .bottom) {
+            BulkActionBar(
+                model: selection,
+                allIDs: selectableNoteIDs,
+                actions: treeBulkActions
+            )
+        }
+        .undoToast(undo)
+        // Global ⌘A + palette "Select All Items": select every visible note leaf.
+        .selectAllCommandTarget(in: selection, ids: selectableNoteIDs)
+        .onReceive(NotificationCenter.default.publisher(for: .nexusSelectAllActiveSurface)) { _ in
+            selection.enterSelection()
+            selection.selectAll(selectableNoteIDs)
+        }
         .alert("New folder", isPresented: $showNewFolderAlert) {
             TextField("Folder name", text: $newFolderText)
             Button("Create") {
@@ -89,6 +109,23 @@ struct NotesTreeView: View {
                 moveTarget = nil
             }
             Button("Cancel", role: .cancel) { moveTarget = nil }
+        }
+        .alert(
+            "Bulk Move to Folder",
+            isPresented: $showBulkMoveAlert
+        ) {
+            TextField("Folder path (blank = Unfiled)", text: $bulkMoveText)
+            Button("Move") {
+                let ids = Array(selection.selectedIDs)
+                let targets = notes.filter { ids.contains($0.id) }
+                let path = NoteFolderPath.normalize(bulkMoveText)
+                for note in targets { try? noteRepository?.setFolderPath(note, path) }
+                selection.exitSelection()
+                bulkMoveText = ""
+            }
+            Button("Cancel", role: .cancel) { bulkMoveText = "" }
+        } message: {
+            Text("Slash-separated path, e.g. projects/nexus. Leave blank for Unfiled.")
         }
         .sheet(isPresented: $showingTrash) {
             NotesTrashView(noteRepository: noteRepository)
@@ -134,6 +171,17 @@ struct NotesTreeView: View {
             }
             .disabled(noteRepository == nil)
             .help("New note")
+            LiquidIconButton(
+                systemImage: selection.isSelecting ? "xmark.circle" : "checkmark.circle",
+                accessibilityLabel: selection.isSelecting ? "Cancel selection" : "Select notes"
+            ) {
+                if selection.isSelecting {
+                    selection.exitSelection()
+                } else {
+                    selection.enterSelection()
+                }
+            }
+            .help(selection.isSelecting ? "Cancel selection" : "Select notes")
         }
         .padding(.horizontal, DS.Space.m)
         .padding(.vertical, DS.Space.s)
@@ -161,12 +209,13 @@ struct NotesTreeView: View {
                 ForEach(tree.library) { node in
                     NoteFolderDisclosure(
                         node: node,
-                        selection: selection,
+                        selection: highlightedID,
                         isExpanded: { !collapsed.contains($0) },
                         setExpanded: { setCollapsed($0, !$1) },
                         onSelect: select,
                         onTogglePin: { note in try? noteRepository?.setPinned(note, !note.isPinned) },
-                        noteMenu: noteContextMenu
+                        noteMenu: noteContextMenu,
+                        selectionModel: selection
                     )
                 }
             }
@@ -198,7 +247,7 @@ struct NotesTreeView: View {
                 NoteTreeLeaf(
                     note: canonical,
                     isCanonical: true,
-                    isSelected: canonical.id == selection
+                    isSelected: canonical.id == highlightedID
                 )
                 .onTapGesture { select(canonical.id) }
             }
@@ -216,11 +265,16 @@ struct NotesTreeView: View {
         NoteTreeLeaf(
             note: note,
             isCanonical: false,
-            isSelected: note.id == selection,
+            isSelected: note.id == highlightedID,
             onTogglePin: { try? noteRepository?.setPinned(note, !note.isPinned) }
         )
         .onTapGesture { select(note.id) }
         .contextMenu { noteContextMenu(note) }
+        .selectable(
+            isSelecting: selection.isSelecting,
+            isSelected: selection.isSelected(id: note.id),
+            onToggle: { selection.toggle(id: note.id) }
+        )
     }
 
     /// Template-specific row: tap or context-menu to instantiate a new note from
@@ -230,7 +284,7 @@ struct NotesTreeView: View {
         NoteTreeLeaf(
             note: note,
             isCanonical: false,
-            isSelected: note.id == selection
+            isSelected: note.id == highlightedID
         )
         .onTapGesture { instantiateTemplate(note) }
         .contextMenu {
@@ -251,6 +305,17 @@ struct NotesTreeView: View {
             try? noteRepository?.setPinned(note, !note.isPinned)
         }
         .disabled(noteRepository == nil)
+        Divider()
+        Button {
+            PasteboardCopy.string(NoteMarkdownExport.markdown(for: note))
+        } label: {
+            Label("Copy as Markdown", systemImage: "doc.plaintext")
+        }
+        Button {
+            PasteboardCopy.string(NoteMarkdownExport.wikilink(for: note))
+        } label: {
+            Label("Copy Link", systemImage: "link")
+        }
         Divider()
         Button("Move to folder…") {
             moveFolderText = note.folderPath ?? ""
@@ -338,6 +403,52 @@ struct NotesTreeView: View {
     private func deleteNote(_ note: Note) {
         try? noteRepository?.delete(note)
         if path.last == note.id { path = [] }  // selection is derived from path.last
+    }
+
+    // MARK: - Multi-select bulk actions
+
+    /// IDs eligible for Select-All: exclude templates and canonical project pages
+    /// (same set that shows `noteContextMenu`).
+    private var selectableNoteIDs: [UUID] {
+        let canonicalIDs = Set(tree.projects.compactMap { $0.canonical?.id })
+        return notes.filter { note in
+            note.role != .template && !canonicalIDs.contains(note.id)
+        }.map(\.id)
+    }
+
+    private var treeBulkActions: [BulkAction] {
+        [
+            BulkAction(label: "Pin to Today", systemImage: "star") {
+                let ids = Array(selection.selectedIDs)
+                let targets = notes.filter { ids.contains($0.id) }
+                for note in targets { try? noteRepository?.setPinned(note, true) }
+                selection.exitSelection()
+            },
+            BulkAction(label: "Move…", systemImage: "folder") {
+                bulkMoveText = ""
+                showBulkMoveAlert = true
+            },
+            BulkAction(label: "Copy as Markdown", systemImage: "doc.plaintext") {
+                let ids = Array(selection.selectedIDs)
+                let targets = notes.filter { ids.contains($0.id) }
+                let markdown = MarkdownExport.list(targets.map { NoteMarkdownExport.markdown(for: $0) })
+                PasteboardCopy.string(markdown)
+                selection.exitSelection()
+            },
+            BulkAction(label: "Delete", systemImage: "trash", role: .destructive) {
+                let ids = Array(selection.selectedIDs)
+                let targets = notes.filter { ids.contains($0.id) }
+                for note in targets {
+                    try? noteRepository?.delete(note)
+                    if path.last == note.id { path = [] }
+                }
+                selection.exitSelection()
+                let count = targets.count
+                undo.show(message: "Deleted \(count) note\(count == 1 ? "" : "s")") {
+                    for note in targets { try? noteRepository?.restore(note) }
+                }
+            },
+        ]
     }
 }
 

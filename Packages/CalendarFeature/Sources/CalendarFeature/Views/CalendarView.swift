@@ -9,6 +9,7 @@ public struct CalendarView: View {
     @State private var viewModel: CalendarViewModel
     @State private var editorContext: EditorContext?
     @State private var availableCalendars: [CalendarInfo] = []
+    @State private var undo = UndoController()
 
     private let calendar: Calendar
     private let now: () -> Date
@@ -57,6 +58,7 @@ public struct CalendarView: View {
         .sheet(item: $editorContext) { context in
             sheetContent(for: context)
         }
+        .undoToast(undo)
     }
 
     // MARK: - Header
@@ -221,7 +223,8 @@ public struct CalendarView: View {
                     onTapItem: { handleTap($0) },
                     onAdjust: { id, start, end in
                         Task { await viewModel.adjust(blockID: id, start: start, end: end) }
-                    }
+                    },
+                    onContextAction: { item, action in handleContextAction(item: item, action: action) }
                 )
             case .week:
                 WeekGridView(
@@ -232,7 +235,8 @@ public struct CalendarView: View {
                     onAccept: { id in Task { await viewModel.accept(blockID: id) } },
                     onReject: { id in viewModel.reject(blockID: id) },
                     onTapItem: { handleTap($0) },
-                    onSelectDay: { selectDay($0) }
+                    onSelectDay: { selectDay($0) },
+                    onContextAction: { item, action in handleContextAction(item: item, action: action) }
                 )
             case .month:
                 MonthGridView(
@@ -389,4 +393,76 @@ public struct CalendarView: View {
         formatter.dateFormat = "MMMM yyyy"
         return formatter
     }()
+}
+
+// MARK: - Context menu dispatch
+
+extension CalendarView {
+    /// Routes a context menu action to the appropriate view-model call. Drives
+    /// `editorContext` (the iOS `CalendarView` sheet seam).
+    func handleContextAction(item: TimelineItem, action: EventContextMenuAction) {
+        switch action {
+        case .openEditor, .openEditorForReschedule:
+            guard item.kind == .event else { return }
+            editorContext = .editEvent(eventID: String(item.id.dropFirst("event-".count)))
+        case .reschedulePlusOneDay: calViewReschedule(item: item, offsetDays: 1)
+        case .reschedulePlusOneWeek: calViewReschedule(item: item, offsetDays: 7)
+        case .convertToTask: calViewConvertToTask(item: item)
+        case .copyAsMarkdown, .copyBlockAsMarkdown: calViewCopyMarkdown(item: item)
+        case .deleteThisEvent: calViewDeleteEvent(item: item, span: .thisEvent)
+        case .deleteFutureEvents: calViewDeleteEvent(item: item, span: .futureEvents)
+        case .acceptBlock:
+            guard let blockID = item.blockID else { return }
+            Task { @MainActor in await viewModel.accept(blockID: blockID) }
+        case .rejectBlock: calViewRejectBlock(item: item)
+        }
+    }
+
+    private func calViewReschedule(item: TimelineItem, offsetDays: Int) {
+        guard item.kind == .event else { return }
+        let eventID = String(item.id.dropFirst("event-".count))
+        let cals = availableCalendars
+        Task { @MainActor in
+            await viewModel.quickReschedule(eventID: eventID, offsetDays: offsetDays, calendars: cals)
+        }
+    }
+
+    private func calViewConvertToTask(item: TimelineItem) {
+        do {
+            let taskID = try viewModel.convertEventToTask(item: item)
+            undo.show(message: "Created task \"\(item.title)\"", icon: "checkmark.square") {
+                viewModel.softDeleteCreatedTask(id: taskID)
+            }
+        } catch {
+            viewModel.lastError = CalendarViewModel.errorMessage(error)
+        }
+    }
+
+    private func calViewCopyMarkdown(item: TimelineItem) {
+        let fmt = WeekEventBlock.timeFormatter
+        let range = "\(fmt.string(from: item.start)) \u{2013} \(fmt.string(from: item.end))"
+        PasteboardCopy.string(MarkdownExport.entity(title: item.title, metadata: [range]))
+    }
+
+    private func calViewDeleteEvent(item: TimelineItem, span: CalendarEventSpan) {
+        guard item.kind == .event else { return }
+        let eventID = String(item.id.dropFirst("event-".count))
+        let title = item.title
+        let icon = span == .thisEvent ? "trash" : "trash.slash"
+        let message = span == .thisEvent ? "Deleted \"\(title)\"" : "Deleted future \"\(title)\" events"
+        Task { @MainActor in
+            await viewModel.deleteEvent(id: eventID, span: span)
+            undo.show(message: message, icon: icon) {
+                viewModel.lastError = "Undo not available for calendar event deletion."
+            }
+        }
+    }
+
+    private func calViewRejectBlock(item: TimelineItem) {
+        guard let blockID = item.blockID else { return }
+        viewModel.reject(blockID: blockID)
+        undo.show(message: "Removed \"\(item.title)\"", icon: "minus.circle") {
+            viewModel.lastError = "Undo not available for block removal."
+        }
+    }
 }

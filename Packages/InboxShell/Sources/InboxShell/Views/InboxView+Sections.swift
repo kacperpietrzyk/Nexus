@@ -62,9 +62,7 @@ enum InboxSectionBuilder {
         // the two registered task sources this branch cannot fire today.
         let noDate = items.filter { $0.sourceID == "tasks.no-date" }
         let snoozed = items.filter { $0.sourceID == "tasks.snoozed" }
-        let rest = items.filter {
-            $0.sourceID != "tasks.no-date" && $0.sourceID != "tasks.snoozed"
-        }
+        let rest = items.filter { $0.sourceID != "tasks.no-date" && $0.sourceID != "tasks.snoozed" }
         let mail = rest.filter { $0.category == .digests }
         let mentions = rest.filter { $0.category == .mentions }
 
@@ -107,9 +105,20 @@ struct InboxListPanel: View {
     let totalsBySourceID: [String: Int]
     @Binding var readItemIDs: Set<UUID>
     @Binding var selectedItem: InboxItem?
+    /// Multi-select model threaded down from InboxView so rows can enter
+    /// selection mode and the BulkActionBar at the parent level reacts.
+    let selection: SelectionModel<UUID>
     /// Fired when the scroll nears the bottom — grows the window page so the
     /// no-date section pages in on scroll instead of materializing ~1383 rows.
     let onReachEnd: () -> Void
+    // Row action callbacks wired to InboxView's private helpers.
+    let onMarkRead: (InboxItem) -> Void
+    let onMarkUnread: (InboxItem) -> Void
+    let onArchive: (InboxItem) -> Void
+    let onDelete: (InboxItem) -> Void
+    let onSnooze: (InboxItem, Int) -> Void
+    let onSnoozeTomorrow: (InboxItem) -> Void
+    let onOpen: (InboxItem) -> Void
 
     private var sections: [InboxSection] {
         InboxSectionBuilder.sections(from: items, totalsBySourceID: totalsBySourceID)
@@ -139,7 +148,15 @@ struct InboxListPanel: View {
                         InboxSectionView(
                             section: section,
                             readItemIDs: $readItemIDs,
-                            selectedItem: $selectedItem
+                            selectedItem: $selectedItem,
+                            selection: selection,
+                            onMarkRead: onMarkRead,
+                            onMarkUnread: onMarkUnread,
+                            onArchive: onArchive,
+                            onDelete: onDelete,
+                            onSnooze: onSnooze,
+                            onSnoozeTomorrow: onSnoozeTomorrow,
+                            onOpen: onOpen
                         )
                     }
                 }
@@ -180,6 +197,14 @@ struct InboxSectionView: View {
     let section: InboxSection
     @Binding var readItemIDs: Set<UUID>
     @Binding var selectedItem: InboxItem?
+    let selection: SelectionModel<UUID>
+    let onMarkRead: (InboxItem) -> Void
+    let onMarkUnread: (InboxItem) -> Void
+    let onArchive: (InboxItem) -> Void
+    let onDelete: (InboxItem) -> Void
+    let onSnooze: (InboxItem, Int) -> Void
+    let onSnoozeTomorrow: (InboxItem) -> Void
+    let onOpen: (InboxItem) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -201,12 +226,71 @@ struct InboxSectionView: View {
                         isUnread: !readItemIDs.contains(item.id),
                         isSelected: selectedItem?.id == item.id
                     ) {
-                        selectedItem = item
-                        readItemIDs.insert(item.id)
+                        if selection.isSelecting {
+                            withAnimation(DS.Motion.selection) { selection.toggle(id: item.id) }
+                        } else {
+                            selectedItem = item
+                            readItemIDs.insert(item.id)
+                        }
                     }
                     .nexusAppear(index)
+                    .selectable(
+                        isSelecting: selection.isSelecting,
+                        isSelected: selection.isSelected(id: item.id),
+                        onToggle: { selection.toggle(id: item.id) }
+                    )
+                    .contextMenu {
+                        macContextMenu(for: item)
+                    }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func macContextMenu(for item: InboxItem) -> some View {
+        let isUnread = !readItemIDs.contains(item.id)
+        if isUnread {
+            Button {
+                onMarkRead(item)
+            } label: {
+                Label("Mark Read", systemImage: "envelope.open")
+            }
+        } else {
+            Button {
+                onMarkUnread(item)
+            } label: {
+                Label("Mark Unread", systemImage: "envelope.badge")
+            }
+        }
+        Button {
+            onOpen(item)
+        } label: {
+            Label("Open", systemImage: "arrow.up.right.square")
+        }
+        Divider()
+        Menu("Snooze") {
+            Button {
+                onSnooze(item, 1)
+            } label: {
+                Label("1 Hour", systemImage: "clock")
+            }
+            Button {
+                onSnoozeTomorrow(item)
+            } label: {
+                Label("Tomorrow", systemImage: "sunrise")
+            }
+        }
+        Button {
+            onArchive(item)
+        } label: {
+            Label("Archive", systemImage: "archivebox")
+        }
+        Divider()
+        Button(role: .destructive) {
+            onDelete(item)
+        } label: {
+            Label("Delete", systemImage: "trash")
         }
     }
 }
@@ -222,55 +306,57 @@ struct InboxPanelRow: View {
     @State private var hover = false
 
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
-                Circle()
-                    .fill(isUnread ? DS.ColorToken.accentPrimary : Color.clear)
-                    .frame(width: 5, height: 5)
-                    .padding(.top, 6)
-                Image(systemName: item.nexusInboxSourceIcon)
-                    .font(.system(size: 11))
-                    .foregroundStyle(DS.ColorToken.textMuted)
-                    .frame(width: 16)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack {
-                        Text(item.title)
-                            .font(isUnread ? DS.FontToken.bodyStrong : DS.FontToken.body)
-                            .foregroundStyle(isUnread ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
-                            .lineLimit(1)
-                        Spacer(minLength: 12)
-                        Text(item.nexusInboxRelativeTime)
-                            .font(DS.FontToken.metadata)
-                            .monospacedDigit()
-                            .foregroundStyle(DS.ColorToken.textTertiary)
-                    }
-                    Text(item.body ?? "")
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textMuted)
+        // Plain tappable row (NOT a Button): a SwiftUI Button nested in a
+        // LazyVStack + `.selectable` + `.contextMenu` swallows its action on
+        // macOS, so the row never toggled in select mode. `.onTapGesture`
+        // fires reliably (same pattern as the working Tasks list).
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill(isUnread ? DS.ColorToken.accentPrimary : Color.clear)
+                .frame(width: 5, height: 5)
+                .padding(.top, 6)
+            Image(systemName: item.nexusInboxSourceIcon)
+                .font(.system(size: 11))
+                .foregroundStyle(DS.ColorToken.textMuted)
+                .frame(width: 16)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(item.title)
+                        .font(isUnread ? DS.FontToken.bodyStrong : DS.FontToken.body)
+                        .foregroundStyle(isUnread ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
                         .lineLimit(1)
+                    Spacer(minLength: 12)
+                    Text(item.nexusInboxRelativeTime)
+                        .font(DS.FontToken.metadata)
+                        .monospacedDigit()
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                 }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                    .fill(
-                        isSelected
-                            ? DS.ColorToken.glassSelected
-                            : (hover ? Color.white.opacity(0.04) : Color.clear)
-                    )
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                    .stroke(isSelected ? DS.ColorToken.strokeHairline : .clear, lineWidth: 1)
-            }
-            .contentShape(Rectangle())
-            .onHover { value in
-                withAnimation(DS.Motion.hover) { hover = value }
+                Text(item.body ?? "")
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textMuted)
+                    .lineLimit(1)
             }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                .fill(
+                    isSelected
+                        ? DS.ColorToken.glassSelected
+                        : (hover ? Color.white.opacity(0.04) : Color.clear)
+                )
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                .stroke(isSelected ? DS.ColorToken.strokeHairline : .clear, lineWidth: 1)
+        }
+        .contentShape(Rectangle())
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hover = value }
+        }
+        .onTapGesture { action() }
     }
 }
 

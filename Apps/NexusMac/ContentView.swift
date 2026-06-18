@@ -542,6 +542,10 @@ struct ContentView: View {
             openDailyNote: { openTodaysDailyNote() },
             openGraph: { openNotesGraph() }
         )
+        // Shell-level bulk-operation palette commands (InboxShell-owned): post
+        // the existing notification paths the active surfaces already observe.
+        await CommandRegistry.shared.register(MarkAllInboxReadCommand())
+        await CommandRegistry.shared.register(SelectAllItemsCommand())
         guard let taskRepository else { return }
         await TasksComposition.bootstrap(
             repository: taskRepository,

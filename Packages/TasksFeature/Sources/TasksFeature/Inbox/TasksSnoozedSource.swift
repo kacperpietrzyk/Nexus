@@ -78,4 +78,22 @@ public actor TasksSnoozedSource: InboxSource {
             try repository.snooze(task, until: date)
         }
     }
+
+    public func delete(_ item: InboxItem) async throws {
+        try await archive(item)
+    }
+
+    public func restore(_ item: InboxItem) async throws {
+        let id = item.id
+        try await MainActor.run {
+            // Fetch including soft-deleted (no `deletedAt == nil` predicate).
+            let descriptor = FetchDescriptor<TaskItem>(
+                predicate: #Predicate { task in task.id == id }
+            )
+            guard let task = try repository.context.fetch(descriptor).first else { return }
+            task.deletedAt = nil
+            task.updatedAt = .now
+            try repository.context.save()
+        }
+    }
 }

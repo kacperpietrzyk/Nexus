@@ -474,6 +474,11 @@ struct NexusMacApp: App {
         .windowStyle(.hiddenTitleBar)
         .modelContainer(container)
         .commands {
+            // Global ⌘A: routes to the active selectable surface via the
+            // `\.selectAllAction` focused value; disabled (and falls through to
+            // text Select All) when no list surface is active. See SelectAllCommands.
+            SelectAllCommands()
+
             CommandGroup(replacing: .newItem) {
                 Button("New Task…") {
                     NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)

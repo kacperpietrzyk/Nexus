@@ -97,10 +97,41 @@ public struct LiquidMeetingsScreen: View {
             HStack(alignment: .top, spacing: DS.Space.m) {
                 MeetingListPane(
                     model: model,
+                    composition: composition,
                     selectedID: router.selectedMeetingID,
                     onSelect: { router.navigate(to: $0) },
                     onSearchChanged: { reload() },
-                    onTogglePin: { model.togglePin($0, composition: composition) }
+                    onTogglePin: { model.togglePin($0, composition: composition) },
+                    onCopySummary: { meeting in
+                        let body = model.summaryMarkdownBody(for: meeting)
+                        let markdown = MarkdownExport.entity(
+                            title: meeting.title,
+                            body: body,
+                            metadata: [LiquidMeetingsFormat.fullDate.string(from: meeting.startedAt)]
+                        )
+                        PasteboardCopy.string(markdown)
+                    },
+                    onRerunSummary: { meeting in
+                        guard !meeting.transcriptText.isEmpty else { return }
+                        // Re-run summary through the pipeline's summary+actions stages.
+                        // `processSummaryAndActions` needs an audio folder — the pipeline
+                        // uses the folder for screen-OCR context only; an empty temp dir
+                        // is sufficient when no new OCR file is present.
+                        Task {
+                            let tempFolder = FileManager.default.temporaryDirectory
+                                .appendingPathComponent("rerun-\(meeting.id.uuidString)", isDirectory: true)
+                            try? FileManager.default.createDirectory(at: tempFolder, withIntermediateDirectories: true)
+                            try? await composition.pipeline.processSummaryAndActions(
+                                meeting: meeting, audioFolder: tempFolder)
+                        }
+                    },
+                    onDelete: { meeting in
+                        model.deleteMeeting(meeting, composition: composition)
+                        if router.selectedMeetingID == meeting.id {
+                            router.selectedMeetingID = model.meetings.first { $0.id != meeting.id }?.id
+                        }
+                        reload()
+                    }
                 )
                 .frame(width: listPaneWidth)
 

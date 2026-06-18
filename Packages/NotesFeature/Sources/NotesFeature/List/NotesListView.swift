@@ -20,6 +20,8 @@ public struct NotesListView: View {
     #if os(macOS)
     @Environment(\.modelContext) private var modelContext
     @Environment(\.notesGraphExternalTitles) private var graphExternalTitles
+    #else
+    @Environment(\.notesTaskRepository) private var notesTaskRepository
     #endif
 
     // All live notes, newest-edited first. `deletedAt == nil` excludes tombstones.
@@ -50,6 +52,14 @@ public struct NotesListView: View {
     @State private var moveToNewFolderNote: Note?
     @State private var newFolderText = ""
     @State private var showingTrash = false
+
+    #if !os(macOS)
+    // Multi-select (iOS only — macOS tree does its own wiring).
+    @State private var selection = SelectionModel<UUID>()
+    @State private var undo = UndoController()
+    // Bulk-move target folder; triggers folder-picker sheet.
+    @State private var bulkMovePickerShown = false
+    #endif
 
     public init() {}
 
@@ -211,9 +221,22 @@ public struct NotesListView: View {
                         Label("Trash", systemImage: "trash")
                     }
                 }
+                ToolbarItem(placement: .automatic) {
+                    Button(selection.isSelecting ? "Done" : "Select") {
+                        if selection.isSelecting {
+                            selection.exitSelection()
+                        } else {
+                            selection.enterSelection()
+                        }
+                    }
+                    .disabled(notes.isEmpty)
+                }
             }
             .sheet(isPresented: $showingTrash) {
                 NotesTrashView(noteRepository: noteRepository)
+            }
+            .sheet(isPresented: $bulkMovePickerShown) {
+                iosBulkMovePicker
             }
         #endif
     }
@@ -236,97 +259,6 @@ public struct NotesListView: View {
             } else {
                 NotesTreeView(path: $path, onOpenGraph: { openGraph(scope: .global) })
             }
-        }
-    }
-
-    #else
-
-    // MARK: - iOS composition (platform-native List)
-
-    @ViewBuilder private var iosContent: some View {
-        if notes.isEmpty {
-            NexusEmptyState(
-                systemImage: "note.text",
-                title: "No notes yet",
-                message: "Capture a thought, draft a page, or link ideas together."
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            List {
-                ForEach(groups) { group in
-                    Section {
-                        ForEach(group.notes) { note in
-                            NavigationLink(value: note.id) {
-                                NoteListRow(note: note, backlinkCount: backlinkCounts[note.id] ?? 0)
-                            }
-                            .listRowBackground(Color.clear)
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    deleteNote(note)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                            .swipeActions(edge: .leading) {
-                                Button {
-                                    try? noteRepository?.setPinned(note, !note.isPinned)
-                                } label: {
-                                    Label(
-                                        note.isPinned ? "Unpin" : "Pin to Today",
-                                        systemImage: note.isPinned ? "star.slash" : "star"
-                                    )
-                                }
-                                .tint(note.isPinned ? .gray : .yellow)
-                            }
-                            .contextMenu {
-                                Button(note.isPinned ? "Unpin from Today" : "Pin to Today") {
-                                    try? noteRepository?.setPinned(note, !note.isPinned)
-                                }
-                                .disabled(noteRepository == nil)
-                                noteTemplateContextMenu(note)
-                                moveToFolderMenu(for: note)
-                            }
-                        }
-                    } header: {
-                        sectionHeader(group)
-                            .listRowBackground(Color.clear)
-                    }
-                }
-            }
-            .listStyle(.plain)
-            // Touch Liquid pass: transparent list on a single light-glass panel
-            // over the shell aurora (mirrors Tasks + the `LiquidTodayScreen` card
-            // family), inset so the aurora reads at the margins.
-            .scrollContentBackground(.hidden)
-            .background {
-                Color.clear
-                    .liquidLightCard(cornerRadius: DS.Radius.l)
-                    .padding(.horizontal, DS.Space.s)
-                    .padding(.bottom, DS.Space.s)
-            }
-        }
-    }
-
-    private func sectionHeader(_ group: NoteListGrouping.Group) -> some View {
-        HStack(spacing: 7) {
-            Text(group.title)
-                .nexusType(.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
-            NexusCount(value: group.notes.count, font: NexusType.metaMono)
-            if groupMode == .folder, group.id != NoteListGrouping.noFolderGroupID {
-                Menu {
-                    Button("Rename Folder…") { promptRenameFolder(group.id) }
-                    Button("Remove Folder (Keep Notes)", role: .destructive) {
-                        removeFolder(group.id)
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.caption)
-                        .foregroundStyle(NexusColor.Text.tertiary)
-                }
-                .accessibilityLabel("Folder actions for \(group.title)")
-            }
-            Spacer(minLength: 0)
         }
     }
 
@@ -459,3 +391,210 @@ public struct NotesListView: View {
         openTodaysDailyNote()
     }
 }
+
+// MARK: - iOS composition + bulk actions
+
+#if !os(macOS)
+extension NotesListView {
+
+    // MARK: - iOS list
+
+    @ViewBuilder var iosContent: some View {
+        if notes.isEmpty {
+            NexusEmptyState(
+                systemImage: "note.text",
+                title: "No notes yet",
+                message: "Capture a thought, draft a page, or link ideas together."
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            List {
+                ForEach(groups) { group in
+                    Section {
+                        ForEach(group.notes) { note in
+                            Button {
+                                if selection.isSelecting { selection.toggle(id: note.id) } else { path.append(note.id) }
+                            } label: {
+                                NoteListRow(note: note, backlinkCount: backlinkCounts[note.id] ?? 0)
+                            }
+                            .buttonStyle(.plain)
+                            .listRowBackground(Color.clear)
+                            .selectable(
+                                isSelecting: selection.isSelecting,
+                                isSelected: selection.isSelected(id: note.id),
+                                onToggle: { selection.toggle(id: note.id) }
+                            )
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    deleteNote(note)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button {
+                                    try? noteRepository?.setPinned(note, !note.isPinned)
+                                } label: {
+                                    Label(
+                                        note.isPinned ? "Unpin" : "Pin to Today",
+                                        systemImage: note.isPinned ? "star.slash" : "star"
+                                    )
+                                }
+                                .tint(note.isPinned ? .gray : .yellow)
+                            }
+                            .contextMenu {
+                                noteRowContextMenu(note)
+                            }
+                        }
+                    } header: {
+                        sectionHeader(group)
+                            .listRowBackground(Color.clear)
+                    }
+                }
+            }
+            .listStyle(.plain)
+            // Touch Liquid pass: transparent list on a single light-glass panel
+            // over the shell aurora (mirrors Tasks + the `LiquidTodayScreen` card
+            // family), inset so the aurora reads at the margins.
+            .scrollContentBackground(.hidden)
+            .background {
+                Color.clear
+                    .liquidLightCard(cornerRadius: DS.Radius.l)
+                    .padding(.horizontal, DS.Space.s)
+                    .padding(.bottom, DS.Space.s)
+            }
+            .safeAreaInset(edge: .bottom) {
+                BulkActionBar(model: selection, allIDs: notes.map(\.id), actions: iosBulkActions)
+            }
+            .undoToast(undo)
+            // Global ⌘A + palette "Select All Items": select every visible note.
+            .selectAllCommandTarget(in: selection, ids: notes.map(\.id))
+            .onReceive(NotificationCenter.default.publisher(for: .nexusSelectAllActiveSurface)) { _ in
+                selection.enterSelection()
+                selection.selectAll(notes.map(\.id))
+            }
+        }
+    }
+
+    @ViewBuilder private func noteRowContextMenu(_ note: Note) -> some View {
+        Button(note.isPinned ? "Unpin from Today" : "Pin to Today") {
+            try? noteRepository?.setPinned(note, !note.isPinned)
+        }
+        .disabled(noteRepository == nil)
+        Button {
+            PasteboardCopy.string(NoteMarkdownExport.markdown(for: note))
+        } label: {
+            Label("Copy as Markdown", systemImage: "doc.plaintext")
+        }
+        Button {
+            PasteboardCopy.string(NoteMarkdownExport.wikilink(for: note))
+        } label: {
+            Label("Copy Link", systemImage: "link")
+        }
+        Button {
+            convertToTask(note)
+        } label: {
+            Label("Convert to Task", systemImage: "checkmark.square")
+        }
+        .disabled(notesTaskRepository == nil)
+        noteTemplateContextMenu(note)
+        moveToFolderMenu(for: note)
+    }
+
+    // MARK: - iOS bulk actions
+
+    var iosBulkActions: [BulkAction] {
+        [
+            BulkAction(label: "Pin to Today", systemImage: "star") {
+                let ids = Array(selection.selectedIDs)
+                let targets = notes.filter { ids.contains($0.id) }
+                for note in targets { try? noteRepository?.setPinned(note, true) }
+                selection.exitSelection()
+            },
+            BulkAction(label: "Move…", systemImage: "folder") {
+                bulkMovePickerShown = true
+            },
+            BulkAction(label: "Copy as Markdown", systemImage: "doc.plaintext") {
+                let ids = Array(selection.selectedIDs)
+                let targets = notes.filter { ids.contains($0.id) }
+                let markdown = MarkdownExport.list(targets.map { NoteMarkdownExport.markdown(for: $0) })
+                PasteboardCopy.string(markdown)
+                selection.exitSelection()
+            },
+            BulkAction(label: "Delete", systemImage: "trash", role: .destructive) {
+                let ids = Array(selection.selectedIDs)
+                let targets = notes.filter { ids.contains($0.id) }
+                for note in targets { try? noteRepository?.delete(note) }
+                selection.exitSelection()
+                let count = targets.count
+                undo.show(message: "Deleted \(count) note\(count == 1 ? "" : "s")") {
+                    for note in targets { try? noteRepository?.restore(note) }
+                }
+            },
+        ]
+    }
+
+    @ViewBuilder var iosBulkMovePicker: some View {
+        NavigationStack {
+            List {
+                Button("No Folder") {
+                    bulkMoveNotesToFolder(nil)
+                    bulkMovePickerShown = false
+                }
+                ForEach(folderMovePaths, id: \.self) { folderPath in
+                    Button(folderPath) {
+                        bulkMoveNotesToFolder(folderPath)
+                        bulkMovePickerShown = false
+                    }
+                }
+            }
+            .navigationTitle("Move to Folder")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { bulkMovePickerShown = false }
+                }
+            }
+        }
+    }
+
+    func bulkMoveNotesToFolder(_ path: String?) {
+        let ids = Array(selection.selectedIDs)
+        let targets = notes.filter { ids.contains($0.id) }
+        for note in targets { try? noteRepository?.setFolderPath(note, path) }
+        selection.exitSelection()
+    }
+
+    func convertToTask(_ note: Note) {
+        guard let notesTaskRepository else { return }
+        let draft = NoteTaskConversion.draft(from: note)
+        let task = TaskItem(title: draft.title, body: draft.body)
+        do {
+            try notesTaskRepository.insert(task)
+            try noteRepository?.delete(note)
+        } catch {
+            // Insert failed: leave the note intact.
+        }
+    }
+
+    func sectionHeader(_ group: NoteListGrouping.Group) -> some View {
+        HStack(spacing: 7) {
+            Text(group.title)
+                .nexusType(.eyebrow)
+                .foregroundStyle(NexusColor.Text.tertiary)
+            NexusCount(value: group.notes.count, font: NexusType.metaMono)
+            if groupMode == .folder, group.id != NoteListGrouping.noFolderGroupID {
+                Menu {
+                    Button("Rename Folder…") { promptRenameFolder(group.id) }
+                    Button("Remove Folder (Keep Notes)", role: .destructive) { removeFolder(group.id) }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.caption)
+                        .foregroundStyle(NexusColor.Text.tertiary)
+                }
+                .accessibilityLabel("Folder actions for \(group.title)")
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+#endif

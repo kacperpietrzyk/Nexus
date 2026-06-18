@@ -20,6 +20,7 @@ public struct iOSMeetingsListView: View {  // swiftlint:disable:this type_name
 struct IOSMeetingsListContentView: View {
     private let composition: MeetingsComposition
     @State private var meetings: [Meeting] = []
+    @State private var undo = UndoController()
 
     init(composition: MeetingsComposition) {
         self.composition = composition
@@ -44,6 +45,7 @@ struct IOSMeetingsListContentView: View {
                         .swipeActions(edge: .leading) {
                             Button {
                                 try? composition.meetingRepository.setPinned(meeting, !meeting.isPinned)
+                                reload()
                             } label: {
                                 Label(
                                     meeting.isPinned ? "Unpin" : "Pin to Today",
@@ -51,6 +53,40 @@ struct IOSMeetingsListContentView: View {
                                 )
                             }
                             .tint(meeting.isPinned ? .gray : .yellow)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                softDelete(meeting)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        .contextMenu {
+                            Button {
+                                try? composition.meetingRepository.setPinned(meeting, !meeting.isPinned)
+                                reload()
+                            } label: {
+                                Label(
+                                    meeting.isPinned ? "Unpin from Today" : "Pin to Today",
+                                    systemImage: meeting.isPinned ? "star.slash" : "star"
+                                )
+                            }
+
+                            Divider()
+
+                            Button {
+                                copySummary(meeting)
+                            } label: {
+                                Label("Copy Summary as Markdown", systemImage: "doc.on.doc")
+                            }
+
+                            Divider()
+
+                            Button(role: .destructive) {
+                                softDelete(meeting)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
                     }
                 }
@@ -69,6 +105,45 @@ struct IOSMeetingsListContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
             reload()
         }
+        .undoToast(undo)
+    }
+
+    // MARK: - Actions
+
+    private func softDelete(_ meeting: Meeting) {
+        meeting.deletedAt = Date()
+        meeting.updatedAt = Date()
+        try? composition.meetingRepository.context.save()
+        reload()
+        let meetingID = meeting.id
+        undo.show(message: "Meeting deleted", icon: "trash") {
+            meeting.deletedAt = nil
+            meeting.updatedAt = Date()
+            try? composition.meetingRepository.context.save()
+            reload()
+            _ = meetingID  // capture to keep alive
+        }
+    }
+
+    private func copySummary(_ meeting: Meeting) {
+        let sections = MeetingSummarySections.parse(summaryText: meeting.summaryText)
+        var parts: [String] = []
+        if let overview = sections.overview, !overview.isEmpty {
+            parts.append(overview)
+        }
+        if !sections.decisions.isEmpty {
+            parts.append("### Decisions\n\n" + sections.decisions.map { "- \($0)" }.joined(separator: "\n"))
+        }
+        for section in sections.extraSections {
+            parts.append("### \(section.title)\n\n" + section.items.map { "- \($0)" }.joined(separator: "\n"))
+        }
+        let body = parts.joined(separator: "\n\n")
+        let markdown = MarkdownExport.entity(
+            title: meeting.title,
+            body: body,
+            metadata: [meeting.startedAt.formatted(date: .abbreviated, time: .shortened)]
+        )
+        PasteboardCopy.string(markdown)
     }
 
     private func reload() {

@@ -89,6 +89,8 @@ struct WeekGrid: View {
     /// Tapping an empty slot in a day column: opens a new-event editor seeded at
     /// the snapped slot time (nil ⇒ no create affordance on the grid body).
     var onCreateAt: ((Date) -> Void)?
+    /// Context menu actions on event/block cells; nil suppresses all menus.
+    var onContextAction: ((TimelineItem, EventContextMenuAction) -> Void)?
 
     @State private var dropSlot: WeekDropSlot?
 
@@ -296,9 +298,14 @@ struct WeekGrid: View {
         let usableWidth = max(0, columnWidth - 4)
         return ForEach(positioned) { entry in
             let laneWidth = usableWidth / CGFloat(entry.columnCount)
-            WeekEventBlock(item: entry.item, height: entry.height, onTap: { onTapItem(entry.item) })
-                .frame(width: max(0, laneWidth - 2), height: entry.height)
-                .offset(x: 2 + CGFloat(entry.columnIndex) * laneWidth, y: entry.yOffset)
+            WeekEventBlock(
+                item: entry.item,
+                height: entry.height,
+                onTap: { onTapItem(entry.item) },
+                onContextAction: onContextAction.map { handler in { action in handler(entry.item, action) } }
+            )
+            .frame(width: max(0, laneWidth - 2), height: entry.height)
+            .offset(x: 2 + CGFloat(entry.columnIndex) * laneWidth, y: entry.yOffset)
         }
     }
 

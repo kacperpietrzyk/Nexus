@@ -22,7 +22,12 @@ public struct AgentThreadRail: View {
                 threads: viewModel.threads,
                 currentThreadID: viewModel.currentThreadID,
                 onSelect: viewModel.selectThread(id:),
-                onArchive: viewModel.archive(threadID:)
+                onArchive: viewModel.archive(threadID:),
+                onUnarchive: viewModel.unarchive(threadID:),
+                onDelete: viewModel.delete(threadID:),
+                onRename: viewModel.rename(threadID:title:),
+                onTogglePin: viewModel.togglePin(threadID:),
+                onExportMarkdown: viewModel.exportMarkdown(threadID:)
             )
             .frame(width: 248)
 

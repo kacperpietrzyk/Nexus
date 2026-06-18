@@ -35,6 +35,10 @@ public final class CalendarViewModel {
     public private(set) var seriesPreviews: [SeriesOccurrencePreview] = []
 
     private let context: ModelContext
+    /// Internal accessors for extension methods (e.g. `+ContextActions`).
+    var modelContext: ModelContext { context }
+    var currentDate: () -> Date { now }
+    var calendarInstance: Calendar { calendar }
     private let reader: any CalendarEventProviding
     private let writer: (any CalendarEventWriting)?
     private let listing: (any CalendarListing)?
@@ -420,17 +424,6 @@ public final class CalendarViewModel {
         )
     }
 
-    /// Format an attendee for the read-only editor list: "Name (email)" when both
-    /// are present, otherwise whichever the invite carried; nil only when neither.
-    static func attendeeDisplay(_ attendee: CalendarEvent.Attendee) -> String? {
-        switch (attendee.name, attendee.email) {
-        case (let name?, let email?): return "\(name) (\(email))"
-        case (let name?, nil): return name
-        case (nil, let email?): return email
-        case (nil, nil): return nil
-        }
-    }
-
     /// Open task ids + titles for the manual-block picker (candidates to schedule).
     public func schedulableTasks() -> [(id: UUID, title: String)] {
         let openRaw = TaskStatus.open.rawValue
@@ -443,19 +436,6 @@ public final class CalendarViewModel {
 
     public func savePreferences(_ prefs: CalendarPreferences) {
         preferencesStore.save(prefs)
-    }
-
-    // MARK: - Error copy
-
-    /// User-facing `lastError` copy: `CalendarProviderError` carries its own
-    /// message (`LocalizedError`), so surfaces never render the enum's debug
-    /// shape (`underlying("…")`); anything else falls back to the debug
-    /// description as before.
-    nonisolated static func errorMessage(_ error: any Error) -> String {
-        if let providerError = error as? CalendarProviderError {
-            return providerError.errorDescription ?? String(describing: error)
-        }
-        return String(describing: error)
     }
 
     // MARK: - Calendar math
