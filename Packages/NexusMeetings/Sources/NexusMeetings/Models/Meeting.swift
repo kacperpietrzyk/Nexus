@@ -26,6 +26,11 @@ public final class Meeting: Linkable, Searchable {
     public var updatedAt: Date = Date()
     public var deletedAt: Date?
     public var externalSourceID: String?
+    /// Whether the user has pinned this meeting to the Today dashboard.
+    /// Additive/defaulted — CloudKit-safe lightweight migration.
+    public var isPinned: Bool = false
+    /// When the meeting was most recently pinned. nil if never pinned.
+    public var pinnedAt: Date?
 
     public init(
         id: UUID = UUID(),

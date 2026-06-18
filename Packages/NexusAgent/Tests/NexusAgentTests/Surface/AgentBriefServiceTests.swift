@@ -210,6 +210,197 @@ struct AgentBriefServiceTests {
         #expect(text == "legacy empty")
     }
 
+    @Test
+    func inputsHashIsDeterministicForIdenticalInputs() {
+        let calendar = Self.utcCalendar
+        let a = AgentBriefService.inputsHash(for: Self.request, calendar: calendar)
+        let b = AgentBriefService.inputsHash(for: Self.request, calendar: calendar)
+        #expect(a == b)
+        // Stable string, not a per-launch-seeded Hasher value.
+        #expect(a == "2023-11-14|o1|t2|n3|a4|Review PR\u{1F}Plan sprint")
+    }
+
+    @Test
+    func inputsHashDiffersWhenCountsOrTitlesChange() {
+        let calendar = Self.utcCalendar
+        let base = AgentBriefService.inputsHash(for: Self.request, calendar: calendar)
+
+        let differentCounts = AgentBriefRequest(
+            counts: AgentBriefCounts(overdue: 9, today: 2, noDate: 3, awaiting: 4),
+            firstTitles: ["Review PR", "Plan sprint"],
+            now: Self.request.now
+        )
+        let differentTitles = AgentBriefRequest(
+            counts: Self.request.counts,
+            firstTitles: ["Different task"],
+            now: Self.request.now
+        )
+        #expect(AgentBriefService.inputsHash(for: differentCounts, calendar: calendar) != base)
+        #expect(AgentBriefService.inputsHash(for: differentTitles, calendar: calendar) != base)
+    }
+
+    @Test
+    func adoptsPeerNoteWithoutInvokingRuntime() async throws {
+        // Device A (agent) writes the canonical note; Device B adopts it — zero LLM.
+        let calendar = Self.utcCalendar
+        let context = try Self.sharedContext()
+
+        let deviceA = try Self.makeService(
+            context: context,
+            calendar: calendar,
+            scripts: [.text("Shared canonical brief.")]
+        )
+        let textA = await deviceA.service.brief(for: Self.request)
+        #expect(textA == "Shared canonical brief.")
+        #expect(deviceA.provider.prompts.count == 1)
+
+        let deviceB = try Self.makeService(
+            context: context,
+            calendar: calendar,
+            scripts: [.text("device B should NOT generate")]
+        )
+        let textB = await deviceB.service.brief(for: Self.request)
+
+        // Returned text == the canonical note's read-back; runtime never ran.
+        #expect(textB == "Shared canonical brief.")
+        #expect(deviceB.provider.prompts.isEmpty)
+        let notes = try context.fetch(FetchDescriptor<Note>())
+        #expect(notes.count == 1)
+    }
+
+    @Test
+    func legacyDeviceAdoptsAgentNoteWithoutGenerating() async throws {
+        // Anti-ping-pong: a legacy-only device ADOPTS a higher-tier agent note.
+        let calendar = Self.utcCalendar
+        let context = try Self.sharedContext()
+
+        let agentDevice = try Self.makeService(
+            context: context,
+            calendar: calendar,
+            scripts: [.text("Agent-tier brief.")]
+        )
+        _ = await agentDevice.service.brief(for: Self.request)
+
+        let legacyDevice = AgentBriefService(
+            runtime: nil,
+            threadStore: nil,
+            legacy: { _ in "legacy fabricated" },
+            isEnabled: { false },
+            calendar: calendar,
+            dailyNoteWriter: AgentBriefDailyNoteWriter(modelContext: context, calendar: calendar)
+        )
+        let text = await legacyDevice.brief(for: Self.request)
+        #expect(text == "Agent-tier brief.")
+        let notes = try context.fetch(FetchDescriptor<Note>())
+        #expect(notes.count == 1)
+        #expect(notes.first?.plainText == "Agent-tier brief.")
+    }
+
+    @Test
+    func changedInputsRegenerateAndUpsertNewNote() async throws {
+        let calendar = Self.utcCalendar
+        let context = try Self.sharedContext()
+        let device = try Self.makeService(
+            context: context,
+            calendar: calendar,
+            scripts: [.text("First brief."), .text("Second brief.")]
+        )
+        let first = await device.service.brief(for: Self.request)
+        #expect(first == "First brief.")
+
+        // Same day, but counts changed → new inputsHash → regenerate.
+        let evolved = AgentBriefRequest(
+            counts: AgentBriefCounts(overdue: 5, today: 6, noDate: 7, awaiting: 8),
+            firstTitles: Self.request.firstTitles,
+            now: Self.request.now
+        )
+        let second = await device.service.brief(for: evolved)
+        #expect(second == "Second brief.")
+        #expect(device.provider.prompts.count == 2)
+
+        // One note (same day), now carrying the latest brief + inputsHash.
+        let notes = try context.fetch(FetchDescriptor<Note>())
+        #expect(notes.count == 1)
+        #expect(notes.first?.plainText == "Second brief.")
+        #expect(
+            Self.property(notes.first, AgentBriefDailyNoteWriter.inputsHashKey)
+                == AgentBriefService.inputsHash(for: evolved, calendar: calendar)
+        )
+    }
+
+    @Test
+    func agentDeviceUpgradesLegacyNoteOnceThenDamps() async throws {
+        let calendar = Self.utcCalendar
+        let context = try Self.sharedContext()
+
+        let legacyDevice = AgentBriefService(
+            runtime: nil,
+            threadStore: nil,
+            legacy: { _ in "Legacy brief." },
+            isEnabled: { false },
+            calendar: calendar,
+            dailyNoteWriter: AgentBriefDailyNoteWriter(modelContext: context, calendar: calendar)
+        )
+        _ = await legacyDevice.brief(for: Self.request)
+        #expect(Self.noteSource(in: context) == AgentBriefSource.legacy.rawValue)
+        // An agent device upgrades it — exactly once.
+        let agentDevice = try Self.makeService(
+            context: context,
+            calendar: calendar,
+            scripts: [.text("Upgraded agent brief."), .text("second upgrade should not happen")]
+        )
+        let firstUpgrade = await agentDevice.service.brief(for: Self.request)
+        #expect(firstUpgrade == "Upgraded agent brief.")
+        #expect(agentDevice.provider.prompts.count == 1)
+        #expect(Self.noteSource(in: context) == AgentBriefSource.agent.rawValue)
+        // A second reload (note now agent-tier) ADOPTS — no second runtime turn.
+        let secondReload = await agentDevice.service.brief(for: Self.request)
+        #expect(secondReload == "Upgraded agent brief.")
+        #expect(agentDevice.provider.prompts.count == 1)
+    }
+
+    private static var utcCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private static func sharedContext() throws -> ModelContext {
+        try AgentBriefHarness.make(scripts: []).modelContext
+    }
+
+    private struct DeviceServices {
+        let service: AgentBriefService
+        let provider: AgentBriefScriptedAIProvider
+    }
+
+    private static func makeService(
+        context: ModelContext,
+        calendar: Calendar,
+        scripts: [AgentBriefScriptedAIProvider.Script]
+    ) throws -> DeviceServices {
+        let harness = try AgentBriefHarness.make(context: context, scripts: scripts)
+        let service = AgentBriefService(
+            runtime: harness.runtime,
+            threadStore: harness.threadStore,
+            legacy: { _ in "legacy" },
+            calendar: calendar,
+            dailyNoteWriter: AgentBriefDailyNoteWriter(modelContext: context, calendar: calendar)
+        )
+        return DeviceServices(service: service, provider: harness.provider)
+    }
+
+    private static func noteSource(in context: ModelContext) -> String? {
+        property(try? context.fetch(FetchDescriptor<Note>()).first, AgentBriefDailyNoteWriter.sourceKey)
+    }
+
+    private static func property(_ note: Note?, _ key: String) -> String? {
+        guard let note, let value = note.properties.first(where: { $0.key == key })?.value,
+            case .string(let string) = value
+        else { return nil }
+        return string
+    }
+
     private static let request = AgentBriefRequest(
         counts: AgentBriefCounts(overdue: 1, today: 2, noDate: 3, awaiting: 4),
         firstTitles: ["Review PR", "Plan sprint"],
@@ -226,7 +417,15 @@ private struct AgentBriefHarness {
 
     @MainActor
     static func make(scripts: [AgentBriefScriptedAIProvider.Script]) throws -> AgentBriefHarness {
-        let modelContext = try makeModelContext()
+        try make(context: makeModelContext(), scripts: scripts)
+    }
+
+    /// Build a harness over an EXISTING context — two "devices" share one store.
+    @MainActor
+    static func make(
+        context modelContext: ModelContext,
+        scripts: [AgentBriefScriptedAIProvider.Script]
+    ) throws -> AgentBriefHarness {
         let threadStore = AgentThreadStore(context: modelContext)
         let messageStore = AgentMessageStore(context: modelContext)
         let memoryStore = AgentMemoryStore(context: modelContext)

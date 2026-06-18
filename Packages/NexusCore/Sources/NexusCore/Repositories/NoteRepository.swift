@@ -288,6 +288,13 @@ public final class NoteRepository {
         return changed
     }
 
+    public func setPinned(_ note: Note, _ pinned: Bool) throws {
+        note.isPinned = pinned
+        note.pinnedAt = pinned ? now() : nil
+        note.updatedAt = now()
+        try context.save()
+    }
+
     /// Delete a note (spec §8): three independent sweeps —
     /// (a) delete outgoing links where `fromID == note.id` (todos detach, tasks
     ///     survive); incoming links are left for their owners to repair;

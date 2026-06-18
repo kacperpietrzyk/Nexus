@@ -31,6 +31,11 @@ public final class Note: Searchable {
     public var createdAt: Date = Date.now
     public var updatedAt: Date = Date.now
     public var deletedAt: Date?
+    /// Whether the user has pinned this note to the Today dashboard.
+    /// Additive/defaulted — CloudKit-safe lightweight migration.
+    public var isPinned: Bool = false
+    /// When the note was most recently pinned. nil if never pinned.
+    public var pinnedAt: Date?
 
     /// Custom property bag (Tranche 2, Obsidian O6). JSON-encoded ordered
     /// `[NoteProperty]` (array, NOT a dict — preserves user order so

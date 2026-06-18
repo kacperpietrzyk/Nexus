@@ -29,6 +29,25 @@ struct LiquidTodayModelTests {
         #expect(groups[2].tasks.map(\.title) == ["today none"])
     }
 
+    @Test("Within a priority group, overdue task precedes due-today task")
+    @MainActor
+    func priorityGroupingOverdueBeforeToday() {
+        let overdueTask = TaskItem(title: "overdue medium", dueAt: .now.addingTimeInterval(-86_400), priority: .medium)
+        let todayTask = TaskItem(title: "today medium", dueAt: .now, priority: .medium)
+
+        let groups = LiquidTodayModel.priorityGroups(
+            overdue: [overdueTask],
+            today: [todayTask]
+        )
+
+        #expect(groups.count == 1)
+        let mediumGroup = groups[0]
+        #expect(mediumGroup.priority == .medium)
+        #expect(mediumGroup.tasks.count == 2)
+        #expect(mediumGroup.tasks[0].id == overdueTask.id)
+        #expect(mediumGroup.tasks[1].id == todayTask.id)
+    }
+
     @Test("Deduplicates a task present in both the overdue and today buckets")
     @MainActor
     func priorityGroupingDeduplicates() {
@@ -38,36 +57,59 @@ struct LiquidTodayModelTests {
         #expect(groups[0].tasks.count == 1)
     }
 
-    // MARK: - Agenda assembly
+    // MARK: - rankedTodayPriorities
 
-    @Test("Sorts timed events + accepted blocks by start; all-day floats to the top")
+    @Test("rankedTodayPriorities orders pinned > overdue > priority > due, capped at 5")
     @MainActor
-    func agendaAssembly() {
+    func rankedPrioritiesOrdering() {
         let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: .now)
-        let nine = dayStart.addingTimeInterval(9 * 3600)
-        let eleven = dayStart.addingTimeInterval(11 * 3600)
+        let now = Date.now
+        let yesterday = now.addingTimeInterval(-86_400)
+        let tomorrow = now.addingTimeInterval(86_400)
 
-        let timed = CalendarEvent(id: "e1", title: "Standup", start: eleven, end: eleven.addingTimeInterval(1800))
-        let allDay = CalendarEvent(id: "e2", title: "Offsite", start: dayStart, end: dayStart.addingTimeInterval(86_400), isAllDay: true)
-        let block = ScheduledBlock(
-            taskID: UUID(),
-            start: nine,
-            end: nine.addingTimeInterval(3600),
-            title: "Deep work",
-            status: .accepted
-        )
+        // a: pinned, low priority, no due -> must come first (pin wins)
+        let a = TaskItem(title: "a-pinned-low", priority: .low, pinnedAsFocus: true)
+        // b: not pinned, overdue (due yesterday) -> second (overdue beats priority)
+        let b = TaskItem(title: "b-overdue", dueAt: yesterday, priority: .low)
+        // c: not pinned, high priority, due tomorrow -> third
+        let c = TaskItem(title: "c-high-tomorrow", dueAt: tomorrow, priority: .high)
+        // d: not pinned, medium priority, due today -> fourth
+        let d = TaskItem(title: "d-medium-today", dueAt: now, priority: .medium)
+        // e..h: four more low-priority no-due tasks -> only one of them shows (cap 5)
+        let e = TaskItem(title: "e-low", priority: .low)
+        let f = TaskItem(title: "f-low", priority: .low)
+        let g = TaskItem(title: "g-low", priority: .low)
+        let h = TaskItem(title: "h-low", priority: .low)
 
-        let items = LiquidTodayModel.agendaItems(events: [timed, allDay], blocks: [block])
+        let tasks = [a, b, c, d, e, f, g, h]
+        let startOfToday = calendar.startOfDay(for: now)
+        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, startOfDay: startOfToday, cap: 5)
+        #expect(ranked.count == 5)
+        #expect(ranked[0].id == a.id)
+        #expect(ranked[1].id == b.id)
+        #expect(ranked[2].id == c.id)
+        #expect(ranked[3].id == d.id)
+    }
 
-        #expect(items.map(\.title) == ["Offsite", "Deep work", "Standup"])
-        #expect(items[1].kind == .focus)
-        #expect(items[2].kind == .meeting)
+    @Test("rankedTodayPriorities caps at the requested limit")
+    @MainActor
+    func rankedPrioritiesCap() {
+        let tasks = (0..<10).map { TaskItem(title: "task-\($0)", priority: .medium) }
+        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, startOfDay: Calendar.current.startOfDay(for: .now), cap: 3)
+        #expect(ranked.count == 3)
+    }
+
+    @Test("rankedTodayPriorities returns all tasks when count is below cap")
+    @MainActor
+    func rankedPrioritiesBelowCap() {
+        let tasks = [TaskItem(title: "only", priority: .high)]
+        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, startOfDay: Calendar.current.startOfDay(for: .now), cap: 5)
+        #expect(ranked.count == 1)
     }
 
     // MARK: - Due metadata
 
-    @Test("Due labels: today, overdue, future")
+    @Test("Due labels: overdue gets indicator; today, future, and undated get nil")
     @MainActor
     func dueLabels() {
         let now = Date.now
@@ -76,9 +118,10 @@ struct LiquidTodayModelTests {
         let future = TaskItem(title: "c", dueAt: now.addingTimeInterval(5 * 86_400))
         let undated = TaskItem(title: "d")
 
-        #expect(TopPrioritiesCard.dueLabel(for: today, now: now) == "Due today")
+        // Only overdue tasks show a label in the ranked shortlist.
+        #expect(TopPrioritiesCard.dueLabel(for: today, now: now) == nil)
         #expect(TopPrioritiesCard.dueLabel(for: overdue, now: now)?.hasPrefix("Overdue · ") == true)
-        #expect(TopPrioritiesCard.dueLabel(for: future, now: now)?.hasPrefix("Due ") == true)
+        #expect(TopPrioritiesCard.dueLabel(for: future, now: now) == nil)
         #expect(TopPrioritiesCard.dueLabel(for: undated, now: now) == nil)
     }
 
@@ -126,6 +169,22 @@ struct LiquidTodayModelTests {
         #expect(LiquidTodayModel.shouldRegenerateBrief(lastInput: input, newInput: sameInput, currentBrief: ""))
         // First load (no prior input) -> regenerate.
         #expect(LiquidTodayModel.shouldRegenerateBrief(lastInput: nil, newInput: input, currentBrief: ""))
+    }
+
+    // MARK: - selectTodayProjects
+
+    @Test("selectTodayProjects puts pinned first (pinnedAt desc), then non-pinned by updatedAt desc, capped at 3")
+    @MainActor
+    func selectTodayProjectsPutsPinnedFirstThenRecent() {
+        func t(_ offset: TimeInterval) -> Date { Date(timeIntervalSince1970: offset) }
+
+        let pinnedOld = Project(name: "pinOld"); pinnedOld.isPinned = true; pinnedOld.pinnedAt = t(1)
+        let pinnedNew = Project(name: "pinNew"); pinnedNew.isPinned = true; pinnedNew.pinnedAt = t(3)
+        let recent = Project(name: "recent"); recent.updatedAt = t(9)
+        let old = Project(name: "old"); old.updatedAt = t(2)
+        let out = LiquidTodayModel.selectTodayProjects([old, recent, pinnedOld, pinnedNew])
+        #expect(out.count == 3)
+        #expect(out.map(\.name) == ["pinNew", "pinOld", "recent"])
     }
 
     // MARK: - Project progress
@@ -179,78 +238,6 @@ struct LiquidTodayModelTests {
         #expect(TodayInspector.elapsedText(for: unstarted, now: now) == "0:00")
     }
 
-    // MARK: - Batched link reads (recentNotes + linkedNotes via reload)
-
-    @Test("reload surfaces linked notes (both link directions) + recent-note link degrees via batched reads")
-    @MainActor
-    func batchedLinkReadsMatchPerItemSemantics() async throws {
-        let container = try ModelContainer(
-            for: TaskItem.self, Link.self, Project.self, Note.self, ScheduledBlock.self,
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-        )
-        let context = ModelContext(container)
-        let now = Date.now
-
-        // Two tasks due today (these feed linkedNotes via overdue + today).
-        let taskA = TaskItem(title: "task A", dueAt: now)
-        let taskB = TaskItem(title: "task B", dueAt: now)
-        context.insert(taskA)
-        context.insert(taskB)
-
-        // noteOut: task -> note (outgoing). noteIn: note -> task (backlink).
-        // noteRecentOnly: not linked to any task, but linked to noteOut (gives it degree).
-        let noteOut = Note(title: "out")
-        let noteIn = Note(title: "in")
-        let noteRecentOnly = Note(title: "recent only")
-        // Distinct updatedAt so recentNotes (updatedAt desc, limit 4) is deterministic.
-        noteOut.updatedAt = Date(timeIntervalSince1970: 3_000)
-        noteIn.updatedAt = Date(timeIntervalSince1970: 2_000)
-        noteRecentOnly.updatedAt = Date(timeIntervalSince1970: 1_000)
-        context.insert(noteOut)
-        context.insert(noteIn)
-        context.insert(noteRecentOnly)
-        try context.save()
-
-        let repo = LinkRepository(context: context)
-        try repo.create(from: (.task, taskA.id), to: (.note, noteOut.id), linkKind: .mentions)
-        try repo.create(from: (.note, noteIn.id), to: (.task, taskB.id), linkKind: .mentions)
-        // Give noteOut a backlink from noteRecentOnly so recentNotes degree > 0.
-        try repo.create(from: (.note, noteRecentOnly.id), to: (.note, noteOut.id), linkKind: .mentions)
-
-        // Ground truth: compute expected results with the per-item API directly.
-        let expectedLinkedNoteIDs = Set([noteOut.id, noteIn.id])
-        // recentNotes degree (outgoing + backlinks) per note, per-item API.
-        func degree(_ id: UUID) throws -> Int {
-            try repo.outgoing(from: (.note, id)).count + repo.backlinks(to: (.note, id)).count
-        }
-        let expectedDegrees = [
-            noteOut.id: try degree(noteOut.id),
-            noteIn.id: try degree(noteIn.id),
-            noteRecentOnly.id: try degree(noteRecentOnly.id),
-        ]
-
-        let model = LiquidTodayModel()
-        await model.reload(
-            modelContext: context,
-            calendarProvider: MockCalendarEventProvider(status: .denied),
-            calendarEventsEnabled: false,
-            meetingIntelProvider: nil,
-            briefProvider: nil,
-            now: now
-        )
-
-        #expect(model.loadError == nil)
-        // linkedNotes: collected from both task link directions.
-        #expect(Set(model.linkedNotes.map(\.id)) == expectedLinkedNoteIDs)
-        // recentNotes link degrees match the per-item computation byte-for-byte.
-        for summary in model.notes {
-            #expect(summary.linkCount == expectedDegrees[summary.note.id])
-        }
-        // noteOut carries two backlinks (from taskA and from noteRecentOnly).
-        let outSummary = model.notes.first { $0.note.id == noteOut.id }
-        #expect(outSummary?.linkCount == 2)
-    }
-
     // MARK: - Skip-redundant-reload gate (return-navigation, FIX 1)
 
     @MainActor
@@ -272,7 +259,7 @@ struct LiquidTodayModelTests {
             modelContext: context,
             calendarProvider: MockCalendarEventProvider(status: .denied),
             calendarEventsEnabled: false,
-            meetingIntelProvider: nil,
+            decisionsProvider: nil,
             briefProvider: nil,
             now: now
         )
@@ -356,7 +343,7 @@ struct LiquidTodayModelTests {
             modelContext: context,
             calendarProvider: MockCalendarEventProvider(status: .denied),
             calendarEventsEnabled: true,
-            meetingIntelProvider: nil,
+            decisionsProvider: nil,
             briefProvider: nil,
             now: now
         )
@@ -380,11 +367,112 @@ struct LiquidTodayModelTests {
 
         #expect(gated.priorityGroups == baseline.priorityGroups)
         #expect(gated.projects == baseline.projects)
-        #expect(gated.notes == baseline.notes)
-        #expect(gated.agendaItems == baseline.agendaItems)
-        #expect(gated.linkedNotes.map(\.id) == baseline.linkedNotes.map(\.id))
         #expect(gated.projectNamesByID == baseline.projectNamesByID)
         #expect(gated.storeLoadCount == 1)
+    }
+
+    // MARK: - upNextEvents
+
+    /// Test-only convenience to read the start hour from a CalendarEvent.
+    private func startHour(of event: CalendarEvent) -> Int {
+        Calendar.current.component(.hour, from: event.start)
+    }
+
+    @Test("upNextEvents keeps today's not-yet-ended non-all-day events, sorted, capped at 3")
+    @MainActor
+    func upNextBounding() {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: .now)
+        func at(_ hour: Int) -> Date { dayStart.addingTimeInterval(Double(hour) * 3600) }
+
+        let now = at(9)
+
+        // Ended by 8:00 — must be excluded
+        let ended = CalendarEvent(id: "ended", title: "Ended", start: at(7), end: at(8))
+        // Four upcoming at 10/11/13/15 — only first 3 should appear
+        let e10 = CalendarEvent(id: "e10", title: "Ten", start: at(10), end: at(10) + 3600)
+        let e11 = CalendarEvent(id: "e11", title: "Eleven", start: at(11), end: at(11) + 3600)
+        let e13 = CalendarEvent(id: "e13", title: "Thirteen", start: at(13), end: at(13) + 3600)
+        let e15 = CalendarEvent(id: "e15", title: "Fifteen", start: at(15), end: at(15) + 3600)
+
+        let events = [ended, e10, e11, e13, e15]
+        let next = LiquidTodayModel.upNextEvents(events, now: now, cap: 3)
+        #expect(next.count == 3)
+        #expect(next.map { startHour(of: $0) } == [10, 11, 13])
+    }
+
+    @Test("upNextEvents excludes all-day events")
+    @MainActor
+    func upNextExcludesAllDay() {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: .now)
+        let allDay = CalendarEvent(
+            id: "allday", title: "All Day", start: dayStart,
+            end: dayStart.addingTimeInterval(86_400), isAllDay: true
+        )
+        let timed = CalendarEvent(
+            id: "timed", title: "Timed", start: dayStart.addingTimeInterval(10 * 3600),
+            end: dayStart.addingTimeInterval(11 * 3600)
+        )
+        let next = LiquidTodayModel.upNextEvents([allDay, timed], now: dayStart, cap: 3)
+        #expect(next.count == 1)
+        #expect(next[0].id == "timed")
+    }
+
+    @Test("upNextEventCount returns total not-ended non-all-day today events (not capped)")
+    @MainActor
+    func upNextEventCount() {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: .now)
+        func at(_ hour: Int) -> Date { dayStart.addingTimeInterval(Double(hour) * 3600) }
+        let now = at(9)
+        let events = [
+            CalendarEvent(id: "e10", title: "Ten", start: at(10), end: at(10) + 3600),
+            CalendarEvent(id: "e11", title: "Eleven", start: at(11), end: at(11) + 3600),
+            CalendarEvent(id: "e13", title: "Thirteen", start: at(13), end: at(13) + 3600),
+            CalendarEvent(id: "e15", title: "Fifteen", start: at(15), end: at(15) + 3600),
+        ]
+        let count = LiquidTodayModel.upNextEventCount(events, now: now)
+        #expect(count == 4)
+    }
+
+    // MARK: - Focus gap (Task 6: empty-calendar reframe)
+
+    @Test("suggestedFocusGap returns nil when events array is empty")
+    @MainActor
+    func focusGapNilWhenNoEvents() {
+        // A passthrough provider that always claims the whole window is free —
+        // so a non-nil result can only come from the events-empty guard.
+        let passthroughProvider: LiquidTodayFocusGapProvider = { _, window in [window] }
+        let now =
+            Calendar.current.date(
+                bySettingHour: 9, minute: 0, second: 0,
+                of: Calendar.current.startOfDay(for: .now)
+            ) ?? .now
+        let gap = LiquidTodayModel.suggestedFocusGap(events: [], provider: passthroughProvider, now: now)
+        #expect(gap == nil)
+    }
+
+    @Test("suggestedFocusGap returns a non-nil gap when at least one event is present")
+    @MainActor
+    func focusGapPresentWhenEventsExist() {
+        // A provider that always returns the whole remaining window as one gap.
+        let realProvider: LiquidTodayFocusGapProvider = { _, window in [window] }
+        let now =
+            Calendar.current.date(
+                bySettingHour: 9, minute: 0, second: 0,
+                of: Calendar.current.startOfDay(for: .now)
+            ) ?? .now
+        let dayStart = Calendar.current.startOfDay(for: now)
+        let eventStart = dayStart.addingTimeInterval(10 * 3600)
+        let event = CalendarEvent(
+            id: "e1",
+            title: "Meeting",
+            start: eventStart,
+            end: eventStart.addingTimeInterval(3600)
+        )
+        let gap = LiquidTodayModel.suggestedFocusGap(events: [event], provider: realProvider, now: now)
+        #expect(gap != nil)
     }
 
     // MARK: - Reference data
@@ -393,12 +481,41 @@ struct LiquidTodayModelTests {
     @MainActor
     func referenceTodaySnapshotIsDense() {
         let snapshot = LiquidTodayReferenceData.snapshot(now: .now)
-        #expect(snapshot.agendaItems.count >= 5)
         #expect(snapshot.priorityGroups.count >= 3)
         #expect(snapshot.projects.count >= 3)
-        #expect(snapshot.notes.count >= 3)
-        #expect(snapshot.linkedNotes.count >= 2)
-        #expect(snapshot.meetingIntel?.actionItemCount ?? 0 >= 3)
+        #expect(!snapshot.decisions.isEmpty)
         #expect(!snapshot.brief.isEmpty)
+    }
+
+}
+
+// MARK: - aggregateDecisions
+
+@Suite("LiquidTodayModel.aggregateDecisions")
+struct LiquidTodayModelDecisionsTests {
+
+    @Test("aggregateDecisions flattens newest-first and caps at 5")
+    @MainActor
+    func aggregateDecisionsCap() {
+        let older = LiquidTodayMeetingDecisions(
+            meetingID: UUID(), meetingTitle: "A",
+            meetingDate: Date(timeIntervalSince1970: 1_000),
+            decisions: ["a1", "a2"]
+        )
+        let newer = LiquidTodayMeetingDecisions(
+            meetingID: UUID(), meetingTitle: "B",
+            meetingDate: Date(timeIntervalSince1970: 2_000),
+            decisions: ["b1", "b2", "b3", "b4"]
+        )
+        let out = LiquidTodayModel.aggregateDecisions([older, newer], cap: 5)
+        #expect(out.count == 5)
+        #expect(out.map(\.text) == ["b1", "b2", "b3", "b4", "a1"])
+        #expect(out[0].meetingTitle == "B")
+    }
+
+    @Test("aggregateDecisions returns empty for no decisions")
+    @MainActor
+    func aggregateDecisionsEmpty() {
+        #expect(LiquidTodayModel.aggregateDecisions([], cap: 5).isEmpty)
     }
 }

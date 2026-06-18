@@ -18,7 +18,7 @@ extension ContentView {
     var liquidTodayMain: some View {
         LiquidTodayScreen(
             model: liquidTodayModel,
-            meetingIntelProvider: { fetchTodayMeetingIntel() },
+            decisionsProvider: { fetchTodayDecisions() },
             briefProvider: dailyBriefProvider,
             // Focus Suggestion seam: CalendarFeature's scheduling intelligence,
             // injected so TasksFeature stays decoupled. The model computes and
@@ -26,6 +26,10 @@ extension ContentView {
             focusGapProvider: { events, window in
                 SchedulingIntelligence.suggestedFocusBlocks(events: events, within: window)
             },
+            // macOS shows the title+date in the toolbar band (LiquidTodayTitle),
+            // so the in-content header is hidden and the cards start higher,
+            // aligning with the right Daily Brief rail.
+            showsInlineHeader: false,
             onNavigate: { navigate(to: $0) },
             onOpenTask: { openTask($0) },
             onOpenCapture: { mode in
@@ -76,29 +80,27 @@ extension ContentView {
         }
     }
 
-    /// Most recent processed meeting (`processedAt != nil`, newest first) as a
-    /// plain value for the Meeting Intelligence card. Runs on the screen's
-    /// reload cadence (initial task + store changes).
+    /// Fetches recent processed meetings and builds the flat decisions feed for the
+    /// Today Decisions card. Decisions are parsed HERE (app layer) so TasksFeature
+    /// never imports NexusMeetings.
     @MainActor
-    private func fetchTodayMeetingIntel() -> LiquidTodayMeetingIntel? {
+    private func fetchTodayDecisions() -> [LiquidTodayDecision] {
+        // Fetch recent-processed meetings (startedAt desc, capped at 10).
         var descriptor = FetchDescriptor<Meeting>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.processedAt != nil },
+            predicate: #Predicate { $0.processedAt != nil && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        descriptor.fetchLimit = 1
-        guard let meeting = try? modelContext.fetch(descriptor).first else { return nil }
-        let status = MeetingProcessingStatus(rawValue: meeting.processingStatus)
-        // Decisions are parsed HERE (app layer) so TasksFeature renders plain
-        // values without importing NexusMeetings; the Today card shows ≤3.
-        let decisions = MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
-        return LiquidTodayMeetingIntel(
-            title: meeting.title,
-            occurredAt: meeting.startedAt,
-            durationSec: meeting.durationSec,
-            summary: meeting.summaryText,
-            decisions: Array(decisions.prefix(3)),
-            actionItemCount: meeting.actionItemIDs.count,
-            statusLabel: status == .ready ? "Processed" : (status == .failed ? "Failed" : "Processing")
-        )
+        descriptor.fetchLimit = 10
+        let meetings = (try? modelContext.fetch(descriptor)) ?? []
+
+        let rows = meetings.map { meeting in
+            LiquidTodayMeetingDecisions(
+                meetingID: meeting.id,
+                meetingTitle: meeting.title,
+                meetingDate: meeting.startedAt,
+                decisions: MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
+            )
+        }
+        return LiquidTodayModel.aggregateDecisions(rows, cap: 5)
     }
 }

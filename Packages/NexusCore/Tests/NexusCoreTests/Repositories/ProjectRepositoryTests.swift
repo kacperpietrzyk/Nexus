@@ -340,4 +340,24 @@ struct ProjectRepositoryTests {
         try repo.setCustomField(key: "k", value: nil, on: project)
         #expect(project.customFields["k"] == nil)
     }
+
+    // MARK: - setPinned
+
+    @MainActor
+    @Test("setPinned sets flag and timestamp, unpin clears them")
+    func setPinnedSetsFlagAndTimestamp() throws {
+        let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context, now: { fixedNow })
+        let project = try repo.create(name: "P")
+
+        try repo.setPinned(project, true)
+        #expect(project.isPinned == true)
+        #expect(project.pinnedAt == fixedNow)
+        #expect(project.updatedAt == fixedNow)
+
+        try repo.setPinned(project, false)
+        #expect(project.isPinned == false)
+        #expect(project.pinnedAt == nil)
+    }
 }

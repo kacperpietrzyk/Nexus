@@ -49,6 +49,9 @@ import SwiftData
 ///   `clientID`/`vendor`/`customFieldsJSON`; universal project types). Pure additive —
 ///   no data move, no backfill. The new `ItemKind.organization` raw case rides the
 ///   existing `String`-backed `Link`/`kind` columns and needs no schema change.
+///   Additive `isPinned`/`pinnedAt` fields on `Project`, `Note`, and `Meeting` also
+///   land in V15 — they are optional/defaulted and require no new version bump;
+///   SwiftData lightweight inference adds the columns automatically.
 ///
 /// WHY the body -> Note move is NOT a `.custom` migration stage (a deliberate
 /// deviation from the spec's "custom stage" wording, forced by this codebase's

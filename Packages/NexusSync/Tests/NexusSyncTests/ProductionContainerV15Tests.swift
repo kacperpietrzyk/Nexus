@@ -79,4 +79,21 @@ struct ProductionContainerV15Tests {
         try context.save()
         #expect(try context.fetch(FetchDescriptor<StubSyncedExtra>()).count == 1)
     }
+
+    /// Gate for pin fields: the in-memory container must persist `isPinned` /
+    /// `pinnedAt` on `Project`. These are additive optional/defaulted fields on V15
+    /// — no version bump needed; lightweight inference adds the columns automatically.
+    @MainActor
+    @Test func v15ContainerPersistsPinFields() throws {
+        let container = try NexusModelContainer.makeInMemory()
+        let context = ModelContext(container)
+        let project = Project(name: "Pinned")
+        project.isPinned = true
+        project.pinnedAt = .now
+        context.insert(project)
+        try context.save()
+        let fetched = try context.fetch(FetchDescriptor<Project>())
+        #expect(fetched.first?.isPinned == true)
+        #expect(fetched.first?.pinnedAt != nil)
+    }
 }

@@ -210,6 +210,15 @@ public final class LiquidMeetingsModel {
 
     // MARK: - Mutations
 
+    /// Pins or unpins a meeting so it surfaces in the Today view.
+    public func togglePin(_ meeting: Meeting, composition: MeetingsComposition) {
+        do {
+            try composition.meetingRepository.setPinned(meeting, !meeting.isPinned)
+        } catch {
+            loadError = String(describing: error)
+        }
+    }
+
     /// Completes / reopens an action item through the real task repository —
     /// the same `TaskCompletionAction` path the rest of the app uses (cascade
     /// fallback for parents with open subtasks; non-interactive surface).

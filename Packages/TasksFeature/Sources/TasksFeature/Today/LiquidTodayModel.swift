@@ -6,42 +6,6 @@ import SwiftData
 
 // MARK: - Cross-module value DTOs (composed in the app layer)
 
-/// Meeting Intelligence snapshot for the Today screen
-/// (`docs/05_MODULE_TODAY.md` §Meeting Intelligence). TasksFeature never
-/// imports NexusMeetings — the app layer fetches the most recent processed
-/// meeting and hands this plain value across the module seam, mirroring the
-/// `meetingsContent: (() -> AnyView)?` injection the old `TodayDashboard` used.
-public struct LiquidTodayMeetingIntel: Equatable, Sendable {
-    public let title: String
-    public let occurredAt: Date
-    public let durationSec: Int
-    public let summary: String
-    /// Decisions parsed from the meeting's summary (the app layer runs
-    /// `MeetingSummarySections.parse` — TasksFeature still never imports
-    /// NexusMeetings). Empty when the summary carries no decisions section.
-    public let decisions: [String]
-    public let actionItemCount: Int
-    public let statusLabel: String
-
-    public init(
-        title: String,
-        occurredAt: Date,
-        durationSec: Int,
-        summary: String,
-        decisions: [String] = [],
-        actionItemCount: Int,
-        statusLabel: String
-    ) {
-        self.title = title
-        self.occurredAt = occurredAt
-        self.durationSec = durationSec
-        self.summary = summary
-        self.decisions = decisions
-        self.actionItemCount = actionItemCount
-        self.statusLabel = statusLabel
-    }
-}
-
 /// Input for the injected Daily Brief provider — the same counts + titles the
 /// old `TodayDashboard.DigestInput.agentBriefRequest(now:)` carried, as a
 /// plain value so TasksFeature does not import NexusAgent. The app layer
@@ -69,14 +33,42 @@ public struct LiquidTodayBriefInput: Equatable, Sendable {
 /// empty state; the screen never fabricates a brief).
 public typealias LiquidTodayBriefProvider = @MainActor (LiquidTodayBriefInput) async -> String
 
-/// Meeting Intelligence seam: the app layer fetches from the NexusMeetings
-/// store on the screen's reload cadence. `nil` = Meetings unavailable.
-public typealias LiquidTodayMeetingIntelProvider = @MainActor () -> LiquidTodayMeetingIntel?
-
 /// Focus Suggestion seam: the app layer passes
 /// `SchedulingIntelligence.suggestedFocusBlocks(events:within:)` (CalendarFeature)
 /// so the inspector can surface today's free gaps without a cross-module import.
 public typealias LiquidTodayFocusGapProvider = @MainActor ([CalendarEvent], DateInterval) -> [DateInterval]
+
+/// One decision surfaced in the cross-meeting Decisions feed on the Today screen.
+/// `id` is stable per (meetingID, index-within-meeting) so `ForEach` diffs are
+/// deterministic across reloads.
+public struct LiquidTodayDecision: Equatable, Sendable, Identifiable {
+    public let id: UUID
+    public let text: String
+    public let meetingTitle: String
+    public let meetingDate: Date
+    public let meetingID: UUID
+}
+
+/// Input row the app shell builds from a meeting (decisions already parsed via
+/// `MeetingSummarySections`): TasksFeature never imports NexusMeetings — the
+/// shell feeds this plain value across the module seam.
+public struct LiquidTodayMeetingDecisions: Equatable, Sendable {
+    public let meetingID: UUID
+    public let meetingTitle: String
+    public let meetingDate: Date
+    public let decisions: [String]
+
+    public init(meetingID: UUID, meetingTitle: String, meetingDate: Date, decisions: [String]) {
+        self.meetingID = meetingID
+        self.meetingTitle = meetingTitle
+        self.meetingDate = meetingDate
+        self.decisions = decisions
+    }
+}
+
+/// Decisions feed seam: the app layer fetches recent meeting decisions and hands
+/// them to the Today screen as a plain closure — `nil` = feed unavailable.
+public typealias LiquidTodayDecisionsProvider = @MainActor () -> [LiquidTodayDecision]
 
 /// Text cleanup shared by the Today cards: model/agent output occasionally
 /// carries `[[accent]]`/`[[mono]]` digest wire markers (see `DigestRenderer`)
@@ -154,18 +146,6 @@ public struct LiquidProjectProgress: Identifiable, Equatable {
     }
 }
 
-/// Notes-card row: a recent note + its Link-graph degree (in + out).
-/// Equatable via model-reference identity + the value field.
-public struct LiquidNoteSummary: Identifiable, Equatable {
-    public let note: Note
-    public let linkCount: Int
-    public var id: UUID { note.id }
-
-    public static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.note === rhs.note && lhs.linkCount == rhs.linkCount
-    }
-}
-
 // MARK: - Model
 
 /// Data feed for `LiquidTodayScreen` + `TodayInspector` (Liquid redesign
@@ -179,19 +159,19 @@ public struct LiquidNoteSummary: Identifiable, Equatable {
 @Observable
 public final class LiquidTodayModel {
 
-    public private(set) var agendaItems: [LiquidAgendaItem] = []
     /// Today's visible calendar events (raw input to the focus-gap seam).
     public private(set) var events: [CalendarEvent] = []
     /// First free focus gap left in today's workday, computed during reload
     /// through the injected `LiquidTodayFocusGapProvider` — the inspector
     /// renders this stored value instead of recomputing in `body`.
     public private(set) var focusSuggestion: DateInterval?
+    /// True when the last reload found at least one calendar event today.
+    /// Lets the Focus Suggestion card distinguish "empty calendar" (open day)
+    /// from "calendar fully booked" (no remaining gap).
+    public private(set) var focusHasCalendarEvents: Bool = false
     public private(set) var priorityGroups: [LiquidPriorityGroup] = []
     public private(set) var projects: [LiquidProjectProgress] = []
-    public private(set) var notes: [LiquidNoteSummary] = []
-    /// Notes linked (Link graph, either direction) to today's priority tasks.
-    public private(set) var linkedNotes: [Note] = []
-    public private(set) var meetingIntel: LiquidTodayMeetingIntel?
+    public private(set) var decisions: [LiquidTodayDecision] = []
     /// First open task pinned as focus (`TaskItem.pinnedAsFocus`) — feeds the
     /// inspector Focus Timer card; `nil` → the card shows its empty state.
     public private(set) var pinnedFocusTask: TaskItem?
@@ -237,7 +217,7 @@ public final class LiquidTodayModel {
         modelContext: ModelContext,
         calendarProvider: any CalendarEventProviding,
         calendarEventsEnabled: Bool,
-        meetingIntelProvider: LiquidTodayMeetingIntelProvider?,
+        decisionsProvider: LiquidTodayDecisionsProvider?,
         briefProvider: LiquidTodayBriefProvider?,
         focusGapProvider: LiquidTodayFocusGapProvider? = nil,
         now: Date = .now
@@ -279,35 +259,25 @@ public final class LiquidTodayModel {
             needsReload = false
             events = fetchedEvents
             focusSuggestion = focusGap
-            agendaItems = Self.agendaItems(events: fetchedEvents, blocks: snapshot.acceptedBlocks)
+            focusHasCalendarEvents = !fetchedEvents.isEmpty
             priorityGroups = Self.priorityGroups(overdue: snapshot.overdue, today: snapshot.today)
             projects = snapshot.projects
-            notes = snapshot.notes
-            linkedNotes = snapshot.linkedNotes
             pinnedFocusTask = snapshot.pinnedFocusTask
             projectNamesByID = snapshot.projectNamesByID
-            meetingIntel = meetingIntelProvider?()
+            decisions = decisionsProvider?() ?? []
             loadError = nil
             await loadBriefIfNeeded(input: snapshot.briefInput, provider: briefProvider, generation: generation)
         } catch {
             guard generation == reloadGeneration else { return }
             events = fetchedEvents
             focusSuggestion = focusGap
-            agendaItems = []
+            focusHasCalendarEvents = !fetchedEvents.isEmpty
             priorityGroups = []
             projects = []
-            notes = []
-            linkedNotes = []
             pinnedFocusTask = nil
+            decisions = []
             loadError = String(describing: error)
         }
-    }
-
-    /// Next upcoming agenda item (start strictly after `now`) — feeds Up Next.
-    public func upNextItem(now: Date = .now) -> LiquidAgendaItem? {
-        agendaItems
-            .filter { !$0.isAllDay && $0.start > now }
-            .min { $0.start < $1.start }
     }
 
     // MARK: - Focus gap
@@ -325,6 +295,7 @@ public final class LiquidTodayModel {
         provider: LiquidTodayFocusGapProvider?,
         now: Date
     ) -> DateInterval? {
+        guard !events.isEmpty else { return nil }
         guard let provider else { return nil }
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: now)
@@ -377,10 +348,7 @@ public final class LiquidTodayModel {
     private struct StoreSnapshot {
         let overdue: [TaskItem]
         let today: [TaskItem]
-        let acceptedBlocks: [ScheduledBlock]
         let projects: [LiquidProjectProgress]
-        let notes: [LiquidNoteSummary]
-        let linkedNotes: [Note]
         let pinnedFocusTask: TaskItem?
         let projectNamesByID: [UUID: String]
         let briefInput: LiquidTodayBriefInput
@@ -400,31 +368,23 @@ public final class LiquidTodayModel {
             .apply(in: modelContext)
         let awaiting = try query.awaiting(now: now, modelContext: modelContext, linkRepository: linkRepository)
 
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: now)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-        // Spec §Today's Agenda: events + ACCEPTED Motion-AI blocks (proposed
-        // ones are calendar-surface concerns, not the day's committed agenda).
-        let acceptedBlocks = ((try? ScheduledBlockRepository(context: modelContext).blocks(from: dayStart, to: dayEnd)) ?? [])
-            .filter { $0.deletedAt == nil && $0.status == .accepted }
-
         let allProjects = try modelContext.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.name)]))
         let liveProjects = allProjects.filter { $0.deletedAt == nil && $0.archivedAt == nil }
         let projectNamesByID = Dictionary(
             liveProjects.map { ($0.id, $0.name) },
             uniquingKeysWith: { current, _ in current }
         )
-        let projects = try projectProgress(
-            activeProjects: liveProjects.filter { $0.status == .active },
+        // Spec §Today Projects card: pinned items surface regardless of status.
+        // Feed the selector with active ∪ pinned so a pinned backlog/planning
+        // project is not gated out before `selectTodayProjects` sees it.
+        let rawProgress = try projectProgress(
+            activeProjects: liveProjects.filter { $0.status == .active || $0.isPinned },
             modelContext: modelContext
         )
+        let progressByID = Dictionary(rawProgress.map { ($0.project.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let projects = Self.selectTodayProjects(rawProgress.map(\.project))
+            .compactMap { progressByID[$0.id] }
 
-        let notes = try recentNotes(modelContext: modelContext, linkRepository: linkRepository)
-        let linkedNotes = try linkedNotes(
-            tasks: overdue + today,
-            modelContext: modelContext,
-            linkRepository: linkRepository
-        )
         let pinned = try pinnedFocusTask(modelContext: modelContext)
 
         let briefInput = LiquidTodayBriefInput(
@@ -439,96 +399,11 @@ public final class LiquidTodayModel {
         return StoreSnapshot(
             overdue: overdue,
             today: today,
-            acceptedBlocks: acceptedBlocks,
             projects: projects,
-            notes: notes,
-            linkedNotes: linkedNotes,
             pinnedFocusTask: pinned,
             projectNamesByID: projectNamesByID,
             briefInput: briefInput
         )
-    }
-
-    /// Real progress = done/total over each active project's non-deleted tasks
-    /// (single fetch, grouped in memory — same data `ProjectPageView` reads).
-    /// Internal (not `private`) so the ordering contract is unit-testable.
-    static func projectProgress(
-        activeProjects: [Project],
-        modelContext: ModelContext
-    ) throws -> [LiquidProjectProgress] {
-        guard !activeProjects.isEmpty else { return [] }
-        let tasks = try modelContext.fetch(
-            FetchDescriptor<TaskItem>(predicate: #Predicate { $0.deletedAt == nil && $0.projectID != nil && $0.isTemplate == false })
-        )
-        let byProject = Dictionary(grouping: tasks, by: { $0.projectID })
-        return
-            activeProjects
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .map { project in
-                let projectTasks = byProject[project.id] ?? []
-                return LiquidProjectProgress(
-                    project: project,
-                    doneCount: projectTasks.count(where: { $0.status == .done }),
-                    totalCount: projectTasks.count
-                )
-            }
-    }
-
-    /// Most recently updated notes (~4, spec §Notes & Knowledge) with their
-    /// Link-graph degree (outgoing + backlinks — both already-indexed reads).
-    private static func recentNotes(
-        modelContext: ModelContext,
-        linkRepository: LinkRepository
-    ) throws -> [LiquidNoteSummary] {
-        var descriptor = FetchDescriptor<Note>(
-            predicate: #Predicate { $0.deletedAt == nil },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = 4
-        let notes = try modelContext.fetch(descriptor)
-        let noteIDs = notes.map(\.id)
-        // Batched link reads: two fetches total instead of two per note.
-        let outgoingByNote = (try? linkRepository.outgoing(fromKind: .note, fromIDs: noteIDs)) ?? [:]
-        let incomingByNote = (try? linkRepository.backlinks(toKind: .note, toIDs: noteIDs)) ?? [:]
-        return notes.map { note in
-            let outgoing = outgoingByNote[note.id]?.count ?? 0
-            let incoming = incomingByNote[note.id]?.count ?? 0
-            return LiquidNoteSummary(note: note, linkCount: outgoing + incoming)
-        }
-    }
-
-    /// Notes connected to today's priority tasks through the Link graph, in
-    /// either direction (task→note or note→task), newest first, capped at 3.
-    private static func linkedNotes(
-        tasks: [TaskItem],
-        modelContext: ModelContext,
-        linkRepository: LinkRepository
-    ) throws -> [Note] {
-        var noteIDs: Set<UUID> = []
-        // Cap the walk: the inspector card shows 3 notes; a dozen tasks of
-        // link reads is plenty and keeps reloads cheap. Two batched fetches
-        // over the capped task set replace the per-task outgoing+backlinks pair.
-        let walkTaskIDs = tasks.prefix(12).map(\.id)
-        let outgoingByTask = (try? linkRepository.outgoing(fromKind: .task, fromIDs: walkTaskIDs)) ?? [:]
-        let incomingByTask = (try? linkRepository.backlinks(toKind: .task, toIDs: walkTaskIDs)) ?? [:]
-        for taskID in walkTaskIDs {
-            for link in outgoingByTask[taskID] ?? [] where link.toKind == .note {
-                noteIDs.insert(link.toID)
-            }
-            for link in incomingByTask[taskID] ?? [] where link.fromKind == .note {
-                noteIDs.insert(link.fromID)
-            }
-        }
-        guard !noteIDs.isEmpty else { return [] }
-        // Bounded fetch: predicate on the collected IDs + fetchLimit, instead
-        // of scanning the whole Note table and filtering in memory.
-        let idArray = Array(noteIDs)
-        var descriptor = FetchDescriptor<Note>(
-            predicate: #Predicate { idArray.contains($0.id) && $0.deletedAt == nil },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = 3
-        return try modelContext.fetch(descriptor)
     }
 
     /// First open pinned-as-focus task (earliest due first) — the same
@@ -546,55 +421,4 @@ public final class LiquidTodayModel {
         return try modelContext.fetch(descriptor).first
     }
 
-    // MARK: - Pure grouping helpers (unit-tested)
-
-    /// Builds the agenda rows: timed calendar events + accepted blocks sorted
-    /// by start; all-day events float to the top of the list.
-    static func agendaItems(events: [CalendarEvent], blocks: [ScheduledBlock]) -> [LiquidAgendaItem] {
-        let eventItems = events.map { event in
-            LiquidAgendaItem(
-                id: "event:\(event.id)",
-                title: event.title,
-                subtitle: event.location,
-                start: event.start,
-                end: event.end,
-                isAllDay: event.isAllDay,
-                kind: .meeting
-            )
-        }
-        let blockItems = blocks.map { block in
-            LiquidAgendaItem(
-                id: "block:\(block.id.uuidString)",
-                title: block.title,
-                subtitle: "Focus block",
-                start: block.start,
-                end: block.end,
-                isAllDay: false,
-                kind: .focus
-            )
-        }
-        return (eventItems + blockItems).sorted { lhs, rhs in
-            if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
-            if lhs.start != rhs.start { return lhs.start < rhs.start }
-            return lhs.id < rhs.id
-        }
-    }
-
-    /// Groups overdue + today tasks (deduped by id, overdue first) into
-    /// High/Medium/Low/None priority sections, descending priority — the
-    /// spec §Top Priorities grouping over the existing `TodayQuery` buckets.
-    static func priorityGroups(overdue: [TaskItem], today: [TaskItem]) -> [LiquidPriorityGroup] {
-        var seen: Set<UUID> = []
-        var combined: [TaskItem] = []
-        for task in overdue + today where !seen.contains(task.id) {
-            seen.insert(task.id)
-            combined.append(task)
-        }
-        let byPriority = Dictionary(grouping: combined, by: \.priority)
-        let order: [TaskPriority] = [.high, .medium, .low, .none]
-        return order.compactMap { priority in
-            guard let tasks = byPriority[priority], !tasks.isEmpty else { return nil }
-            return LiquidPriorityGroup(priority: priority, tasks: tasks)
-        }
-    }
 }

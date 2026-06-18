@@ -267,7 +267,22 @@ public struct NotesListView: View {
                                     Label("Delete", systemImage: "trash")
                                 }
                             }
+                            .swipeActions(edge: .leading) {
+                                Button {
+                                    try? noteRepository?.setPinned(note, !note.isPinned)
+                                } label: {
+                                    Label(
+                                        note.isPinned ? "Unpin" : "Pin to Today",
+                                        systemImage: note.isPinned ? "star.slash" : "star"
+                                    )
+                                }
+                                .tint(note.isPinned ? .gray : .yellow)
+                            }
                             .contextMenu {
+                                Button(note.isPinned ? "Unpin from Today" : "Pin to Today") {
+                                    try? noteRepository?.setPinned(note, !note.isPinned)
+                                }
+                                .disabled(noteRepository == nil)
                                 noteTemplateContextMenu(note)
                                 moveToFolderMenu(for: note)
                             }

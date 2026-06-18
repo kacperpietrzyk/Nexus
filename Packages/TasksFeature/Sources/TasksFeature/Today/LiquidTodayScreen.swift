@@ -5,7 +5,7 @@ import SwiftData
 import SwiftUI
 
 /// Spec `docs/04_LAYOUT_SYSTEM.md` §Grid Rules / Today Dashboard:
-/// "Today's Agenda — width ~380".
+/// "Today's Agenda — width ~380" (retained for the merged Up Next card).
 private let agendaCardWidth: CGFloat = 380
 
 #if os(iOS)
@@ -25,15 +25,15 @@ private let inspectorSideMinWidth: CGFloat = 820
 #endif
 
 /// The Liquid `Today / Command Center` main column (Task 5, spec
-/// `docs/05_MODULE_TODAY.md`): serif page header, then Agenda + Top
-/// Priorities on top and Projects / Notes / Meeting Intelligence as the
-/// 3-column bottom row. The matching right inspector (`TodayInspector`) is
+/// `docs/05_MODULE_TODAY.md`): serif page header, then Top Priorities + Up
+/// Next as the action band (row 1) and Meeting Decisions + Projects as the
+/// context row (row 2). The matching right inspector (`TodayInspector`) is
 /// mounted separately through `LiquidAppShell`'s inspector slot; both read
 /// the same shared `LiquidTodayModel`.
 ///
-/// Cross-module content (meeting intel, daily brief) enters through injected
-/// value providers composed in the app layer — TasksFeature imports neither
-/// NexusMeetings nor NexusAgent.
+/// Cross-module content (meeting decisions, daily brief) enters through
+/// injected value providers composed in the app layer — TasksFeature imports
+/// neither NexusMeetings nor NexusAgent.
 public struct LiquidTodayScreen: View {
 
     @Environment(\.modelContext) private var modelContext
@@ -51,9 +51,13 @@ public struct LiquidTodayScreen: View {
     @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) private var calendarEventsEnabled = false
 
     private let model: LiquidTodayModel
-    private let meetingIntelProvider: LiquidTodayMeetingIntelProvider?
+    private let decisionsProvider: LiquidTodayDecisionsProvider?
     private let briefProvider: LiquidTodayBriefProvider?
     private let focusGapProvider: LiquidTodayFocusGapProvider?
+    // On macOS the title+date moved into the window toolbar band, so the host
+    // hides the in-content header (false). iOS/iPadOS has no toolbar band and
+    // keeps the inline header (the default).
+    private let showsInlineHeader: Bool
     private let onNavigate: (TodayNavSelection) -> Void
     private let onOpenTask: (TaskItem) -> Void
     private let onOpenCapture: (CapturePane.Mode) -> Void
@@ -72,17 +76,19 @@ public struct LiquidTodayScreen: View {
 
     public init(
         model: LiquidTodayModel,
-        meetingIntelProvider: LiquidTodayMeetingIntelProvider?,
+        decisionsProvider: LiquidTodayDecisionsProvider?,
         briefProvider: LiquidTodayBriefProvider?,
         focusGapProvider: LiquidTodayFocusGapProvider? = nil,
+        showsInlineHeader: Bool = true,
         onNavigate: @escaping (TodayNavSelection) -> Void,
         onOpenTask: @escaping (TaskItem) -> Void,
         onOpenCapture: @escaping (CapturePane.Mode) -> Void
     ) {
         self.model = model
-        self.meetingIntelProvider = meetingIntelProvider
+        self.decisionsProvider = decisionsProvider
         self.briefProvider = briefProvider
         self.focusGapProvider = focusGapProvider
+        self.showsInlineHeader = showsInlineHeader
         self.onNavigate = onNavigate
         self.onOpenTask = onOpenTask
         self.onOpenCapture = onOpenCapture
@@ -145,30 +151,33 @@ public struct LiquidTodayScreen: View {
     /// `regularContent` (iOS has no shell inspector slot).
     private var gridContent: some View {
         VStack(alignment: .leading, spacing: DS.Space.l) {
-            header
+            if showsInlineHeader {
+                header
+            }
             errorRowIfNeeded
             insightBanner()
 
-            // Row height = the tallest card's intrinsic content (no magic
-            // constant, no `.clipped()`): empty states stay compact instead of
-            // stretching to a fixed 420 pt, and dense cards grow rather than
-            // hard-truncating. `maxHeight: .infinity` makes the shorter card
-            // match the taller one so the row stays baseline-aligned.
+            // Action band (row 1): Top Priorities is the hero and fills the
+            // available width; Up Next is the fixed-width companion (see
+            // `agendaCell`). Row height = the tallest card's intrinsic content
+            // (no magic constant, no `.clipped()`): empty states stay compact
+            // and dense cards grow rather than hard-truncating. A POPULATED
+            // Up Next fills the row height to match Top Priorities
+            // (`agendaCell`'s `maxHeight: .infinity`); an EMPTY one hugs its
+            // slim content so the row collapses.
             HStack(alignment: .top, spacing: DS.Space.m) {
-                agendaCard
-                    .frame(width: agendaCardWidth)
-                    .frame(maxHeight: .infinity)
                 prioritiesCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                agendaCell
             }
             .fixedSize(horizontal: false, vertical: true)
 
+            // Context row (row 2): Meeting Decisions + Projects — balanced
+            // equal-width cards.
             HStack(alignment: .top, spacing: DS.Space.m) {
-                projectsCard
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                notesCard
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 meetingCard
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                projectsCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -176,21 +185,22 @@ public struct LiquidTodayScreen: View {
     }
 
     #if os(iOS)
-    /// The five main cards as an ADAPTIVE grid (not the macOS fixed 380 + 3-column
+    /// The four main cards as an ADAPTIVE grid (not the macOS fixed 380 + 3-column
     /// row, which is wider than an iPad-11" pane and overflows). The grid picks the
     /// column count that fits the available width — 1 on iPhone, 2 on a narrow iPad
     /// pane, 3 on a wide one — so nothing truncates and there are no magic widths.
+    /// Card order mirrors the macOS layout: action band first (Top Priorities, Up
+    /// Next), then context row (Meeting Decisions, Projects).
     private var iosCardGrid: some View {
         LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 240, maximum: .infinity), spacing: DS.Space.l, alignment: .top)],
             alignment: .leading,
             spacing: DS.Space.l
         ) {
-            agendaCard
             prioritiesCard
-            projectsCard
-            notesCard
+            agendaCard
             meetingCard
+            projectsCard
         }
     }
 
@@ -273,14 +283,47 @@ public struct LiquidTodayScreen: View {
         }
     }
 
-    private var agendaCard: some View {
+    /// macOS top-row Up Next cell: a fixed-width column. When the card has
+    /// events it fills the row height (matching Top Priorities); when empty it
+    /// hugs its slim content so the row collapses and the second grid row
+    /// (Projects + Meeting Intelligence) rises above the fold. `.fixedSize` on
+    /// the empty branch defeats both the populated card's internal
+    /// `maxHeight: .infinity` and the row's equal-height behavior.
+    @ViewBuilder
+    private var agendaCell: some View {
+        if upNextIsEmpty {
+            upNextCard
+                .frame(width: agendaCardWidth)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            upNextCard
+                .frame(width: agendaCardWidth)
+                .frame(maxHeight: .infinity)
+        }
+    }
+
+    private var upNextIsEmpty: Bool {
+        if LiquidReferenceMode.isEnabled {
+            let snap = LiquidTodayReferenceData.snapshot(now: .now)
+            return LiquidTodayModel.upNextEvents(snap.events, now: .now).isEmpty
+        }
+        return LiquidTodayModel.upNextEvents(model.events, now: .now).isEmpty
+    }
+
+    private var upNextCard: some View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
-        return TodayAgendaCard(
-            items: reference?.agendaItems ?? model.agendaItems,
-            now: .now,
+        let sourceEvents = reference?.events ?? model.events
+        let shown = LiquidTodayModel.upNextEvents(sourceEvents, now: .now)
+        let total = LiquidTodayModel.upNextEventCount(sourceEvents, now: .now)
+        return TodayUpNextCard(
+            events: shown,
+            totalCount: total,
             onOpenCalendar: { onNavigate(.calendar) }
         )
     }
+
+    // iOS adaptive grid uses `upNextCard` directly (no fixed-width cell wrapper)
+    private var agendaCard: some View { upNextCard }
 
     private var prioritiesCard: some View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
@@ -307,22 +350,22 @@ public struct LiquidTodayScreen: View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
         return TodayProjectsCard(
             projects: reference?.projects ?? model.projects,
-            onOpenProjects: { onNavigate(.projects) }
-        )
-    }
-
-    private var notesCard: some View {
-        let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
-        return TodayNotesCard(
-            notes: reference?.notes ?? model.notes,
-            onOpenNotes: { onNavigate(.notes) }
+            onOpenProjects: { onNavigate(.projects) },
+            onTogglePin: LiquidReferenceMode.isEnabled
+                ? nil
+                : { [self] id in
+                    guard let project = model.projects.first(where: { $0.id == id })?.project else { return }
+                    try? ProjectRepository(context: modelContext).setPinned(project, !project.isPinned)
+                    model.markDirty()
+                    _Concurrency.Task { await reload() }
+                }
         )
     }
 
     private var meetingCard: some View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
-        return MeetingIntelCard(
-            intel: reference?.meetingIntel ?? model.meetingIntel,
+        return TodayMeetingDecisionsCard(
+            decisions: reference?.decisions ?? model.decisions,
             onOpenMeetings: { onNavigate(.meetings) }
         )
     }
@@ -330,57 +373,17 @@ public struct LiquidTodayScreen: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .top, spacing: DS.Space.l) {
-            VStack(alignment: .leading, spacing: DS.Space.xxs) {
-                Text("Today")
-                    .font(DS.FontToken.displayLarge)
-                    .foregroundStyle(DS.ColorToken.textPrimary)
-                // Real formatted date only — the reference's weather chip has no
-                // backing service and is intentionally omitted (no fake data).
-                Text(Self.dateFormatter.string(from: .now))
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
-                onNavigate(.agent)
-            } label: {
-                HStack(spacing: DS.Space.xs) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("AI Daily Brief")
-                }
-                .font(DS.FontToken.button)
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+            Text("Today")
+                .font(DS.FontToken.displayLarge)
                 .foregroundStyle(DS.ColorToken.textPrimary)
-                .padding(.horizontal, DS.Space.l)
-                .frame(height: 32)
-                .background {
-                    Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.040))
-                        .overlay {
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.10),
-                                    .clear,
-                                    Color.black.opacity(0.030),
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            .clipShape(Capsule(style: .continuous))
-                        }
-                }
-                .overlay {
-                    Capsule(style: .continuous)
-                        .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
-                }
-                .shadow(color: DS.ColorToken.accentPrimary.opacity(0.16), radius: 18, x: 0, y: 0)
-            }
-            .buttonStyle(.plain)
-            .padding(.top, DS.Space.s)
+            // Real formatted date only — the reference's weather chip has no
+            // backing service and is intentionally omitted (no fake data).
+            Text(Self.dateFormatter.string(from: .now))
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(DS.ColorToken.textSecondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
@@ -414,7 +417,7 @@ public struct LiquidTodayScreen: View {
             modelContext: modelContext,
             calendarProvider: calendarProvider,
             calendarEventsEnabled: calendarEventsEnabled,
-            meetingIntelProvider: meetingIntelProvider,
+            decisionsProvider: decisionsProvider,
             briefProvider: briefProvider,
             focusGapProvider: focusGapProvider
         )

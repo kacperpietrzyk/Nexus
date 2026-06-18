@@ -682,7 +682,7 @@ extension ContentView {
     var liquidTodayMain: some View {
         LiquidTodayScreen(
             model: liquidTodayModel,
-            meetingIntelProvider: { fetchTodayMeetingIntel() },
+            decisionsProvider: { fetchTodayDecisions() },
             briefProvider: dailyBriefProvider,
             focusGapProvider: { events, window in
                 SchedulingIntelligence.suggestedFocusBlocks(events: events, within: window)
@@ -746,27 +746,28 @@ extension ContentView {
         }
     }
 
-    /// Most recent processed meeting as a plain value for the Meeting
-    /// Intelligence card (mirrors the macOS seam).
+    /// Fetches recent processed meetings and builds the flat decisions feed for the
+    /// Today Decisions card. Decisions are parsed HERE (app layer) so TasksFeature
+    /// never imports NexusMeetings. Mirrors the macOS seam.
     @MainActor
-    private func fetchTodayMeetingIntel() -> LiquidTodayMeetingIntel? {
+    private func fetchTodayDecisions() -> [LiquidTodayDecision] {
+        // Fetch recent-processed meetings (startedAt desc, capped at 10).
         var descriptor = FetchDescriptor<Meeting>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.processedAt != nil },
+            predicate: #Predicate { $0.processedAt != nil && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        descriptor.fetchLimit = 1
-        guard let meeting = try? modelContext.fetch(descriptor).first else { return nil }
-        let status = MeetingProcessingStatus(rawValue: meeting.processingStatus)
-        let decisions = MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
-        return LiquidTodayMeetingIntel(
-            title: meeting.title,
-            occurredAt: meeting.startedAt,
-            durationSec: meeting.durationSec,
-            summary: meeting.summaryText,
-            decisions: Array(decisions.prefix(3)),
-            actionItemCount: meeting.actionItemIDs.count,
-            statusLabel: status == .ready ? "Processed" : (status == .failed ? "Failed" : "Processing")
-        )
+        descriptor.fetchLimit = 10
+        let meetings = (try? modelContext.fetch(descriptor)) ?? []
+
+        let rows = meetings.map { meeting in
+            LiquidTodayMeetingDecisions(
+                meetingID: meeting.id,
+                meetingTitle: meeting.title,
+                meetingDate: meeting.startedAt,
+                decisions: MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
+            )
+        }
+        return LiquidTodayModel.aggregateDecisions(rows, cap: 5)
     }
 }
 

@@ -196,4 +196,11 @@ public final class MeetingRepository {
         meeting.updatedAt = Date()
         try context.save()
     }
+
+    public func setPinned(_ meeting: Meeting, _ pinned: Bool) throws {
+        meeting.isPinned = pinned
+        meeting.pinnedAt = pinned ? Date() : nil
+        meeting.updatedAt = Date()
+        try context.save()
+    }
 }

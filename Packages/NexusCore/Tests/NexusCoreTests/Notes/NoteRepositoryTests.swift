@@ -291,4 +291,22 @@ struct NoteRepositoryTests {
         #expect(backlinks.count == 2)
         #expect(backlinks.allSatisfy { $0.toID == target.id && $0.linkKind == .mentions })
     }
+
+    // MARK: - setPinned
+
+    @Test func setPinnedSetsFlagAndTimestamp() throws {
+        let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
+        let context = try makeContext()
+        let repo = NoteRepository(context: context, now: { fixedNow })
+        let note = try repo.create(title: "Pinnable")
+
+        try repo.setPinned(note, true)
+        #expect(note.isPinned == true)
+        #expect(note.pinnedAt == fixedNow)
+        #expect(note.updatedAt == fixedNow)
+
+        try repo.setPinned(note, false)
+        #expect(note.isPinned == false)
+        #expect(note.pinnedAt == nil)
+    }
 }

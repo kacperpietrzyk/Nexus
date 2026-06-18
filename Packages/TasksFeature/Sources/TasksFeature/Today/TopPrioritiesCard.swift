@@ -2,14 +2,10 @@ import NexusCore
 import NexusUI
 import SwiftUI
 
-/// Rows shown per priority section before deferring to the Tasks list — keeps
-/// the card a summary, not a second task manager.
-private let prioritySectionRowCap = 5
-
-/// `Top Priorities` card (spec §Main top row 2): today's + overdue tasks
-/// grouped High/Medium/Low (section labels red/amber/blue per
-/// `docs/05_MODULE_TODAY.md` §Top Priorities), `LiquidTaskRow`s with a real
-/// completion checkbox, project tag pill, and trailing due metadata.
+/// `Top Priorities` card (spec §Main top row 2): a ranked "do-now" shortlist of
+/// ≤5 tasks (pinned → overdue → priority high→low → due soonest → stable index),
+/// with `LiquidTaskRow`s showing a real completion checkbox, project tag pill, and
+/// an overdue indicator only when the task is actually overdue.
 struct TopPrioritiesCard: View {
 
     let groups: [LiquidPriorityGroup]
@@ -36,9 +32,14 @@ struct TopPrioritiesCard: View {
             } else if groups.isEmpty {
                 emptySummary
             } else {
+                let startOfToday = Calendar.current.startOfDay(for: now)
+                let ranked = LiquidTodayModel.rankedTodayPriorities(
+                    groups.flatMap(\.tasks),
+                    startOfDay: startOfToday
+                )
                 VStack(alignment: .leading, spacing: DS.Space.m) {
-                    ForEach(groups) { group in
-                        section(group)
+                    ForEach(ranked, id: \.id) { task in
+                        row(task)
                     }
                     Spacer(minLength: 0)
                     LiquidCardFooterLink("View all tasks", action: onViewAll)
@@ -131,33 +132,6 @@ struct TopPrioritiesCard: View {
         .shadow(color: color.opacity(0.028), radius: 7, x: 0, y: 0)
     }
 
-    private func section(_ group: LiquidPriorityGroup) -> some View {
-        VStack(alignment: .leading, spacing: DS.Space.xxs) {
-            HStack(spacing: DS.Space.xs) {
-                Text(Self.label(for: group.priority))
-                    // Section label: 11 pt semibold in the priority color
-                    // (spec §Top Priorities High=red / Medium=amber / Low=blue);
-                    // metadata token at semibold — no dedicated token exists.
-                    .font(DS.FontToken.metadata.weight(.semibold))
-                    .foregroundStyle(Self.color(for: group.priority))
-                Text("\(group.tasks.count)")
-                    .font(DS.FontToken.metadata)
-                    .foregroundStyle(DS.ColorToken.textTertiary)
-                    .monospacedDigit()
-            }
-
-            ForEach(group.tasks.prefix(prioritySectionRowCap), id: \.id) { task in
-                row(task)
-            }
-            if group.tasks.count > prioritySectionRowCap {
-                Text("+\(group.tasks.count - prioritySectionRowCap) more")
-                    .font(DS.FontToken.metadata)
-                    .foregroundStyle(DS.ColorToken.textMuted)
-                    .padding(.horizontal, DS.Space.s)
-            }
-        }
-    }
-
     private func row(_ task: TaskItem) -> some View {
         LiquidTaskRow(
             task.title,
@@ -174,6 +148,7 @@ struct TopPrioritiesCard: View {
         .onTapGesture { onOpen(task) }
     }
 
+    /// Human-readable label for a priority level (also used by Kanban and other views).
     static func label(for priority: TaskPriority) -> String {
         switch priority {
         case .high: return "High Priority"
@@ -183,6 +158,7 @@ struct TopPrioritiesCard: View {
         }
     }
 
+    /// Accent color for a priority level (also used by Kanban and other views).
     static func color(for priority: TaskPriority) -> Color {
         switch priority {
         case .high: return DS.ColorToken.accentRed
@@ -192,15 +168,13 @@ struct TopPrioritiesCard: View {
         }
     }
 
-    /// Trailing due metadata (spec: tertiary, right aligned): "Due today",
-    /// "Overdue · Jun 3", or "Due Jun 14".
+    /// Overdue indicator: shown ONLY when the task is overdue. Today, future,
+    /// and undated tasks return nil (no label in the ranked shortlist).
     static func dueLabel(for task: TaskItem, now: Date) -> String? {
         guard let due = task.dueAt else { return nil }
-        let calendar = Calendar.current
-        if calendar.isDate(due, inSameDayAs: now) { return "Due today" }
-        let dayText = dueDayFormatter.string(from: due)
-        if due < calendar.startOfDay(for: now) { return "Overdue · \(dayText)" }
-        return "Due \(dayText)"
+        let startOfToday = Calendar.current.startOfDay(for: now)
+        guard due < startOfToday else { return nil }
+        return "Overdue · \(dueDayFormatter.string(from: due))"
     }
 
     /// English UI rule: explicit en_US (system locale may be pl_PL).

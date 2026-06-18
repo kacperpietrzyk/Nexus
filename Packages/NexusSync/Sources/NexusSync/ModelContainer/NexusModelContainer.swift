@@ -12,8 +12,10 @@ public protocol NexusEnvironmentProviding: Sendable {
 extension NexusEnvironment: NexusEnvironmentProviding {}
 
 /// Single source of truth for the SwiftData container the apps install via `.modelContainer(...)`.
-/// Currently bound to `NexusSchemaV15` (V14 + universal project types: `Organization` +
-/// `ProjectKeyDate` entities and additive defaulted/optional `Project` columns;
+/// Currently bound to `NexusSchemaV15` (adds universal project types: `Organization` +
+/// `ProjectKeyDate` entities and additive defaulted/optional `Project` columns; also carries
+/// the additive `isPinned`/`pinnedAt` fields on `Project`, `Note`, and `Meeting` — those are
+/// optional/defaulted and handled by lightweight inference with no version bump;
 /// V14 added durable `AttachmentAsset` metadata;
 /// V13 added the Tranche-2 parity batch: `Cycle` + `ActivityEntry` entities and
 /// additive `TaskItem.cycleID` / `TaskItem.isTemplate` / `Note.propertiesJSON` /
