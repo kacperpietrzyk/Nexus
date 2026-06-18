@@ -165,14 +165,7 @@ struct InsightBannerRow: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                NexusColor.Background.raised,
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(NexusColor.Line.hairline, lineWidth: 1)
-            }
+            .liquidLightCard(cornerRadius: DS.Radius.m)
 
             HStack(spacing: 8) {
                 Button("Dismiss") { model.reject() }
