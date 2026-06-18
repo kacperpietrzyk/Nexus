@@ -143,6 +143,21 @@ struct LiquidTodayModelTests {
         #expect(out.map(\.name) == ["pinNew", "pinOld", "recent"])
     }
 
+    // MARK: - selectTodayNotes
+
+    @Test("selectTodayNotes puts pinned first (pinnedAt desc), then non-pinned by updatedAt desc, capped")
+    @MainActor
+    func selectTodayNotesPutsPinnedFirstThenRecent() {
+        func t(_ offset: TimeInterval) -> Date { Date(timeIntervalSince1970: offset) }
+
+        let pinnedOld = Note(title: "pinOld"); pinnedOld.isPinned = true; pinnedOld.pinnedAt = t(1)
+        let pinnedNew = Note(title: "pinNew"); pinnedNew.isPinned = true; pinnedNew.pinnedAt = t(3)
+        let recent = Note(title: "recent"); recent.updatedAt = t(9)
+        let old = Note(title: "old"); old.updatedAt = t(2)
+        let out = LiquidTodayModel.selectTodayNotes([old, recent, pinnedOld, pinnedNew], cap: 3)
+        #expect(out.map(\.title) == ["pinNew", "pinOld", "recent"])
+    }
+
     // MARK: - Project progress
 
     @Test("Project progress orders by updatedAt desc and counts done/total per project")

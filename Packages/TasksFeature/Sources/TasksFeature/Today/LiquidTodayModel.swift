@@ -452,18 +452,32 @@ public final class LiquidTodayModel {
         )
     }
 
-    /// Most recently updated notes (~4, spec §Notes & Knowledge) with their
-    /// Link-graph degree (outgoing + backlinks — both already-indexed reads).
+    /// Pinned-first then most recently updated notes (cap 4, spec §Notes & Knowledge)
+    /// with their Link-graph degree (outgoing + backlinks — both already-indexed reads).
+    ///
+    /// Fetch strategy: we union pinned notes with the 24 most-recent non-pinned so
+    /// that a pinned note older than the top-4-by-updatedAt is never silently dropped.
+    /// `selectTodayNotes` applies the final pinned-first ordering + cap.
     private static func recentNotes(
         modelContext: ModelContext,
         linkRepository: LinkRepository
     ) throws -> [LiquidNoteSummary] {
-        var descriptor = FetchDescriptor<Note>(
-            predicate: #Predicate { $0.deletedAt == nil },
+        // Fetch pinned candidates.
+        let pinnedDescriptor = FetchDescriptor<Note>(
+            predicate: #Predicate { $0.deletedAt == nil && $0.isPinned == true }
+        )
+        let pinned = try modelContext.fetch(pinnedDescriptor)
+
+        // Fetch recent (non-pinned) candidates — generous cap so pinned can't be
+        // crowded out; the selector trims to 4 after merging.
+        var recentDescriptor = FetchDescriptor<Note>(
+            predicate: #Predicate { $0.deletedAt == nil && $0.isPinned == false },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        descriptor.fetchLimit = 4
-        let notes = try modelContext.fetch(descriptor)
+        recentDescriptor.fetchLimit = 24
+        let recent = try modelContext.fetch(recentDescriptor)
+
+        let notes = selectTodayNotes(pinned + recent)
         let noteIDs = notes.map(\.id)
         // Batched link reads: two fetches total instead of two per note.
         let outgoingByNote = (try? linkRepository.outgoing(fromKind: .note, fromIDs: noteIDs)) ?? [:]
