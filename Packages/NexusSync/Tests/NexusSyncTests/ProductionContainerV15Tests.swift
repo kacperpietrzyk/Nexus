@@ -79,4 +79,20 @@ struct ProductionContainerV15Tests {
         try context.save()
         #expect(try context.fetch(FetchDescriptor<StubSyncedExtra>()).count == 1)
     }
+
+    /// Gate for V16: the in-memory container must persist the new `isPinned` /
+    /// `pinnedAt` fields on `Project`. Confirms the schema bump is wired end-to-end.
+    @MainActor
+    @Test func v16ContainerPersistsPinFields() throws {
+        let container = try NexusModelContainer.makeInMemory()
+        let context = ModelContext(container)
+        let project = Project(name: "Pinned")
+        project.isPinned = true
+        project.pinnedAt = .now
+        context.insert(project)
+        try context.save()
+        let fetched = try context.fetch(FetchDescriptor<Project>())
+        #expect(fetched.first?.isPinned == true)
+        #expect(fetched.first?.pinnedAt != nil)
+    }
 }

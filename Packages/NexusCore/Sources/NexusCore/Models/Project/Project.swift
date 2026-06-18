@@ -39,6 +39,11 @@ public final class Project: Searchable {
     public var createdAt: Date = Date.now
     public var updatedAt: Date = Date.now
     public var deletedAt: Date?
+    /// Whether the user has pinned this project to the Today dashboard.
+    /// Additive/defaulted — CloudKit-safe lightweight migration.
+    public var isPinned: Bool = false
+    /// When the project was most recently pinned. nil if never pinned.
+    public var pinnedAt: Date?
 
     public init(
         id: UUID = UUID(),

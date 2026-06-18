@@ -12,7 +12,8 @@ public protocol NexusEnvironmentProviding: Sendable {
 extension NexusEnvironment: NexusEnvironmentProviding {}
 
 /// Single source of truth for the SwiftData container the apps install via `.modelContainer(...)`.
-/// Currently bound to `NexusSchemaV15` (V14 + universal project types: `Organization` +
+/// Currently bound to `NexusSchemaV16` (V15 + pin/favorite fields: `isPinned`/`pinnedAt`
+/// on `Project`, `Note`, and `Meeting`; V15 added universal project types: `Organization` +
 /// `ProjectKeyDate` entities and additive defaulted/optional `Project` columns;
 /// V14 added durable `AttachmentAsset` metadata;
 /// V13 added the Tranche-2 parity batch: `Cycle` + `ActivityEntry` entities and
@@ -42,7 +43,7 @@ public enum NexusModelContainer {
     ///
     /// `extraModels` lets composition packages add their own SwiftData entities
     /// without making NexusSync import them. Duplicate entries are accepted and
-    /// deduplicated by `NexusSchemaV15`.
+    /// deduplicated by `NexusSchemaV16`.
     public static func makeInMemory(
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
@@ -73,7 +74,7 @@ public enum NexusModelContainer {
     ///     runtime; without activation, `containerURL(forSecurityApplicationGroupIdentifier:)`
     ///     returns nil and we fall back to the default Application Support path.
     ///   - extraModels: composition-time models from packages that cannot be imported by
-    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV15`.
+    ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV16`.
     ///   - localOnlyExtraModels: composition-time models that must be present in the
     ///     container but excluded from CloudKit-backed configurations.
     public static func make(
@@ -132,10 +133,10 @@ public enum NexusModelContainer {
         extraModels: [any PersistentModel.Type] = [],
         localOnlyExtraModels: [any PersistentModel.Type] = []
     ) -> ModelPartitions {
-        let allModels = NexusSchemaV15.assembledModels(extraModels: extraModels + localOnlyExtraModels)
+        let allModels = NexusSchemaV16.assembledModels(extraModels: extraModels + localOnlyExtraModels)
         let localOnlyBaselineIDs = Set(localOnlyBaseline.map(ObjectIdentifier.init))
         let baselineSyncedIdentifiers = Set(
-            NexusSchemaV15.models
+            NexusSchemaV16.models
                 .filter { !localOnlyBaselineIDs.contains(ObjectIdentifier($0)) }
                 .map(ObjectIdentifier.init)
         )
@@ -152,7 +153,7 @@ public enum NexusModelContainer {
             containerModels: allModels,
             syncedModels: syncedModels,
             localOnlyModels: localOnlyModels,
-            hasEffectiveExtraModels: allModels.count > NexusSchemaV15.models.count
+            hasEffectiveExtraModels: allModels.count > NexusSchemaV16.models.count
         )
     }
 
@@ -167,8 +168,8 @@ public enum NexusModelContainer {
             extraModels: extraModels,
             localOnlyExtraModels: localOnlyExtraModels
         )
-        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV15.versionIdentifier)
-        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV15.versionIdentifier)
+        let syncedSchema = Schema(partitions.syncedModels, version: NexusSchemaV16.versionIdentifier)
+        let localOnlySchema = Schema(partitions.localOnlyModels, version: NexusSchemaV16.versionIdentifier)
         let configurations: [ModelConfiguration]
 
         if isStoredInMemoryOnly {
@@ -207,7 +208,7 @@ public enum NexusModelContainer {
         }
 
         return ModelConfigurationPlan(
-            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV15.versionIdentifier),
+            containerSchema: Schema(partitions.containerModels, version: NexusSchemaV16.versionIdentifier),
             configurations: configurations,
             partitions: partitions
         )

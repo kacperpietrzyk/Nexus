@@ -86,6 +86,7 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             NexusSchemaV13.self,
             NexusSchemaV14.self,
             NexusSchemaV15.self,
+            NexusSchemaV16.self,
         ]
     }
 
@@ -146,6 +147,10 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             MigrationStage.lightweight(
                 fromVersion: NexusSchemaV14.self,
                 toVersion: NexusSchemaV15.self
+            ),
+            MigrationStage.lightweight(
+                fromVersion: NexusSchemaV15.self,
+                toVersion: NexusSchemaV16.self
             ),
         ]
     }
