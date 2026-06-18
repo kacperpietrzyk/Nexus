@@ -8,7 +8,7 @@ private let quickCaptureMinHeight: CGFloat = 72
 private let focusRingSize: CGFloat = 66
 
 /// The Today right inspector (spec §Right inspector): Daily Brief, Focus
-/// Suggestion, Up Next, Linked Notes, Focus Timer, and Quick Capture as one
+/// Suggestion, Up Next, Focus Timer, and Quick Capture as one
 /// integrated glass column. Reads the same shared `LiquidTodayModel` the main
 /// column renders; cross-module intelligence arrives through injected
 /// providers composed in the app layer.
@@ -51,12 +51,11 @@ public struct TodayInspector: View {
         // No ScrollView — the inspector is a fixed column that must fit the
         // window height. Empty cards collapse to a single muted line (see
         // `inspectorEmptyLine`) so vertical demand tracks real content and the
-        // six cards fit without scrolling.
+        // cards fit without scrolling.
         VStack(spacing: DS.Space.s) {
             dailyBriefCard
             focusSuggestionCard
             upNextCard
-            linkedNotesCard
             focusTimerCard
             quickCaptureCard
         }
@@ -232,55 +231,6 @@ public struct TodayInspector: View {
             }
         }
     }
-
-    // MARK: - Linked Notes
-
-    // Rows route to the Notes destination; a per-note open seam (onOpenNote
-    // targeting the specific note) is deferred to a later task.
-    @ViewBuilder
-    private var linkedNotesCard: some View {
-        TodayInspectorSection("Linked Notes") {
-            let notes = reference?.linkedNotes ?? model.linkedNotes
-            if notes.isEmpty {
-                inspectorEmptyLine("No notes linked to today's tasks yet.")
-            } else {
-                VStack(alignment: .leading, spacing: DS.Space.s) {
-                    ForEach(notes, id: \.id) { note in
-                        Button {
-                            onNavigate(.notes)
-                        } label: {
-                            HStack(spacing: DS.Space.s) {
-                                Image(systemName: "doc.text")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(DS.ColorToken.accentCyan)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(note.title.isEmpty ? "Untitled note" : note.title)
-                                        .font(DS.FontToken.body)
-                                        .foregroundStyle(DS.ColorToken.textPrimary)
-                                        .lineLimit(1)
-                                    Text("Updated \(Self.updatedFormatter.string(from: note.updatedAt))")
-                                        .font(DS.FontToken.metadata)
-                                        .foregroundStyle(DS.ColorToken.textTertiary)
-                                }
-                                Spacer(minLength: 0)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Open notes")
-                    }
-                }
-            }
-        }
-    }
-
-    /// English UI rule: explicit en_US (system locale may be pl_PL).
-    private static let updatedFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
 
     // MARK: - Focus Timer
 

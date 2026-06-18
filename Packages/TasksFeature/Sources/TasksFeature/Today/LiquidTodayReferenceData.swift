@@ -7,7 +7,6 @@ enum LiquidTodayReferenceData {
         let agendaItems: [LiquidAgendaItem]
         let priorityGroups: [LiquidPriorityGroup]
         let projects: [LiquidProjectProgress]
-        let linkedNotes: [Note]
         let meetingIntel: LiquidTodayMeetingIntel?
         let pinnedFocusTask: TaskItem?
         let projectNamesByID: [UUID: String]
@@ -68,12 +67,6 @@ enum LiquidTodayReferenceData {
                 kind: .personal),
         ]
 
-        let notes = [
-            Note(title: "PRD: AI Assistant", plainText: "Linked to AI Assistant", tags: ["Product", "PRD"]),
-            Note(title: "User Interview: Power Users", plainText: "Research synthesis", tags: ["Research"]),
-            Note(title: "GTM Messaging Framework", plainText: "Marketing strategy", tags: ["Marketing"]),
-        ]
-
         return Snapshot(
             agendaItems: agendaItems,
             priorityGroups: LiquidTodayModel.priorityGroups(overdue: [], today: tasks),
@@ -82,7 +75,6 @@ enum LiquidTodayReferenceData {
                 LiquidProjectProgress(project: assistant, doneCount: 10, totalCount: 24),
                 LiquidProjectProgress(project: design, doneCount: 18, totalCount: 24),
             ],
-            linkedNotes: Array(notes.prefix(2)),
             meetingIntel: LiquidTodayMeetingIntel(
                 title: "Product Roadmap Review",
                 occurredAt: at(11),

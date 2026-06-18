@@ -188,8 +188,6 @@ public final class LiquidTodayModel {
     public private(set) var focusHasCalendarEvents: Bool = false
     public private(set) var priorityGroups: [LiquidPriorityGroup] = []
     public private(set) var projects: [LiquidProjectProgress] = []
-    /// Notes linked (Link graph, either direction) to today's priority tasks.
-    public private(set) var linkedNotes: [Note] = []
     public private(set) var meetingIntel: LiquidTodayMeetingIntel?
     /// First open task pinned as focus (`TaskItem.pinnedAsFocus`) — feeds the
     /// inspector Focus Timer card; `nil` → the card shows its empty state.
@@ -282,7 +280,6 @@ public final class LiquidTodayModel {
             agendaItems = Self.agendaItems(events: fetchedEvents, blocks: snapshot.acceptedBlocks)
             priorityGroups = Self.priorityGroups(overdue: snapshot.overdue, today: snapshot.today)
             projects = snapshot.projects
-            linkedNotes = snapshot.linkedNotes
             pinnedFocusTask = snapshot.pinnedFocusTask
             projectNamesByID = snapshot.projectNamesByID
             meetingIntel = meetingIntelProvider?()
@@ -296,7 +293,6 @@ public final class LiquidTodayModel {
             agendaItems = []
             priorityGroups = []
             projects = []
-            linkedNotes = []
             pinnedFocusTask = nil
             loadError = String(describing: error)
         }
@@ -379,7 +375,6 @@ public final class LiquidTodayModel {
         let today: [TaskItem]
         let acceptedBlocks: [ScheduledBlock]
         let projects: [LiquidProjectProgress]
-        let linkedNotes: [Note]
         let pinnedFocusTask: TaskItem?
         let projectNamesByID: [UUID: String]
         let briefInput: LiquidTodayBriefInput
@@ -424,11 +419,6 @@ public final class LiquidTodayModel {
         let projects = Self.selectTodayProjects(rawProgress.map(\.project))
             .compactMap { progressByID[$0.id] }
 
-        let linkedNotes = try linkedNotes(
-            tasks: overdue + today,
-            modelContext: modelContext,
-            linkRepository: linkRepository
-        )
         let pinned = try pinnedFocusTask(modelContext: modelContext)
 
         let briefInput = LiquidTodayBriefInput(
@@ -445,45 +435,10 @@ public final class LiquidTodayModel {
             today: today,
             acceptedBlocks: acceptedBlocks,
             projects: projects,
-            linkedNotes: linkedNotes,
             pinnedFocusTask: pinned,
             projectNamesByID: projectNamesByID,
             briefInput: briefInput
         )
-    }
-
-    /// Notes connected to today's priority tasks through the Link graph, in
-    /// either direction (task→note or note→task), newest first, capped at 3.
-    private static func linkedNotes(
-        tasks: [TaskItem],
-        modelContext: ModelContext,
-        linkRepository: LinkRepository
-    ) throws -> [Note] {
-        var noteIDs: Set<UUID> = []
-        // Cap the walk: the inspector card shows 3 notes; a dozen tasks of
-        // link reads is plenty and keeps reloads cheap. Two batched fetches
-        // over the capped task set replace the per-task outgoing+backlinks pair.
-        let walkTaskIDs = tasks.prefix(12).map(\.id)
-        let outgoingByTask = (try? linkRepository.outgoing(fromKind: .task, fromIDs: walkTaskIDs)) ?? [:]
-        let incomingByTask = (try? linkRepository.backlinks(toKind: .task, toIDs: walkTaskIDs)) ?? [:]
-        for taskID in walkTaskIDs {
-            for link in outgoingByTask[taskID] ?? [] where link.toKind == .note {
-                noteIDs.insert(link.toID)
-            }
-            for link in incomingByTask[taskID] ?? [] where link.fromKind == .note {
-                noteIDs.insert(link.fromID)
-            }
-        }
-        guard !noteIDs.isEmpty else { return [] }
-        // Bounded fetch: predicate on the collected IDs + fetchLimit, instead
-        // of scanning the whole Note table and filtering in memory.
-        let idArray = Array(noteIDs)
-        var descriptor = FetchDescriptor<Note>(
-            predicate: #Predicate { idArray.contains($0.id) && $0.deletedAt == nil },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = 3
-        return try modelContext.fetch(descriptor)
     }
 
     /// First open pinned-as-focus task (earliest due first) — the same

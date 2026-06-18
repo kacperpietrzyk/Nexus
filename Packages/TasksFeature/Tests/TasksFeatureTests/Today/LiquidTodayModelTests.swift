@@ -213,55 +213,6 @@ struct LiquidTodayModelTests {
         #expect(TodayInspector.elapsedText(for: unstarted, now: now) == "0:00")
     }
 
-    // MARK: - Batched link reads (linkedNotes via reload)
-
-    @Test("reload surfaces linked notes (both link directions) via batched reads")
-    @MainActor
-    func batchedLinkReadsMatchPerItemSemantics() async throws {
-        let container = try ModelContainer(
-            for: TaskItem.self, Link.self, Project.self, Note.self, ScheduledBlock.self,
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-        )
-        let context = ModelContext(container)
-        let now = Date.now
-
-        // Two tasks due today (these feed linkedNotes via overdue + today).
-        let taskA = TaskItem(title: "task A", dueAt: now)
-        let taskB = TaskItem(title: "task B", dueAt: now)
-        context.insert(taskA)
-        context.insert(taskB)
-
-        // noteOut: task -> note (outgoing). noteIn: note -> task (backlink).
-        let noteOut = Note(title: "out")
-        let noteIn = Note(title: "in")
-        noteOut.updatedAt = Date(timeIntervalSince1970: 3_000)
-        noteIn.updatedAt = Date(timeIntervalSince1970: 2_000)
-        context.insert(noteOut)
-        context.insert(noteIn)
-        try context.save()
-
-        let repo = LinkRepository(context: context)
-        try repo.create(from: (.task, taskA.id), to: (.note, noteOut.id), linkKind: .mentions)
-        try repo.create(from: (.note, noteIn.id), to: (.task, taskB.id), linkKind: .mentions)
-
-        // Ground truth: both link directions collect into the linked-note set.
-        let expectedLinkedNoteIDs = Set([noteOut.id, noteIn.id])
-
-        let model = LiquidTodayModel()
-        await model.reload(
-            modelContext: context,
-            calendarProvider: MockCalendarEventProvider(status: .denied),
-            calendarEventsEnabled: false,
-            meetingIntelProvider: nil,
-            briefProvider: nil,
-            now: now
-        )
-
-        #expect(model.loadError == nil)
-        // linkedNotes: collected from both task link directions.
-        #expect(Set(model.linkedNotes.map(\.id)) == expectedLinkedNoteIDs)
-    }
-
     // MARK: - Skip-redundant-reload gate (return-navigation, FIX 1)
 
     @MainActor
@@ -392,7 +343,6 @@ struct LiquidTodayModelTests {
         #expect(gated.priorityGroups == baseline.priorityGroups)
         #expect(gated.projects == baseline.projects)
         #expect(gated.agendaItems == baseline.agendaItems)
-        #expect(gated.linkedNotes.map(\.id) == baseline.linkedNotes.map(\.id))
         #expect(gated.projectNamesByID == baseline.projectNamesByID)
         #expect(gated.storeLoadCount == 1)
     }
@@ -443,7 +393,6 @@ struct LiquidTodayModelTests {
         #expect(snapshot.agendaItems.count >= 5)
         #expect(snapshot.priorityGroups.count >= 3)
         #expect(snapshot.projects.count >= 3)
-        #expect(snapshot.linkedNotes.count >= 2)
         #expect(snapshot.meetingIntel?.actionItemCount ?? 0 >= 3)
         #expect(!snapshot.brief.isEmpty)
     }
