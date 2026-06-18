@@ -162,18 +162,6 @@ public struct LiquidProjectProgress: Identifiable, Equatable {
     }
 }
 
-/// Notes-card row: a recent note + its Link-graph degree (in + out).
-/// Equatable via model-reference identity + the value field.
-public struct LiquidNoteSummary: Identifiable, Equatable {
-    public let note: Note
-    public let linkCount: Int
-    public var id: UUID { note.id }
-
-    public static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.note === rhs.note && lhs.linkCount == rhs.linkCount
-    }
-}
-
 // MARK: - Model
 
 /// Data feed for `LiquidTodayScreen` + `TodayInspector` (Liquid redesign
@@ -200,7 +188,6 @@ public final class LiquidTodayModel {
     public private(set) var focusHasCalendarEvents: Bool = false
     public private(set) var priorityGroups: [LiquidPriorityGroup] = []
     public private(set) var projects: [LiquidProjectProgress] = []
-    public private(set) var notes: [LiquidNoteSummary] = []
     /// Notes linked (Link graph, either direction) to today's priority tasks.
     public private(set) var linkedNotes: [Note] = []
     public private(set) var meetingIntel: LiquidTodayMeetingIntel?
@@ -295,7 +282,6 @@ public final class LiquidTodayModel {
             agendaItems = Self.agendaItems(events: fetchedEvents, blocks: snapshot.acceptedBlocks)
             priorityGroups = Self.priorityGroups(overdue: snapshot.overdue, today: snapshot.today)
             projects = snapshot.projects
-            notes = snapshot.notes
             linkedNotes = snapshot.linkedNotes
             pinnedFocusTask = snapshot.pinnedFocusTask
             projectNamesByID = snapshot.projectNamesByID
@@ -310,7 +296,6 @@ public final class LiquidTodayModel {
             agendaItems = []
             priorityGroups = []
             projects = []
-            notes = []
             linkedNotes = []
             pinnedFocusTask = nil
             loadError = String(describing: error)
@@ -394,7 +379,6 @@ public final class LiquidTodayModel {
         let today: [TaskItem]
         let acceptedBlocks: [ScheduledBlock]
         let projects: [LiquidProjectProgress]
-        let notes: [LiquidNoteSummary]
         let linkedNotes: [Note]
         let pinnedFocusTask: TaskItem?
         let projectNamesByID: [UUID: String]
@@ -440,7 +424,6 @@ public final class LiquidTodayModel {
         let projects = Self.selectTodayProjects(rawProgress.map(\.project))
             .compactMap { progressByID[$0.id] }
 
-        let notes = try recentNotes(modelContext: modelContext, linkRepository: linkRepository)
         let linkedNotes = try linkedNotes(
             tasks: overdue + today,
             modelContext: modelContext,
@@ -462,49 +445,11 @@ public final class LiquidTodayModel {
             today: today,
             acceptedBlocks: acceptedBlocks,
             projects: projects,
-            notes: notes,
             linkedNotes: linkedNotes,
             pinnedFocusTask: pinned,
             projectNamesByID: projectNamesByID,
             briefInput: briefInput
         )
-    }
-
-    /// Pinned-first then most recently updated notes (cap 4, spec §Notes & Knowledge)
-    /// with their Link-graph degree (outgoing + backlinks — both already-indexed reads).
-    ///
-    /// Fetch strategy: we union pinned notes with the 24 most-recent non-pinned so
-    /// that a pinned note older than the top-4-by-updatedAt is never silently dropped.
-    /// `selectTodayNotes` applies the final pinned-first ordering + cap.
-    private static func recentNotes(
-        modelContext: ModelContext,
-        linkRepository: LinkRepository
-    ) throws -> [LiquidNoteSummary] {
-        // Fetch pinned candidates.
-        let pinnedDescriptor = FetchDescriptor<Note>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.isPinned == true }
-        )
-        let pinned = try modelContext.fetch(pinnedDescriptor)
-
-        // Fetch recent (non-pinned) candidates — generous cap so pinned can't be
-        // crowded out; the selector trims to 4 after merging.
-        var recentDescriptor = FetchDescriptor<Note>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.isPinned == false },
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        recentDescriptor.fetchLimit = 24
-        let recent = try modelContext.fetch(recentDescriptor)
-
-        let notes = selectTodayNotes(pinned + recent)
-        let noteIDs = notes.map(\.id)
-        // Batched link reads: two fetches total instead of two per note.
-        let outgoingByNote = (try? linkRepository.outgoing(fromKind: .note, fromIDs: noteIDs)) ?? [:]
-        let incomingByNote = (try? linkRepository.backlinks(toKind: .note, toIDs: noteIDs)) ?? [:]
-        return notes.map { note in
-            let outgoing = outgoingByNote[note.id]?.count ?? 0
-            let incoming = incomingByNote[note.id]?.count ?? 0
-            return LiquidNoteSummary(note: note, linkCount: outgoing + incoming)
-        }
     }
 
     /// Notes connected to today's priority tasks through the Link graph, in

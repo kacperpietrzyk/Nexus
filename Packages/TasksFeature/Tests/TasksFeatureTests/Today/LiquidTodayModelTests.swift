@@ -162,21 +162,6 @@ struct LiquidTodayModelTests {
         #expect(out.map(\.name) == ["pinNew", "pinOld", "recent"])
     }
 
-    // MARK: - selectTodayNotes
-
-    @Test("selectTodayNotes puts pinned first (pinnedAt desc), then non-pinned by updatedAt desc, capped")
-    @MainActor
-    func selectTodayNotesPutsPinnedFirstThenRecent() {
-        func t(_ offset: TimeInterval) -> Date { Date(timeIntervalSince1970: offset) }
-
-        let pinnedOld = Note(title: "pinOld"); pinnedOld.isPinned = true; pinnedOld.pinnedAt = t(1)
-        let pinnedNew = Note(title: "pinNew"); pinnedNew.isPinned = true; pinnedNew.pinnedAt = t(3)
-        let recent = Note(title: "recent"); recent.updatedAt = t(9)
-        let old = Note(title: "old"); old.updatedAt = t(2)
-        let out = LiquidTodayModel.selectTodayNotes([old, recent, pinnedOld, pinnedNew], cap: 3)
-        #expect(out.map(\.title) == ["pinNew", "pinOld", "recent"])
-    }
-
     // MARK: - Project progress
 
     @Test("Project progress orders by updatedAt desc and counts done/total per project")
@@ -228,9 +213,9 @@ struct LiquidTodayModelTests {
         #expect(TodayInspector.elapsedText(for: unstarted, now: now) == "0:00")
     }
 
-    // MARK: - Batched link reads (recentNotes + linkedNotes via reload)
+    // MARK: - Batched link reads (linkedNotes via reload)
 
-    @Test("reload surfaces linked notes (both link directions) + recent-note link degrees via batched reads")
+    @Test("reload surfaces linked notes (both link directions) via batched reads")
     @MainActor
     func batchedLinkReadsMatchPerItemSemantics() async throws {
         let container = try ModelContainer(
@@ -247,36 +232,20 @@ struct LiquidTodayModelTests {
         context.insert(taskB)
 
         // noteOut: task -> note (outgoing). noteIn: note -> task (backlink).
-        // noteRecentOnly: not linked to any task, but linked to noteOut (gives it degree).
         let noteOut = Note(title: "out")
         let noteIn = Note(title: "in")
-        let noteRecentOnly = Note(title: "recent only")
-        // Distinct updatedAt so recentNotes (updatedAt desc, limit 4) is deterministic.
         noteOut.updatedAt = Date(timeIntervalSince1970: 3_000)
         noteIn.updatedAt = Date(timeIntervalSince1970: 2_000)
-        noteRecentOnly.updatedAt = Date(timeIntervalSince1970: 1_000)
         context.insert(noteOut)
         context.insert(noteIn)
-        context.insert(noteRecentOnly)
         try context.save()
 
         let repo = LinkRepository(context: context)
         try repo.create(from: (.task, taskA.id), to: (.note, noteOut.id), linkKind: .mentions)
         try repo.create(from: (.note, noteIn.id), to: (.task, taskB.id), linkKind: .mentions)
-        // Give noteOut a backlink from noteRecentOnly so recentNotes degree > 0.
-        try repo.create(from: (.note, noteRecentOnly.id), to: (.note, noteOut.id), linkKind: .mentions)
 
-        // Ground truth: compute expected results with the per-item API directly.
+        // Ground truth: both link directions collect into the linked-note set.
         let expectedLinkedNoteIDs = Set([noteOut.id, noteIn.id])
-        // recentNotes degree (outgoing + backlinks) per note, per-item API.
-        func degree(_ id: UUID) throws -> Int {
-            try repo.outgoing(from: (.note, id)).count + repo.backlinks(to: (.note, id)).count
-        }
-        let expectedDegrees = [
-            noteOut.id: try degree(noteOut.id),
-            noteIn.id: try degree(noteIn.id),
-            noteRecentOnly.id: try degree(noteRecentOnly.id),
-        ]
 
         let model = LiquidTodayModel()
         await model.reload(
@@ -291,13 +260,6 @@ struct LiquidTodayModelTests {
         #expect(model.loadError == nil)
         // linkedNotes: collected from both task link directions.
         #expect(Set(model.linkedNotes.map(\.id)) == expectedLinkedNoteIDs)
-        // recentNotes link degrees match the per-item computation byte-for-byte.
-        for summary in model.notes {
-            #expect(summary.linkCount == expectedDegrees[summary.note.id])
-        }
-        // noteOut carries two backlinks (from taskA and from noteRecentOnly).
-        let outSummary = model.notes.first { $0.note.id == noteOut.id }
-        #expect(outSummary?.linkCount == 2)
     }
 
     // MARK: - Skip-redundant-reload gate (return-navigation, FIX 1)
@@ -429,7 +391,6 @@ struct LiquidTodayModelTests {
 
         #expect(gated.priorityGroups == baseline.priorityGroups)
         #expect(gated.projects == baseline.projects)
-        #expect(gated.notes == baseline.notes)
         #expect(gated.agendaItems == baseline.agendaItems)
         #expect(gated.linkedNotes.map(\.id) == baseline.linkedNotes.map(\.id))
         #expect(gated.projectNamesByID == baseline.projectNamesByID)
@@ -482,7 +443,6 @@ struct LiquidTodayModelTests {
         #expect(snapshot.agendaItems.count >= 5)
         #expect(snapshot.priorityGroups.count >= 3)
         #expect(snapshot.projects.count >= 3)
-        #expect(snapshot.notes.count >= 3)
         #expect(snapshot.linkedNotes.count >= 2)
         #expect(snapshot.meetingIntel?.actionItemCount ?? 0 >= 3)
         #expect(!snapshot.brief.isEmpty)

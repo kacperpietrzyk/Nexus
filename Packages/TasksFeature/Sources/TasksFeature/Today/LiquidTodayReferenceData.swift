@@ -7,7 +7,6 @@ enum LiquidTodayReferenceData {
         let agendaItems: [LiquidAgendaItem]
         let priorityGroups: [LiquidPriorityGroup]
         let projects: [LiquidProjectProgress]
-        let notes: [LiquidNoteSummary]
         let linkedNotes: [Note]
         let meetingIntel: LiquidTodayMeetingIntel?
         let pinnedFocusTask: TaskItem?
@@ -83,7 +82,6 @@ enum LiquidTodayReferenceData {
                 LiquidProjectProgress(project: assistant, doneCount: 10, totalCount: 24),
                 LiquidProjectProgress(project: design, doneCount: 18, totalCount: 24),
             ],
-            notes: notes.map { LiquidNoteSummary(note: $0, linkCount: 3) },
             linkedNotes: Array(notes.prefix(2)),
             meetingIntel: LiquidTodayMeetingIntel(
                 title: "Product Roadmap Review",

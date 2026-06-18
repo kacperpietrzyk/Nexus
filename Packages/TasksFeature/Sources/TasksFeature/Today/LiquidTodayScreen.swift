@@ -180,8 +180,6 @@ public struct LiquidTodayScreen: View {
             HStack(alignment: .top, spacing: DS.Space.m) {
                 projectsCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                notesCard
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 meetingCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -203,7 +201,6 @@ public struct LiquidTodayScreen: View {
             agendaCard
             prioritiesCard
             projectsCard
-            notesCard
             meetingCard
         }
     }
@@ -327,22 +324,6 @@ public struct LiquidTodayScreen: View {
                 : { [self] id in
                     guard let project = model.projects.first(where: { $0.id == id })?.project else { return }
                     try? ProjectRepository(context: modelContext).setPinned(project, !project.isPinned)
-                    model.markDirty()
-                    _Concurrency.Task { await reload() }
-                }
-        )
-    }
-
-    private var notesCard: some View {
-        let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
-        return TodayNotesCard(
-            notes: reference?.notes ?? model.notes,
-            onOpenNotes: { onNavigate(.notes) },
-            onTogglePin: LiquidReferenceMode.isEnabled
-                ? nil
-                : { [self] id in
-                    guard let note = model.notes.first(where: { $0.id == id })?.note else { return }
-                    try? NoteRepository(context: modelContext).setPinned(note, !note.isPinned)
                     model.markDirty()
                     _Concurrency.Task { await reload() }
                 }

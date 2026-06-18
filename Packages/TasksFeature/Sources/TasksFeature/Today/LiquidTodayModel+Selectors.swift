@@ -42,17 +42,6 @@ extension LiquidTodayModel {
             }
     }
 
-    // MARK: - Note selectors
-
-    /// Pinned-first (pinnedAt desc, nil last), then by updatedAt desc; capped.
-    /// Internal so the ordering contract is unit-testable.
-    static func selectTodayNotes(_ all: [Note], cap: Int = 4) -> [Note] {
-        let pinned = all.filter(\.isPinned)
-            .sorted { ($0.pinnedAt ?? .distantPast) > ($1.pinnedAt ?? .distantPast) }
-        let rest = all.filter { !$0.isPinned }.sorted { $0.updatedAt > $1.updatedAt }
-        return Array((pinned + rest).prefix(cap))
-    }
-
     // MARK: - Agenda + priority grouping
 
     /// Builds the agenda rows: timed calendar events + accepted blocks sorted
