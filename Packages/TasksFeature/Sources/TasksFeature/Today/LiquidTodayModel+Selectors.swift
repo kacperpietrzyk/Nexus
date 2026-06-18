@@ -76,6 +76,50 @@ extension LiquidTodayModel {
         }
     }
 
+    /// Returns a ranked shortlist (≤ `cap`) of tasks for the Top Priorities card,
+    /// sorted by: pinned first → overdue before not → priority high→low →
+    /// due date soonest first (nil last) → original index (stable tiebreak).
+    /// `now` should be the start of today so `isOverdue` = `dueAt < now`.
+    static func rankedTodayPriorities(
+        _ tasks: [TaskItem],
+        now: Date = .now,
+        cap: Int = 5
+    ) -> [TaskItem] {
+        struct Keyed {
+            let index: Int
+            let task: TaskItem
+            let isOverdue: Bool
+        }
+        let keyed = tasks.enumerated().map { index, task in
+            Keyed(
+                index: index,
+                task: task,
+                isOverdue: task.dueAt.map { $0 < now } ?? false
+            )
+        }
+        let sorted = keyed.sorted { lhs, rhs in
+            // 1. Pinned first
+            let lhsPinned = lhs.task.pinnedAsFocus ? 0 : 1
+            let rhsPinned = rhs.task.pinnedAsFocus ? 0 : 1
+            if lhsPinned != rhsPinned { return lhsPinned < rhsPinned }
+            // 2. Overdue before not
+            let lhsOverdue = lhs.isOverdue ? 0 : 1
+            let rhsOverdue = rhs.isOverdue ? 0 : 1
+            if lhsOverdue != rhsOverdue { return lhsOverdue < rhsOverdue }
+            // 3. Priority high → low (higher rawValue = higher priority)
+            if lhs.task.priority.rawValue != rhs.task.priority.rawValue {
+                return lhs.task.priority.rawValue > rhs.task.priority.rawValue
+            }
+            // 4. Due date soonest first; nil last
+            let lhsDue = lhs.task.dueAt ?? .distantFuture
+            let rhsDue = rhs.task.dueAt ?? .distantFuture
+            if lhsDue != rhsDue { return lhsDue < rhsDue }
+            // 5. Original index (stable tiebreak)
+            return lhs.index < rhs.index
+        }
+        return Array(sorted.prefix(cap).map(\.task))
+    }
+
     /// Groups overdue + today tasks (deduped by id, overdue first) into
     /// High/Medium/Low/None priority sections, descending priority — the
     /// spec §Top Priorities grouping over the existing `TodayQuery` buckets.

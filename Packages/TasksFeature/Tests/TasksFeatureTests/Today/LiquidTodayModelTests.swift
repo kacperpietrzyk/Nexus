@@ -57,36 +57,54 @@ struct LiquidTodayModelTests {
         #expect(groups[0].tasks.count == 1)
     }
 
-    // MARK: - Top Priorities total row cap
+    // MARK: - rankedTodayPriorities
 
-    /// Builds priority groups through the real grouping factory (no public
-    /// memberwise init on `LiquidPriorityGroup`) — `tasks` with the given
-    /// per-priority counts, grouped high→medium→low→none.
+    @Test("rankedTodayPriorities orders pinned > overdue > priority > due, capped at 5")
     @MainActor
-    private func makeGroups(_ counts: [(TaskPriority, Int)]) -> [LiquidPriorityGroup] {
-        let today = counts.flatMap { priority, count in
-            (0..<count).map { TaskItem(title: "\(priority)-\($0)", dueAt: .now, priority: priority) }
-        }
-        return LiquidTodayModel.priorityGroups(overdue: [], today: today)
+    func rankedPrioritiesOrdering() {
+        let calendar = Calendar.current
+        let now = Date.now
+        let yesterday = now.addingTimeInterval(-86_400)
+        let tomorrow = now.addingTimeInterval(86_400)
+
+        // a: pinned, low priority, no due -> must come first (pin wins)
+        let a = TaskItem(title: "a-pinned-low", priority: .low, pinnedAsFocus: true)
+        // b: not pinned, overdue (due yesterday) -> second (overdue beats priority)
+        let b = TaskItem(title: "b-overdue", dueAt: yesterday, priority: .low)
+        // c: not pinned, high priority, due tomorrow -> third
+        let c = TaskItem(title: "c-high-tomorrow", dueAt: tomorrow, priority: .high)
+        // d: not pinned, medium priority, due today -> fourth
+        let d = TaskItem(title: "d-medium-today", dueAt: now, priority: .medium)
+        // e..h: four more low-priority no-due tasks -> only one of them shows (cap 5)
+        let e = TaskItem(title: "e-low", priority: .low)
+        let f = TaskItem(title: "f-low", priority: .low)
+        let g = TaskItem(title: "g-low", priority: .low)
+        let h = TaskItem(title: "h-low", priority: .low)
+
+        let tasks = [a, b, c, d, e, f, g, h]
+        let startOfToday = calendar.startOfDay(for: now)
+        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, now: startOfToday, cap: 5)
+        #expect(ranked.count == 5)
+        #expect(ranked[0].id == a.id)
+        #expect(ranked[1].id == b.id)
+        #expect(ranked[2].id == c.id)
+        #expect(ranked[3].id == d.id)
     }
 
-    @Test("rowAllocation spends a total budget across sections in priority order")
+    @Test("rankedTodayPriorities caps at the requested limit")
     @MainActor
-    func priorityRowAllocationSpendsBudgetInOrder() {
-        // High 4, Medium 5, Low 3 — budget 6 → High takes 4, Medium takes 2, Low 0.
-        let groups = makeGroups([(.high, 4), (.medium, 5), (.low, 3)])
-        #expect(TopPrioritiesCard.rowAllocation(for: groups, budget: 6) == [4, 2, 0])
+    func rankedPrioritiesCap() {
+        let tasks = (0..<10).map { TaskItem(title: "task-\($0)", priority: .medium) }
+        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, now: .now, cap: 3)
+        #expect(ranked.count == 3)
     }
 
-    @Test("rowAllocation never exceeds a section's count and zeroes overflow sections")
+    @Test("rankedTodayPriorities returns all tasks when count is below cap")
     @MainActor
-    func priorityRowAllocationCapsPerSectionAndZeroesRest() {
-        // Budget larger than total → every section shown in full.
-        let small = makeGroups([(.high, 2), (.low, 1)])
-        #expect(TopPrioritiesCard.rowAllocation(for: small, budget: 6) == [2, 1])
-        // First section alone exhausts the budget → the rest collapse to 0.
-        let bigFirst = makeGroups([(.high, 9), (.medium, 3)])
-        #expect(TopPrioritiesCard.rowAllocation(for: bigFirst, budget: 6) == [6, 0])
+    func rankedPrioritiesBelowCap() {
+        let tasks = [TaskItem(title: "only", priority: .high)]
+        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, now: .now, cap: 5)
+        #expect(ranked.count == 1)
     }
 
     // MARK: - Agenda assembly
@@ -118,7 +136,7 @@ struct LiquidTodayModelTests {
 
     // MARK: - Due metadata
 
-    @Test("Due labels: today, overdue, future")
+    @Test("Due labels: overdue gets indicator; today, future, and undated get nil")
     @MainActor
     func dueLabels() {
         let now = Date.now
@@ -127,9 +145,10 @@ struct LiquidTodayModelTests {
         let future = TaskItem(title: "c", dueAt: now.addingTimeInterval(5 * 86_400))
         let undated = TaskItem(title: "d")
 
-        #expect(TopPrioritiesCard.dueLabel(for: today, now: now) == "Due today")
+        // Only overdue tasks show a label in the ranked shortlist.
+        #expect(TopPrioritiesCard.dueLabel(for: today, now: now) == nil)
         #expect(TopPrioritiesCard.dueLabel(for: overdue, now: now)?.hasPrefix("Overdue · ") == true)
-        #expect(TopPrioritiesCard.dueLabel(for: future, now: now)?.hasPrefix("Due ") == true)
+        #expect(TopPrioritiesCard.dueLabel(for: future, now: now) == nil)
         #expect(TopPrioritiesCard.dueLabel(for: undated, now: now) == nil)
     }
 
