@@ -69,13 +69,34 @@ enum LiquidTodayReferenceData {
                 kind: .personal),
         ]
 
-        // Reference calendar events for the Up Next card: staggered-hour events
-        // that cover the populated, capped, and "+N more" states in previews.
+        // Reference calendar events for the Up Next card: now-relative offsets so
+        // the populated, capped, and "+N more" states are always visible regardless
+        // of the wall-clock time at which a screenshot or preview is taken.
         let referenceEvents = [
-            CalendarEvent(id: "ref-e10", title: "1:1 Meeting", start: at(10), end: at(10, 50)),
-            CalendarEvent(id: "ref-e11", title: "Product Roadmap Review", start: at(11), end: at(12)),
-            CalendarEvent(id: "ref-e13", title: "Focus Time", start: at(13), end: at(14)),
-            CalendarEvent(id: "ref-e14", title: "Marketing Sync", start: at(14, 30), end: at(15, 15)),
+            CalendarEvent(
+                id: "ref-e1",
+                title: "1:1 Meeting",
+                start: now.addingTimeInterval(30 * 60),
+                end: now.addingTimeInterval(80 * 60)
+            ),
+            CalendarEvent(
+                id: "ref-e2",
+                title: "Product Roadmap Review",
+                start: now.addingTimeInterval(90 * 60),
+                end: now.addingTimeInterval(150 * 60)
+            ),
+            CalendarEvent(
+                id: "ref-e3",
+                title: "Focus Time",
+                start: now.addingTimeInterval(3 * 60 * 60),
+                end: now.addingTimeInterval(4 * 60 * 60)
+            ),
+            CalendarEvent(
+                id: "ref-e4",
+                title: "Marketing Sync",
+                start: now.addingTimeInterval(270 * 60),
+                end: now.addingTimeInterval(315 * 60)
+            ),
         ]
 
         return Snapshot(
