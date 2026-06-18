@@ -9,7 +9,7 @@ enum LiquidTodayReferenceData {
         let events: [CalendarEvent]
         let priorityGroups: [LiquidPriorityGroup]
         let projects: [LiquidProjectProgress]
-        let meetingIntel: LiquidTodayMeetingIntel?
+        let decisions: [LiquidTodayDecision]
         let pinnedFocusTask: TaskItem?
         let projectNamesByID: [UUID: String]
         let focusSuggestion: DateInterval?
@@ -108,16 +108,22 @@ enum LiquidTodayReferenceData {
                 LiquidProjectProgress(project: assistant, doneCount: 10, totalCount: 24),
                 LiquidProjectProgress(project: design, doneCount: 18, totalCount: 24),
             ],
-            meetingIntel: LiquidTodayMeetingIntel(
-                title: "Product Roadmap Review",
-                occurredAt: at(11),
-                durationSec: 50 * 60,
-                summary:
-                    // swiftlint:disable:next line_length
-                    "Reviewed Q2 roadmap progress, confirmed priority bets, and aligned on resourcing for AI Assistant and mobile improvements.",
-                decisions: ["Move AI Assistant to top priority", "Launch beta in early July"],
-                actionItemCount: 3,
-                statusLabel: "Processed"
+            decisions: LiquidTodayModel.aggregateDecisions(
+                [
+                    LiquidTodayMeetingDecisions(
+                        meetingID: UUID(uuidString: "A1B2C3D4-E5F6-7890-ABCD-EF1234567890") ?? UUID(),
+                        meetingTitle: "Product Roadmap Review",
+                        meetingDate: at(11),
+                        decisions: ["Move AI Assistant to top priority", "Launch beta in early July"]
+                    ),
+                    LiquidTodayMeetingDecisions(
+                        meetingID: UUID(uuidString: "B2C3D4E5-F6A7-8901-BCDE-F12345678901") ?? UUID(),
+                        meetingTitle: "Design System Sync",
+                        meetingDate: at(11).addingTimeInterval(-86_400),
+                        decisions: ["Adopt liquid card tokens globally", "Ship DS v2 by end of sprint"]
+                    ),
+                ],
+                cap: 5
             ),
             pinnedFocusTask: pinned,
             projectNamesByID: [

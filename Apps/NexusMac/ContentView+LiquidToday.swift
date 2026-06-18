@@ -18,7 +18,7 @@ extension ContentView {
     var liquidTodayMain: some View {
         LiquidTodayScreen(
             model: liquidTodayModel,
-            meetingIntelProvider: { fetchTodayMeetingIntel() },
+            decisionsProvider: { fetchTodayDecisions() },
             briefProvider: dailyBriefProvider,
             // Focus Suggestion seam: CalendarFeature's scheduling intelligence,
             // injected so TasksFeature stays decoupled. The model computes and
@@ -26,7 +26,6 @@ extension ContentView {
             focusGapProvider: { events, window in
                 SchedulingIntelligence.suggestedFocusBlocks(events: events, within: window)
             },
-            onToggleMeetingPin: { id in toggleMeetingPin(id: id) },
             // macOS shows the title+date in the toolbar band (LiquidTodayTitle),
             // so the in-content header is hidden and the cards start higher,
             // aligning with the right Daily Brief rail.
@@ -37,16 +36,6 @@ extension ContentView {
                 NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
             }
         )
-    }
-
-    /// Fetches the meeting by id and toggles its pin state via `MeetingRepository`.
-    /// `context.save()` fires `.reloadOnStoreChange` → the Today screen re-reads
-    /// `fetchTodayMeetingIntel()` and the card reflects the new `isPinned` state.
-    @MainActor
-    private func toggleMeetingPin(id: UUID) {
-        let descriptor = FetchDescriptor<Meeting>(predicate: #Predicate { $0.id == id })
-        guard let meeting = (try? modelContext.fetch(descriptor))?.first else { return }
-        try? MeetingRepository(context: modelContext).setPinned(meeting, !meeting.isPinned)
     }
 
     /// Right-inspector slot content for `.today`; `nil` everywhere else so
@@ -91,43 +80,27 @@ extension ContentView {
         }
     }
 
-    /// Selects the most relevant processed meeting for the Meeting Intelligence card
-    /// (pinned → today → most-recent processed). Runs on the screen's reload cadence.
+    /// Fetches recent processed meetings and builds the flat decisions feed for the
+    /// Today Decisions card. Decisions are parsed HERE (app layer) so TasksFeature
+    /// never imports NexusMeetings.
     @MainActor
-    private func fetchTodayMeetingIntel() -> LiquidTodayMeetingIntel? {
-        // Fetch pinned-processed candidates.
-        let pinnedDescriptor = FetchDescriptor<Meeting>(
-            predicate: #Predicate { $0.isPinned == true && $0.processedAt != nil && $0.deletedAt == nil }
-        )
-        let pinnedCandidates = (try? modelContext.fetch(pinnedDescriptor)) ?? []
-
-        // Fetch recent-processed candidates (startedAt desc, capped).
-        var recentDescriptor = FetchDescriptor<Meeting>(
+    private func fetchTodayDecisions() -> [LiquidTodayDecision] {
+        // Fetch recent-processed meetings (startedAt desc, capped at 10).
+        var descriptor = FetchDescriptor<Meeting>(
             predicate: #Predicate { $0.processedAt != nil && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        recentDescriptor.fetchLimit = 30
-        let recentCandidates = (try? modelContext.fetch(recentDescriptor)) ?? []
+        descriptor.fetchLimit = 10
+        let meetings = (try? modelContext.fetch(descriptor)) ?? []
 
-        // De-dup by id and select.
-        var seen = Set<UUID>()
-        let candidates = (pinnedCandidates + recentCandidates).filter { seen.insert($0.id).inserted }
-        guard let meeting = TodayMeetingSelector.select(candidates, now: .now) else { return nil }
-
-        let status = MeetingProcessingStatus(rawValue: meeting.processingStatus)
-        // Decisions are parsed HERE (app layer) so TasksFeature renders plain
-        // values without importing NexusMeetings; the Today card shows ≤3.
-        let decisions = MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
-        return LiquidTodayMeetingIntel(
-            id: meeting.id,
-            title: meeting.title,
-            occurredAt: meeting.startedAt,
-            durationSec: meeting.durationSec,
-            summary: meeting.summaryText,
-            decisions: Array(decisions.prefix(3)),
-            actionItemCount: meeting.actionItemIDs.count,
-            statusLabel: status == .ready ? "Processed" : (status == .failed ? "Failed" : "Processing"),
-            isPinned: meeting.isPinned
-        )
+        let rows = meetings.map { meeting in
+            LiquidTodayMeetingDecisions(
+                meetingID: meeting.id,
+                meetingTitle: meeting.title,
+                meetingDate: meeting.startedAt,
+                decisions: MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
+            )
+        }
+        return LiquidTodayModel.aggregateDecisions(rows, cap: 5)
     }
 }

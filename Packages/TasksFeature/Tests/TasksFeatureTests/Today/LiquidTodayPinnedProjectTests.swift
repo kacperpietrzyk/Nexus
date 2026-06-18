@@ -43,7 +43,7 @@ struct LiquidTodayPinnedProjectTests {
             modelContext: context,
             calendarProvider: MockCalendarEventProvider(status: .denied),
             calendarEventsEnabled: false,
-            meetingIntelProvider: nil,
+            decisionsProvider: nil,
             briefProvider: nil,
             now: Date(timeIntervalSince1970: 10_000)
         )

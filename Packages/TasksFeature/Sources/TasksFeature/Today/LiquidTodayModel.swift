@@ -220,7 +220,7 @@ public final class LiquidTodayModel {
     public private(set) var focusHasCalendarEvents: Bool = false
     public private(set) var priorityGroups: [LiquidPriorityGroup] = []
     public private(set) var projects: [LiquidProjectProgress] = []
-    public private(set) var meetingIntel: LiquidTodayMeetingIntel?
+    public private(set) var decisions: [LiquidTodayDecision] = []
     /// First open task pinned as focus (`TaskItem.pinnedAsFocus`) — feeds the
     /// inspector Focus Timer card; `nil` → the card shows its empty state.
     public private(set) var pinnedFocusTask: TaskItem?
@@ -266,7 +266,7 @@ public final class LiquidTodayModel {
         modelContext: ModelContext,
         calendarProvider: any CalendarEventProviding,
         calendarEventsEnabled: Bool,
-        meetingIntelProvider: LiquidTodayMeetingIntelProvider?,
+        decisionsProvider: LiquidTodayDecisionsProvider?,
         briefProvider: LiquidTodayBriefProvider?,
         focusGapProvider: LiquidTodayFocusGapProvider? = nil,
         now: Date = .now
@@ -314,7 +314,7 @@ public final class LiquidTodayModel {
             projects = snapshot.projects
             pinnedFocusTask = snapshot.pinnedFocusTask
             projectNamesByID = snapshot.projectNamesByID
-            meetingIntel = meetingIntelProvider?()
+            decisions = decisionsProvider?() ?? []
             loadError = nil
             await loadBriefIfNeeded(input: snapshot.briefInput, provider: briefProvider, generation: generation)
         } catch {

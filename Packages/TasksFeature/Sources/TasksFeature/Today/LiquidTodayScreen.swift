@@ -26,14 +26,14 @@ private let inspectorSideMinWidth: CGFloat = 820
 
 /// The Liquid `Today / Command Center` main column (Task 5, spec
 /// `docs/05_MODULE_TODAY.md`): serif page header, then Agenda + Top
-/// Priorities on top and Projects / Notes / Meeting Intelligence as the
-/// 3-column bottom row. The matching right inspector (`TodayInspector`) is
-/// mounted separately through `LiquidAppShell`'s inspector slot; both read
-/// the same shared `LiquidTodayModel`.
+/// Priorities on top and Projects / Meeting Decisions as the bottom row.
+/// The matching right inspector (`TodayInspector`) is mounted separately
+/// through `LiquidAppShell`'s inspector slot; both read the same shared
+/// `LiquidTodayModel`.
 ///
-/// Cross-module content (meeting intel, daily brief) enters through injected
-/// value providers composed in the app layer — TasksFeature imports neither
-/// NexusMeetings nor NexusAgent.
+/// Cross-module content (meeting decisions, daily brief) enters through
+/// injected value providers composed in the app layer — TasksFeature imports
+/// neither NexusMeetings nor NexusAgent.
 public struct LiquidTodayScreen: View {
 
     @Environment(\.modelContext) private var modelContext
@@ -51,13 +51,9 @@ public struct LiquidTodayScreen: View {
     @AppStorage(NexusPreferences.Keys.calendarEventsInTodayEnabled) private var calendarEventsEnabled = false
 
     private let model: LiquidTodayModel
-    private let meetingIntelProvider: LiquidTodayMeetingIntelProvider?
+    private let decisionsProvider: LiquidTodayDecisionsProvider?
     private let briefProvider: LiquidTodayBriefProvider?
     private let focusGapProvider: LiquidTodayFocusGapProvider?
-    /// Meeting pin toggle seam: the app layer (which imports NexusMeetings)
-    /// fetches the meeting by id and calls `MeetingRepository.setPinned`.
-    /// `nil` = no toggle, the star renders read-only (reference/preview mode).
-    private let onToggleMeetingPin: ((UUID) -> Void)?
     // On macOS the title+date moved into the window toolbar band, so the host
     // hides the in-content header (false). iOS/iPadOS has no toolbar band and
     // keeps the inline header (the default).
@@ -80,20 +76,18 @@ public struct LiquidTodayScreen: View {
 
     public init(
         model: LiquidTodayModel,
-        meetingIntelProvider: LiquidTodayMeetingIntelProvider?,
+        decisionsProvider: LiquidTodayDecisionsProvider?,
         briefProvider: LiquidTodayBriefProvider?,
         focusGapProvider: LiquidTodayFocusGapProvider? = nil,
-        onToggleMeetingPin: ((UUID) -> Void)? = nil,
         showsInlineHeader: Bool = true,
         onNavigate: @escaping (TodayNavSelection) -> Void,
         onOpenTask: @escaping (TaskItem) -> Void,
         onOpenCapture: @escaping (CapturePane.Mode) -> Void
     ) {
         self.model = model
-        self.meetingIntelProvider = meetingIntelProvider
+        self.decisionsProvider = decisionsProvider
         self.briefProvider = briefProvider
         self.focusGapProvider = focusGapProvider
-        self.onToggleMeetingPin = onToggleMeetingPin
         self.showsInlineHeader = showsInlineHeader
         self.onNavigate = onNavigate
         self.onOpenTask = onOpenTask
@@ -364,10 +358,9 @@ public struct LiquidTodayScreen: View {
 
     private var meetingCard: some View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
-        return MeetingIntelCard(
-            intel: reference?.meetingIntel ?? model.meetingIntel,
-            onOpenMeetings: { onNavigate(.meetings) },
-            onTogglePin: LiquidReferenceMode.isEnabled ? nil : onToggleMeetingPin
+        return TodayMeetingDecisionsCard(
+            decisions: reference?.decisions ?? model.decisions,
+            onOpenMeetings: { onNavigate(.meetings) }
         )
     }
 
@@ -418,7 +411,7 @@ public struct LiquidTodayScreen: View {
             modelContext: modelContext,
             calendarProvider: calendarProvider,
             calendarEventsEnabled: calendarEventsEnabled,
-            meetingIntelProvider: meetingIntelProvider,
+            decisionsProvider: decisionsProvider,
             briefProvider: briefProvider,
             focusGapProvider: focusGapProvider
         )
