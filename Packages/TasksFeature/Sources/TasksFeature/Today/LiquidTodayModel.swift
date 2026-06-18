@@ -186,6 +186,10 @@ public final class LiquidTodayModel {
     /// through the injected `LiquidTodayFocusGapProvider` — the inspector
     /// renders this stored value instead of recomputing in `body`.
     public private(set) var focusSuggestion: DateInterval?
+    /// True when the last reload found at least one calendar event today.
+    /// Lets the Focus Suggestion card distinguish "empty calendar" (open day)
+    /// from "calendar fully booked" (no remaining gap).
+    public private(set) var focusHasCalendarEvents: Bool = false
     public private(set) var priorityGroups: [LiquidPriorityGroup] = []
     public private(set) var projects: [LiquidProjectProgress] = []
     public private(set) var notes: [LiquidNoteSummary] = []
@@ -279,6 +283,7 @@ public final class LiquidTodayModel {
             needsReload = false
             events = fetchedEvents
             focusSuggestion = focusGap
+            focusHasCalendarEvents = !fetchedEvents.isEmpty
             agendaItems = Self.agendaItems(events: fetchedEvents, blocks: snapshot.acceptedBlocks)
             priorityGroups = Self.priorityGroups(overdue: snapshot.overdue, today: snapshot.today)
             projects = snapshot.projects
@@ -293,6 +298,7 @@ public final class LiquidTodayModel {
             guard generation == reloadGeneration else { return }
             events = fetchedEvents
             focusSuggestion = focusGap
+            focusHasCalendarEvents = !fetchedEvents.isEmpty
             agendaItems = []
             priorityGroups = []
             projects = []
@@ -325,6 +331,7 @@ public final class LiquidTodayModel {
         provider: LiquidTodayFocusGapProvider?,
         now: Date
     ) -> DateInterval? {
+        guard !events.isEmpty else { return nil }
         guard let provider else { return nil }
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: now)

@@ -163,6 +163,8 @@ public struct TodayInspector: View {
         TodayInspectorSection("Focus Suggestion") {
             // Stored on the model (computed during reload via the injected
             // SchedulingIntelligence seam) — no per-render recomputation.
+            // reference?.focusSuggestion nil means reference has no gap —
+            // fall back to the live model value for both gap AND calendar state.
             if let gap = reference?.focusSuggestion ?? model.focusSuggestion {
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     Text(
@@ -172,6 +174,17 @@ public struct TodayInspector: View {
                     .font(DS.FontToken.body)
                     .foregroundStyle(DS.ColorToken.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                }
+            } else if !model.focusHasCalendarEvents {
+                // No meetings at all — the day is wide open. Skip the fabricated
+                // "X hours of focus time" claim; surface focus intent instead.
+                VStack(alignment: .leading, spacing: DS.Space.s) {
+                    inspectorEmptyLine("No meetings today — the day is open for focus.")
+                    if model.pinnedFocusTask != nil {
+                        inspectorEmptyLine("Start the Focus Timer below to begin your session.")
+                    } else {
+                        LiquidPrimaryButton("Browse tasks") { onNavigate(.tasks) }
+                    }
                 }
             } else {
                 inspectorEmptyLine("No free focus gaps left in today's workday.")

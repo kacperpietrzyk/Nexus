@@ -417,6 +417,43 @@ struct LiquidTodayModelTests {
         #expect(gated.storeLoadCount == 1)
     }
 
+    // MARK: - Focus gap (Task 6: empty-calendar reframe)
+
+    @Test("suggestedFocusGap returns nil when events array is empty")
+    @MainActor
+    func focusGapNilWhenNoEvents() {
+        // A passthrough provider that always claims the whole window is free —
+        // so a non-nil result can only come from the events-empty guard.
+        let passthroughProvider: LiquidTodayFocusGapProvider = { _, window in [window] }
+        let now = Calendar.current.date(
+            bySettingHour: 9, minute: 0, second: 0,
+            of: Calendar.current.startOfDay(for: .now)
+        ) ?? .now
+        let gap = LiquidTodayModel.suggestedFocusGap(events: [], provider: passthroughProvider, now: now)
+        #expect(gap == nil)
+    }
+
+    @Test("suggestedFocusGap returns a non-nil gap when at least one event is present")
+    @MainActor
+    func focusGapPresentWhenEventsExist() {
+        // A provider that always returns the whole remaining window as one gap.
+        let realProvider: LiquidTodayFocusGapProvider = { _, window in [window] }
+        let now = Calendar.current.date(
+            bySettingHour: 9, minute: 0, second: 0,
+            of: Calendar.current.startOfDay(for: .now)
+        ) ?? .now
+        let dayStart = Calendar.current.startOfDay(for: now)
+        let eventStart = dayStart.addingTimeInterval(10 * 3600)
+        let event = CalendarEvent(
+            id: "e1",
+            title: "Meeting",
+            start: eventStart,
+            end: eventStart.addingTimeInterval(3600)
+        )
+        let gap = LiquidTodayModel.suggestedFocusGap(events: [event], provider: realProvider, now: now)
+        #expect(gap != nil)
+    }
+
     // MARK: - Reference data
 
     @Test("Reference snapshot supplies dense Today data without persistence")
