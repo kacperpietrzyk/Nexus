@@ -105,6 +105,25 @@ public actor MeetingActionItemsInboxSource: InboxSource {
         }
     }
 
+    public func delete(_ item: InboxItem) async throws {
+        try await archive(item)
+    }
+
+    public func restore(_ item: InboxItem) async throws {
+        let id = item.id
+        try await MainActor.run {
+            // Fetch including soft-deleted (no `deletedAt == nil` predicate).
+            var descriptor = FetchDescriptor<TaskItem>(
+                predicate: #Predicate { task in task.id == id }
+            )
+            descriptor.fetchLimit = 1
+            guard let task = try taskRepository.context.fetch(descriptor).first else { return }
+            task.deletedAt = nil
+            task.updatedAt = .now
+            try taskRepository.context.save()
+        }
+    }
+
     @MainActor
     private func task(id: UUID) throws -> TaskItem? {
         var descriptor = FetchDescriptor<TaskItem>(

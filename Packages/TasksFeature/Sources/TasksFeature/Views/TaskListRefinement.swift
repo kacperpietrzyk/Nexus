@@ -118,10 +118,14 @@ extension TaskListView {
 struct TaskListFilterBar: View {
     @Binding var refinement: TaskListRefinement
     let availableLabels: [TaskLabel]
+    /// Drives the always-visible "Select" / "Done" multi-select toggle. Lives in
+    /// the in-content bar (not `.toolbar`) because the macOS shell paints its own
+    /// `NexusTopBar` and never surfaces system toolbar items.
+    var selection: SelectionModel<UUID>?
 
     var body: some View {
-        if !availableLabels.isEmpty {
-            HStack(spacing: DS.Space.s) {
+        HStack(spacing: DS.Space.s) {
+            if !availableLabels.isEmpty {
                 labelMenu
                 agentMenu
                 if refinement.isActive {
@@ -131,13 +135,35 @@ struct TaskListFilterBar: View {
                         .foregroundStyle(DS.ColorToken.textTertiary)
                         .accessibilityLabel("Clear filters")
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, DS.Space.l)
-            .padding(.vertical, DS.Space.s)
-            .background(barBackground)
-            .tint(DS.ColorToken.textPrimary)
+            Spacer(minLength: 0)
+            if let selection { selectionToggle(selection) }
         }
+        .padding(.horizontal, DS.Space.l)
+        .padding(.vertical, DS.Space.s)
+        .background(barBackground)
+        .tint(DS.ColorToken.textPrimary)
+    }
+
+    @ViewBuilder
+    private func selectionToggle(_ selection: SelectionModel<UUID>) -> some View {
+        Button {
+            withAnimation(DS.Motion.selection) {
+                if selection.isSelecting { selection.exitSelection() } else { selection.enterSelection() }
+            }
+        } label: {
+            LiquidFilterChip(
+                systemImage: selection.isSelecting ? "checkmark.circle.fill" : "checkmark.circle",
+                text: selection.isSelecting ? "Done" : "Select",
+                isActive: selection.isSelecting
+            )
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel(selection.isSelecting ? "Done selecting" : "Select tasks")
+        #if os(macOS)
+        .keyboardShortcut(selection.isSelecting ? KeyboardShortcut(.escape, modifiers: []) : nil)
+        #endif
     }
 
     /// Liquid re-skin (container level): transparent on macOS so the bar sits

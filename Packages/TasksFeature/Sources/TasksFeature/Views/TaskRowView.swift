@@ -75,6 +75,12 @@ public struct TaskRowView: View {
     public let onToggleSubtasks: (() -> Void)?
     public let onToggleDone: () -> Void
     public let onSnooze: (() -> Void)?
+    /// Multi-select state (driven by the surface's `SelectionModel`). While
+    /// `isSelecting`, the leading status checkbox cross-fades to a selection
+    /// checkmark and stops capturing taps, so the row's own tap toggles
+    /// selection instead of completing the task.
+    public let isSelecting: Bool
+    public let isSelected: Bool
 
     public init(
         task: TaskItem,
@@ -86,7 +92,9 @@ public struct TaskRowView: View {
         showsDefaultTaskAssistMenu: Bool = true,
         onToggleSubtasks: (() -> Void)? = nil,
         onToggleDone: @escaping () -> Void,
-        onSnooze: (() -> Void)? = nil
+        onSnooze: (() -> Void)? = nil,
+        isSelecting: Bool = false,
+        isSelected: Bool = false
     ) {
         self._task = Bindable(task)
         self.now = now
@@ -98,6 +106,8 @@ public struct TaskRowView: View {
         self.onToggleSubtasks = onToggleSubtasks
         self.onToggleDone = onToggleDone
         self.onSnooze = onSnooze
+        self.isSelecting = isSelecting
+        self.isSelected = isSelected
     }
 
     public var body: some View {
@@ -120,7 +130,9 @@ public struct TaskRowView: View {
             isSubtasksExpanded: isSubtasksExpanded,
             onToggleSubtasks: onToggleSubtasks,
             onToggleDone: onToggleDone,
-            onSnooze: onSnooze
+            onSnooze: onSnooze,
+            isSelecting: isSelecting,
+            isSelected: isSelected
         )
     }
 }
@@ -139,6 +151,8 @@ private struct RowBody: View {
     let onToggleSubtasks: (() -> Void)?
     let onToggleDone: () -> Void
     let onSnooze: (() -> Void)?
+    let isSelecting: Bool
+    let isSelected: Bool
 
     @State private var isHovering = false
 
@@ -163,8 +177,9 @@ private struct RowBody: View {
             disclosureControl
             // Leading Liquid checkbox — row anatomy: checkbox → title → spacer
             // → trailing meta. Snoozed renders a dashed ring; the button's a11y
-            // value announces the truth ("Snoozed").
-            statusToggleButton
+            // value announces the truth ("Snoozed"). In multi-select mode the
+            // checkbox cross-fades to a selection checkmark (`leadingSlot`).
+            leadingSlot
             if isCompact {
                 compactCentralContent
             } else {
@@ -223,6 +238,23 @@ private struct RowBody: View {
     }
 
     // MARK: Leading Liquid checkbox
+
+    /// Leading slot: the status checkbox and a multi-select checkmark are BOTH
+    /// always in the view tree (constant structure — a conditional swap would
+    /// re-diff the row mid-flight and crash the List), cross-faded by opacity.
+    /// While selecting, the checkbox stops capturing taps so the row's own tap
+    /// routes to the selection toggle.
+    private var leadingSlot: some View {
+        ZStack {
+            statusToggleButton
+                .opacity(isSelecting ? 0 : 1)
+                .allowsHitTesting(!isSelecting)
+            SelectionCheckmark(isSelected: isSelected)
+                .frame(width: statusHitSize, height: statusHitSize)
+                .opacity(isSelecting ? 1 : 0)
+                .allowsHitTesting(false)
+        }
+    }
 
     private var statusToggleButton: some View {
         Button(action: onToggleDone) {

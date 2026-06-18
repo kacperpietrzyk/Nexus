@@ -185,4 +185,16 @@ public actor InboxSourceRegistry {
         }
         try await source.snooze(item, until: date)
     }
+
+    public func delete(_ item: InboxItem) async throws {
+        guard let source = sources[item.sourceID] else {
+            throw InboxSourceRegistryError.missingSource(item.sourceID)
+        }
+        try await source.delete(item)
+    }
+
+    public func restore(_ item: InboxItem) async throws {
+        guard let source = sources[item.sourceID] else { return }
+        try await source.restore(item)
+    }
 }

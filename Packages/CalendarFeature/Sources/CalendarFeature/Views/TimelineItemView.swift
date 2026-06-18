@@ -5,12 +5,15 @@ import SwiftUI
 /// A single placed item on the hour axis (spec §7 / §9). Proposed blocks read as
 /// dashed/dimmed (a suggestion), accepted blocks as a solid lime-edged surface,
 /// and external events as a neutral raised surface — three visually distinct
-/// treatments per spec §7.
+/// treatments per spec §7. Right-click / long-press reveals a context menu
+/// forwarded via `onContextAction`.
 struct TimelineItemView: View {
     let positioned: PositionedTimelineItem
     let onAccept: () -> Void
     let onReject: () -> Void
     let onTap: () -> Void
+    /// Nil suppresses the context menu.
+    var onContextAction: ((EventContextMenuAction) -> Void)?
 
     private var item: TimelineItem { positioned.item }
 
@@ -51,6 +54,7 @@ struct TimelineItemView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
+        .modifier(EventContextMenuModifier(item: item, onAction: onContextAction))
     }
 
     private var accentBar: some View {

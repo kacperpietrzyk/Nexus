@@ -45,8 +45,42 @@ struct MessageBubbleView: View {
         switch block.kind {
         case .user:
             userBlock
+                .contextMenu { messageContextMenu }
         case .agent:
             agentBlock
+                .contextMenu { messageContextMenu }
+        }
+    }
+
+    @ViewBuilder
+    private var messageContextMenu: some View {
+        Button {
+            PasteboardCopy.string(markdownRepresentation)
+        } label: {
+            Label("Copy as Markdown", systemImage: "doc.plaintext")
+        }
+    }
+
+    /// Canonical Markdown for this message block. User messages use a plain
+    /// `> quote` block; agent messages use a heading + body. Tool rows are
+    /// appended as a bullet list so the export is informative.
+    private var markdownRepresentation: String {
+        switch block.kind {
+        case .user:
+            let text = AgentOCRMarker.userFacingText(block.text)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return MarkdownExport.entity(title: "You", body: text)
+        case .agent:
+            var meta: [String] = []
+            if block.redacted { meta.append("summarised") }
+            for tool in block.tools {
+                meta.append("tool: \(tool.name)")
+            }
+            return MarkdownExport.entity(
+                title: "Nexus",
+                body: block.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                metadata: meta
+            )
         }
     }
 

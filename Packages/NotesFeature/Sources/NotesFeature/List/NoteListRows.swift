@@ -91,6 +91,17 @@ struct LiquidNoteRow: View {
                 extraContextMenu
                 Divider()
             }
+            Button {
+                PasteboardCopy.string(NoteMarkdownExport.markdown(for: note))
+            } label: {
+                Label("Copy as Markdown", systemImage: "doc.plaintext")
+            }
+            Button {
+                PasteboardCopy.string(NoteMarkdownExport.wikilink(for: note))
+            } label: {
+                Label("Copy Link", systemImage: "link")
+            }
+            Divider()
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }

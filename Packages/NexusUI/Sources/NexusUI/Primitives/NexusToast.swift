@@ -43,6 +43,11 @@ public struct NexusToast: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 11)
         }
+        // Hug content vertically: the leading stripe is a height-less Rectangle,
+        // so without this it stretches to fill a tall proposed height (e.g. an
+        // `.overlay(alignment:.bottom)` host) and balloons the toast into a
+        // full-height panel.
+        .fixedSize(horizontal: false, vertical: true)
         .background(NexusColor.Background.raised)
         .clipShape(RoundedRectangle(cornerRadius: NexusRadius.r1, style: .continuous))
         .overlay(

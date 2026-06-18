@@ -44,3 +44,21 @@ extension EnvironmentValues {
         set { self[PersonMeetingResolverEnvironmentKey.self] = newValue }
     }
 }
+
+// MARK: - New linked task callback
+
+private struct OnCreateLinkedTaskEnvironmentKey: EnvironmentKey {
+    static let defaultValue: (@MainActor (Person) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    /// Host-injected closure that creates a new task linked (via `.mentions`) to
+    /// the given `Person`. PeopleFeature cannot import TasksFeature or
+    /// TaskItemRepository (CLAUDE.md isolation), so the actual task creation
+    /// belongs to the app composition root which imports both. When nil the
+    /// "New Linked Task" context-menu item is hidden.
+    public var onCreateLinkedTask: (@MainActor (Person) -> Void)? {
+        get { self[OnCreateLinkedTaskEnvironmentKey.self] }
+        set { self[OnCreateLinkedTaskEnvironmentKey.self] = newValue }
+    }
+}

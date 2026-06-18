@@ -66,6 +66,8 @@ struct NoteFolderDisclosure<Menu: View>: View {
     /// Per-note context menu, supplied by the owner so Library notes share the
     /// same Move / Convert / Delete actions as the flat-section leaves.
     @ViewBuilder let noteMenu: (Note) -> Menu
+    /// Optional multi-select model; when provided, each leaf gets `.selectable`.
+    var selectionModel: SelectionModel<UUID>?
 
     var body: some View {
         DisclosureGroup(
@@ -82,25 +84,48 @@ struct NoteFolderDisclosure<Menu: View>: View {
                     setExpanded: setExpanded,
                     onSelect: onSelect,
                     onTogglePin: onTogglePin,
-                    noteMenu: noteMenu
+                    noteMenu: noteMenu,
+                    selectionModel: selectionModel
                 )
                 .padding(.leading, DS.Space.m)
             }
             ForEach(node.notes) { note in
-                NoteTreeLeaf(
-                    note: note,
-                    isCanonical: false,
-                    isSelected: note.id == selection,
-                    onTogglePin: onTogglePin.map { toggle in { toggle(note) } }
-                )
-                .padding(.leading, DS.Space.m)
-                .onTapGesture { onSelect(note.id) }
-                .contextMenu { noteMenu(note) }
+                leafRow(for: note)
+                    .padding(.leading, DS.Space.m)
             }
         } label: {
             Label(node.name, systemImage: "folder")
                 .font(DS.FontToken.bodyStrong)
                 .foregroundStyle(DS.ColorToken.textPrimary)
+        }
+    }
+
+    @ViewBuilder private func leafRow(for note: Note) -> some View {
+        let leaf = NoteTreeLeaf(
+            note: note,
+            isCanonical: false,
+            isSelected: note.id == selection,
+            onTogglePin: onTogglePin.map { toggle in { toggle(note) } }
+        )
+        .onTapGesture {
+            // In multi-select mode the row tap toggles selection instead of
+            // opening the note (the `.selectable` checkmark is presentation only).
+            if let model = selectionModel, model.isSelecting {
+                withAnimation(DS.Motion.selection) { model.toggle(id: note.id) }
+            } else {
+                onSelect(note.id)
+            }
+        }
+        .contextMenu { noteMenu(note) }
+
+        if let model = selectionModel {
+            leaf.selectable(
+                isSelecting: model.isSelecting,
+                isSelected: model.isSelected(id: note.id),
+                onToggle: { model.toggle(id: note.id) }
+            )
+        } else {
+            leaf
         }
     }
 }

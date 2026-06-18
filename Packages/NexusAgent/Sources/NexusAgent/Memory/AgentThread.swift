@@ -8,6 +8,9 @@ public final class AgentThread {
     public var createdAt: Date = Date.now
     public var updatedAt: Date = Date.now
     public var archivedAt: Date?
+    /// Non-nil when the thread is pinned to the top of the rail. The timestamp
+    /// is the pin date (newest-pinned-first ordering among pins).
+    public var pinnedAt: Date?
     public var projectID: UUID?
     public var modelHint: String?
 
@@ -17,6 +20,7 @@ public final class AgentThread {
         createdAt: Date = .now,
         updatedAt: Date = .now,
         archivedAt: Date? = nil,
+        pinnedAt: Date? = nil,
         projectID: UUID? = nil,
         modelHint: String? = nil
     ) {
@@ -25,6 +29,7 @@ public final class AgentThread {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.archivedAt = archivedAt
+        self.pinnedAt = pinnedAt
         self.projectID = projectID
         self.modelHint = modelHint
     }

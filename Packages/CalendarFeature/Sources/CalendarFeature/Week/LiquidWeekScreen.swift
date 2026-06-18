@@ -109,16 +109,20 @@ extension View {
 /// the existing `addManualBlock` (accepted block + mirror event) seam.
 public struct LiquidWeekScreen: View {
 
-    @Bindable private var viewModel: CalendarViewModel
+    // `viewModel`, `editorTarget`, `availableCalendars`, and `undo` are internal
+    // (not `private`) so the same-type context-menu dispatch lives in
+    // `LiquidWeekScreen+ContextActions.swift` (keeps this file under length limits).
+    @Bindable var viewModel: CalendarViewModel
     private let calendar: Calendar
     private let now: () -> Date
     /// App-layer capture seam for the strip's empty-state CTA (same
     /// notification path the Today screen uses); nil hides the CTA.
     private let onAddTask: (() -> Void)?
 
-    @State private var editorTarget: WeekEditorTarget?
+    @State var editorTarget: WeekEditorTarget?
     @State private var manualBlockRequest: ManualBlockRequest?
-    @State private var availableCalendars: [CalendarInfo] = []
+    @State var availableCalendars: [CalendarInfo] = []
+    @State var undo = UndoController()
 
     private struct ManualBlockRequest: Identifiable {
         let taskID: UUID
@@ -168,6 +172,7 @@ public struct LiquidWeekScreen: View {
         .sheet(item: $manualBlockRequest) { request in
             manualBlockSheet(request)
         }
+        .undoToast(undo)
     }
 
     // MARK: - Header
@@ -346,6 +351,10 @@ public struct LiquidWeekScreen: View {
                 onCreateAt: { start in
                     guard reference == nil else { return }
                     createEvent(at: start)
+                },
+                onContextAction: { item, action in
+                    guard reference == nil else { return }
+                    handleContextAction(item: item, action: action)
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -405,6 +414,10 @@ public struct LiquidWeekScreen: View {
                 onCreateAt: { start in
                     guard dayReference == nil else { return }
                     createEvent(at: start)
+                },
+                onContextAction: { item, action in
+                    guard dayReference == nil else { return }
+                    handleContextAction(item: item, action: action)
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -22,6 +22,21 @@ public protocol InboxSource: Sendable {
     /// an offset page) keeps the cross-source merge order-correct and re-entry
     /// simple.
     func items(limit: Int) async throws -> [InboxItem]
+
+    /// Permanently deletes an item. The default delegates to `archive` so
+    /// existing conformers need no change; sources that support real deletion
+    /// (e.g. a TasksSource backed by a repo) should override to call their
+    /// hard-delete path. The default is intentionally non-throwing on the
+    /// delete semantics because even the archive fallback removes the item
+    /// from the live list.
+    func delete(_ item: InboxItem) async throws
+
+    /// Restores a previously archived/deleted item. Default is a no-op because
+    /// the protocol has no restore path today; sources that support undo
+    /// (e.g. TasksSource with a soft-delete repo) should override. The undo
+    /// toast is wired to this — the toast will still show, but pressing Undo
+    /// silently no-ops for sources that don't implement restore.
+    func restore(_ item: InboxItem) async throws
 }
 
 extension InboxSource {
@@ -31,5 +46,13 @@ extension InboxSource {
 
     public func items(limit: Int) async throws -> [InboxItem] {
         Array(try await items().prefix(limit))
+    }
+
+    public func delete(_ item: InboxItem) async throws {
+        try await archive(item)
+    }
+
+    public func restore(_: InboxItem) async throws {
+        // no-op default — sources must override for real undo support
     }
 }

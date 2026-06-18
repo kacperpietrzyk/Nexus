@@ -14,7 +14,8 @@ public struct TaskListView: View {
     // TaskListRefinement.swift can post-filter the resolved arrays without
     // bloating this file's type body past the lint budget.
     @Environment(\.modelContext) var modelContext
-    @Environment(\.taskRepository) private var repository
+    // `internal` so TaskListView+BulkActions.swift can call repository methods.
+    @Environment(\.taskRepository) var repository
 
     public let filter: TaskFilter
     public let now: Date
@@ -28,11 +29,11 @@ public struct TaskListView: View {
     // those two (DB-sorted) filters page; everything else loads fully and leaves
     // this untouched. See `TaskListPageState`.
     @State var pageState = TaskListPageState()
-    @State private var expandedTaskIDs: Set<UUID> = []
+    @State var expandedTaskIDs: Set<UUID> = []
     // `internal` so the +Paging extension can refresh progress after an append.
     @State var subtaskProgressByTaskID: [UUID: SubtaskProgress] = [:]
-    @State private var parentPickerTarget: TaskItem?
-    @State private var cascadePrompt: CascadeCompletionPrompt?
+    @State var parentPickerTarget: TaskItem?
+    @State var cascadePrompt: CascadeCompletionPrompt?
     // `internal` so the +Paging extension can surface a load-more failure.
     @State var error: String?
     @State var refinement = TaskListRefinement()
@@ -40,6 +41,15 @@ public struct TaskListView: View {
     // Memoized labeled-task-id resolution (FIX 3a): only re-queries
     // LinkRepository when `refinement.labelID` changes.
     @State var labeledTaskIDCache = LabeledTaskIDCache()
+    // Multi-select / bulk actions
+    // `internal` so TaskListView+BulkActions.swift extension can read/write these.
+    @State var selection = SelectionModel<UUID>()
+    @State var undo = UndoController()
+    @State var bulkMovePickerPresented = false
+    @State var bulkMoveActiveProjects: [Project] = []
+    // Per-row context-menu project picker (single task move)
+    @State var contextMoveTarget: TaskItem?
+    @State var contextMoveActiveProjects: [Project] = []
 
     public init(
         filter: TaskFilter,
@@ -74,8 +84,31 @@ public struct TaskListView: View {
         }
         #endif
         .safeAreaInset(edge: .top, spacing: 0) {
-            TaskListFilterBar(refinement: $refinement, availableLabels: refinementLabels)
+            TaskListFilterBar(refinement: $refinement, availableLabels: refinementLabels, selection: selection)
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            BulkActionBar(
+                model: selection,
+                allIDs: visibleRootTasks.map(\.id),
+                actions: bulkActions
+            )
+        }
+        .undoToast(undo)
+        // Global ⌘A: publish this list's "select all" into the focused scene so
+        // the shell's menu-bar command can route ⌘A here. macOS mounts exactly
+        // one list destination at a time, so the default `isActive: true` is
+        // correct; the published action enters selection mode + selects every
+        // visible root task.
+        .selectAllCommandTarget(in: selection, ids: visibleRootTasks.map(\.id))
+        // Palette "Select All Items" path; the menu-bar ⌘A uses the focused
+        // value above. macOS / iPad mount one list surface at a time.
+        .onReceive(NotificationCenter.default.publisher(for: .nexusSelectAllActiveSurface)) { _ in
+            selection.enterSelection()
+            selection.selectAll(visibleRootTasks.map(\.id))
+        }
+        // Select/Done entry now lives in the in-content `TaskListFilterBar`
+        // (the macOS shell paints its own NexusTopBar, so `.toolbar` items never
+        // surfaced); long-press on any row is the secondary entry point on iOS.
         .task(id: filter) { reload() }
         .task { loadRefinementLabels() }
         .onChange(of: now) { _, _ in reload() }
@@ -91,6 +124,28 @@ public struct TaskListView: View {
                 reload()
             }
         }
+        .sheet(isPresented: $bulkMovePickerPresented) {
+            ProjectPickerSheet(
+                projects: bulkMoveActiveProjects,
+                title: "Move \(selection.count) tasks to…"
+            ) { projectID in
+                bulkMove(toProject: projectID)
+                bulkMovePickerPresented = false
+            } onCancel: {
+                bulkMovePickerPresented = false
+            }
+        }
+        .sheet(item: $contextMoveTarget) { task in
+            ProjectPickerSheet(
+                projects: contextMoveActiveProjects,
+                title: "Move to project"
+            ) { projectID in
+                moveToProject(projectID, for: task)
+                contextMoveTarget = nil
+            } onCancel: {
+                contextMoveTarget = nil
+            }
+        }
         .cascadeCompletionConfirmation($cascadePrompt) { prompt in
             confirmCascade(prompt)
         }
@@ -104,197 +159,15 @@ public struct TaskListView: View {
         )
     }
 
-    private var taskListContent: some View {
-        List {
-            if let error, !isSavedFilter {
-                errorRow(error)
-            }
+}
 
-            switch filter {
-            case .today:
-                section("Overdue", items: overdue)
-                todaySection
-                noDateSection
-            case .all where isWindowing:
-                // Windowed flat list: capped stagger + a prefetch trigger near the
-                // tail. `windowedRow` appends the next page on appear.
-                ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
-                    windowedRow(for: item, index: i, loadedCount: flatList.count)
-                }
-            case .all, .upcoming, .completed, .templates, .byTag:
-                // MP-2 motion pass: staggered row enter via .nexusAppear(i)
-                ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
-                    row(for: item, appearIndex: i)
-                }
-            case .inbox:
-                ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
-                    row(for: item, appearIndex: i)
-                }
-            case .project, .projectSection, .cycle:
-                ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
-                    row(for: item, appearIndex: i)
-                }
-            case .savedFilter:
-                savedFilterContent
-            }
-        }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
-    }
+// MARK: - Reload, mutations and bulk-action state
 
-    /// Liquid empty state (calm, title + one line) — same idiom as
-    /// `LiquidEmptyState`, plus the title line the per-filter resolver carries.
-    private func taskEmptyState(title: String, systemImage: String, message: String) -> some View {
-        VStack(spacing: DS.Space.m) {
-            Image(systemName: systemImage)
-                // 22 pt hero glyph — matches LiquidEmptyState's calibration.
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textMuted)
-                .symbolRenderingMode(.hierarchical)
+extension TaskListView {
 
-            VStack(spacing: DS.Space.xs) {
-                Text(title)
-                    .font(DS.FontToken.section)
-                    .foregroundStyle(DS.ColorToken.textPrimary)
-
-                Text(message)
-                    .font(DS.FontToken.metadata)
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-            }
-        }
-        .frame(maxWidth: 440)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding(.horizontal, DS.Space.xxxl)
-        .padding(.bottom, 118)
-    }
-
-    private func errorRow(_ message: String) -> some View {
-        Text(message)
-            .font(DS.FontToken.metadata)
-            // Error legibility is carried by contrast/weight, not color.
-            .foregroundStyle(DS.ColorToken.textPrimary)
-            .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-            .listRowBackground(containerBackground)
-            .listRowSeparator(.hidden)
-    }
-
-    @ViewBuilder
-    private var savedFilterContent: some View {
-        if let error {
-            ContentUnavailableView(
-                "Smart List unavailable",
-                systemImage: "line.3.horizontal.decrease.circle",
-                description: Text(error)
-            )
-            .listRowBackground(containerBackground)
-        } else if flatList.isEmpty {
-            ContentUnavailableView(
-                "No matching tasks",
-                systemImage: "line.3.horizontal.decrease.circle",
-                description: Text("This Smart List has no open root tasks right now.")
-            )
-            .listRowBackground(containerBackground)
-        } else {
-            ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
-                row(for: item, appearIndex: i)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var todaySection: some View {
-        if !today.isEmpty {
-            Section {
-                // MP-2 motion pass: staggered row enter via .nexusAppear(i)
-                ForEach(Array(today.enumerated()), id: \.element.id) { i, item in
-                    row(for: item, appearIndex: i)
-                }
-                .onMove { from, to in moveToday(from: from, to: to) }
-            } header: {
-                sectionHeader("TODAY")
-            }
-        }
-    }
-
-    @ViewBuilder
-    func section(_ title: String, items: [TaskItem]) -> some View {
-        if !items.isEmpty {
-            Section {
-                // MP-2 motion pass: staggered row enter via .nexusAppear(i)
-                ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
-                    row(for: item, appearIndex: i)
-                }
-            } header: {
-                sectionHeader(title.uppercased())
-            }
-        }
-    }
-
-    /// Tracked-caps Liquid section header (01_FOUNDATIONS §Gęstość informacji).
-    func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(DS.FontToken.caption)
-            .tracking(0.8)
-            .foregroundStyle(DS.ColorToken.textTertiary)
-    }
-
-    @ViewBuilder
-    func row(for item: TaskItem, appearIndex: Int? = nil) -> some View {
-        // MP-2 motion pass: only the row itself gets the staggered enter — the
-        // subtask list expands on tap, not on appear, so it stays unindexed.
-        if let appearIndex {
-            rowView(for: item).nexusAppear(appearIndex)
-        } else {
-            rowView(for: item)
-        }
-        if expandedTaskIDs.contains(item.id) {
-            SubtaskListView(
-                parent: item,
-                now: now,
-                expandedTaskIDs: $expandedTaskIDs,
-                onSelect: onSelect
-            )
-        }
-    }
-
-    private func rowView(for item: TaskItem) -> some View {
-        TaskRowView(
-            task: item,
-            now: now,
-            subtaskProgress: subtaskProgressByTaskID[item.id],
-            isSubtasksExpanded: expandedTaskIDs.contains(item.id),
-            showsDefaultTaskAssistMenu: false,
-            onToggleSubtasks: { toggleExpansion(for: item) },
-            onToggleDone: { toggleDone(item) },
-            onSnooze: { snooze(item, by: .oneHour) }
-        )
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(containerBackground)
-        .listRowSeparator(.hidden)
-        .contentShape(Rectangle())
-        .onTapGesture { onSelect?(item) }
-        .swipeActions(edge: .leading) { leadingSwipeActions(for: item) }
-        .swipeActions(edge: .trailing) { trailingSwipeActions(for: item) }
-        .taskAssistContextMenu(for: item) { actions in
-            if item.isTemplate {
-                Button("New Task from Template") { instantiateTemplate(item) }
-                // I-D1: no complete/snooze/subtask affordances on an inert blueprint.
-                Button("Delete Template", role: .destructive) { deleteTemplate(item) }
-            } else {
-                Button(item.status == .done ? "Reopen" : "Mark done") { toggleDone(item) }
-                Button("Save as Template") { saveAsTemplate(item) }
-                Button("Subtask of…") { parentPickerTarget = item }
-                Button("Snooze 1h") { snooze(item, by: .oneHour) }
-                Button("Snooze until tomorrow") { snooze(item, by: .tomorrow) }
-                TaskAssistMenuSection(actions: actions)
-            }
-        }
-    }
-
+    // `internal` so TaskListView+BulkActions.swift can call reload() after mutations.
     @MainActor
-    private func reload() {
+    func reload() {
         do {
             // A reload re-resolves the data set from scratch, so the windowed
             // cursors must reset too — otherwise a `now` tick or store-change
@@ -366,28 +239,41 @@ public struct TaskListView: View {
         }
     }
 
-    private var isSavedFilter: Bool {
-        if case .savedFilter = filter {
-            return true
-        }
+    /// Bulk actions shown in the `BulkActionBar` when `selection.hasSelection`.
+    @MainActor
+    var bulkActions: [BulkAction] {
+        var actions: [BulkAction] = []
+        actions.append(BulkAction(label: "Complete", systemImage: "checkmark.circle") { [self] in bulkComplete() })
+        actions.append(BulkAction(label: "Snooze 1h", systemImage: "clock") { [self] in bulkSnooze(by: .oneHour) })
+        actions.append(BulkAction(label: "Tomorrow", systemImage: "sun.haze") { [self] in bulkSnooze(by: .tomorrow) })
+        actions.append(BulkAction(label: "Pin", systemImage: "pin") { [self] in bulkPin() })
+        actions.append(BulkAction(label: "Move", systemImage: "folder") { [self] in bulkMovePresent() })
+        actions.append(BulkAction(label: "Copy", systemImage: "doc.on.doc") { [self] in bulkCopyAsMarkdown() })
+        actions.append(BulkAction(label: "Delete", systemImage: "trash", role: .destructive) { [self] in bulkDelete() })
+        return actions
+    }
+
+    @MainActor
+    private func bulkMovePresent() {
+        bulkMoveActiveProjects = loadActiveProjects()
+        bulkMovePickerPresented = true
+    }
+
+    var isSavedFilter: Bool {
+        if case .savedFilter = filter { return true }
         return false
     }
 
     /// Whether the resolved data set for the current filter has zero rows.
-    /// Drives `TaskListEmptyState.resolve`. `.today` aggregates its three
-    /// buckets; every other filter uses the flat list. `.savedFilter` is
-    /// included for completeness but the resolver short-circuits it.
-    private var listIsEmpty: Bool {
+    var listIsEmpty: Bool {
         switch filter {
-        case .today:
-            return overdue.isEmpty && today.isEmpty && noDate.isEmpty
-        default:
-            return flatList.isEmpty
+        case .today: return overdue.isEmpty && today.isEmpty && noDate.isEmpty
+        default: return flatList.isEmpty
         }
     }
 
     @MainActor
-    private func toggleExpansion(for item: TaskItem) {
+    func toggleExpansion(for item: TaskItem) {
         if expandedTaskIDs.contains(item.id) {
             expandedTaskIDs.remove(item.id)
         } else {
@@ -396,7 +282,7 @@ public struct TaskListView: View {
     }
 
     @MainActor
-    private func toggleDone(_ item: TaskItem) {
+    func toggleDone(_ item: TaskItem) {
         guard let repository, !item.isTemplate else { return }
         do {
             if item.status == .done {
@@ -420,7 +306,7 @@ public struct TaskListView: View {
     }
 
     @MainActor
-    private func confirmCascade(_ prompt: CascadeCompletionPrompt) {
+    func confirmCascade(_ prompt: CascadeCompletionPrompt) {
         guard let repository else { return }
         do {
             try TaskCompletionAction.cascadeComplete(prompt.task, repository: repository)
@@ -431,7 +317,7 @@ public struct TaskListView: View {
     }
 
     @MainActor
-    private func moveToday(from offsets: IndexSet, to destination: Int) {
+    func moveToday(from offsets: IndexSet, to destination: Int) {
         guard let repository else { return }
         // Renumber the whole visible Today order so the reorder persists and is
         // reflected by `TodayQuery.today`'s manual-order comparator. A single
@@ -450,7 +336,7 @@ public struct TaskListView: View {
     }
 
     @MainActor
-    private func snooze(_ item: TaskItem, by offset: SnoozeOffset) {
+    func snooze(_ item: TaskItem, by offset: SnoozeOffset) {
         guard let repository else { return }
         var calendar = Calendar(identifier: .iso8601)
         calendar.timeZone = .current
@@ -471,15 +357,14 @@ public struct TaskListView: View {
         }
     }
 
-    private enum SnoozeOffset {
-        case oneHour
-        case tomorrow
-    }
+    enum SnoozeOffset { case oneHour, tomorrow }
 }
+
+// MARK: - Template actions, swipe actions, section buckets
 
 extension TaskListView {
     @MainActor
-    private func saveAsTemplate(_ item: TaskItem) {
+    func saveAsTemplate(_ item: TaskItem) {
         guard let repository else { return }
         do {
             _ = try TemplateInstantiator(tasks: repository).saveAsTemplate(item)
@@ -490,7 +375,7 @@ extension TaskListView {
     }
 
     @MainActor
-    private func instantiateTemplate(_ item: TaskItem) {
+    func instantiateTemplate(_ item: TaskItem) {
         guard let repository else { return }
         do {
             _ = try TemplateInstantiator(tasks: repository).instantiate(item)
@@ -501,7 +386,7 @@ extension TaskListView {
     }
 
     @MainActor
-    private func deleteTemplate(_ item: TaskItem) {
+    func deleteTemplate(_ item: TaskItem) {
         guard let repository, item.isTemplate else { return }
         do {
             try repository.softDelete(item)

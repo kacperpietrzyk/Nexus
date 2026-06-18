@@ -255,6 +255,47 @@ struct InboxSourceRegistryTests {
             try await registry.archive(item)
         }
     }
+
+    @Test("delete routes to owning source; default implementation delegates to archive")
+    func deleteRoutesToSource() async throws {
+        let registry = InboxSourceRegistry()
+        let source = RecordingInboxSource(id: "tasks.no-date", items: [])
+        let itm = InboxItem(
+            id: UUID(), sourceID: "tasks.no-date", title: "Delete Me",
+            body: nil, due: nil, tags: [], createdAt: Date(timeIntervalSince1970: 300)
+        )
+        await registry.register(source)
+        try await registry.delete(itm)
+        // RecordingInboxSource doesn't override delete → default delegates to archive.
+        let events = await source.events
+        #expect(events == ["archive:Delete Me"])
+    }
+
+    @Test("restore is a no-op for sources that don't override it")
+    func restoreIsNoOpByDefault() async throws {
+        let registry = InboxSourceRegistry()
+        let source = RecordingInboxSource(id: "tasks.no-date", items: [])
+        let itm = InboxItem(
+            id: UUID(), sourceID: "tasks.no-date", title: "Restore Me",
+            body: nil, due: nil, tags: [], createdAt: Date(timeIntervalSince1970: 300)
+        )
+        await registry.register(source)
+        // Should not throw and should record nothing.
+        try await registry.restore(itm)
+        let events = await source.events
+        #expect(events.isEmpty)
+    }
+
+    @Test("restore on unknown sourceID silently succeeds (no throw)")
+    func restoreUnknownSourceSilent() async throws {
+        let registry = InboxSourceRegistry()
+        let itm = InboxItem(
+            id: UUID(), sourceID: "ghost", title: "Ghost",
+            body: nil, due: nil, tags: [], createdAt: Date(timeIntervalSince1970: 300)
+        )
+        // restore on an unregistered source must NOT throw (unlike archive/delete).
+        try await registry.restore(itm)
+    }
 }
 
 private actor RecordingInboxSource: InboxSource {

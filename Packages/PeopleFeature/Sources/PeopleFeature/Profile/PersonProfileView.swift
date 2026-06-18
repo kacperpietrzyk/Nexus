@@ -25,6 +25,7 @@ private let profileColumnMaxWidth: CGFloat = 720
 public struct PersonProfileView: View {
     @Environment(\.personRepository) private var personRepository
     @Environment(\.personMeetingResolver) private var meetingResolver
+    @Environment(\.onCreateLinkedTask) private var onCreateLinkedTask
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -36,6 +37,7 @@ public struct PersonProfileView: View {
     @State private var noteRows: [any Linkable] = []
     @State private var editorPresented = false
     @State private var mergePresented = false
+    @State private var deleteConfirmPresented = false
     @State private var loadError: String?
 
     public init(personID: UUID) {
@@ -86,6 +88,22 @@ public struct PersonProfileView: View {
         .navigationTitle(person?.displayName.isEmpty == false ? person!.displayName : "Person")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                if let current = person, let email = current.email, !email.isEmpty {
+                    Button {
+                        PasteboardCopy.string(email)
+                    } label: {
+                        Label("Copy Email", systemImage: "envelope")
+                    }
+                }
+
+                if onCreateLinkedTask != nil, let current = person {
+                    Button {
+                        onCreateLinkedTask?(current)
+                    } label: {
+                        Label("New Linked Task", systemImage: "checkmark.circle.badge.plus")
+                    }
+                }
+
                 Button {
                     mergePresented = true
                 } label: {
@@ -97,6 +115,13 @@ public struct PersonProfileView: View {
                     editorPresented = true
                 } label: {
                     Label("Edit", systemImage: "pencil")
+                }
+                .disabled(person == nil || personRepository == nil)
+
+                Button(role: .destructive) {
+                    deleteConfirmPresented = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
                 .disabled(person == nil || personRepository == nil)
             }
@@ -111,6 +136,18 @@ public struct PersonProfileView: View {
             if let person {
                 PersonMergeView(target: person)
             }
+        }
+        .confirmationDialog(
+            "Delete \(person?.displayName.isEmpty == false ? person!.displayName : "this person")?",
+            isPresented: $deleteConfirmPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) { deletePerson() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "This removes the contact and all graph links to their meetings, tasks, and notes. This action cannot be undone."
+            )
         }
         .task(id: personID) { reload() }
     }
@@ -140,6 +177,19 @@ public struct PersonProfileView: View {
             Spacer(minLength: 0)
 
             #if os(macOS)
+            if let email = person.email, !email.isEmpty {
+                LiquidIconButton(systemImage: "envelope", accessibilityLabel: "Copy Email") {
+                    PasteboardCopy.string(email)
+                }
+            }
+            if onCreateLinkedTask != nil {
+                LiquidIconButton(
+                    systemImage: "checkmark.circle.badge.plus",
+                    accessibilityLabel: "New Linked Task"
+                ) {
+                    onCreateLinkedTask?(person)
+                }
+            }
             LiquidIconButton(systemImage: "arrow.triangle.merge", accessibilityLabel: "Merge") {
                 mergePresented = true
             }
@@ -148,8 +198,18 @@ public struct PersonProfileView: View {
                 editorPresented = true
             }
             .disabled(personRepository == nil)
+            LiquidIconButton(systemImage: "trash", accessibilityLabel: "Delete") {
+                deleteConfirmPresented = true
+            }
+            .disabled(personRepository == nil)
             #endif
         }
+    }
+
+    private func deletePerson() {
+        guard let personRepository, let person else { return }
+        try? personRepository.softDelete(person)
+        dismiss()
     }
 
     @ViewBuilder

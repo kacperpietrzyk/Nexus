@@ -15,6 +15,8 @@ struct DayGridView: View {
     /// Drag-to-adjust a block (spec §7): a vertical drag shifts its start/end and
     /// (for proposed blocks) implicitly accepts it. Receives the new start/end.
     var onAdjust: ((UUID, Date, Date) -> Void)?
+    /// Context menu actions on individual event/block cells; nil suppresses menus.
+    var onContextAction: ((TimelineItem, EventContextMenuAction) -> Void)?
 
     @State private var dragOffsets: [String: CGFloat] = [:]
 
@@ -170,7 +172,10 @@ struct DayGridView: View {
                     positioned: placed,
                     onAccept: { if let id = placed.item.blockID { onAccept(id) } },
                     onReject: { if let id = placed.item.blockID { onReject(id) } },
-                    onTap: { onTapItem(placed.item) }
+                    onTap: { onTapItem(placed.item) },
+                    onContextAction: onContextAction.map { handler in
+                        { action in handler(placed.item, action) }
+                    }
                 )
                 .frame(width: max(0, columnWidth - columnSpacing), height: placed.height, alignment: .topLeading)
                 .offset(

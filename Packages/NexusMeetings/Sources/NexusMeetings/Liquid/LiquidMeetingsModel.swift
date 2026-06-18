@@ -91,7 +91,8 @@ public final class LiquidMeetingsModel {
     /// (04_LAYOUT_SYSTEM.md §Wide desktop — only 1600 pt+ windows "show
     /// knowledge column and right actions simultaneously").
     public var knowledgeCollapsed = false
-    public private(set) var loadError: String?
+    // `internal(set)` so extension files can set error state without a public setter.
+    public internal(set) var loadError: String?
 
     public init() {}
 

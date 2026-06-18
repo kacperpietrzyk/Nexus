@@ -11,13 +11,15 @@ let package = Package(
         .library(name: "InboxShell", targets: ["InboxShell"])
     ],
     dependencies: [
-        .package(path: "../NexusUI")
+        .package(path: "../NexusUI"),
+        .package(path: "../CommandPaletteShell"),
     ],
     targets: [
         .target(
             name: "InboxShell",
             dependencies: [
-                .product(name: "NexusUI", package: "NexusUI")
+                .product(name: "NexusUI", package: "NexusUI"),
+                .product(name: "CommandPaletteShell", package: "CommandPaletteShell"),
             ]
         ),
         .testTarget(

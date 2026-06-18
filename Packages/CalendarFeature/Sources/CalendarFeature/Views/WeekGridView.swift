@@ -13,6 +13,8 @@ struct WeekGridView: View {
     let onReject: (UUID) -> Void
     let onTapItem: (TimelineItem) -> Void
     let onSelectDay: (Date) -> Void
+    /// Context menu actions on compact chips; nil suppresses menus.
+    var onContextAction: ((TimelineItem, EventContextMenuAction) -> Void)?
 
     var body: some View {
         ScrollView {
@@ -94,6 +96,14 @@ struct WeekGridView: View {
             .overlay(chipBorder(item))
         }
         .buttonStyle(.plain)
+        .modifier(
+            EventContextMenuModifier(
+                item: item,
+                onAction: onContextAction.map { handler in
+                    { action in handler(item, action) }
+                }
+            )
+        )
     }
 
     private func chipColor(_ item: TimelineItem) -> Color {

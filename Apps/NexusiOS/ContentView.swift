@@ -177,6 +177,9 @@ struct ContentView: View {
         }
         .task {
             await NotesComposition.bootstrap(openDailyNote: { openTodaysDailyNote() })
+            // Shell-level bulk-operation palette commands (InboxShell-owned).
+            await CommandRegistry.shared.register(MarkAllInboxReadCommand())
+            await CommandRegistry.shared.register(SelectAllItemsCommand())
             guard let taskRepository else { return }
             await TasksComposition.bootstrap(
                 repository: taskRepository,

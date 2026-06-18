@@ -274,6 +274,12 @@ struct NexusiOSApp: App {
             .preferredColorScheme(.dark)
         }
         .modelContainer(container)
+        // iPad hardware-keyboard ⌘A: routes to the active selectable surface via
+        // the `\.selectAllAction` focused value (disabled → text Select All
+        // fall-through when no list is active). Same shared command the Mac uses.
+        .commands {
+            SelectAllCommands()
+        }
     }
 
     /// Submits a `BGProcessingTaskRequest` for ~24h from now. Called on launch and after each

@@ -130,6 +130,8 @@ public final class AgentChatViewModel: ObservableObject {
         reloadThreads()
     }
 
+    // rename/togglePin/delete/exportMarkdown/archiveAll/deleteAll: see extension below.
+
     @discardableResult
     public func send(
         userMessage: String,
@@ -288,5 +290,101 @@ public final class AgentChatViewModel: ObservableObject {
         case .providerError(let message):
             message
         }
+    }
+}
+
+// MARK: - Thread management ops (extracted to keep AgentChatViewModel under type_body_length limit)
+
+extension AgentChatViewModel {
+    /// Renames the thread to `title`. A blank title collapses to "Untitled" (in the store).
+    public func rename(threadID: UUID, title: String) {
+        do {
+            try threadStore.rename(id: threadID, title: title)
+        } catch {
+            lastError = error.localizedDescription
+            return
+        }
+        lastError = nil
+        reloadThreads()
+    }
+
+    /// Toggles the pin state of `threadID`. Pinned threads sort above unpinned ones.
+    public func togglePin(threadID: UUID) {
+        do {
+            try threadStore.togglePin(id: threadID)
+        } catch {
+            lastError = error.localizedDescription
+            return
+        }
+        lastError = nil
+        reloadThreads()
+    }
+
+    /// Hard-deletes the thread (and navigates away if it is currently selected).
+    public func delete(threadID: UUID) {
+        do {
+            try threadStore.delete(id: threadID)
+        } catch {
+            lastError = error.localizedDescription
+            return
+        }
+        lastError = nil
+        if currentThreadID == threadID {
+            currentThreadID = nil
+            messages = []
+        }
+        reloadThreads()
+    }
+
+    /// Returns a Markdown string for the thread. Empty string on error.
+    public func exportMarkdown(threadID: UUID) -> String {
+        (try? threadStore.exportMarkdown(id: threadID, messageStore: messageStore)) ?? ""
+    }
+
+    /// Archives all threads with IDs in `ids`. Silently skips unknown IDs.
+    public func archiveAll(threadIDs: [UUID]) {
+        for id in threadIDs {
+            try? threadStore.archive(id: id)
+            if currentThreadID == id {
+                currentThreadID = nil
+                messages = []
+            }
+        }
+        lastError = nil
+        reloadThreads()
+    }
+
+    /// Hard-deletes all threads with IDs in `ids`.
+    public func deleteAll(threadIDs: [UUID]) {
+        for id in threadIDs {
+            try? threadStore.delete(id: id)
+            if currentThreadID == id {
+                currentThreadID = nil
+                messages = []
+            }
+        }
+        lastError = nil
+        reloadThreads()
+    }
+
+    /// Restores an archived thread (clears `archivedAt`).
+    public func unarchive(threadID: UUID) {
+        do {
+            try threadStore.unarchive(id: threadID)
+        } catch {
+            lastError = error.localizedDescription
+            return
+        }
+        lastError = nil
+        reloadThreads()
+    }
+
+    /// Restores all threads with IDs in `ids` from archive. Silently skips unknown IDs.
+    public func unarchiveAll(threadIDs: [UUID]) {
+        for id in threadIDs {
+            try? threadStore.unarchive(id: id)
+        }
+        lastError = nil
+        reloadThreads()
     }
 }

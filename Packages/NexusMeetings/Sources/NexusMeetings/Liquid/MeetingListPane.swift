@@ -70,6 +70,8 @@ enum LiquidMeetingsFormat {
 /// Meeting list pane (spec §Meeting list): search field, Today / Yesterday /
 /// This Week / Earlier groups, rows with title + time + source glyph. The
 /// active meeting gets the glass selected state with an accent leading line.
+/// Supports multi-select via long-press: `SelectionModel` + `BulkActionBar`
+/// for bulk Pin and bulk Delete-with-undo.
 struct MeetingListPane: View {
 
     @Bindable var model: LiquidMeetingsModel
@@ -77,10 +79,54 @@ struct MeetingListPane: View {
     let onSelect: (UUID) -> Void
     let onSearchChanged: () -> Void
     let onTogglePin: (Meeting) -> Void
+    /// Copy summary as Markdown to pasteboard.
+    let onCopySummary: (Meeting) -> Void
+    /// Re-run summary generation through the pipeline (seam: callers that have
+    /// no live pipeline pass a no-op).
+    let onRerunSummary: (Meeting) -> Void
+    /// Hard-delete the meeting (with audio cleanup).
+    let onDelete: (Meeting) -> Void
+
+    // Multi-select state owned here; the bulk bar reads it.
+    @State private var selection = SelectionModel<UUID>()
+    @State private var undo = UndoController()
+    private let composition: MeetingsComposition
+
+    init(
+        model: LiquidMeetingsModel,
+        composition: MeetingsComposition,
+        selectedID: UUID?,
+        onSelect: @escaping (UUID) -> Void,
+        onSearchChanged: @escaping () -> Void,
+        onTogglePin: @escaping (Meeting) -> Void,
+        onCopySummary: @escaping (Meeting) -> Void,
+        onRerunSummary: @escaping (Meeting) -> Void,
+        onDelete: @escaping (Meeting) -> Void
+    ) {
+        self.model = model
+        self.composition = composition
+        self.selectedID = selectedID
+        self.onSelect = onSelect
+        self.onSearchChanged = onSearchChanged
+        self.onTogglePin = onTogglePin
+        self.onCopySummary = onCopySummary
+        self.onRerunSummary = onRerunSummary
+        self.onDelete = onDelete
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
-            searchField
+            HStack(spacing: DS.Space.xs) {
+                searchField
+                LiquidIconButton(
+                    systemImage: selection.isSelecting ? "xmark.circle" : "checkmark.circle",
+                    accessibilityLabel: selection.isSelecting ? "Cancel selection" : "Select meetings"
+                ) {
+                    withAnimation(DS.Motion.selection) {
+                        if selection.isSelecting { selection.exitSelection() } else { selection.enterSelection() }
+                    }
+                }
+            }
 
             if model.meetings.isEmpty {
                 LiquidEmptyState(
@@ -101,6 +147,34 @@ struct MeetingListPane: View {
         .padding(DS.Space.m)
         .frame(maxHeight: .infinity, alignment: .top)
         .liquidGlass(.sidebar, radius: DS.Radius.l)
+        .overlay(alignment: .bottom) {
+            BulkActionBar(
+                model: selection,
+                allIDs: model.meetings.map(\.id),
+                actions: [
+                    BulkAction(label: "Pin", systemImage: "star") {
+                        model.pinAll(selection.selectedIDs, composition: composition)
+                        selection.exitSelection()
+                    },
+                    BulkAction(label: "Delete", systemImage: "trash", role: .destructive) {
+                        let ids = selection.selectedIDs
+                        let count = ids.count
+                        let restore = model.deleteAll(ids, composition: composition)
+                        selection.exitSelection()
+                        undo.show(message: "Deleted \(count) \(count == 1 ? "meeting" : "meetings")", icon: "trash") {
+                            restore()
+                        }
+                    },
+                ]
+            )
+        }
+        .undoToast(undo)
+        // Global ⌘A + palette "Select All Items": select every visible meeting.
+        .selectAllCommandTarget(in: selection, ids: model.meetings.map(\.id))
+        .onReceive(NotificationCenter.default.publisher(for: .nexusSelectAllActiveSurface)) { _ in
+            selection.enterSelection()
+            selection.selectAll(model.meetings.map(\.id))
+        }
     }
 
     private var searchField: some View {
@@ -147,7 +221,11 @@ struct MeetingListPane: View {
                 bucket: bucket,
                 isSelected: meeting.id == selectedID,
                 action: { onSelect(meeting.id) },
-                onTogglePin: { onTogglePin(meeting) }
+                onTogglePin: { onTogglePin(meeting) },
+                onCopySummary: { onCopySummary(meeting) },
+                onRerunSummary: { onRerunSummary(meeting) },
+                onDelete: { onDelete(meeting) },
+                selection: selection
             )
         }
     }
@@ -159,11 +237,24 @@ private struct MeetingListRow: View {
     let isSelected: Bool
     let action: () -> Void
     let onTogglePin: () -> Void
+    let onCopySummary: () -> Void
+    let onRerunSummary: () -> Void
+    let onDelete: () -> Void
+    let selection: SelectionModel<UUID>
 
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            // In multi-select mode the row tap toggles selection instead of
+            // opening the meeting (the `.selectable` checkmark is presentation
+            // only and can't capture the tap).
+            if selection.isSelecting {
+                withAnimation(DS.Motion.selection) { selection.toggle(id: meeting.id) }
+            } else {
+                action()
+            }
+        } label: {
             HStack(alignment: .top, spacing: DS.Space.s) {
                 // Accent leading line marks the active meeting (spec §Meeting list).
                 Capsule(style: .continuous)
@@ -207,12 +298,40 @@ private struct MeetingListRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .selectable(
+            isSelecting: selection.isSelecting,
+            isSelected: selection.isSelected(id: meeting.id),
+            onToggle: { selection.toggle(id: meeting.id) }
+        )
         .onHover { value in
             withAnimation(DS.Motion.hover) { hovering = value }
         }
         .contextMenu {
             Button(meeting.isPinned ? "Unpin from Today" : "Pin to Today") {
                 onTogglePin()
+            }
+
+            Divider()
+
+            Button {
+                onCopySummary()
+            } label: {
+                Label("Copy Summary as Markdown", systemImage: "doc.on.doc")
+            }
+
+            Button {
+                onRerunSummary()
+            } label: {
+                Label("Re-run Summary", systemImage: "arrow.clockwise")
+            }
+            .disabled(meeting.transcriptText.isEmpty)
+
+            Divider()
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete Meeting", systemImage: "trash")
             }
         }
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
