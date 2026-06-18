@@ -5,6 +5,8 @@ import NexusCore
 enum LiquidTodayReferenceData {
     struct Snapshot {
         let agendaItems: [LiquidAgendaItem]
+        /// Raw calendar events for the Up Next card (selector filters + caps at render time).
+        let events: [CalendarEvent]
         let priorityGroups: [LiquidPriorityGroup]
         let projects: [LiquidProjectProgress]
         let meetingIntel: LiquidTodayMeetingIntel?
@@ -67,8 +69,18 @@ enum LiquidTodayReferenceData {
                 kind: .personal),
         ]
 
+        // Reference calendar events for the Up Next card: staggered-hour events
+        // that cover the populated, capped, and "+N more" states in previews.
+        let referenceEvents = [
+            CalendarEvent(id: "ref-e10", title: "1:1 Meeting", start: at(10), end: at(10, 50)),
+            CalendarEvent(id: "ref-e11", title: "Product Roadmap Review", start: at(11), end: at(12)),
+            CalendarEvent(id: "ref-e13", title: "Focus Time", start: at(13), end: at(14)),
+            CalendarEvent(id: "ref-e14", title: "Marketing Sync", start: at(14, 30), end: at(15, 15)),
+        ]
+
         return Snapshot(
             agendaItems: agendaItems,
+            events: referenceEvents,
             priorityGroups: LiquidTodayModel.priorityGroups(overdue: [], today: tasks),
             projects: [
                 LiquidProjectProgress(project: roadmap, doneCount: 17, totalCount: 25),

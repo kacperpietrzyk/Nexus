@@ -5,7 +5,7 @@ import SwiftData
 import SwiftUI
 
 /// Spec `docs/04_LAYOUT_SYSTEM.md` §Grid Rules / Today Dashboard:
-/// "Today's Agenda — width ~380".
+/// "Today's Agenda — width ~380" (retained for the merged Up Next card).
 private let agendaCardWidth: CGFloat = 380
 
 #if os(iOS)
@@ -283,7 +283,7 @@ public struct LiquidTodayScreen: View {
         }
     }
 
-    /// macOS top-row agenda cell: a fixed-width column. When the agenda has
+    /// macOS top-row Up Next cell: a fixed-width column. When the card has
     /// events it fills the row height (matching Top Priorities); when empty it
     /// hugs its slim content so the row collapses and the second grid row
     /// (Projects + Meeting Intelligence) rises above the fold. `.fixedSize` on
@@ -291,32 +291,39 @@ public struct LiquidTodayScreen: View {
     /// `maxHeight: .infinity` and the row's equal-height behavior.
     @ViewBuilder
     private var agendaCell: some View {
-        if agendaIsEmpty {
-            agendaCard
+        if upNextIsEmpty {
+            upNextCard
                 .frame(width: agendaCardWidth)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
-            agendaCard
+            upNextCard
                 .frame(width: agendaCardWidth)
                 .frame(maxHeight: .infinity)
         }
     }
 
-    private var agendaIsEmpty: Bool {
+    private var upNextIsEmpty: Bool {
         if LiquidReferenceMode.isEnabled {
-            return LiquidTodayReferenceData.snapshot(now: .now).agendaItems.isEmpty
+            let snap = LiquidTodayReferenceData.snapshot(now: .now)
+            return LiquidTodayModel.upNextEvents(snap.events, now: .now).isEmpty
         }
-        return model.agendaItems.isEmpty
+        return LiquidTodayModel.upNextEvents(model.events, now: .now).isEmpty
     }
 
-    private var agendaCard: some View {
+    private var upNextCard: some View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
-        return TodayAgendaCard(
-            items: reference?.agendaItems ?? model.agendaItems,
-            now: .now,
+        let sourceEvents = reference?.events ?? model.events
+        let shown = LiquidTodayModel.upNextEvents(sourceEvents, now: .now)
+        let total = LiquidTodayModel.upNextEventCount(sourceEvents, now: .now)
+        return TodayUpNextCard(
+            events: shown,
+            totalCount: total,
             onOpenCalendar: { onNavigate(.calendar) }
         )
     }
+
+    // iOS adaptive grid uses `upNextCard` directly (no fixed-width cell wrapper)
+    private var agendaCard: some View { upNextCard }
 
     private var prioritiesCard: some View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil

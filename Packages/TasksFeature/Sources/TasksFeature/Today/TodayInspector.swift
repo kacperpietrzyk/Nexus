@@ -55,7 +55,6 @@ public struct TodayInspector: View {
         VStack(spacing: DS.Space.s) {
             dailyBriefCard
             focusCard
-            upNextCard
             quickCaptureCard
         }
         .padding(.horizontal, DS.Space.m)
@@ -239,7 +238,7 @@ public struct TodayInspector: View {
     private var focusContextLine: String {
         if let gap = reference?.focusSuggestion ?? model.focusSuggestion {
             return "You have \(Self.durationText(gap.duration)) of focus time "
-                + "from \(TodayAgendaCard.timeFormatter.string(from: gap.start)). "
+                + "from \(TodayUpNextCard.timeFormatter.string(from: gap.start)). "
                 + "Set a focus task to begin."
         }
         if !model.focusHasCalendarEvents {
@@ -255,38 +254,6 @@ public struct TodayInspector: View {
         if hours > 0 && minutes > 0 { return "\(hours)h \(minutes)m" }
         if hours > 0 { return "\(hours)h" }
         return "\(minutes)m"
-    }
-
-    // MARK: - Up Next
-
-    @ViewBuilder
-    private var upNextCard: some View {
-        TodayInspectorSection("Up Next") {
-            if let item = reference?.agendaItems.first(where: { !$0.isAllDay && $0.start > .now }) ?? model.upNextItem() {
-                HStack(alignment: .top, spacing: DS.Space.s) {
-                    Circle()
-                        .fill(item.kind.accent)
-                        .frame(width: 5, height: 5)
-                        .padding(.top, 5)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
-                            .font(DS.FontToken.bodyStrong)
-                            .foregroundStyle(DS.ColorToken.textPrimary)
-                            .lineLimit(2)
-                        Text(
-                            "\(TodayAgendaCard.timeFormatter.string(from: item.start)) – "
-                                + TodayAgendaCard.timeFormatter.string(from: item.end)
-                        )
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                    }
-                    Spacer(minLength: 0)
-                }
-            } else {
-                inspectorEmptyLine("Nothing else scheduled today.")
-            }
-        }
     }
 
     /// The primary circular play control (spec §Focus Timer) — enters the

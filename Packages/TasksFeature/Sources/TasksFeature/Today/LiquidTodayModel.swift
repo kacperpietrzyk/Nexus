@@ -298,13 +298,6 @@ public final class LiquidTodayModel {
         }
     }
 
-    /// Next upcoming agenda item (start strictly after `now`) — feeds Up Next.
-    public func upNextItem(now: Date = .now) -> LiquidAgendaItem? {
-        agendaItems
-            .filter { !$0.isAllDay && $0.start > now }
-            .min { $0.start < $1.start }
-    }
-
     // MARK: - Focus gap
 
     /// Workday window for the Focus Suggestion gap search: a standard

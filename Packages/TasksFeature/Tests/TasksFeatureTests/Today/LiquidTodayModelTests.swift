@@ -398,6 +398,71 @@ struct LiquidTodayModelTests {
         #expect(gated.storeLoadCount == 1)
     }
 
+    // MARK: - upNextEvents
+
+    /// Test-only convenience to read the start hour from a CalendarEvent.
+    private func startHour(of event: CalendarEvent) -> Int {
+        Calendar.current.component(.hour, from: event.start)
+    }
+
+    @Test("upNextEvents keeps today's not-yet-ended non-all-day events, sorted, capped at 3")
+    @MainActor
+    func upNextBounding() {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: .now)
+        func at(_ hour: Int) -> Date { dayStart.addingTimeInterval(Double(hour) * 3600) }
+
+        let now = at(9)
+
+        // Ended by 8:00 — must be excluded
+        let ended = CalendarEvent(id: "ended", title: "Ended", start: at(7), end: at(8))
+        // Four upcoming at 10/11/13/15 — only first 3 should appear
+        let e10 = CalendarEvent(id: "e10", title: "Ten", start: at(10), end: at(10) + 3600)
+        let e11 = CalendarEvent(id: "e11", title: "Eleven", start: at(11), end: at(11) + 3600)
+        let e13 = CalendarEvent(id: "e13", title: "Thirteen", start: at(13), end: at(13) + 3600)
+        let e15 = CalendarEvent(id: "e15", title: "Fifteen", start: at(15), end: at(15) + 3600)
+
+        let events = [ended, e10, e11, e13, e15]
+        let next = LiquidTodayModel.upNextEvents(events, now: now, cap: 3)
+        #expect(next.count == 3)
+        #expect(next.map { startHour(of: $0) } == [10, 11, 13])
+    }
+
+    @Test("upNextEvents excludes all-day events")
+    @MainActor
+    func upNextExcludesAllDay() {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: .now)
+        let allDay = CalendarEvent(
+            id: "allday", title: "All Day", start: dayStart,
+            end: dayStart.addingTimeInterval(86_400), isAllDay: true
+        )
+        let timed = CalendarEvent(
+            id: "timed", title: "Timed", start: dayStart.addingTimeInterval(10 * 3600),
+            end: dayStart.addingTimeInterval(11 * 3600)
+        )
+        let next = LiquidTodayModel.upNextEvents([allDay, timed], now: dayStart, cap: 3)
+        #expect(next.count == 1)
+        #expect(next[0].id == "timed")
+    }
+
+    @Test("upNextEventCount returns total not-ended non-all-day today events (not capped)")
+    @MainActor
+    func upNextEventCount() {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: .now)
+        func at(_ hour: Int) -> Date { dayStart.addingTimeInterval(Double(hour) * 3600) }
+        let now = at(9)
+        let events = [
+            CalendarEvent(id: "e10", title: "Ten", start: at(10), end: at(10) + 3600),
+            CalendarEvent(id: "e11", title: "Eleven", start: at(11), end: at(11) + 3600),
+            CalendarEvent(id: "e13", title: "Thirteen", start: at(13), end: at(13) + 3600),
+            CalendarEvent(id: "e15", title: "Fifteen", start: at(15), end: at(15) + 3600),
+        ]
+        let count = LiquidTodayModel.upNextEventCount(events, now: now)
+        #expect(count == 4)
+    }
+
     // MARK: - Focus gap (Task 6: empty-calendar reframe)
 
     @Test("suggestedFocusGap returns nil when events array is empty")

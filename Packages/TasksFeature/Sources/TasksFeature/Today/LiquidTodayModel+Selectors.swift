@@ -42,6 +42,34 @@ extension LiquidTodayModel {
             }
     }
 
+    // MARK: - Up Next
+
+    /// Returns today's not-yet-ended, non-all-day calendar events sorted by start
+    /// ascending and capped to `cap`. An event is "not yet ended" when its `end`
+    /// is strictly after `now` and it falls on the same calendar day as `now`.
+    /// All-day events are excluded to match the inspector's original Up Next intent.
+    static func upNextEvents(_ events: [CalendarEvent], now: Date, cap: Int = 3) -> [CalendarEvent] {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: now)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+
+        return
+            events
+            .filter { !$0.isAllDay && $0.end > now && $0.start >= dayStart && $0.start < dayEnd }
+            .sorted { $0.start < $1.start }
+            .prefix(cap)
+            .map { $0 }
+    }
+
+    /// Total count of today's not-yet-ended, non-all-day events (uncapped).
+    /// The view uses this to render "+N more → Calendar" when the count exceeds `cap`.
+    static func upNextEventCount(_ events: [CalendarEvent], now: Date) -> Int {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: now)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+        return events.filter { !$0.isAllDay && $0.end > now && $0.start >= dayStart && $0.start < dayEnd }.count
+    }
+
     // MARK: - Agenda + priority grouping
 
     /// Builds the agenda rows: timed calendar events + accepted blocks sorted
