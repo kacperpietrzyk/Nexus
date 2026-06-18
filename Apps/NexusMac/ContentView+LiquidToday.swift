@@ -26,6 +26,10 @@ extension ContentView {
             focusGapProvider: { events, window in
                 SchedulingIntelligence.suggestedFocusBlocks(events: events, within: window)
             },
+            // macOS shows the title+date in the toolbar band (LiquidTodayTitle),
+            // so the in-content header is hidden and the cards start higher,
+            // aligning with the right Daily Brief rail.
+            showsInlineHeader: false,
             onNavigate: { navigate(to: $0) },
             onOpenTask: { openTask($0) },
             onOpenCapture: { mode in

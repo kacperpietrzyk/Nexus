@@ -297,9 +297,7 @@ struct ContentView: View {
         } else if selection == .agent, let agentViewModel {
             AgentTopControl(viewModel: agentViewModel)
         } else if selection == .today {
-            LiquidTodayToolbarControl {
-                navigate(to: .calendar)
-            }
+            LiquidTodayTitle()
         } else {
             LiquidToolbarBreadcrumb(crumbs: ["Personal", shellTitle])
         }

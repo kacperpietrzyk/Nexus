@@ -54,6 +54,10 @@ public struct LiquidTodayScreen: View {
     private let meetingIntelProvider: LiquidTodayMeetingIntelProvider?
     private let briefProvider: LiquidTodayBriefProvider?
     private let focusGapProvider: LiquidTodayFocusGapProvider?
+    // On macOS the title+date moved into the window toolbar band, so the host
+    // hides the in-content header (false). iOS/iPadOS has no toolbar band and
+    // keeps the inline header (the default).
+    private let showsInlineHeader: Bool
     private let onNavigate: (TodayNavSelection) -> Void
     private let onOpenTask: (TaskItem) -> Void
     private let onOpenCapture: (CapturePane.Mode) -> Void
@@ -75,6 +79,7 @@ public struct LiquidTodayScreen: View {
         meetingIntelProvider: LiquidTodayMeetingIntelProvider?,
         briefProvider: LiquidTodayBriefProvider?,
         focusGapProvider: LiquidTodayFocusGapProvider? = nil,
+        showsInlineHeader: Bool = true,
         onNavigate: @escaping (TodayNavSelection) -> Void,
         onOpenTask: @escaping (TaskItem) -> Void,
         onOpenCapture: @escaping (CapturePane.Mode) -> Void
@@ -83,6 +88,7 @@ public struct LiquidTodayScreen: View {
         self.meetingIntelProvider = meetingIntelProvider
         self.briefProvider = briefProvider
         self.focusGapProvider = focusGapProvider
+        self.showsInlineHeader = showsInlineHeader
         self.onNavigate = onNavigate
         self.onOpenTask = onOpenTask
         self.onOpenCapture = onOpenCapture
@@ -145,7 +151,9 @@ public struct LiquidTodayScreen: View {
     /// `regularContent` (iOS has no shell inspector slot).
     private var gridContent: some View {
         VStack(alignment: .leading, spacing: DS.Space.l) {
-            header
+            if showsInlineHeader {
+                header
+            }
             errorRowIfNeeded
             insightBanner()
 
@@ -330,57 +338,17 @@ public struct LiquidTodayScreen: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(alignment: .top, spacing: DS.Space.l) {
-            VStack(alignment: .leading, spacing: DS.Space.xxs) {
-                Text("Today")
-                    .font(DS.FontToken.displayLarge)
-                    .foregroundStyle(DS.ColorToken.textPrimary)
-                // Real formatted date only — the reference's weather chip has no
-                // backing service and is intentionally omitted (no fake data).
-                Text(Self.dateFormatter.string(from: .now))
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
-                onNavigate(.agent)
-            } label: {
-                HStack(spacing: DS.Space.xs) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("AI Daily Brief")
-                }
-                .font(DS.FontToken.button)
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+            Text("Today")
+                .font(DS.FontToken.displayLarge)
                 .foregroundStyle(DS.ColorToken.textPrimary)
-                .padding(.horizontal, DS.Space.l)
-                .frame(height: 32)
-                .background {
-                    Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.040))
-                        .overlay {
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.10),
-                                    .clear,
-                                    Color.black.opacity(0.030),
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            .clipShape(Capsule(style: .continuous))
-                        }
-                }
-                .overlay {
-                    Capsule(style: .continuous)
-                        .stroke(DS.ColorToken.strokeDefault, lineWidth: 1)
-                }
-                .shadow(color: DS.ColorToken.accentPrimary.opacity(0.16), radius: 18, x: 0, y: 0)
-            }
-            .buttonStyle(.plain)
-            .padding(.top, DS.Space.s)
+            // Real formatted date only — the reference's weather chip has no
+            // backing service and is intentionally omitted (no fake data).
+            Text(Self.dateFormatter.string(from: .now))
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(DS.ColorToken.textSecondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
