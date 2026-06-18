@@ -131,6 +131,13 @@ public final class ProjectRepository {
         try context.save()
     }
 
+    public func setPinned(_ project: Project, _ pinned: Bool) throws {
+        project.isPinned = pinned
+        project.pinnedAt = pinned ? now() : nil
+        project.updatedAt = now()
+        try context.save()
+    }
+
     public func softDelete(_ project: Project, cascade: Bool = true) throws {
         let stamp = now()
         var visited = Set<UUID>()

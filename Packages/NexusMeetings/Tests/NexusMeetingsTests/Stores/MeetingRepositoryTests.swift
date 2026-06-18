@@ -131,3 +131,25 @@ import Testing
     #expect(try meetingRepo.find(id: meeting.id) == nil)
     #expect(try storageRepo.find(meetingID: meeting.id) == nil)
 }
+
+@MainActor
+@Test func setPinnedSetsFlagAndTimestamp() throws {
+    let context = try MeetingsTestSupport.makeContext()
+    let repo = MeetingRepository(context: context)
+    let meeting = MeetingsTestSupport.meeting(title: "Pinnable")
+    try repo.insert(meeting)
+
+    let before = Date()
+    try repo.setPinned(meeting, true)
+    let after = Date()
+
+    #expect(meeting.isPinned == true)
+    #expect(meeting.pinnedAt != nil)
+    if let pinnedAt = meeting.pinnedAt {
+        #expect(pinnedAt >= before && pinnedAt <= after)
+    }
+
+    try repo.setPinned(meeting, false)
+    #expect(meeting.isPinned == false)
+    #expect(meeting.pinnedAt == nil)
+}
