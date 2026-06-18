@@ -355,10 +355,11 @@ struct LiquidTodayModelTests {
         // A passthrough provider that always claims the whole window is free —
         // so a non-nil result can only come from the events-empty guard.
         let passthroughProvider: LiquidTodayFocusGapProvider = { _, window in [window] }
-        let now = Calendar.current.date(
-            bySettingHour: 9, minute: 0, second: 0,
-            of: Calendar.current.startOfDay(for: .now)
-        ) ?? .now
+        let now =
+            Calendar.current.date(
+                bySettingHour: 9, minute: 0, second: 0,
+                of: Calendar.current.startOfDay(for: .now)
+            ) ?? .now
         let gap = LiquidTodayModel.suggestedFocusGap(events: [], provider: passthroughProvider, now: now)
         #expect(gap == nil)
     }
@@ -368,10 +369,11 @@ struct LiquidTodayModelTests {
     func focusGapPresentWhenEventsExist() {
         // A provider that always returns the whole remaining window as one gap.
         let realProvider: LiquidTodayFocusGapProvider = { _, window in [window] }
-        let now = Calendar.current.date(
-            bySettingHour: 9, minute: 0, second: 0,
-            of: Calendar.current.startOfDay(for: .now)
-        ) ?? .now
+        let now =
+            Calendar.current.date(
+                bySettingHour: 9, minute: 0, second: 0,
+                of: Calendar.current.startOfDay(for: .now)
+            ) ?? .now
         let dayStart = Calendar.current.startOfDay(for: now)
         let eventStart = dayStart.addingTimeInterval(10 * 3600)
         let event = CalendarEvent(
