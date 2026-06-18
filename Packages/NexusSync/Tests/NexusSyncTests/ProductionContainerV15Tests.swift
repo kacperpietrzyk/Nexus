@@ -80,10 +80,11 @@ struct ProductionContainerV15Tests {
         #expect(try context.fetch(FetchDescriptor<StubSyncedExtra>()).count == 1)
     }
 
-    /// Gate for V16: the in-memory container must persist the new `isPinned` /
-    /// `pinnedAt` fields on `Project`. Confirms the schema bump is wired end-to-end.
+    /// Gate for pin fields: the in-memory container must persist `isPinned` /
+    /// `pinnedAt` on `Project`. These are additive optional/defaulted fields on V15
+    /// — no version bump needed; lightweight inference adds the columns automatically.
     @MainActor
-    @Test func v16ContainerPersistsPinFields() throws {
+    @Test func v15ContainerPersistsPinFields() throws {
         let container = try NexusModelContainer.makeInMemory()
         let context = ModelContext(container)
         let project = Project(name: "Pinned")
