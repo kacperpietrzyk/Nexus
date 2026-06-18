@@ -29,6 +29,11 @@ public struct TodayInspector: View {
     @State private var captureIsSaving = false
     @State private var captureSavedFeedback = false
     @State private var captureError: String?
+    /// The inspector is a fixed, non-scrolling column (see `body`), so the brief
+    /// preview is clamped to 5 lines. Tapping the card opens the full text in a
+    /// popover (adapts to a sheet in compact width) — the only way to read a
+    /// brief that overflows the preview.
+    @State private var showFullBrief = false
 
     public init(
         model: LiquidTodayModel,
@@ -106,13 +111,21 @@ public struct TodayInspector: View {
     }
 
     private func briefText(_ text: String) -> some View {
-        Text(LiquidTodayText.strippingMarkers(from: text))
-            .font(.system(size: 14, weight: .regular))
-            .foregroundStyle(DS.ColorToken.textSecondary)
-            .lineSpacing(4)
-            .lineLimit(5)
-            .padding(.top, DS.Space.xs)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        Button {
+            showFullBrief = true
+        } label: {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                Text(LiquidTodayText.strippingMarkers(from: text))
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+                    .lineSpacing(4)
+                    .lineLimit(5)
+                    .padding(.top, DS.Space.xs)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Read full brief")
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.accentPrimaryHover)
+            }
             .background(alignment: .topTrailing) {
                 Circle()
                     .fill(DS.ColorToken.accentBlue.opacity(0.10))
@@ -120,6 +133,27 @@ public struct TodayInspector: View {
                     .blur(radius: 26)
                     .offset(x: 40, y: -52)
             }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Read the full daily brief")
+        .accessibilityLabel("Read the full daily brief")
+        .popover(isPresented: $showFullBrief, arrowEdge: .leading) {
+            fullBriefPopover(text)
+        }
+    }
+
+    private func fullBriefPopover(_ text: String) -> some View {
+        ScrollView {
+            Text(LiquidTodayText.strippingMarkers(from: text))
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(DS.ColorToken.textPrimary)
+                .lineSpacing(4)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(DS.Space.l)
+        }
+        .frame(idealWidth: 360, maxWidth: 460, minHeight: 160, idealHeight: 360, maxHeight: 520)
     }
 
     // MARK: - Focus Suggestion
