@@ -746,16 +746,29 @@ extension ContentView {
         }
     }
 
-    /// Most recent processed meeting as a plain value for the Meeting
-    /// Intelligence card (mirrors the macOS seam).
+    /// Selects the most relevant processed meeting for the Meeting Intelligence card
+    /// (pinned → today → most-recent processed). Mirrors the macOS seam.
     @MainActor
     private func fetchTodayMeetingIntel() -> LiquidTodayMeetingIntel? {
-        var descriptor = FetchDescriptor<Meeting>(
-            predicate: #Predicate { $0.deletedAt == nil && $0.processedAt != nil },
+        // Fetch pinned-processed candidates.
+        let pinnedDescriptor = FetchDescriptor<Meeting>(
+            predicate: #Predicate { $0.isPinned == true && $0.processedAt != nil && $0.deletedAt == nil }
+        )
+        let pinnedCandidates = (try? modelContext.fetch(pinnedDescriptor)) ?? []
+
+        // Fetch recent-processed candidates (startedAt desc, capped).
+        var recentDescriptor = FetchDescriptor<Meeting>(
+            predicate: #Predicate { $0.processedAt != nil && $0.deletedAt == nil },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        descriptor.fetchLimit = 1
-        guard let meeting = try? modelContext.fetch(descriptor).first else { return nil }
+        recentDescriptor.fetchLimit = 30
+        let recentCandidates = (try? modelContext.fetch(recentDescriptor)) ?? []
+
+        // De-dup by id and select.
+        var seen = Set<UUID>()
+        let candidates = (pinnedCandidates + recentCandidates).filter { seen.insert($0.id).inserted }
+        guard let meeting = TodayMeetingSelector.select(candidates, now: .now) else { return nil }
+
         let status = MeetingProcessingStatus(rawValue: meeting.processingStatus)
         let decisions = MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
         return LiquidTodayMeetingIntel(
