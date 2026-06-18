@@ -429,8 +429,11 @@ public final class LiquidTodayModel {
             liveProjects.map { ($0.id, $0.name) },
             uniquingKeysWith: { current, _ in current }
         )
+        // Spec §Today Projects card: pinned items surface regardless of status.
+        // Feed the selector with active ∪ pinned so a pinned backlog/planning
+        // project is not gated out before `selectTodayProjects` sees it.
         let rawProgress = try projectProgress(
-            activeProjects: liveProjects.filter { $0.status == .active },
+            activeProjects: liveProjects.filter { $0.status == .active || $0.isPinned },
             modelContext: modelContext
         )
         let progressByID = Dictionary(rawProgress.map { ($0.project.id, $0) }, uniquingKeysWith: { a, _ in a })
