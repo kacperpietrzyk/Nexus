@@ -27,13 +27,16 @@ struct TodayAgendaCard: View {
     var body: some View {
         TodayGlassCard("Today's Agenda") {
             if items.isEmpty {
+                // Slim empty state: hug content (no `maxHeight: .infinity`) so the
+                // card collapses to a compact row instead of stretching to match
+                // the Top Priorities column. The grid cell drops its fill frame
+                // in this case too (see `LiquidTodayScreen.agendaCell`).
                 LiquidEmptyState(
                     systemImage: "calendar",
                     message: "Nothing on the calendar today."
                 ) {
                     LiquidPrimaryButton("Open Calendar", action: onOpenCalendar)
                 }
-                .frame(maxHeight: .infinity)
             } else {
                 timeline
             }

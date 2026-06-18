@@ -169,9 +169,7 @@ public struct LiquidTodayScreen: View {
             // hard-truncating. `maxHeight: .infinity` makes the shorter card
             // match the taller one so the row stays baseline-aligned.
             HStack(alignment: .top, spacing: DS.Space.m) {
-                agendaCard
-                    .frame(width: agendaCardWidth)
-                    .frame(maxHeight: .infinity)
+                agendaCell
                 prioritiesCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -282,6 +280,32 @@ public struct LiquidTodayScreen: View {
             InsightBannerRow(model: model, extraCount: max(0, store.count - 1))
                 .id(entry.id)
         }
+    }
+
+    /// macOS top-row agenda cell: a fixed-width column. When the agenda has
+    /// events it fills the row height (matching Top Priorities); when empty it
+    /// hugs its slim content so the row collapses and the second grid row
+    /// (Projects + Meeting Intelligence) rises above the fold. `.fixedSize` on
+    /// the empty branch defeats both the populated card's internal
+    /// `maxHeight: .infinity` and the row's equal-height behavior.
+    @ViewBuilder
+    private var agendaCell: some View {
+        if agendaIsEmpty {
+            agendaCard
+                .frame(width: agendaCardWidth)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            agendaCard
+                .frame(width: agendaCardWidth)
+                .frame(maxHeight: .infinity)
+        }
+    }
+
+    private var agendaIsEmpty: Bool {
+        if LiquidReferenceMode.isEnabled {
+            return LiquidTodayReferenceData.snapshot(now: .now).agendaItems.isEmpty
+        }
+        return model.agendaItems.isEmpty
     }
 
     private var agendaCard: some View {
