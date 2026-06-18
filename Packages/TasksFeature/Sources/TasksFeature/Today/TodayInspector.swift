@@ -7,8 +7,8 @@ private let quickCaptureMinHeight: CGFloat = 72
 /// Spec §Focus Timer: "circular progress 62–70 pt".
 private let focusRingSize: CGFloat = 66
 
-/// The Today right inspector (spec §Right inspector): Daily Brief, Focus
-/// Suggestion, Up Next, Focus Timer, and Quick Capture as one
+/// The Today right inspector (spec §Right inspector): Daily Brief, Focus,
+/// Up Next, and Quick Capture as one
 /// integrated glass column. Reads the same shared `LiquidTodayModel` the main
 /// column renders; cross-module intelligence arrives through injected
 /// providers composed in the app layer.
@@ -54,9 +54,8 @@ public struct TodayInspector: View {
         // cards fit without scrolling.
         VStack(spacing: DS.Space.s) {
             dailyBriefCard
-            focusSuggestionCard
+            focusCard
             upNextCard
-            focusTimerCard
             quickCaptureCard
         }
         .padding(.horizontal, DS.Space.m)
@@ -155,40 +154,98 @@ public struct TodayInspector: View {
         .frame(idealWidth: 360, maxWidth: 460, minHeight: 160, idealHeight: 360, maxHeight: 520)
     }
 
-    // MARK: - Focus Suggestion
+    // MARK: - Focus
 
+    /// One card, two states. State A (a focus task is set) shows the running
+    /// timer ring + task; State B (none set) shows today's focus-context line
+    /// and a way to choose a task. Merges the former Focus Suggestion + Focus
+    /// Timer cards; keyed on the same `pinnedAsFocus` task the ⌘. command reads.
     @ViewBuilder
-    private var focusSuggestionCard: some View {
-        TodayInspectorSection("Focus Suggestion") {
-            // Stored on the model (computed during reload via the injected
-            // SchedulingIntelligence seam) — no per-render recomputation.
-            // reference?.focusSuggestion nil means reference has no gap —
-            // fall back to the live model value for both gap AND calendar state.
-            if let gap = reference?.focusSuggestion ?? model.focusSuggestion {
-                VStack(alignment: .leading, spacing: DS.Space.xs) {
-                    Text(
-                        "You have \(Self.durationText(gap.duration)) of focus time "
-                            + "from \(TodayAgendaCard.timeFormatter.string(from: gap.start))."
-                    )
-                    .font(DS.FontToken.body)
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-            } else if !model.focusHasCalendarEvents {
-                // No meetings at all — the day is wide open. Skip the fabricated
-                // "X hours of focus time" claim; surface focus intent instead.
-                VStack(alignment: .leading, spacing: DS.Space.s) {
-                    inspectorEmptyLine("No meetings today — the day is open for focus.")
-                    if model.pinnedFocusTask != nil {
-                        inspectorEmptyLine("Start the Focus Timer below to begin your session.")
-                    } else {
-                        LiquidPrimaryButton("Browse tasks") { onNavigate(.tasks) }
-                    }
-                }
+    private var focusCard: some View {
+        TodayInspectorSection("Focus") {
+            if let task = reference?.pinnedFocusTask ?? model.pinnedFocusTask {
+                focusActiveState(task)
             } else {
-                inspectorEmptyLine("No free focus gaps left in today's workday.")
+                focusEmptyState
             }
         }
+    }
+
+    /// State A: the live focus timer for the set task (ring + name + controls).
+    private func focusActiveState(_ task: TaskItem) -> some View {
+        HStack(spacing: DS.Space.m) {
+            LiquidCircularProgress(
+                value: FocusTimelineProgress.progress(
+                    startAt: task.startAt,
+                    endAt: task.endAt,
+                    dueAt: task.dueAt,
+                    now: .now
+                ),
+                title: Self.elapsedText(for: task, now: .now),
+                size: focusRingSize
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(task.title)
+                    .font(DS.FontToken.bodyStrong)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                    .lineLimit(2)
+                let names = reference?.projectNamesByID ?? model.projectNamesByID
+                if let projectID = task.projectID, let name = names[projectID] {
+                    Text(name)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            playButton(task)
+        }
+    }
+
+    /// State B: no focus task set — one context line + a way to choose one.
+    private var focusEmptyState: some View {
+        VStack(spacing: DS.Space.m) {
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.10), lineWidth: 7)
+                    .frame(width: focusRingSize, height: focusRingSize)
+                Circle()
+                    .trim(from: 0, to: 0.22)
+                    .stroke(
+                        DS.ColorToken.accentPrimary,
+                        style: StrokeStyle(lineWidth: 7, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: focusRingSize, height: focusRingSize)
+                    .shadow(color: DS.ColorToken.accentPrimary.opacity(0.24), radius: 10)
+                Image(systemName: "timer")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+            }
+            Text(focusContextLine)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            LiquidPrimaryButton("Browse tasks") { onNavigate(.tasks) }
+        }
+        .frame(maxWidth: .infinity, minHeight: 138)
+    }
+
+    /// The single context line for State B — the former Focus Suggestion copy:
+    /// a real free gap when one exists, an open-day line when the calendar is
+    /// empty, otherwise a no-gaps line. Reads the stored model values (computed
+    /// during reload via the SchedulingIntelligence seam) — no per-render work.
+    private var focusContextLine: String {
+        if let gap = reference?.focusSuggestion ?? model.focusSuggestion {
+            return "You have \(Self.durationText(gap.duration)) of focus time "
+                + "from \(TodayAgendaCard.timeFormatter.string(from: gap.start)). "
+                + "Set a focus task to begin."
+        }
+        if !model.focusHasCalendarEvents {
+            return "No meetings today — the day is open for focus. Set a focus task to begin."
+        }
+        return "No free focus gaps left in today's workday."
     }
 
     static func durationText(_ duration: TimeInterval) -> String {
@@ -228,69 +285,6 @@ public struct TodayInspector: View {
                 }
             } else {
                 inspectorEmptyLine("Nothing else scheduled today.")
-            }
-        }
-    }
-
-    // MARK: - Focus Timer
-
-    @ViewBuilder
-    private var focusTimerCard: some View {
-        TodayInspectorSection("Focus Timer") {
-            if let task = reference?.pinnedFocusTask ?? model.pinnedFocusTask {
-                HStack(spacing: DS.Space.m) {
-                    LiquidCircularProgress(
-                        value: FocusTimelineProgress.progress(
-                            startAt: task.startAt,
-                            endAt: task.endAt,
-                            dueAt: task.dueAt,
-                            now: .now
-                        ),
-                        title: Self.elapsedText(for: task, now: .now),
-                        size: focusRingSize
-                    )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(task.title)
-                            .font(DS.FontToken.bodyStrong)
-                            .foregroundStyle(DS.ColorToken.textPrimary)
-                            .lineLimit(2)
-                        let names = reference?.projectNamesByID ?? model.projectNamesByID
-                        if let projectID = task.projectID, let name = names[projectID] {
-                            Text(name)
-                                .font(DS.FontToken.metadata)
-                                .foregroundStyle(DS.ColorToken.textTertiary)
-                                .lineLimit(1)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                    playButton(task)
-                }
-            } else {
-                VStack(spacing: DS.Space.m) {
-                    ZStack {
-                        Circle()
-                            .stroke(Color.white.opacity(0.10), lineWidth: 7)
-                            .frame(width: focusRingSize, height: focusRingSize)
-                        Circle()
-                            .trim(from: 0, to: 0.22)
-                            .stroke(
-                                DS.ColorToken.accentPrimary,
-                                style: StrokeStyle(lineWidth: 7, lineCap: .round)
-                            )
-                            .rotationEffect(.degrees(-90))
-                            .frame(width: focusRingSize, height: focusRingSize)
-                            .shadow(color: DS.ColorToken.accentPrimary.opacity(0.24), radius: 10)
-                        Image(systemName: "timer")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(DS.ColorToken.textTertiary)
-                    }
-                    Text("Pin a task as focus to start a session.")
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textSecondary)
-                        .multilineTextAlignment(.center)
-                    LiquidPrimaryButton("Browse tasks") { onNavigate(.tasks) }
-                }
-                .frame(maxWidth: .infinity, minHeight: 138)
             }
         }
     }
