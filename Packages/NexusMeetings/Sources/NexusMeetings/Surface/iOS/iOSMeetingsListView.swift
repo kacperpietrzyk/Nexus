@@ -41,6 +41,17 @@ struct IOSMeetingsListContentView: View {
                             IOSMeetingRow(meeting: meeting)
                         }
                         .listRowBackground(Color.clear)
+                        .swipeActions(edge: .leading) {
+                            Button {
+                                try? composition.meetingRepository.setPinned(meeting, !meeting.isPinned)
+                            } label: {
+                                Label(
+                                    meeting.isPinned ? "Unpin" : "Pin to Today",
+                                    systemImage: meeting.isPinned ? "star.slash" : "star"
+                                )
+                            }
+                            .tint(meeting.isPinned ? .gray : .yellow)
+                        }
                     }
                 }
                 .scrollContentBackground(.hidden)

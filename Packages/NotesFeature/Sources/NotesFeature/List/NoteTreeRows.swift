@@ -10,6 +10,9 @@ struct NoteTreeLeaf: View {
     let note: Note
     let isCanonical: Bool
     let isSelected: Bool
+    /// Optional pin toggle; `nil` hides the star (e.g. canonical project pages,
+    /// templates — structural notes that should not be pinned to Today).
+    var onTogglePin: (() -> Void)?
 
     @State private var hovering = false
 
@@ -30,6 +33,10 @@ struct NoteTreeLeaf: View {
                 )
                 .lineLimit(1)
             Spacer(minLength: 0)
+            if let onTogglePin {
+                LiquidPinButton(isPinned: note.isPinned, toggle: onTogglePin)
+                    .opacity(hovering || note.isPinned ? 1 : 0)
+            }
         }
         .padding(.vertical, 3)
         .padding(.horizontal, DS.Space.xs)

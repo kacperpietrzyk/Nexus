@@ -254,12 +254,17 @@ public struct LiquidProjectScreen: View {
                 ProjectPickerRow(
                     project: project,
                     openCount: model.openCountsByProject[project.id] ?? 0,
-                    progress: model.progressByProject[project.id] ?? 0
-                ) {
-                    select(project)
-                }
+                    progress: model.progressByProject[project.id] ?? 0,
+                    onTogglePin: { togglePin(project) },
+                    action: { select(project) }
+                )
             }
         }
+    }
+
+    private func togglePin(_ project: Project) {
+        try? ProjectRepository(context: modelContext).setPinned(project, !project.isPinned)
+        reload()
     }
 
     private func select(_ project: Project?) {
@@ -384,6 +389,7 @@ private struct ProjectPickerRow: View {
     let project: Project
     let openCount: Int
     let progress: Double
+    let onTogglePin: () -> Void
     let action: () -> Void
 
     @State private var hovering = false
@@ -406,6 +412,13 @@ private struct ProjectPickerRow: View {
                         .lineLimit(1)
 
                     Spacer(minLength: DS.Space.s)
+
+                    #if os(macOS)
+                    LiquidPinButton(isPinned: project.isPinned, toggle: onTogglePin)
+                        .opacity(hovering || project.isPinned ? 1 : 0)
+                    #else
+                    LiquidPinButton(isPinned: project.isPinned, toggle: onTogglePin)
+                    #endif
 
                     Image(systemName: "chevron.right")
                         // 10 pt disclosure chevron; no DS icon-size token.
@@ -437,6 +450,11 @@ private struct ProjectPickerRow: View {
         #if os(macOS)
         .onHover { value in
             withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        .contextMenu {
+            Button(project.isPinned ? "Unpin from Today" : "Pin to Today") {
+                onTogglePin()
+            }
         }
         #endif
         .accessibilityLabel("\(project.name), \(openCount) open tasks")

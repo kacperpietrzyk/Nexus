@@ -76,6 +76,7 @@ struct MeetingListPane: View {
     let selectedID: UUID?
     let onSelect: (UUID) -> Void
     let onSearchChanged: () -> Void
+    let onTogglePin: (Meeting) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
@@ -145,7 +146,8 @@ struct MeetingListPane: View {
                 meeting: meeting,
                 bucket: bucket,
                 isSelected: meeting.id == selectedID,
-                action: { onSelect(meeting.id) }
+                action: { onSelect(meeting.id) },
+                onTogglePin: { onTogglePin(meeting) }
             )
         }
     }
@@ -156,6 +158,7 @@ private struct MeetingListRow: View {
     let bucket: LiquidMeetingsModel.Bucket
     let isSelected: Bool
     let action: () -> Void
+    let onTogglePin: () -> Void
 
     @State private var hovering = false
 
@@ -182,6 +185,9 @@ private struct MeetingListRow: View {
 
                 Spacer(minLength: 0)
 
+                LiquidPinButton(isPinned: meeting.isPinned, toggle: onTogglePin)
+                    .opacity(hovering || meeting.isPinned ? 1 : 0)
+
                 Image(systemName: MeetingSourceBadge.systemImage(for: meeting))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(DS.ColorToken.textMuted)
@@ -203,6 +209,11 @@ private struct MeetingListRow: View {
         .buttonStyle(.plain)
         .onHover { value in
             withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        .contextMenu {
+            Button(meeting.isPinned ? "Unpin from Today" : "Pin to Today") {
+                onTogglePin()
+            }
         }
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }

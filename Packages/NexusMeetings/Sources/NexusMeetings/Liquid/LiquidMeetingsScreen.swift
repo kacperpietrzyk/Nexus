@@ -99,7 +99,8 @@ public struct LiquidMeetingsScreen: View {
                     model: model,
                     selectedID: router.selectedMeetingID,
                     onSelect: { router.navigate(to: $0) },
-                    onSearchChanged: { reload() }
+                    onSearchChanged: { reload() },
+                    onTogglePin: { model.togglePin($0, composition: composition) }
                 )
                 .frame(width: listPaneWidth)
 

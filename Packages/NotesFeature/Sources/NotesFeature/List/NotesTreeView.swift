@@ -215,7 +215,8 @@ struct NotesTreeView: View {
         NoteTreeLeaf(
             note: note,
             isCanonical: false,
-            isSelected: note.id == selection
+            isSelected: note.id == selection,
+            onTogglePin: { try? noteRepository?.setPinned(note, !note.isPinned) }
         )
         .onTapGesture { select(note.id) }
         .contextMenu { noteContextMenu(note) }
@@ -245,6 +246,11 @@ struct NotesTreeView: View {
     /// recursive Library `NoteFolderDisclosure`. Not offered on canonical project
     /// pages (Convert/Delete on a project's page would be wrong).
     @ViewBuilder private func noteContextMenu(_ note: Note) -> some View {
+        Button(note.isPinned ? "Unpin from Today" : "Pin to Today") {
+            try? noteRepository?.setPinned(note, !note.isPinned)
+        }
+        .disabled(noteRepository == nil)
+        Divider()
         Button("Move to folder…") {
             moveFolderText = note.folderPath ?? ""
             moveTarget = note
