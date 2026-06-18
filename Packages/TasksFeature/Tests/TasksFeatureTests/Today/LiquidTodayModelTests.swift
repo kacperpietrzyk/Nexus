@@ -29,6 +29,25 @@ struct LiquidTodayModelTests {
         #expect(groups[2].tasks.map(\.title) == ["today none"])
     }
 
+    @Test("Within a priority group, overdue task precedes due-today task")
+    @MainActor
+    func priorityGroupingOverdueBeforeToday() {
+        let overdueTask = TaskItem(title: "overdue medium", dueAt: .now.addingTimeInterval(-86_400), priority: .medium)
+        let todayTask = TaskItem(title: "today medium", dueAt: .now, priority: .medium)
+
+        let groups = LiquidTodayModel.priorityGroups(
+            overdue: [overdueTask],
+            today: [todayTask]
+        )
+
+        #expect(groups.count == 1)
+        let mediumGroup = groups[0]
+        #expect(mediumGroup.priority == .medium)
+        #expect(mediumGroup.tasks.count == 2)
+        #expect(mediumGroup.tasks[0].id == overdueTask.id)
+        #expect(mediumGroup.tasks[1].id == todayTask.id)
+    }
+
     @Test("Deduplicates a task present in both the overdue and today buckets")
     @MainActor
     func priorityGroupingDeduplicates() {
