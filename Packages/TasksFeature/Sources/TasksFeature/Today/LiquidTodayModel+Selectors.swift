@@ -42,6 +42,53 @@ extension LiquidTodayModel {
             }
     }
 
+    // MARK: - Meeting Decisions
+
+    /// Aggregates decisions from multiple meetings into a flat feed.
+    /// Meetings are sorted newest-first by `meetingDate`; each meeting's
+    /// `decisions` array is flattened in order. The result is `prefix(cap)`.
+    /// Each `LiquidTodayDecision.id` is stable per (meetingID, index-within-meeting).
+    public static func aggregateDecisions(
+        _ meetings: [LiquidTodayMeetingDecisions],
+        cap: Int = 5
+    ) -> [LiquidTodayDecision] {
+        meetings
+            .sorted { $0.meetingDate > $1.meetingDate }
+            .flatMap { meeting in
+                meeting.decisions.enumerated().map { index, text in
+                    LiquidTodayDecision(
+                        id: UUID(
+                            uuidString: stableDecisionID(meetingID: meeting.meetingID, index: index)
+                        ) ?? UUID(),
+                        text: text,
+                        meetingTitle: meeting.meetingTitle,
+                        meetingDate: meeting.meetingDate,
+                        meetingID: meeting.meetingID
+                    )
+                }
+            }
+            .prefix(cap)
+            .map { $0 }
+    }
+
+    /// Derives a stable UUID string from a (meetingID, index) pair by XOR-ing the
+    /// last 8 bytes of the source UUID with the index so decision rows have a
+    /// consistent `id` across reloads without storing extra state.
+    private static func stableDecisionID(meetingID: UUID, index: Int) -> String {
+        var bytes = withUnsafeBytes(of: meetingID.uuid) { Array($0) }
+        let indexBytes = withUnsafeBytes(of: UInt64(index).bigEndian) { Array($0) }
+        for i in 8..<16 {
+            bytes[i] ^= indexBytes[i - 8]
+        }
+        let t = (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        )
+        return UUID(uuid: t).uuidString
+    }
+
     // MARK: - Up Next
 
     /// Returns today's not-yet-ended, non-all-day calendar events sorted by start

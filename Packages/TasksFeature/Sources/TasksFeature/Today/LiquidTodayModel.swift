@@ -86,6 +86,38 @@ public typealias LiquidTodayMeetingIntelProvider = @MainActor () -> LiquidTodayM
 /// so the inspector can surface today's free gaps without a cross-module import.
 public typealias LiquidTodayFocusGapProvider = @MainActor ([CalendarEvent], DateInterval) -> [DateInterval]
 
+/// One decision surfaced in the cross-meeting Decisions feed on the Today screen.
+/// `id` is stable per (meetingID, index-within-meeting) so `ForEach` diffs are
+/// deterministic across reloads.
+public struct LiquidTodayDecision: Equatable, Sendable, Identifiable {
+    public let id: UUID
+    public let text: String
+    public let meetingTitle: String
+    public let meetingDate: Date
+    public let meetingID: UUID
+}
+
+/// Input row the app shell builds from a meeting (decisions already parsed via
+/// `MeetingSummarySections`): TasksFeature never imports NexusMeetings — the
+/// shell feeds this plain value across the module seam.
+public struct LiquidTodayMeetingDecisions: Equatable, Sendable {
+    public let meetingID: UUID
+    public let meetingTitle: String
+    public let meetingDate: Date
+    public let decisions: [String]
+
+    public init(meetingID: UUID, meetingTitle: String, meetingDate: Date, decisions: [String]) {
+        self.meetingID = meetingID
+        self.meetingTitle = meetingTitle
+        self.meetingDate = meetingDate
+        self.decisions = decisions
+    }
+}
+
+/// Decisions feed seam: the app layer fetches recent meeting decisions and hands
+/// them to the Today screen as a plain closure — `nil` = feed unavailable.
+public typealias LiquidTodayDecisionsProvider = @MainActor () -> [LiquidTodayDecision]
+
 /// Text cleanup shared by the Today cards: model/agent output occasionally
 /// carries `[[accent]]`/`[[mono]]` digest wire markers (see `DigestRenderer`)
 /// or disobeys the "plain paragraphs" prompt with Markdown headings. The

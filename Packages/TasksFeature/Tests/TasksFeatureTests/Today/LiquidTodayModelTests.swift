@@ -514,4 +514,36 @@ struct LiquidTodayModelTests {
         #expect(snapshot.meetingIntel?.actionItemCount ?? 0 >= 3)
         #expect(!snapshot.brief.isEmpty)
     }
+
+}
+
+// MARK: - aggregateDecisions
+
+@Suite("LiquidTodayModel.aggregateDecisions")
+struct LiquidTodayModelDecisionsTests {
+
+    @Test("aggregateDecisions flattens newest-first and caps at 5")
+    @MainActor
+    func aggregateDecisionsCap() {
+        let older = LiquidTodayMeetingDecisions(
+            meetingID: UUID(), meetingTitle: "A",
+            meetingDate: Date(timeIntervalSince1970: 1_000),
+            decisions: ["a1", "a2"]
+        )
+        let newer = LiquidTodayMeetingDecisions(
+            meetingID: UUID(), meetingTitle: "B",
+            meetingDate: Date(timeIntervalSince1970: 2_000),
+            decisions: ["b1", "b2", "b3", "b4"]
+        )
+        let out = LiquidTodayModel.aggregateDecisions([older, newer], cap: 5)
+        #expect(out.count == 5)
+        #expect(out.map(\.text) == ["b1", "b2", "b3", "b4", "a1"])
+        #expect(out[0].meetingTitle == "B")
+    }
+
+    @Test("aggregateDecisions returns empty for no decisions")
+    @MainActor
+    func aggregateDecisionsEmpty() {
+        #expect(LiquidTodayModel.aggregateDecisions([], cap: 5).isEmpty)
+    }
 }
