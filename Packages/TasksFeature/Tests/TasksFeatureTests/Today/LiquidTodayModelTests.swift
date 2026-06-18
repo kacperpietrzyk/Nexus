@@ -57,6 +57,38 @@ struct LiquidTodayModelTests {
         #expect(groups[0].tasks.count == 1)
     }
 
+    // MARK: - Top Priorities total row cap
+
+    /// Builds priority groups through the real grouping factory (no public
+    /// memberwise init on `LiquidPriorityGroup`) — `tasks` with the given
+    /// per-priority counts, grouped high→medium→low→none.
+    @MainActor
+    private func makeGroups(_ counts: [(TaskPriority, Int)]) -> [LiquidPriorityGroup] {
+        let today = counts.flatMap { priority, count in
+            (0..<count).map { TaskItem(title: "\(priority)-\($0)", dueAt: .now, priority: priority) }
+        }
+        return LiquidTodayModel.priorityGroups(overdue: [], today: today)
+    }
+
+    @Test("rowAllocation spends a total budget across sections in priority order")
+    @MainActor
+    func priorityRowAllocationSpendsBudgetInOrder() {
+        // High 4, Medium 5, Low 3 — budget 6 → High takes 4, Medium takes 2, Low 0.
+        let groups = makeGroups([(.high, 4), (.medium, 5), (.low, 3)])
+        #expect(TopPrioritiesCard.rowAllocation(for: groups, budget: 6) == [4, 2, 0])
+    }
+
+    @Test("rowAllocation never exceeds a section's count and zeroes overflow sections")
+    @MainActor
+    func priorityRowAllocationCapsPerSectionAndZeroesRest() {
+        // Budget larger than total → every section shown in full.
+        let small = makeGroups([(.high, 2), (.low, 1)])
+        #expect(TopPrioritiesCard.rowAllocation(for: small, budget: 6) == [2, 1])
+        // First section alone exhausts the budget → the rest collapse to 0.
+        let bigFirst = makeGroups([(.high, 9), (.medium, 3)])
+        #expect(TopPrioritiesCard.rowAllocation(for: bigFirst, budget: 6) == [6, 0])
+    }
+
     // MARK: - Agenda assembly
 
     @Test("Sorts timed events + accepted blocks by start; all-day floats to the top")

@@ -166,8 +166,9 @@ public struct LiquidTodayScreen: View {
             // Row height = the tallest card's intrinsic content (no magic
             // constant, no `.clipped()`): empty states stay compact instead of
             // stretching to a fixed 420 pt, and dense cards grow rather than
-            // hard-truncating. `maxHeight: .infinity` makes the shorter card
-            // match the taller one so the row stays baseline-aligned.
+            // hard-truncating. A POPULATED agenda fills the row to match Top
+            // Priorities (`agendaCell`'s `maxHeight: .infinity`); an EMPTY one
+            // hugs its slim content so the row collapses (see `agendaCell`).
             HStack(alignment: .top, spacing: DS.Space.m) {
                 agendaCell
                 prioritiesCard

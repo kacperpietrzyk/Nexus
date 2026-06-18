@@ -2,9 +2,11 @@ import NexusCore
 import NexusUI
 import SwiftUI
 
-/// Rows shown per priority section before deferring to the Tasks list — keeps
-/// the card a summary, not a second task manager.
-private let prioritySectionRowCap = 5
+/// Total task rows shown across ALL priority sections before deferring to the
+/// Tasks list — keeps the card a bounded today-slice (predictable height), not
+/// a second task manager. Sections fill in priority order until the budget is
+/// spent; the rest collapse to "+N more" / "View all tasks →".
+private let priorityTotalRowCap = 6
 
 /// `Top Priorities` card (spec §Main top row 2): today's + overdue tasks
 /// grouped High/Medium/Low (section labels red/amber/blue per
@@ -36,9 +38,15 @@ struct TopPrioritiesCard: View {
             } else if groups.isEmpty {
                 emptySummary
             } else {
+                let shown = Self.rowAllocation(for: groups, budget: priorityTotalRowCap)
                 VStack(alignment: .leading, spacing: DS.Space.m) {
-                    ForEach(groups) { group in
-                        section(group)
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                        // Sections allocated zero rows (budget spent by higher
+                        // priorities) collapse entirely — the "View all tasks →"
+                        // footer is the path to them.
+                        if shown[index] > 0 {
+                            section(group, shownRows: shown[index])
+                        }
                     }
                     Spacer(minLength: 0)
                     LiquidCardFooterLink("View all tasks", action: onViewAll)
@@ -131,7 +139,22 @@ struct TopPrioritiesCard: View {
         .shadow(color: color.opacity(0.028), radius: 7, x: 0, y: 0)
     }
 
-    private func section(_ group: LiquidPriorityGroup) -> some View {
+    /// Allocates the total row budget across the priority sections in order:
+    /// each section takes `min(remaining, its task count)`, leaving later (lower
+    /// priority) sections with whatever is left. Returns a per-group shown-row
+    /// count aligned to `groups`; a 0 means the section isn't rendered. The
+    /// header still reports each group's TRUE count — only visible rows are
+    /// bounded — so overflow surfaces as "+N more" / "View all tasks →".
+    static func rowAllocation(for groups: [LiquidPriorityGroup], budget: Int) -> [Int] {
+        var remaining = max(0, budget)
+        return groups.map { group in
+            let take = min(remaining, group.tasks.count)
+            remaining -= take
+            return take
+        }
+    }
+
+    private func section(_ group: LiquidPriorityGroup, shownRows: Int) -> some View {
         VStack(alignment: .leading, spacing: DS.Space.xxs) {
             HStack(spacing: DS.Space.xs) {
                 Text(Self.label(for: group.priority))
@@ -146,11 +169,11 @@ struct TopPrioritiesCard: View {
                     .monospacedDigit()
             }
 
-            ForEach(group.tasks.prefix(prioritySectionRowCap), id: \.id) { task in
+            ForEach(group.tasks.prefix(shownRows), id: \.id) { task in
                 row(task)
             }
-            if group.tasks.count > prioritySectionRowCap {
-                Text("+\(group.tasks.count - prioritySectionRowCap) more")
+            if group.tasks.count > shownRows {
+                Text("+\(group.tasks.count - shownRows) more")
                     .font(DS.FontToken.metadata)
                     .foregroundStyle(DS.ColorToken.textMuted)
                     .padding(.horizontal, DS.Space.s)
