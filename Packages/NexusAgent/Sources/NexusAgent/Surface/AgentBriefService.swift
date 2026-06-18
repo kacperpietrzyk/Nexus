@@ -440,9 +440,10 @@ public final class AgentBriefService: AgentBriefServiceProtocol, @unchecked Send
                 return await legacy(request)
             }
 
-            let content =
+            let raw =
                 response.finalAssistantContent?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let content = Self.strippingLeadingPreamble(from: raw)
             return content.isEmpty ? await legacy(request) : content
         } catch {
             return await legacy(request)
@@ -471,6 +472,8 @@ public final class AgentBriefService: AgentBriefServiceProtocol, @unchecked Send
         return """
             Write today's brief for the Today view in Nexus.
             Keep the tone concrete, calm, and operational. Return only the finished brief.
+            Start directly with the first sentence of the brief — no preamble, no \
+            salutation, no meta-sentence like "Here is a brief…" or "Below is a summary…".
             Format: 1-2 short paragraphs. Use at most two [[accent]]...[[/accent]] markers.
 
             Date: \(formattedDate)
@@ -479,6 +482,26 @@ public final class AgentBriefService: AgentBriefServiceProtocol, @unchecked Send
             First tasks:
             \(titles.isEmpty ? "- none" : titles)
             """
+    }
+
+    /// Strips a leading meta-preamble sentence the LLM may emit when it paraphrases
+    /// its own instruction — e.g. "Here is a brief for the user based on their real
+    /// tasks: Three things matter today…". The pattern anchors on known openers
+    /// ("here is", "here's", "this is", "below is") that precede "brief" or
+    /// "summary" within the same colon-delimited span, then removes everything up to
+    /// and including the first colon. `[^:\n]*` prevents the match from crossing a
+    /// colon or newline, so a body sentence that itself contains a colon is never
+    /// over-stripped.
+    nonisolated static func strippingLeadingPreamble(from text: String) -> String {
+        // NSRegularExpression is case-insensitive; `(?i)` flag avoids recompiling.
+        let pattern =
+            #"(?i)^\s*(here is|here'?s|this is|below is)\b[^:\n]*\b(brief|summary)\b[^:\n]*:\s*"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex..., in: text)
+        let stripped = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+        // Guard: if stripping left nothing useful, return the original.
+        let trimmed = stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? text : trimmed
     }
 
     private static let dateFormatter: DateFormatter = {
