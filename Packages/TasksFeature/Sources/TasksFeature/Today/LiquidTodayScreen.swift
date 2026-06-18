@@ -54,6 +54,10 @@ public struct LiquidTodayScreen: View {
     private let meetingIntelProvider: LiquidTodayMeetingIntelProvider?
     private let briefProvider: LiquidTodayBriefProvider?
     private let focusGapProvider: LiquidTodayFocusGapProvider?
+    /// Meeting pin toggle seam: the app layer (which imports NexusMeetings)
+    /// fetches the meeting by id and calls `MeetingRepository.setPinned`.
+    /// `nil` = no toggle, the star renders read-only (reference/preview mode).
+    private let onToggleMeetingPin: ((UUID) -> Void)?
     // On macOS the title+date moved into the window toolbar band, so the host
     // hides the in-content header (false). iOS/iPadOS has no toolbar band and
     // keeps the inline header (the default).
@@ -79,6 +83,7 @@ public struct LiquidTodayScreen: View {
         meetingIntelProvider: LiquidTodayMeetingIntelProvider?,
         briefProvider: LiquidTodayBriefProvider?,
         focusGapProvider: LiquidTodayFocusGapProvider? = nil,
+        onToggleMeetingPin: ((UUID) -> Void)? = nil,
         showsInlineHeader: Bool = true,
         onNavigate: @escaping (TodayNavSelection) -> Void,
         onOpenTask: @escaping (TaskItem) -> Void,
@@ -88,6 +93,7 @@ public struct LiquidTodayScreen: View {
         self.meetingIntelProvider = meetingIntelProvider
         self.briefProvider = briefProvider
         self.focusGapProvider = focusGapProvider
+        self.onToggleMeetingPin = onToggleMeetingPin
         self.showsInlineHeader = showsInlineHeader
         self.onNavigate = onNavigate
         self.onOpenTask = onOpenTask
@@ -315,7 +321,15 @@ public struct LiquidTodayScreen: View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
         return TodayProjectsCard(
             projects: reference?.projects ?? model.projects,
-            onOpenProjects: { onNavigate(.projects) }
+            onOpenProjects: { onNavigate(.projects) },
+            onTogglePin: LiquidReferenceMode.isEnabled
+                ? nil
+                : { [self] id in
+                    guard let project = model.projects.first(where: { $0.id == id })?.project else { return }
+                    try? ProjectRepository(context: modelContext).setPinned(project, !project.isPinned)
+                    model.markDirty()
+                    _Concurrency.Task { await reload() }
+                }
         )
     }
 
@@ -323,7 +337,15 @@ public struct LiquidTodayScreen: View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
         return TodayNotesCard(
             notes: reference?.notes ?? model.notes,
-            onOpenNotes: { onNavigate(.notes) }
+            onOpenNotes: { onNavigate(.notes) },
+            onTogglePin: LiquidReferenceMode.isEnabled
+                ? nil
+                : { [self] id in
+                    guard let note = model.notes.first(where: { $0.id == id })?.note else { return }
+                    try? NoteRepository(context: modelContext).setPinned(note, !note.isPinned)
+                    model.markDirty()
+                    _Concurrency.Task { await reload() }
+                }
         )
     }
 
@@ -331,7 +353,8 @@ public struct LiquidTodayScreen: View {
         let reference = LiquidReferenceMode.isEnabled ? LiquidTodayReferenceData.snapshot(now: .now) : nil
         return MeetingIntelCard(
             intel: reference?.meetingIntel ?? model.meetingIntel,
-            onOpenMeetings: { onNavigate(.meetings) }
+            onOpenMeetings: { onNavigate(.meetings) },
+            onTogglePin: LiquidReferenceMode.isEnabled ? nil : onToggleMeetingPin
         )
     }
 

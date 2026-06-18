@@ -687,10 +687,21 @@ extension ContentView {
             focusGapProvider: { events, window in
                 SchedulingIntelligence.suggestedFocusBlocks(events: events, within: window)
             },
+            onToggleMeetingPin: { id in toggleMeetingPin(id: id) },
             onNavigate: { navigateToday($0) },
             onOpenTask: { selectedTask = $0 },
             onOpenCapture: { openCapture(mode: $0) }
         )
+    }
+
+    /// Fetches the meeting by id and toggles its pin state via `MeetingRepository`.
+    /// `context.save()` fires `.reloadOnStoreChange` → the Today screen re-reads
+    /// `fetchTodayMeetingIntel()` and the card reflects the new `isPinned` state.
+    @MainActor
+    private func toggleMeetingPin(id: UUID) {
+        let descriptor = FetchDescriptor<Meeting>(predicate: #Predicate { $0.id == id })
+        guard let meeting = (try? modelContext.fetch(descriptor))?.first else { return }
+        try? MeetingRepository(context: modelContext).setPinned(meeting, !meeting.isPinned)
     }
 
     /// Routes the Today cards' navigation intents to the iOS tab switch. Projects
@@ -772,13 +783,15 @@ extension ContentView {
         let status = MeetingProcessingStatus(rawValue: meeting.processingStatus)
         let decisions = MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
         return LiquidTodayMeetingIntel(
+            id: meeting.id,
             title: meeting.title,
             occurredAt: meeting.startedAt,
             durationSec: meeting.durationSec,
             summary: meeting.summaryText,
             decisions: Array(decisions.prefix(3)),
             actionItemCount: meeting.actionItemIDs.count,
-            statusLabel: status == .ready ? "Processed" : (status == .failed ? "Failed" : "Processing")
+            statusLabel: status == .ready ? "Processed" : (status == .failed ? "Failed" : "Processing"),
+            isPinned: meeting.isPinned
         )
     }
 }

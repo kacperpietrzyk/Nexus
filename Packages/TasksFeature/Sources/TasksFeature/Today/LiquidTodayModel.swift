@@ -12,6 +12,8 @@ import SwiftData
 /// meeting and hands this plain value across the module seam, mirroring the
 /// `meetingsContent: (() -> AnyView)?` injection the old `TodayDashboard` used.
 public struct LiquidTodayMeetingIntel: Equatable, Sendable {
+    /// Stable identity for the pin toggle seam (the meeting's `UUID`).
+    public let id: UUID
     public let title: String
     public let occurredAt: Date
     public let durationSec: Int
@@ -22,16 +24,21 @@ public struct LiquidTodayMeetingIntel: Equatable, Sendable {
     public let decisions: [String]
     public let actionItemCount: Int
     public let statusLabel: String
+    /// Whether the source meeting is currently pinned.
+    public let isPinned: Bool
 
     public init(
+        id: UUID = UUID(),
         title: String,
         occurredAt: Date,
         durationSec: Int,
         summary: String,
         decisions: [String] = [],
         actionItemCount: Int,
-        statusLabel: String
+        statusLabel: String,
+        isPinned: Bool = false
     ) {
+        self.id = id
         self.title = title
         self.occurredAt = occurredAt
         self.durationSec = durationSec
@@ -39,6 +46,7 @@ public struct LiquidTodayMeetingIntel: Equatable, Sendable {
         self.decisions = decisions
         self.actionItemCount = actionItemCount
         self.statusLabel = statusLabel
+        self.isPinned = isPinned
     }
 }
 

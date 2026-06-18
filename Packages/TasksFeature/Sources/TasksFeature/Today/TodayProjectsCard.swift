@@ -11,6 +11,7 @@ struct TodayProjectsCard: View {
 
     let projects: [LiquidProjectProgress]
     let onOpenProjects: () -> Void
+    var onTogglePin: ((UUID) -> Void)?
 
     var body: some View {
         TodayGlassCard("Projects") {
@@ -25,7 +26,11 @@ struct TodayProjectsCard: View {
             } else {
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     ForEach(projects) { entry in
-                        TodayProjectRow(entry: entry, action: onOpenProjects)
+                        TodayProjectRow(
+                            entry: entry,
+                            action: onOpenProjects,
+                            onTogglePin: onTogglePin.map { toggle in { toggle(entry.id) } }
+                        )
                     }
                     if projects.count < 3 {
                         projectStateRows
@@ -71,6 +76,7 @@ struct TodayProjectsCard: View {
 private struct TodayProjectRow: View {
     let entry: LiquidProjectProgress
     let action: () -> Void
+    var onTogglePin: (() -> Void)?
 
     @State private var hovering = false
 
@@ -87,6 +93,14 @@ private struct TodayProjectRow: View {
                         .foregroundStyle(DS.ColorToken.textPrimary)
                         .lineLimit(1)
                     Spacer(minLength: DS.Space.s)
+                    if let onTogglePin {
+                        #if os(macOS)
+                        LiquidPinButton(isPinned: entry.project.isPinned, toggle: onTogglePin)
+                            .opacity(hovering || entry.project.isPinned ? 1 : 0)
+                        #else
+                        LiquidPinButton(isPinned: entry.project.isPinned, toggle: onTogglePin)
+                        #endif
+                    }
                     Text("\(Int((entry.fraction * 100).rounded()))%")
                         .font(DS.FontToken.metadata)
                         .foregroundStyle(DS.ColorToken.textSecondary)

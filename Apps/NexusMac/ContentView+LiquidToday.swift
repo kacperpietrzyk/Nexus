@@ -26,6 +26,7 @@ extension ContentView {
             focusGapProvider: { events, window in
                 SchedulingIntelligence.suggestedFocusBlocks(events: events, within: window)
             },
+            onToggleMeetingPin: { id in toggleMeetingPin(id: id) },
             // macOS shows the title+date in the toolbar band (LiquidTodayTitle),
             // so the in-content header is hidden and the cards start higher,
             // aligning with the right Daily Brief rail.
@@ -36,6 +37,16 @@ extension ContentView {
                 NotificationCenter.default.post(name: .nexusOpenCapture, object: mode)
             }
         )
+    }
+
+    /// Fetches the meeting by id and toggles its pin state via `MeetingRepository`.
+    /// `context.save()` fires `.reloadOnStoreChange` → the Today screen re-reads
+    /// `fetchTodayMeetingIntel()` and the card reflects the new `isPinned` state.
+    @MainActor
+    private func toggleMeetingPin(id: UUID) {
+        let descriptor = FetchDescriptor<Meeting>(predicate: #Predicate { $0.id == id })
+        guard let meeting = (try? modelContext.fetch(descriptor))?.first else { return }
+        try? MeetingRepository(context: modelContext).setPinned(meeting, !meeting.isPinned)
     }
 
     /// Right-inspector slot content for `.today`; `nil` everywhere else so
@@ -108,13 +119,15 @@ extension ContentView {
         // values without importing NexusMeetings; the Today card shows ≤3.
         let decisions = MeetingSummarySections.parse(summaryText: meeting.summaryText).decisions
         return LiquidTodayMeetingIntel(
+            id: meeting.id,
             title: meeting.title,
             occurredAt: meeting.startedAt,
             durationSec: meeting.durationSec,
             summary: meeting.summaryText,
             decisions: Array(decisions.prefix(3)),
             actionItemCount: meeting.actionItemIDs.count,
-            statusLabel: status == .ready ? "Processed" : (status == .failed ? "Failed" : "Processing")
+            statusLabel: status == .ready ? "Processed" : (status == .failed ? "Failed" : "Processing"),
+            isPinned: meeting.isPinned
         )
     }
 }

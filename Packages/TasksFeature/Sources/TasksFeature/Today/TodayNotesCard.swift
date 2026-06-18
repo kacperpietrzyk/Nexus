@@ -11,6 +11,7 @@ struct TodayNotesCard: View {
 
     let notes: [LiquidNoteSummary]
     let onOpenNotes: () -> Void
+    var onTogglePin: ((UUID) -> Void)?
 
     var body: some View {
         TodayGlassCard("Notes & Knowledge") {
@@ -25,7 +26,11 @@ struct TodayNotesCard: View {
             } else {
                 VStack(alignment: .leading, spacing: DS.Space.xs) {
                     ForEach(notes) { summary in
-                        TodayNoteRow(summary: summary, action: onOpenNotes)
+                        TodayNoteRow(
+                            summary: summary,
+                            action: onOpenNotes,
+                            onTogglePin: onTogglePin.map { toggle in { toggle(summary.id) } }
+                        )
                     }
                     Spacer(minLength: 0)
                     LiquidCardFooterLink("Open all notes", action: onOpenNotes)
@@ -39,6 +44,7 @@ struct TodayNotesCard: View {
 private struct TodayNoteRow: View {
     let summary: LiquidNoteSummary
     let action: () -> Void
+    var onTogglePin: (() -> Void)?
 
     @State private var hovering = false
 
@@ -80,6 +86,16 @@ private struct TodayNoteRow: View {
                     }
                 }
                 Spacer(minLength: 0)
+                if let onTogglePin {
+                    #if os(macOS)
+                    LiquidPinButton(isPinned: summary.note.isPinned, toggle: onTogglePin)
+                        .opacity(hovering || summary.note.isPinned ? 1 : 0)
+                        .padding(.top, 1)
+                    #else
+                    LiquidPinButton(isPinned: summary.note.isPinned, toggle: onTogglePin)
+                        .padding(.top, 1)
+                    #endif
+                }
             }
             .padding(DS.Space.m)
             .background {

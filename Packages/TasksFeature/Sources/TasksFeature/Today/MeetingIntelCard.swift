@@ -9,6 +9,7 @@ struct MeetingIntelCard: View {
 
     let intel: LiquidTodayMeetingIntel?
     let onOpenMeetings: () -> Void
+    var onTogglePin: ((UUID) -> Void)?
 
     var body: some View {
         TodayGlassCard("Meeting Intelligence") {
@@ -100,6 +101,9 @@ struct MeetingIntelCard: View {
                     .lineLimit(2)
                 Spacer(minLength: DS.Space.xs)
                 LiquidPill(intel.statusLabel, color: DS.ColorToken.accentGreen)
+                if let onTogglePin {
+                    LiquidPinButton(isPinned: intel.isPinned, toggle: { onTogglePin(intel.id) })
+                }
             }
 
             Text(Self.metadataLine(for: intel))
