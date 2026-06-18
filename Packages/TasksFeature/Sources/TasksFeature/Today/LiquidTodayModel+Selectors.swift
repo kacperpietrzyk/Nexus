@@ -117,47 +117,15 @@ extension LiquidTodayModel {
         return events.filter { !$0.isAllDay && $0.end > now && $0.start >= dayStart && $0.start < dayEnd }.count
     }
 
-    // MARK: - Agenda + priority grouping
-
-    /// Builds the agenda rows: timed calendar events + accepted blocks sorted
-    /// by start; all-day events float to the top of the list.
-    static func agendaItems(events: [CalendarEvent], blocks: [ScheduledBlock]) -> [LiquidAgendaItem] {
-        let eventItems = events.map { event in
-            LiquidAgendaItem(
-                id: "event:\(event.id)",
-                title: event.title,
-                subtitle: event.location,
-                start: event.start,
-                end: event.end,
-                isAllDay: event.isAllDay,
-                kind: .meeting
-            )
-        }
-        let blockItems = blocks.map { block in
-            LiquidAgendaItem(
-                id: "block:\(block.id.uuidString)",
-                title: block.title,
-                subtitle: "Focus block",
-                start: block.start,
-                end: block.end,
-                isAllDay: false,
-                kind: .focus
-            )
-        }
-        return (eventItems + blockItems).sorted { lhs, rhs in
-            if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
-            if lhs.start != rhs.start { return lhs.start < rhs.start }
-            return lhs.id < rhs.id
-        }
-    }
+    // MARK: - Priority grouping
 
     /// Returns a ranked shortlist (≤ `cap`) of tasks for the Top Priorities card,
     /// sorted by: pinned first → overdue before not → priority high→low →
     /// due date soonest first (nil last) → original index (stable tiebreak).
-    /// `now` should be the start of today so `isOverdue` = `dueAt < now`.
+    /// `startOfDay` must be the start of today so `isOverdue` = `dueAt < startOfDay`.
     static func rankedTodayPriorities(
         _ tasks: [TaskItem],
-        now: Date = .now,
+        startOfDay: Date,
         cap: Int = 5
     ) -> [TaskItem] {
         struct Keyed {
@@ -169,7 +137,7 @@ extension LiquidTodayModel {
             Keyed(
                 index: index,
                 task: task,
-                isOverdue: task.dueAt.map { $0 < now } ?? false
+                isOverdue: task.dueAt.map { $0 < startOfDay } ?? false
             )
         }
         let sorted = keyed.sorted { lhs, rhs in

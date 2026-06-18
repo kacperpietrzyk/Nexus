@@ -6,50 +6,6 @@ import SwiftData
 
 // MARK: - Cross-module value DTOs (composed in the app layer)
 
-/// Meeting Intelligence snapshot for the Today screen
-/// (`docs/05_MODULE_TODAY.md` §Meeting Intelligence). TasksFeature never
-/// imports NexusMeetings — the app layer fetches the most recent processed
-/// meeting and hands this plain value across the module seam, mirroring the
-/// `meetingsContent: (() -> AnyView)?` injection the old `TodayDashboard` used.
-public struct LiquidTodayMeetingIntel: Equatable, Sendable {
-    /// Stable identity for the pin toggle seam (the meeting's `UUID`).
-    public let id: UUID
-    public let title: String
-    public let occurredAt: Date
-    public let durationSec: Int
-    public let summary: String
-    /// Decisions parsed from the meeting's summary (the app layer runs
-    /// `MeetingSummarySections.parse` — TasksFeature still never imports
-    /// NexusMeetings). Empty when the summary carries no decisions section.
-    public let decisions: [String]
-    public let actionItemCount: Int
-    public let statusLabel: String
-    /// Whether the source meeting is currently pinned.
-    public let isPinned: Bool
-
-    public init(
-        id: UUID = UUID(),
-        title: String,
-        occurredAt: Date,
-        durationSec: Int,
-        summary: String,
-        decisions: [String] = [],
-        actionItemCount: Int,
-        statusLabel: String,
-        isPinned: Bool = false
-    ) {
-        self.id = id
-        self.title = title
-        self.occurredAt = occurredAt
-        self.durationSec = durationSec
-        self.summary = summary
-        self.decisions = decisions
-        self.actionItemCount = actionItemCount
-        self.statusLabel = statusLabel
-        self.isPinned = isPinned
-    }
-}
-
 /// Input for the injected Daily Brief provider — the same counts + titles the
 /// old `TodayDashboard.DigestInput.agentBriefRequest(now:)` carried, as a
 /// plain value so TasksFeature does not import NexusAgent. The app layer
@@ -76,10 +32,6 @@ public struct LiquidTodayBriefInput: Equatable, Sendable {
 /// closure (`nil` = the agent is disabled/unavailable → the card shows its
 /// empty state; the screen never fabricates a brief).
 public typealias LiquidTodayBriefProvider = @MainActor (LiquidTodayBriefInput) async -> String
-
-/// Meeting Intelligence seam: the app layer fetches from the NexusMeetings
-/// store on the screen's reload cadence. `nil` = Meetings unavailable.
-public typealias LiquidTodayMeetingIntelProvider = @MainActor () -> LiquidTodayMeetingIntel?
 
 /// Focus Suggestion seam: the app layer passes
 /// `SchedulingIntelligence.suggestedFocusBlocks(events:within:)` (CalendarFeature)
@@ -207,7 +159,6 @@ public struct LiquidProjectProgress: Identifiable, Equatable {
 @Observable
 public final class LiquidTodayModel {
 
-    public private(set) var agendaItems: [LiquidAgendaItem] = []
     /// Today's visible calendar events (raw input to the focus-gap seam).
     public private(set) var events: [CalendarEvent] = []
     /// First free focus gap left in today's workday, computed during reload
@@ -309,7 +260,6 @@ public final class LiquidTodayModel {
             events = fetchedEvents
             focusSuggestion = focusGap
             focusHasCalendarEvents = !fetchedEvents.isEmpty
-            agendaItems = Self.agendaItems(events: fetchedEvents, blocks: snapshot.acceptedBlocks)
             priorityGroups = Self.priorityGroups(overdue: snapshot.overdue, today: snapshot.today)
             projects = snapshot.projects
             pinnedFocusTask = snapshot.pinnedFocusTask
@@ -322,10 +272,10 @@ public final class LiquidTodayModel {
             events = fetchedEvents
             focusSuggestion = focusGap
             focusHasCalendarEvents = !fetchedEvents.isEmpty
-            agendaItems = []
             priorityGroups = []
             projects = []
             pinnedFocusTask = nil
+            decisions = []
             loadError = String(describing: error)
         }
     }
@@ -398,7 +348,6 @@ public final class LiquidTodayModel {
     private struct StoreSnapshot {
         let overdue: [TaskItem]
         let today: [TaskItem]
-        let acceptedBlocks: [ScheduledBlock]
         let projects: [LiquidProjectProgress]
         let pinnedFocusTask: TaskItem?
         let projectNamesByID: [UUID: String]
@@ -418,14 +367,6 @@ public final class LiquidTodayModel {
         let noDate = try query.noDate(excludingProjectIDs: archivedProjectIDs)
             .apply(in: modelContext)
         let awaiting = try query.awaiting(now: now, modelContext: modelContext, linkRepository: linkRepository)
-
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: now)
-        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-        // Spec §Today's Agenda: events + ACCEPTED Motion-AI blocks (proposed
-        // ones are calendar-surface concerns, not the day's committed agenda).
-        let acceptedBlocks = ((try? ScheduledBlockRepository(context: modelContext).blocks(from: dayStart, to: dayEnd)) ?? [])
-            .filter { $0.deletedAt == nil && $0.status == .accepted }
 
         let allProjects = try modelContext.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.name)]))
         let liveProjects = allProjects.filter { $0.deletedAt == nil && $0.archivedAt == nil }
@@ -458,7 +399,6 @@ public final class LiquidTodayModel {
         return StoreSnapshot(
             overdue: overdue,
             today: today,
-            acceptedBlocks: acceptedBlocks,
             projects: projects,
             pinnedFocusTask: pinned,
             projectNamesByID: projectNamesByID,

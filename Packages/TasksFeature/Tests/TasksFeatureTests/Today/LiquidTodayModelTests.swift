@@ -83,7 +83,7 @@ struct LiquidTodayModelTests {
 
         let tasks = [a, b, c, d, e, f, g, h]
         let startOfToday = calendar.startOfDay(for: now)
-        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, now: startOfToday, cap: 5)
+        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, startOfDay: startOfToday, cap: 5)
         #expect(ranked.count == 5)
         #expect(ranked[0].id == a.id)
         #expect(ranked[1].id == b.id)
@@ -95,7 +95,7 @@ struct LiquidTodayModelTests {
     @MainActor
     func rankedPrioritiesCap() {
         let tasks = (0..<10).map { TaskItem(title: "task-\($0)", priority: .medium) }
-        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, now: .now, cap: 3)
+        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, startOfDay: Calendar.current.startOfDay(for: .now), cap: 3)
         #expect(ranked.count == 3)
     }
 
@@ -103,35 +103,8 @@ struct LiquidTodayModelTests {
     @MainActor
     func rankedPrioritiesBelowCap() {
         let tasks = [TaskItem(title: "only", priority: .high)]
-        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, now: .now, cap: 5)
+        let ranked = LiquidTodayModel.rankedTodayPriorities(tasks, startOfDay: Calendar.current.startOfDay(for: .now), cap: 5)
         #expect(ranked.count == 1)
-    }
-
-    // MARK: - Agenda assembly
-
-    @Test("Sorts timed events + accepted blocks by start; all-day floats to the top")
-    @MainActor
-    func agendaAssembly() {
-        let calendar = Calendar.current
-        let dayStart = calendar.startOfDay(for: .now)
-        let nine = dayStart.addingTimeInterval(9 * 3600)
-        let eleven = dayStart.addingTimeInterval(11 * 3600)
-
-        let timed = CalendarEvent(id: "e1", title: "Standup", start: eleven, end: eleven.addingTimeInterval(1800))
-        let allDay = CalendarEvent(id: "e2", title: "Offsite", start: dayStart, end: dayStart.addingTimeInterval(86_400), isAllDay: true)
-        let block = ScheduledBlock(
-            taskID: UUID(),
-            start: nine,
-            end: nine.addingTimeInterval(3600),
-            title: "Deep work",
-            status: .accepted
-        )
-
-        let items = LiquidTodayModel.agendaItems(events: [timed, allDay], blocks: [block])
-
-        #expect(items.map(\.title) == ["Offsite", "Deep work", "Standup"])
-        #expect(items[1].kind == .focus)
-        #expect(items[2].kind == .meeting)
     }
 
     // MARK: - Due metadata
@@ -394,7 +367,6 @@ struct LiquidTodayModelTests {
 
         #expect(gated.priorityGroups == baseline.priorityGroups)
         #expect(gated.projects == baseline.projects)
-        #expect(gated.agendaItems == baseline.agendaItems)
         #expect(gated.projectNamesByID == baseline.projectNamesByID)
         #expect(gated.storeLoadCount == 1)
     }
@@ -509,7 +481,6 @@ struct LiquidTodayModelTests {
     @MainActor
     func referenceTodaySnapshotIsDense() {
         let snapshot = LiquidTodayReferenceData.snapshot(now: .now)
-        #expect(snapshot.agendaItems.count >= 5)
         #expect(snapshot.priorityGroups.count >= 3)
         #expect(snapshot.projects.count >= 3)
         #expect(!snapshot.decisions.isEmpty)

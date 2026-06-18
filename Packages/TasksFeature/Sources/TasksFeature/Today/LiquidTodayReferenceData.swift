@@ -4,7 +4,6 @@ import NexusCore
 @MainActor
 enum LiquidTodayReferenceData {
     struct Snapshot {
-        let agendaItems: [LiquidAgendaItem]
         /// Raw calendar events for the Up Next card (selector filters + caps at render time).
         let events: [CalendarEvent]
         let priorityGroups: [LiquidPriorityGroup]
@@ -48,27 +47,6 @@ enum LiquidTodayReferenceData {
             pinnedAsFocus: true
         )
 
-        let agendaItems = [
-            LiquidAgendaItem(
-                id: "deep-work", title: "Deep Work", subtitle: "Product Strategy", start: at(9), end: at(9, 50), isAllDay: false,
-                kind: .focus),
-            LiquidAgendaItem(
-                id: "one-one", title: "1:1 Meeting", subtitle: "Jamie Park", start: at(10), end: at(10, 50), isAllDay: false, kind: .meeting
-            ),
-            LiquidAgendaItem(
-                id: "roadmap-review", title: "Product Roadmap Review", subtitle: "Conference Room B", start: at(11), end: at(12),
-                isAllDay: false, kind: .project),
-            LiquidAgendaItem(
-                id: "focus-time", title: "Focus Time", subtitle: "Design System Audit", start: at(13), end: at(14), isAllDay: false,
-                kind: .focus),
-            LiquidAgendaItem(
-                id: "marketing-sync", title: "Marketing Sync", subtitle: "Go-to-Market Plan", start: at(14, 30), end: at(15, 15),
-                isAllDay: false, kind: .meeting),
-            LiquidAgendaItem(
-                id: "leadership", title: "Leadership Update", subtitle: "Weekly Check-in", start: at(16), end: at(16, 45), isAllDay: false,
-                kind: .personal),
-        ]
-
         // Reference calendar events for the Up Next card: now-relative offsets so
         // the populated, capped, and "+N more" states are always visible regardless
         // of the wall-clock time at which a screenshot or preview is taken.
@@ -100,7 +78,6 @@ enum LiquidTodayReferenceData {
         ]
 
         return Snapshot(
-            agendaItems: agendaItems,
             events: referenceEvents,
             priorityGroups: LiquidTodayModel.priorityGroups(overdue: [], today: tasks),
             projects: [

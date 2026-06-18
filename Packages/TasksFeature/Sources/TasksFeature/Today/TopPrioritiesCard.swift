@@ -35,7 +35,7 @@ struct TopPrioritiesCard: View {
                 let startOfToday = Calendar.current.startOfDay(for: now)
                 let ranked = LiquidTodayModel.rankedTodayPriorities(
                     groups.flatMap(\.tasks),
-                    now: startOfToday
+                    startOfDay: startOfToday
                 )
                 VStack(alignment: .leading, spacing: DS.Space.m) {
                     ForEach(ranked, id: \.id) { task in
