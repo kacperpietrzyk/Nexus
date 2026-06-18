@@ -264,7 +264,8 @@ public struct LiquidProjectScreen: View {
 
     private func togglePin(_ project: Project) {
         try? ProjectRepository(context: modelContext).setPinned(project, !project.isPinned)
-        reload()
+        // `setPinned` calls `context.save()`; `.reloadOnStoreChange` already fires
+        // `reload()` on `ModelContext.didSave` — no explicit call needed here.
     }
 
     private func select(_ project: Project?) {

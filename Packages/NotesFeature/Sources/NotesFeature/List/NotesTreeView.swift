@@ -165,6 +165,7 @@ struct NotesTreeView: View {
                         isExpanded: { !collapsed.contains($0) },
                         setExpanded: { setCollapsed($0, !$1) },
                         onSelect: select,
+                        onTogglePin: { note in try? noteRepository?.setPinned(note, !note.isPinned) },
                         noteMenu: noteContextMenu
                     )
                 }

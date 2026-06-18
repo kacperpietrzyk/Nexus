@@ -59,6 +59,10 @@ struct NoteFolderDisclosure<Menu: View>: View {
     let isExpanded: (String) -> Bool
     let setExpanded: (String, Bool) -> Void
     let onSelect: (UUID) -> Void
+    /// Per-note pin toggle; mirrors the seam used by the flat-section `leaf(_:)`
+    /// path. `nil` would suppress the hover star for every note in this folder
+    /// tree — pass a non-nil closure to show it (same as non-folder leaves).
+    var onTogglePin: ((Note) -> Void)?
     /// Per-note context menu, supplied by the owner so Library notes share the
     /// same Move / Convert / Delete actions as the flat-section leaves.
     @ViewBuilder let noteMenu: (Note) -> Menu
@@ -77,6 +81,7 @@ struct NoteFolderDisclosure<Menu: View>: View {
                     isExpanded: isExpanded,
                     setExpanded: setExpanded,
                     onSelect: onSelect,
+                    onTogglePin: onTogglePin,
                     noteMenu: noteMenu
                 )
                 .padding(.leading, DS.Space.m)
@@ -85,7 +90,8 @@ struct NoteFolderDisclosure<Menu: View>: View {
                 NoteTreeLeaf(
                     note: note,
                     isCanonical: false,
-                    isSelected: note.id == selection
+                    isSelected: note.id == selection,
+                    onTogglePin: onTogglePin.map { toggle in { toggle(note) } }
                 )
                 .padding(.leading, DS.Space.m)
                 .onTapGesture { onSelect(note.id) }
