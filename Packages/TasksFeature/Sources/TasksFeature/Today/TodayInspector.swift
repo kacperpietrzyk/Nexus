@@ -8,10 +8,9 @@ private let quickCaptureMinHeight: CGFloat = 72
 private let focusRingSize: CGFloat = 66
 
 /// The Today right inspector (spec §Right inspector): Daily Brief, Focus,
-/// Up Next, and Quick Capture as one
-/// integrated glass column. Reads the same shared `LiquidTodayModel` the main
-/// column renders; cross-module intelligence arrives through injected
-/// providers composed in the app layer.
+/// and Quick Capture as one integrated glass column. Reads the same shared
+/// `LiquidTodayModel` the main column renders; cross-module intelligence
+/// arrives through injected providers composed in the app layer.
 public struct TodayInspector: View {
 
     @Environment(\.focusModeState) private var focusModeState

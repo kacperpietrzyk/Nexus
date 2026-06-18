@@ -25,11 +25,11 @@ private let inspectorSideMinWidth: CGFloat = 820
 #endif
 
 /// The Liquid `Today / Command Center` main column (Task 5, spec
-/// `docs/05_MODULE_TODAY.md`): serif page header, then Agenda + Top
-/// Priorities on top and Projects / Meeting Decisions as the bottom row.
-/// The matching right inspector (`TodayInspector`) is mounted separately
-/// through `LiquidAppShell`'s inspector slot; both read the same shared
-/// `LiquidTodayModel`.
+/// `docs/05_MODULE_TODAY.md`): serif page header, then Top Priorities + Up
+/// Next as the action band (row 1) and Meeting Decisions + Projects as the
+/// context row (row 2). The matching right inspector (`TodayInspector`) is
+/// mounted separately through `LiquidAppShell`'s inspector slot; both read
+/// the same shared `LiquidTodayModel`.
 ///
 /// Cross-module content (meeting decisions, daily brief) enters through
 /// injected value providers composed in the app layer — TasksFeature imports
@@ -157,23 +157,27 @@ public struct LiquidTodayScreen: View {
             errorRowIfNeeded
             insightBanner()
 
-            // Row height = the tallest card's intrinsic content (no magic
-            // constant, no `.clipped()`): empty states stay compact instead of
-            // stretching to a fixed 420 pt, and dense cards grow rather than
-            // hard-truncating. A POPULATED agenda fills the row to match Top
-            // Priorities (`agendaCell`'s `maxHeight: .infinity`); an EMPTY one
-            // hugs its slim content so the row collapses (see `agendaCell`).
+            // Action band (row 1): Top Priorities is the hero and fills the
+            // available width; Up Next is the fixed-width companion (see
+            // `agendaCell`). Row height = the tallest card's intrinsic content
+            // (no magic constant, no `.clipped()`): empty states stay compact
+            // and dense cards grow rather than hard-truncating. A POPULATED
+            // Up Next fills the row height to match Top Priorities
+            // (`agendaCell`'s `maxHeight: .infinity`); an EMPTY one hugs its
+            // slim content so the row collapses.
             HStack(alignment: .top, spacing: DS.Space.m) {
-                agendaCell
                 prioritiesCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                agendaCell
             }
             .fixedSize(horizontal: false, vertical: true)
 
+            // Context row (row 2): Meeting Decisions + Projects — balanced
+            // equal-width cards.
             HStack(alignment: .top, spacing: DS.Space.m) {
-                projectsCard
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 meetingCard
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                projectsCard
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -181,20 +185,22 @@ public struct LiquidTodayScreen: View {
     }
 
     #if os(iOS)
-    /// The five main cards as an ADAPTIVE grid (not the macOS fixed 380 + 3-column
+    /// The four main cards as an ADAPTIVE grid (not the macOS fixed 380 + 3-column
     /// row, which is wider than an iPad-11" pane and overflows). The grid picks the
     /// column count that fits the available width — 1 on iPhone, 2 on a narrow iPad
     /// pane, 3 on a wide one — so nothing truncates and there are no magic widths.
+    /// Card order mirrors the macOS layout: action band first (Top Priorities, Up
+    /// Next), then context row (Meeting Decisions, Projects).
     private var iosCardGrid: some View {
         LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 240, maximum: .infinity), spacing: DS.Space.l, alignment: .top)],
             alignment: .leading,
             spacing: DS.Space.l
         ) {
-            agendaCard
             prioritiesCard
-            projectsCard
+            agendaCard
             meetingCard
+            projectsCard
         }
     }
 
