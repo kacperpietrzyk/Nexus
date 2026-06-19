@@ -57,8 +57,9 @@ public enum NoteListResolver {
             guard let section = tree.projects.first(where: { $0.id == id }) else {
                 return Result(sections: [], truncated: false)
             }
-            let notes = ([section.canonical].compactMap { $0 }) + section.notes
-            return single(byUpdatedDesc(notes))
+            let canonical = [section.canonical].compactMap { $0 }
+            let rest = byUpdatedDesc(section.notes)
+            return single(canonical + rest)
         case .folder(let path):
             let node = findFolder(path, in: tree.library)
             return single(byUpdatedDesc(node?.notes ?? []))

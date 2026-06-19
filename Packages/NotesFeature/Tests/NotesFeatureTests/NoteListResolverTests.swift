@@ -72,6 +72,42 @@ struct NoteListResolverTests {
         #expect(result.sections[0].notes.map(\.title) == ["at"])
     }
 
+    @Test("project container: canonical note always first, then linked notes by updatedAt desc")
+    func projectCanonicalFirst() throws {
+        let projectID = UUID()
+        // Canonical has an older updatedAt — the old "sort all together" logic would NOT put
+        // it first. The new logic pins it at position 0 regardless of date.
+        let canonical = note("Project page", role: .projectPage, updated: Date(timeIntervalSince1970: 1))
+        let linked1 = note("Linked A", updated: Date(timeIntervalSince1970: 100))
+        let linked2 = note("Linked B", updated: Date(timeIntervalSince1970: 200))
+
+        func projectLink(note noteID: UUID, project projectID: UUID) -> Link {
+            Link(from: (.note, noteID), to: (.project, projectID), linkKind: .mentions)
+        }
+
+        let proj = NoteTreeModel.ProjectRef(id: projectID, title: "Test Project", canonicalNoteRef: canonical.id)
+        let tree = NoteTreeModel.build(
+            notes: [canonical, linked1, linked2],
+            links: [
+                projectLink(note: canonical.id, project: projectID),
+                projectLink(note: linked1.id, project: projectID),
+                projectLink(note: linked2.id, project: projectID),
+            ],
+            projects: [proj]
+        )
+
+        let result = NoteListResolver.resolve(
+            container: .project(projectID), tree: tree, allNotes: [canonical, linked1, linked2],
+            recentLimit: 50)
+
+        #expect(result.sections.count == 1)
+        let notes = result.sections[0].notes
+        // Canonical must be first despite having the oldest updatedAt.
+        #expect(notes.first?.id == canonical.id)
+        // Remaining notes are updatedAt desc: Linked B (200) before Linked A (100).
+        #expect(notes.map(\.title) == ["Project page", "Linked B", "Linked A"])
+    }
+
     @Test("unfiled / journal / templates pull the matching tree slice, updatedAt desc")
     func structuralSlices() {
         let u1 = note("u1", updated: Date(timeIntervalSince1970: 1))

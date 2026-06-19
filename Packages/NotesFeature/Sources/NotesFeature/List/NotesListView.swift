@@ -22,7 +22,6 @@ public struct NotesListView: View {
 
     @State private var path: [UUID] = []
     @State private var newNoteError: String?
-    @State private var groupMode: NoteListGrouping.Mode = .role
     #if os(macOS)
     @State private var graphModel: NoteGraphModel?
     @State private var selectedContainer: NoteContainer = .overview
@@ -49,11 +48,12 @@ public struct NotesListView: View {
     private var backlinkCounts: [UUID: Int] {
         NoteListGrouping.backlinkCounts(from: links)
     }
-
+    #if !os(macOS)
+    @State private var groupMode: NoteListGrouping.Mode = .role
     private var groups: [NoteListGrouping.Group] {
         NoteListGrouping.groups(for: notes, mode: groupMode)
     }
-
+    #endif
     public var body: some View {
         #if os(macOS)
         // macOS owns no outer NavigationStack — the right-pane stack inside

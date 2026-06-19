@@ -2,7 +2,6 @@
 
 import NexusCore
 import NexusUI
-import SwiftData
 import SwiftUI
 
 /// macOS knowledge-base navigator (spec §4): in-panel header + a sectioned,

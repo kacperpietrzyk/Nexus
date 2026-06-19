@@ -174,7 +174,7 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     /// structured custom property bag (key/value rows + an "add property" field)
     /// persisted via `NoteRepository.updateProperties`.
     private var propertiesSection: some View {
-        VStack(alignment: .leading, spacing: DS.Space.s + 2) {
+        let slab = VStack(alignment: .leading, spacing: DS.Space.s + 2) {
             propertyRow(label: "Tags") {
                 tagEditor
             }
@@ -218,12 +218,29 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             }
         }
         .padding(DS.Space.m)
-        .overlay {
-            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
-        }
-        .padding(.vertical, DS.Space.s)
-        .listRowSeparator(.hidden)
+        #if os(macOS)
+        return
+            slab
+            .overlay {
+                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                    .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+            }
+            .padding(.vertical, DS.Space.s)
+            .listRowSeparator(.hidden)
+        #else
+        return
+            slab
+            .background {
+                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                    .fill(DS.ColorToken.glassSoft)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
+                    .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+            }
+            .padding(.vertical, DS.Space.s)
+            .listRowSeparator(.hidden)
+        #endif
     }
 
     private func propertyRow<Content: View>(
@@ -269,7 +286,6 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             field
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
-            .frame(maxWidth: 420, alignment: .leading)
         #else
         return field.frame(maxWidth: 420, alignment: .leading)
         #endif
@@ -315,7 +331,6 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             field
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
-            .frame(maxWidth: 420, alignment: .leading)
         #else
         return field.frame(maxWidth: 420, alignment: .leading)
         #endif
@@ -342,7 +357,9 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
 
     private var addPropertyField: some View {
-        HStack(spacing: 6) {
+        // The .frame cap is macOS-only; the #if is applied outside the HStack modifier
+        // chain to avoid mid-chain conditional compilation (mirrors tagInputField pattern).
+        let stack = HStack(spacing: 6) {
             Image(systemName: "plus.circle")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(DS.ColorToken.textTertiary)
@@ -351,8 +368,12 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
                     model.addProperty(key: newPropertyKey)
                     newPropertyKey = ""
                 }
-                .frame(maxWidth: 420, alignment: .leading)
         }
+        #if os(macOS)
+        return stack.frame(maxWidth: 420, alignment: .leading)
+        #else
+        return stack
+        #endif
     }
 
     private var blockRows: some View {
