@@ -479,7 +479,9 @@ private struct WeekColumnDropDelegate: DropDelegate {
 /// visible week) can be squared while outer corners remain rounded.
 ///
 /// `clippedStart` → left edge is square; `clippedEnd` → right edge is square.
-private struct AllDayBarView: View {
+/// Internal (not private) so `LiquidMonthGrid` can reuse the same visual recipe
+/// for its spanning-bar overlay, avoiding recipe drift.
+struct AllDayBarView: View {
     let title: String
     let color: Color
     let clippedStart: Bool

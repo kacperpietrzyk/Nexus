@@ -3,8 +3,17 @@ import NexusUI
 import SwiftUI
 
 /// Liquid-native month density grid (spec §Calendar — Month scope): a 6×7 cell
-/// grid of per-day event dots inside one glass card, matching the Week grid's
-/// look. Tapping a day drills into the Day scope.
+/// grid with Apple-style event chips and multi-day spanning bars inside one glass
+/// card, matching the Week grid's look. Tapping a day drills into the Day scope.
+///
+/// Design (top-to-bottom inside each week row):
+/// 1. Multi-day / all-day **spanning bars** — one continuous bar per event across
+///    its covered columns, using `AllDayLaneLayout` (max 2 lanes). Events that
+///    cross a week boundary are squared on the clipped edge, matching Apple Calendar.
+/// 2. **Chips** — a compact leading color dot + truncated title for timed single-day
+///    events, rendered below the bar region. Capped to the available cell height.
+/// 3. **"+N more"** — one badge per cell summing both chip overflow and any spanning
+///    bars that were pushed out of the lane cap.
 ///
 /// This is the Liquid counterpart of the legacy `MonthGridView` (which stays on
 /// the old `NexusColor` tokens for the iOS `CalendarView`); the two are kept
@@ -21,6 +30,22 @@ struct LiquidMonthGrid: View {
     let itemsForDay: (Date) -> [TimelineItem]
     let onSelectDay: (Date) -> Void
 
+    // MARK: - Row metrics
+
+    /// Height of one spanning-bar lane (bar + vertical padding).
+    private static let barLaneHeight: CGFloat = 18
+    /// Vertical gap between stacked bar lanes.
+    private static let barLaneSpacing: CGFloat = 2
+    /// Vertical padding above the first bar lane inside the bar region.
+    private static let barRegionTopPadding: CGFloat = 2
+    /// Maximum spanning-bar lanes shown per row (overflow folded into "+N more").
+    private static let maxBarLanes = 2
+
+    /// Max chips shown per cell before "+N more" appears.
+    static let maxChipsVisible = 3
+
+    // MARK: - Layout helpers
+
     /// Days chunked into week rows so each row can share the available height
     /// (a `LazyVGrid` only flexes width — rows would collapse to content).
     private var weeks: [[Date]] {
@@ -34,12 +59,8 @@ struct LiquidMonthGrid: View {
             weekdayHeader
             VStack(spacing: DS.Space.xs) {
                 ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
-                    HStack(spacing: DS.Space.xs) {
-                        ForEach(week, id: \.self) { day in
-                            cell(day)
-                        }
-                    }
-                    .frame(maxHeight: .infinity)
+                    weekRow(week)
+                        .frame(maxHeight: .infinity)
                 }
             }
         }
@@ -47,6 +68,8 @@ struct LiquidMonthGrid: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .liquidLightCard(cornerRadius: DS.Radius.m)
     }
+
+    // MARK: - Week-day header
 
     private var weekdayHeader: some View {
         HStack(spacing: DS.Space.xs) {
@@ -59,18 +82,125 @@ struct LiquidMonthGrid: View {
         }
     }
 
-    private func cell(_ day: Date) -> some View {
-        let items = itemsForDay(day)
+    // MARK: - Week row
+
+    /// One horizontal row of 7 day cells, with the spanning-bar overlay on top.
+    ///
+    /// Layout layers (bottom to top):
+    /// - `HStack` of 7 `cell(_:barRegionHeight:overflowByColumn:)` views
+    /// - Spanning bar overlay (absolute-positioned via `GeometryReader`)
+    private func weekRow(_ week: [Date]) -> some View {
+        // Compute the bar layout once for the full row so cells can reserve the
+        // same vertical space for the bar region and the overlay can position bars.
+        let allDayItems = DayTimelineLayout.allDayItems(forVisibleDays: week, itemsForDay: itemsForDay)
+        let barLayout = AllDayLaneLayout.layout(
+            items: allDayItems,
+            visibleDays: week.map { calendar.startOfDay(for: $0) },
+            calendar: calendar,
+            maxLanes: Self.maxBarLanes
+        )
+        let usedLanes = (barLayout.bars.map(\.lane).max() ?? -1) + 1
+        let barRegionHeight: CGFloat =
+            usedLanes > 0
+            ? Self.barRegionTopPadding
+                + CGFloat(usedLanes) * Self.barLaneHeight
+                + CGFloat(max(0, usedLanes - 1)) * Self.barLaneSpacing
+            : 0
+
+        return GeometryReader { geo in
+            let columnWidth = geo.size.width / CGFloat(max(1, week.count))
+            ZStack(alignment: .topLeading) {
+                // Bottom layer: cell backgrounds + day numbers + chips + "+N more".
+                HStack(spacing: DS.Space.xs) {
+                    ForEach(week, id: \.self) { day in
+                        let col = week.firstIndex(of: day) ?? 0
+                        let barOverflow = barLayout.overflowByColumn[col] ?? 0
+                        cell(day, barRegionHeight: barRegionHeight, barOverflow: barOverflow)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                // Top layer: spanning bars, hit-testing disabled so cell buttons
+                // still receive taps underneath.
+                ForEach(barLayout.bars, id: \.item.id) { bar in
+                    let accent =
+                        LiquidCalendarTint(calendarHex: bar.item.colorHex)?.accent
+                        ?? WeekEventClassifier.kind(for: bar.item).accent
+                    // Mirror WeekGrid.allDayRow geometry: 2 pt gap from each
+                    // column edge + lane-offset matching barRegionTopPadding.
+                    let cellSpacing = DS.Space.xs
+                    let xOffset = columnWidth * CGFloat(bar.startColumn) + cellSpacing / 2 + 2
+                    let barWidth =
+                        columnWidth * CGFloat(bar.endColumn - bar.startColumn + 1)
+                        - cellSpacing - 4
+                    let yOffset =
+                        DS.Space.xs  // cell top padding
+                        + Self.barRegionTopPadding
+                        + CGFloat(bar.lane) * (Self.barLaneHeight + Self.barLaneSpacing)
+                    AllDayBarView(
+                        title: bar.item.title,
+                        color: accent,
+                        clippedStart: bar.clippedStart,
+                        clippedEnd: bar.clippedEnd
+                    )
+                    .frame(width: max(0, barWidth), height: Self.barLaneHeight)
+                    .offset(x: xOffset, y: yOffset)
+                }
+                .allowsHitTesting(false)
+            }
+        }
+    }
+
+    // MARK: - Day cell
+
+    private func cell(
+        _ day: Date,
+        barRegionHeight: CGFloat,
+        barOverflow: Int
+    ) -> some View {
+        let allItems = itemsForDay(day)
+        let timedItems = MonthGridHelpers.timedItems(from: allItems)
+        let chipCount = min(timedItems.count, Self.maxChipsVisible)
+        let chipOverflow = timedItems.count - chipCount
+        let totalOverflow = chipOverflow + barOverflow
         let inMonth = calendar.isDate(day, equalTo: anchor, toGranularity: .month)
         let isToday = calendar.isDate(day, inSameDayAs: now)
+
         return Button {
             onSelectDay(day)
         } label: {
-            VStack(alignment: .leading, spacing: DS.Space.xxs) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Day number always at the top.
                 Text(Self.dayNumberFormatter.string(from: day))
                     .font(DS.FontToken.caption)
                     .foregroundStyle(dayNumberColor(inMonth: inMonth, isToday: isToday))
-                dots(for: items, inMonth: inMonth)
+                    .padding(.bottom, DS.Space.xxs)
+
+                // Reserve space for spanning bars so all cells in the row stay
+                // vertically aligned (the bars themselves are in the overlay).
+                if barRegionHeight > 0 {
+                    Color.clear
+                        .frame(height: barRegionHeight)
+                }
+
+                // Chips for timed single-day events.
+                if !timedItems.isEmpty {
+                    VStack(alignment: .leading, spacing: MonthGridHelpers.chipSpacing) {
+                        ForEach(Array(timedItems.prefix(chipCount).enumerated()), id: \.offset) { _, item in
+                            chip(item)
+                        }
+                    }
+                    .padding(.top, barRegionHeight > 0 ? DS.Space.xxs : 0)
+                }
+
+                // "+N more" badge when chips or bars overflow.
+                if totalOverflow > 0 {
+                    Text("+\(totalOverflow) more")
+                        .font(DS.FontToken.caption.monospacedDigit())
+                        .foregroundStyle(DS.ColorToken.textTertiary)
+                        .padding(.top, DS.Space.xxs)
+                }
+
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -89,35 +219,36 @@ struct LiquidMonthGrid: View {
             .opacity(inMonth ? 1 : 0.45)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(Self.accessibilityFormatter.string(from: day)), \(items.count) items")
+        .accessibilityLabel(
+            "\(Self.accessibilityFormatter.string(from: day)), \(allItems.count) items"
+        )
     }
 
-    @ViewBuilder
-    private func dots(for items: [TimelineItem], inMonth: Bool) -> some View {
-        if items.isEmpty {
-            if inMonth {
-                Circle()
-                    .fill(DS.ColorToken.textMuted.opacity(0.6))
-                    .frame(width: 3, height: 3)
-                    .accessibilityHidden(true)
-            }
-        } else {
-            HStack(spacing: 2) {
-                ForEach(Array(items.prefix(4).enumerated()), id: \.offset) { _, item in
-                    Circle().fill(dotColor(item)).frame(width: 4, height: 4)
-                }
-                if items.count > 4 {
-                    Text("+\(items.count - 4)")
-                        .font(DS.FontToken.caption.monospacedDigit())
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                }
-            }
+    // MARK: - Chip
+
+    /// A compact event chip: a 4 pt leading color marker + truncated title.
+    /// Mirrors the dot-color logic from the old `dots(for:)` but inline since
+    /// chips are a structurally different view.
+    private func chip(_ item: TimelineItem) -> some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(chipColor(item))
+                .frame(width: 4, height: 4)
+                .accessibilityHidden(true)
+            Text(item.title)
+                .font(.system(size: 10, weight: .regular))
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
+        .frame(height: MonthGridHelpers.chipHeight, alignment: .leading)
     }
 
-    private func dotColor(_ item: TimelineItem) -> Color {
+    private func chipColor(_ item: TimelineItem) -> Color {
         switch item.kind {
-        case .event: return item.colorHex.flatMap { Color(calendarHexDesaturated: $0) } ?? DS.ColorToken.textTertiary
+        case .event:
+            return item.colorHex.flatMap { Color(calendarHexDesaturated: $0) }
+                ?? DS.ColorToken.textTertiary
         case .proposedBlock: return DS.ColorToken.textMuted
         case .acceptedBlock: return DS.ColorToken.accentPrimary
         case .seriesPreview: return DS.ColorToken.textMuted
@@ -128,6 +259,8 @@ struct LiquidMonthGrid: View {
         if isToday { return DS.ColorToken.accentPrimaryHover }
         return inMonth ? DS.ColorToken.textSecondary : DS.ColorToken.textMuted
     }
+
+    // MARK: - Static resources
 
     static let weekdaySymbols = ["S", "M", "T", "W", "T", "F", "S"]
 
@@ -144,4 +277,37 @@ struct LiquidMonthGrid: View {
         formatter.dateStyle = .medium
         return formatter
     }()
+}
+
+// MARK: - Pure helpers (testable without SwiftUI)
+
+/// Pure partitioning logic extracted so unit tests can exercise it without a
+/// SwiftUI host. No UI, no ambient clock.
+enum MonthGridHelpers {
+    /// Height of one event chip row — kept here (nonisolated) so `chipCapacity`
+    /// can use it as a default without referencing the `@MainActor`-isolated
+    /// `LiquidMonthGrid` static properties.
+    static let chipHeight: CGFloat = 14
+    /// Vertical gap between stacked chips inside a cell.
+    static let chipSpacing: CGFloat = 1
+
+    /// Timed (non-all-day) items from a day's item list, sorted by start time.
+    /// These are what render as in-cell chips; all-day items are handled by the
+    /// spanning-bar layer.
+    static func timedItems(from items: [TimelineItem]) -> [TimelineItem] {
+        items.filter { !$0.isAllDay }
+    }
+
+    /// How many chip rows fit in `availableHeight` below the bar region, given
+    /// chip height and spacing constants.
+    static func chipCapacity(
+        availableHeight: CGFloat,
+        chipHeight: CGFloat = MonthGridHelpers.chipHeight,
+        chipSpacing: CGFloat = MonthGridHelpers.chipSpacing
+    ) -> Int {
+        guard availableHeight >= chipHeight else { return 0 }
+        // Each chip after the first costs chipHeight + chipSpacing.
+        let rest = chipHeight + chipSpacing
+        return 1 + max(0, Int((availableHeight - chipHeight) / rest))
+    }
 }
