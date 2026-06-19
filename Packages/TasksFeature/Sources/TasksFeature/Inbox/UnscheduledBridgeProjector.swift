@@ -1,6 +1,27 @@
 // Packages/TasksFeature/Sources/TasksFeature/Inbox/UnscheduledBridgeProjector.swift
 import Foundation
 import InboxShell
+import NexusCore
+import SwiftData
+
+/// Cheap COUNT path for the unscheduled-tasks bridge card — a `fetchCount` over
+/// the no-date inbox window (no materialization). Lifted verbatim from the
+/// deleted `TasksNoDateSource.count()` so the composition root can inject it
+/// into `UnscheduledBridgeProjector` without TasksFeature re-importing the old
+/// inbox-source machinery. `@MainActor` to match the SwiftData isolation the
+/// rest of the repositories use.
+@MainActor
+public struct TasksNoDateInboxCount {
+    private let context: ModelContext
+
+    public init(context: ModelContext) {
+        self.context = context
+    }
+
+    public func count() throws -> Int {
+        try TodayQuery().noDateInboxWindow().count(in: context)
+    }
+}
 
 /// Single "go triage your unscheduled tasks" bridge card. Count is injected so
 /// the projector stays testable; the composition root supplies the real

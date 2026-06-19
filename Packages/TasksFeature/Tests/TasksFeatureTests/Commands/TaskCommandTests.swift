@@ -10,20 +10,24 @@ import Testing
 @Suite("Task command registration")
 struct TaskCommandTests {
 
-    @Test("bootstrap registers Inbox sources and six task commands")
-    func bootstrapRegistersSourcesAndCommands() async throws {
+    @Test("bootstrap registers the unscheduled feed projector and six task commands")
+    func bootstrapRegistersProjectorAndCommands() async throws {
         let harness = try Harness()
-        let inbox = InboxSourceRegistry()
+        // A no-date, open task makes the unscheduled bridge projector emit one
+        // bridge card via its injected fetchCount.
+        try harness.repository.insert(TaskItem(title: "No date"))
+        let feed = FeedRegistry()
         let commands = CommandRegistry()
 
         await TasksComposition.bootstrap(
             repository: harness.repository,
-            inboxRegistry: inbox,
+            feedRegistry: feed,
             commandRegistry: commands,
             navigation: .init(goToToday: {}, goToInbox: {}, openCapture: {}, selectedTask: { nil })
         )
 
-        #expect(await inbox.sourceIDs() == ["tasks.no-date", "tasks.snoozed"])
+        let items = try await feed.items(now: Date(timeIntervalSince1970: 1_800_000_000))
+        #expect(items.contains { $0.key == "bridge:unscheduled" && $0.route == .unscheduledTasks })
         #expect(
             await commands.allCommands().map(\.id) == [
                 "tasks.add",

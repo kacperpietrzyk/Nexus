@@ -103,19 +103,32 @@ public enum TasksComposition {
         OverdueDigestScheduler(delivery: delivery)
     }
 
-    /// Registers Tasks Inbox sources and command palette actions into the
+    /// Registers the Tasks feed projector and command palette actions into the
     /// shared cross-module registries. Apps call this once from their
-    /// composition root so the `InboxShell` and `CommandPaletteShell` UI gets
-    /// populated without any direct cross-module imports.
+    /// composition root so the `InboxShell` activity feed and the
+    /// `CommandPaletteShell` UI get populated without any direct cross-module
+    /// imports. The `UnscheduledBridgeProjector` emits a single bridge card
+    /// linking to the unscheduled-tasks triage view; its count comes from the
+    /// cheap `TasksNoDateInboxCount` fetchCount (no materialization).
     @MainActor
     public static func bootstrap(
         repository: TaskItemRepository,
-        inboxRegistry: InboxSourceRegistry = .shared,
+        feedRegistry: FeedRegistry = .shared,
         commandRegistry: CommandRegistry = .shared,
         navigation: TaskCommandNavigation
     ) async {
-        await inboxRegistry.register(TasksNoDateSource(repository: repository))
-        await inboxRegistry.register(TasksSnoozedSource(repository: repository))
+        // Capture the Sendable `ModelContainer` (not the non-Sendable
+        // `ModelContext`) so the `@Sendable` count closure stays legal under
+        // Swift 6 strict concurrency, then resolve the main context inside the
+        // MainActor hop where SwiftData fetches must run.
+        let container = repository.context.container
+        await feedRegistry.register(
+            UnscheduledBridgeProjector(countProvider: {
+                await MainActor.run {
+                    (try? TasksNoDateInboxCount(context: container.mainContext).count()) ?? 0
+                }
+            })
+        )
 
         await commandRegistry.register(AddTaskCommand(openCapture: navigation.openCapture))
         await commandRegistry.register(GoToInboxCommand(action: navigation.goToInbox))

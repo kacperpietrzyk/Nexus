@@ -1,6 +1,7 @@
 // Packages/NexusAgent/Sources/NexusAgent/Inbox/DailyBriefProjector.swift
 import Foundation
 import InboxShell
+import NexusCore
 
 /// Emits today's daily-brief note as one Agent-stream feed row. The day key and
 /// note snapshot are injected; the composition root supplies the real providers
@@ -16,6 +17,14 @@ public struct DailyBriefProjector: FeedProjector {
     ) {
         self.dayKeyProvider = dayKeyProvider
         self.snapshotProvider = snapshotProvider
+    }
+
+    /// The stable feed key for the daily brief on the day containing `date`:
+    /// `"brief:" + yyyy-MM-dd` (the prefix the `FeedItemState` doc convention
+    /// cites). Shares `DailyNoteConvention.dayKey` so the key tracks the same
+    /// per-day identity the canonical daily note uses.
+    public static func dayKey(for date: Date) -> String {
+        "brief:" + DailyNoteConvention.dayKey(for: date)
     }
 
     public func project() async throws -> [FeedItem] {

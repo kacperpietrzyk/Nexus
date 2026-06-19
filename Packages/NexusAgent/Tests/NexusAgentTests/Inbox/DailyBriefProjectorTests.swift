@@ -24,4 +24,13 @@ import InboxShell
         let projector = DailyBriefProjector(dayKeyProvider: { "brief:x" }, snapshotProvider: { nil })
         #expect(try await projector.project().isEmpty)
     }
+
+    @Test func dayKeyHasBriefPrefixAndIsoDate() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        // 2023-11-14T22:13:20Z — `dayKey` reads the calendar's start-of-day.
+        let key = DailyBriefProjector.dayKey(for: day)
+        #expect(key.hasPrefix("brief:"))
+        #expect(key.dropFirst("brief:".count).count == "yyyy-MM-dd".count)
+    }
 }

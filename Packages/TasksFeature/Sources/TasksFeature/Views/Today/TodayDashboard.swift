@@ -149,12 +149,16 @@ public struct TodayDashboard: View {
     private let chrome: TodayDashboardChrome
     public let inboxUnreadCount: Int
     public let onInboxUnreadCountChanged: ((Int) -> Void)?
-    public let onOpenInboxItem: ((InboxItem) -> Void)?
+    public let onOpenInboxItem: ((FeedItem) -> Void)?
     // §1a control mode: the Mac shell hoists the Inbox filter into its
     // top-bar band. nil = no host hoist (iOS / standalone) → InboxView
     // keeps its own internal filter owner. Pure presentation routing.
     private let inboxActiveFilter: Binding<InboxFilter>?
-    public let onInboxItemsChanged: (([InboxItem]) -> Void)?
+    public let onInboxItemsChanged: (([FeedItem]) -> Void)?
+    // Activity-feed state callbacks (seen / dismiss / snooze) → `InboxView`.
+    public let onInboxMarkSeen: ((FeedItem) async -> Void)?
+    public let onInboxDismiss: ((FeedItem) async -> Void)?
+    public let onInboxSnooze: ((FeedItem, Date) async -> Void)?
     public let onOpenTask: ((TaskItem) -> Void)?
     private let meetingsContent: (() -> AnyView)?
     public let onOpenCapture: (CapturePane.Mode) -> Void
@@ -203,9 +207,12 @@ public struct TodayDashboard: View {
         chrome: TodayDashboardChrome = .standalone,
         inboxUnreadCount: Int = 0,
         onInboxUnreadCountChanged: ((Int) -> Void)? = nil,
-        onOpenInboxItem: ((InboxItem) -> Void)? = nil,
+        onOpenInboxItem: ((FeedItem) -> Void)? = nil,
         inboxActiveFilter: Binding<InboxFilter>? = nil,
-        onInboxItemsChanged: (([InboxItem]) -> Void)? = nil,
+        onInboxItemsChanged: (([FeedItem]) -> Void)? = nil,
+        onInboxMarkSeen: ((FeedItem) async -> Void)? = nil,
+        onInboxDismiss: ((FeedItem) async -> Void)? = nil,
+        onInboxSnooze: ((FeedItem, Date) async -> Void)? = nil,
         onOpenTask: ((TaskItem) -> Void)? = nil,
         meetingsContent: (() -> AnyView)? = nil,
         onOpenCapture: @escaping (CapturePane.Mode) -> Void = { _ in },
@@ -222,6 +229,9 @@ public struct TodayDashboard: View {
         self.onOpenInboxItem = onOpenInboxItem
         self.inboxActiveFilter = inboxActiveFilter
         self.onInboxItemsChanged = onInboxItemsChanged
+        self.onInboxMarkSeen = onInboxMarkSeen
+        self.onInboxDismiss = onInboxDismiss
+        self.onInboxSnooze = onInboxSnooze
         self.onOpenTask = onOpenTask
         self.meetingsContent = meetingsContent
         self.onOpenCapture = onOpenCapture
@@ -284,13 +294,9 @@ public struct TodayDashboard: View {
     /// The route content gets a real `minWidth` so it can never compress
     /// behind the 320pt right rail — the pre-existing render bug fix.
     private var embeddedRegularBody: some View {
-        // Audit B3: the rail is the single global right rail on routes with
-        // no right column of their own, but yields on `inbox` / `meetings`,
-        // which own a right pane (double-rail otherwise). When suppressed,
-        // `content` simply fills the freed width. Hoisted to a `let` so the
-        // `if` condition is single-line (both swiftlint `opening_brace` and
-        // swift-format are satisfied — wrapped-condition brace placement
-        // disagrees between the two strict gates).
+        // Audit B3: the single global right rail; yields on `inbox`/`meetings`
+        // (which own a right pane). Hoisted to a `let` to keep the `if`
+        // single-line (satisfies both strict brace gates).
         let showsTimelineRail =
             TodayDashboardContentRoute
             .route(for: activeSelection.wrappedValue)
@@ -321,15 +327,6 @@ public struct TodayDashboard: View {
         VStack(spacing: 0) {
             NexusTopBar(crumbs: ["Personal", title], onCmdK: onOpenCommandPalette) {
                 HStack(spacing: 6) {
-                    if activeSelection.wrappedValue == .inbox {
-                        NexusButton(variant: .ghost, size: .sm, action: markInboxRead) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "envelope.open")
-                                Text("Mark read")
-                            }
-                        }
-                    }
-
                     if canOpenAgent {
                         NexusButton(variant: .ghost, size: .sm, action: openAsk) {
                             HStack(spacing: 4) {
@@ -401,7 +398,10 @@ public struct TodayDashboard: View {
                 },
                 onOpen: { item in
                     onOpenInboxItem?(item)
-                }
+                },
+                markSeen: { item in await onInboxMarkSeen?(item) },
+                dismiss: { item in await onInboxDismiss?(item) },
+                snooze: { item, date in await onInboxSnooze?(item, date) }
             )
         case .meetings:
             if let meetingsContent {

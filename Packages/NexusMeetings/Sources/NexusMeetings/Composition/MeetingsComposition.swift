@@ -11,6 +11,12 @@ public final class MeetingsComposition {
     public static let extraModels: [any PersistentModel.Type] = [Meeting.self]
     public static let localOnlyExtraModels: [any PersistentModel.Type] = [MeetingAudioStorage.self]
 
+    /// Stable source identifier for meeting-extracted action items. Persisted on
+    /// `TaskItem.externalSourceID` for idempotent re-extraction, so the value
+    /// must stay byte-identical (`"meetings.action-items"`) — it outlived the
+    /// deleted `MeetingActionItemsInboxSource` that originally owned it.
+    public static let actionItemSourceID = "meetings.action-items"
+
     /// V11 -> V12 People backfill (spec §8 / M1): seeds `Person` records and
     /// `.attendee` edges from existing meetings' `participantsJSON`. Wires the
     /// concrete `Meeting` type into the generic, marker-gated backfill in
@@ -29,7 +35,6 @@ public final class MeetingsComposition {
 
     public let meetingRepository: MeetingRepository
     public let audioStorageRepository: MeetingAudioStorageRepository
-    public let inboxSource: MeetingActionItemsInboxSource
     public let recorder: MeetingRecorder
     public let detector: MeetingDetector
     public let pipeline: MeetingProcessingPipeline
@@ -87,11 +92,6 @@ public final class MeetingsComposition {
                 now: Date.init
             )
         linkRepository = LinkRepository(context: context)
-        inboxSource = MeetingActionItemsInboxSource(
-            meetingRepository: meetingRepository,
-            taskRepository: self.taskRepository,
-            linkRepository: linkRepository
-        )
 
         let primaryProvider = ParakeetTDTProvider()
         let fallbackProvider = WhisperKitMeetingProvider()
@@ -113,7 +113,7 @@ public final class MeetingsComposition {
                 taskRepository: self.taskRepository,
                 meetingRepository: meetingRepository,
                 linkRepository: linkRepository,
-                sourceID: MeetingActionItemsInboxSource.identifier,
+                sourceID: MeetingsComposition.actionItemSourceID,
                 dateExtractor: dateExtractor
             ),
             providerProfile: {
@@ -242,10 +242,24 @@ public final class MeetingsComposition {
         )
     }
 
-    public func registerInboxSource(in registry: InboxSourceRegistry = .shared) {
-        let source = inboxSource
+    /// Registers the meeting activity-feed projector into the shared
+    /// `FeedRegistry`. Each meeting that produced a summary and/or extracted
+    /// action items becomes one `.meeting`-stream feed row; the snapshot is
+    /// built on `@MainActor` by `MeetingFeedSnapshotBuilder` (the queries lifted
+    /// from the deleted `MeetingActionItemsInboxSource`).
+    public func registerInboxSource(in registry: FeedRegistry = .shared) {
+        // Capture the Sendable container (not the non-Sendable repositories) so
+        // the `@Sendable` snapshot closure is legal under strict concurrency;
+        // rebuild the repositories on the MainActor hop where fetches run.
+        let container = meetingRepository.context.container
         Task {
-            await registry.register(source)
+            await registry.register(
+                MeetingFeedProjector(snapshotProvider: {
+                    try await MainActor.run {
+                        try MeetingFeedSnapshotBuilder(context: container.mainContext).snapshots()
+                    }
+                })
+            )
         }
     }
 

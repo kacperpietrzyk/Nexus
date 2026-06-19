@@ -177,9 +177,10 @@ struct ContentView: View {
         }
         .task {
             await NotesComposition.bootstrap(openDailyNote: { openTodaysDailyNote() })
-            // Shell-level bulk-operation palette commands (InboxShell-owned).
-            await CommandRegistry.shared.register(MarkAllInboxReadCommand())
+            // Shell-level bulk-operation palette command (InboxShell-owned).
             await CommandRegistry.shared.register(SelectAllItemsCommand())
+            await bootstrapActivityFeed()
+            await reloadInboxCount()
             guard let taskRepository else { return }
             await TasksComposition.bootstrap(
                 repository: taskRepository,
@@ -190,6 +191,9 @@ struct ContentView: View {
                     selectedTask: { selectedTask }
                 )
             )
+        }
+        .reloadOnStoreChange {
+            _Concurrency.Task { await reloadInboxCount() }
         }
         .sheet(isPresented: $commandPalettePresented) {
             CommandPaletteView {
@@ -256,7 +260,10 @@ struct ContentView: View {
                 onOpenItem: { openInboxItem($0) },
                 onOpenCapture: { openCapture(mode: .task) },
                 onOpenCommandPalette: { commandPalettePresented = true },
-                onUnreadCountChanged: { inboxUnreadCount = $0 }
+                onUnreadCountChanged: { inboxUnreadCount = $0 },
+                markSeen: { item in markFeedItemSeen(item) },
+                dismissItem: { item in dismissFeedItem(item) },
+                snoozeItem: { item, date in snoozeFeedItem(item, until: date) }
             )
             .tag(NexusTab.inbox)
             .tabItem { Label("Inbox", systemImage: "tray") }
@@ -373,15 +380,92 @@ struct ContentView: View {
         return tasks.first { $0.pinnedAsFocus } ?? tasks.first { $0.priorityRaw == highPriority }
     }
 
+    /// Routes an opened activity-feed row to its destination tab. Module-level
+    /// navigation only — deep-linking is refined in Plan 2.
     @MainActor
-    private func openInboxItem(_ item: InboxItem) {
-        let id = item.id
-        let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { task in
-                task.id == id && task.deletedAt == nil
-            }
+    private func openInboxItem(_ item: FeedItem) {
+        switch item.route {
+        case .meeting:
+            // TODO(Plan 2): deep-link to the specific meeting; for now open the
+            // Meetings tab (or Settings fallback when no Meetings composition).
+            navigateToday(.meetings)
+        case .dailyBrief:
+            selectedTab = .today
+        case .unscheduledTasks:
+            // TODO(Plan 2): preselect TaskFilter.inbox ("Unscheduled"); the filter
+            // lives inside the Tasks surface, so the shell only routes the tab.
+            selectedTab = .tasks
+        case .agentInsight:
+            // TODO(Plan 2): deep-link to the specific insight.
+            selectedTab = .agent
+        }
+        markFeedItemSeen(item)
+    }
+
+    /// Registers the app-owned activity-feed projector (DailyBrief) and the state
+    /// provider into `FeedRegistry`. Module-owned projectors register from their
+    /// own roots (Unscheduled via `TasksComposition.bootstrap`, Meeting via
+    /// `MeetingsComposition.registerInboxSource`).
+    @MainActor
+    private func bootstrapActivityFeed() async {
+        let container = modelContext.container
+        await FeedRegistry.shared.register(
+            DailyBriefProjector(
+                dayKeyProvider: { DailyBriefProjector.dayKey(for: Date()) },
+                snapshotProvider: {
+                    try await MainActor.run {
+                        let writer = AgentBriefDailyNoteWriter(modelContext: container.mainContext)
+                        let request = AgentBriefRequest(
+                            counts: AgentBriefCounts(overdue: 0, today: 0, noDate: 0, awaiting: 0),
+                            firstTitles: [],
+                            now: Date()
+                        )
+                        guard let snapshot = try writer.todayDailyNote(for: request) else { return nil }
+                        return (text: snapshot.plainText, updatedAt: snapshot.updatedAt)
+                    }
+                }
+            )
         )
-        selectedTask = try? modelContext.fetch(descriptor).first
+        await FeedRegistry.shared.setStateProvider {
+            await MainActor.run {
+                let states = (try? FeedItemStateRepository(context: container.mainContext).all()) ?? [:]
+                return states.mapValues {
+                    FeedRegistry.State(
+                        seenAt: $0.seenAt,
+                        dismissedAt: $0.dismissedAt,
+                        snoozedUntil: $0.snoozedUntil
+                    )
+                }
+            }
+        }
+    }
+
+    /// Recompute the Inbox tab badge from `FeedRegistry.unreadCount`. The
+    /// registry caches the projected set and self-invalidates on store change.
+    @MainActor
+    private func reloadInboxCount() async {
+        inboxUnreadCount = (try? await FeedRegistry.shared.unreadCount(now: Date())) ?? 0
+    }
+
+    @MainActor
+    private func markFeedItemSeen(_ item: FeedItem) {
+        try? FeedItemStateRepository(context: modelContext).upsert(key: item.key) {
+            $0.seenAt = Date()
+        }
+    }
+
+    @MainActor
+    private func dismissFeedItem(_ item: FeedItem) {
+        try? FeedItemStateRepository(context: modelContext).upsert(key: item.key) {
+            $0.dismissedAt = Date()
+        }
+    }
+
+    @MainActor
+    private func snoozeFeedItem(_ item: FeedItem, until date: Date) {
+        try? FeedItemStateRepository(context: modelContext).upsert(key: item.key) {
+            $0.snoozedUntil = date
+        }
     }
 
     private func openCapture(mode: CapturePane.Mode) {
@@ -561,6 +645,9 @@ extension ContentView {
                 onOpenCapture: { openCapture(mode: .task) },
                 onOpenCommandPalette: { commandPalettePresented = true },
                 onUnreadCountChanged: { inboxUnreadCount = $0 },
+                markSeen: { item in markFeedItemSeen(item) },
+                dismissItem: { item in dismissFeedItem(item) },
+                snoozeItem: { item, date in snoozeFeedItem(item, until: date) },
                 showsToolbarActions: false
             )
         case .tasks:

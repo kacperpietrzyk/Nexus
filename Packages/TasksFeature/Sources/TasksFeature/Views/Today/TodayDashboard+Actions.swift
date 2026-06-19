@@ -1,11 +1,6 @@
-import InboxShell
 import SwiftUI
 
 extension TodayDashboard {
-    func markInboxRead() {
-        NotificationCenter.default.post(name: .nexusMarkInboxRead, object: nil)
-    }
-
     nonisolated static func selectionAfterOpeningAsk() -> TodayNavSelection { .agent }
 
     nonisolated static func canOpenAgent(selectionProvided: Bool, callbackProvided: Bool) -> Bool {
