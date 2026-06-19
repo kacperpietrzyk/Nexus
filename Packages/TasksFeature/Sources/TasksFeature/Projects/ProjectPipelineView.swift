@@ -155,8 +155,11 @@ struct ProjectPipelineView: View {
     }
 
     /// The type actually used for lane computation — user override or dominant.
+    /// Falls back to `dominantType` when `selectedType` is no longer present
+    /// in `stageBearingTypes` (e.g. after projects change type or are removed).
     private var effectiveType: ProjectType {
-        selectedType ?? dominantType ?? .generic
+        if let t = selectedType, stageBearingTypes.contains(t) { return t }
+        return dominantType ?? .generic
     }
 
     private var lanes: [Lane] {

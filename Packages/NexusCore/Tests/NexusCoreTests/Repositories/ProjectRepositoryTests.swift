@@ -350,8 +350,10 @@ struct ProjectRepositoryTests {
         let project = try repo.create(name: "Impl", type: .implementation)
         try repo.setStage(.installation, on: project)
         #expect(project.stage == .installation)
+        let capturedStatusRaw = project.statusRaw
         try repo.clearStage(on: project)
         #expect(project.stage == nil)
+        #expect(project.statusRaw == capturedStatusRaw)
     }
 
     // MARK: - setPinned

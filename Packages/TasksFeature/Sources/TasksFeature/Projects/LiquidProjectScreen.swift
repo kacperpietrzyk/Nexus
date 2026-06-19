@@ -304,7 +304,6 @@ public struct LiquidProjectScreen: View {
                     project: project,
                     descriptionLine: model.descriptionLine,
                     progress: model.progress,
-                    stage: project.stage,
                     clientName: clientName(for: project),
                     onBack: { select(nil) },
                     onEdit: { editingProject = project }

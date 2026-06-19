@@ -255,9 +255,11 @@ struct LiquidProjectsModelTests {
     @Test func pickerProjectsAreGridOrdered() throws {
         let context = try makeContext()
         let repo = ProjectRepository(context: context)
-        let backlog = try repo.create(name: "Backlog one")
+        // Name-sort would put "Aaa…" first, but status-priority must win:
+        // the active project (late alphabetically) should sort ahead.
+        let backlog = try repo.create(name: "Aaa backlog")
         try repo.setStatus(.backlog, on: backlog)
-        let active = try repo.create(name: "Active one")
+        let active = try repo.create(name: "Zzz active")
         try repo.setStatus(.active, on: active)
         let model = LiquidProjectsModel()
         model.reload(modelContext: context, now: .now)

@@ -16,7 +16,6 @@ struct ProjectHeader: View {
     let project: Project
     let descriptionLine: String?
     let progress: Double
-    var stage: ProjectStage?
     var clientName: String?
     let onBack: () -> Void
     let onEdit: () -> Void
