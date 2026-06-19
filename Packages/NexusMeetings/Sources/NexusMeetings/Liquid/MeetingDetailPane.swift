@@ -17,7 +17,7 @@ enum MeetingDetailTab: String, CaseIterable, Identifiable {
 }
 
 /// Meeting detail column (spec §Meeting detail header + §Overview content):
-/// breadcrumb, serif title, real metadata, attendees, status badges, then the
+/// serif title, real metadata, attendees, status badges, then the
 /// Overview / Transcript tabs.
 struct MeetingDetailPane: View {
 
@@ -45,19 +45,8 @@ struct MeetingDetailPane: View {
 
     private func header(_ meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
-            HStack(spacing: DS.Space.xxs) {
-                Text("Meetings")
-                    .font(DS.FontToken.metadata)
-                    .foregroundStyle(DS.ColorToken.textTertiary)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(DS.ColorToken.textMuted)
-                Text(meeting.title)
-                    .font(DS.FontToken.metadata)
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    .lineLimit(1)
-            }
-
+            // The "Meetings › <title>" breadcrumb now lives in the shell toolbar
+            // (single source of back-navigation); the in-pane one was removed.
             Text(meeting.title)
                 .font(DS.FontToken.displayMedium)
                 .foregroundStyle(DS.ColorToken.textPrimary)
