@@ -21,6 +21,29 @@ extension ContentView {
         // Pin structural identity so `destinationMain` branch re-evaluations
         // never tear down the screen's internal @State (tab, drafts).
         .id(TodayNavSelection.projects)
+        // Publish the detail crumb whenever the selection changes. The crumb is
+        // DERIVED from selection (no loop — setting detailCrumb never sets
+        // selectedProjectID). `onPopToRoot` lets the shell breadcrumb clear the
+        // selection so the screen returns to the project list.
+        .onChange(of: liquidProjectsModel.selectedProjectID, initial: true) { _, id in
+            if let id, let name = liquidProjectsModel.projects.first(where: { $0.id == id })?.name {
+                navigator.detailCrumb = NavCrumb(id: "project:\(id)", label: name, isLeaf: true)
+            } else {
+                navigator.detailCrumb = nil
+            }
+        }
+        // Consume pending deep-links staged by the sidebar or back/forward.
+        // `initial: true` ensures a deep-link staged before this view mounts is
+        // consumed on appear (not only on later changes).
+        .onChange(of: navigator.pendingDeepLink, initial: true) { _, link in
+            if case .project(let pid)? = link {
+                liquidProjectsModel.selectedProjectID = pid
+                navigator.pendingDeepLink = nil
+            }
+        }
+        .onAppear {
+            navigator.onPopToRoot = { liquidProjectsModel.selectedProjectID = nil }
+        }
     }
 
     /// Projects no longer mount a right inspector — Health/Risk/Activity now live

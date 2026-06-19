@@ -242,7 +242,12 @@ struct ContentView: View {
                 LiquidSidebar(
                     selection: selection,
                     inboxUnreadCount: inboxUnreadCount,
-                    onNavigate: { navigate(to: $0) }
+                    onNavigate: { navigate(to: $0) },
+                    onDeepLink: { destination, link in
+                        withAnimation(DS.Motion.nav) {
+                            navigator.open(destination, deepLink: link)
+                        }
+                    }
                 )
             },
             toolbar: {

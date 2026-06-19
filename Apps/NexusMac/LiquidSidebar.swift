@@ -30,6 +30,9 @@ struct LiquidSidebar: View {
     let selection: TodayNavSelection
     let inboxUnreadCount: Int
     let onNavigate: (TodayNavSelection) -> Void
+    /// Stages a deep link for a sidebar shortcut row (e.g. a project).
+    /// The host calls `navigator.open(_:deepLink:)` wrapped in animation.
+    let onDeepLink: (TodayNavSelection, DeepLinkTarget) -> Void
 
     @Query private var projects: [Project]
     @Query(sort: \SavedFilter.orderIndex) private var savedFilters: [SavedFilter]
@@ -88,11 +91,7 @@ struct LiquidSidebar: View {
                             project.name,
                             systemImage: nexusProjectGlyph(token: project.color, id: project.id)
                         ) {
-                            // No public project-selection seam on
-                            // `ProjectsRootView` (its `selectedProjectID` is
-                            // private @State), so this navigates to the
-                            // Projects destination without preselecting.
-                            onNavigate(.projects)
+                            onDeepLink(.projects, .project(project.id))
                         }
                     }
                 }
