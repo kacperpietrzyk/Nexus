@@ -52,7 +52,7 @@ public final class PendingInsightStore {
 
     private static func encode(_ proposal: Proposal) -> String? {
         guard let data = try? JSONEncoder().encode(proposal) else { return nil }
-        return String(decoding: data, as: UTF8.self)
+        return String(bytes: data, encoding: .utf8)
     }
 
     private static func decode(_ json: String) -> Proposal? {
