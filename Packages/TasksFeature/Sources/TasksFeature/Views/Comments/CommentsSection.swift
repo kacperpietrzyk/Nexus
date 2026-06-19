@@ -68,16 +68,16 @@ struct CommentsSection: View {
                     ForEach(comments, id: \.id) { comment in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(comment.body)
-                                .font(NexusType.body)
-                                .foregroundStyle(NexusColor.Text.primary)
+                                .font(DS.FontToken.body)
+                                .foregroundStyle(DS.ColorToken.textPrimary)
                             Text(
                                 comment.createdAt.formatted(
                                     date: .abbreviated,
                                     time: .shortened
                                 )
                             )
-                            .font(NexusType.caption)
-                            .foregroundStyle(NexusColor.Text.tertiary)
+                            .font(DS.FontToken.metadata)
+                            .foregroundStyle(DS.ColorToken.textTertiary)
                         }
                     }
                 }
@@ -96,8 +96,8 @@ struct CommentsSection: View {
 
             if let errorMessage {
                 Text(errorMessage)
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
             }
         }
         // Reload when item identity changes (inspector reuses the view across

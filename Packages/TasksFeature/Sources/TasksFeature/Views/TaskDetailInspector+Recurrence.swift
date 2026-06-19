@@ -46,8 +46,8 @@ extension TaskDetailInspector {
     private var anchorPicker: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("REPEAT FROM")
-                .font(NexusType.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             NexusSegmentedControl(
                 items: [
                     .init(id: false, label: "Due date"),

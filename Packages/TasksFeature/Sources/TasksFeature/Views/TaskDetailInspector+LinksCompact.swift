@@ -16,7 +16,7 @@ extension TaskDetailInspector {
             HStack(spacing: 8) {
                 Text("Parent")
                     .nexusType(.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .foregroundStyle(DS.ColorToken.textMuted)
                 Spacer(minLength: 8)
                 if let parent = parentTaskPicker.parent {
                     NexusChip(
@@ -30,10 +30,10 @@ extension TaskDetailInspector {
                         parentPickerPresented = true
                     } label: {
                         Label("Set parent", systemImage: "arrow.turn.down.right")
-                            .font(NexusType.bodySmall)
+                            .font(DS.FontToken.body)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
                     .popover(isPresented: $parentPickerPresented, arrowEdge: .bottom) {
                         parentPickerPopover
                     }
@@ -44,21 +44,21 @@ extension TaskDetailInspector {
             HStack(spacing: 8) {
                 Text("Subtasks")
                     .nexusType(.caption)
-                    .foregroundStyle(NexusColor.Text.muted)
+                    .foregroundStyle(DS.ColorToken.textMuted)
                 Spacer(minLength: 8)
                 Button {
                     createNewSubtask()
                 } label: {
                     Label("New subtask", systemImage: "plus")
-                        .font(NexusType.bodySmall)
+                        .font(DS.FontToken.body)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(NexusColor.Text.secondary)
+                .foregroundStyle(DS.ColorToken.textSecondary)
             }
             if let subtaskActionError {
                 Text(subtaskActionError)
                     .font(.caption)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
             }
 
             // Blocks: current outgoing chips + an "Add" popover.
@@ -66,12 +66,12 @@ extension TaskDetailInspector {
                 HStack {
                     Text("Blocks")
                         .nexusType(.caption)
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .foregroundStyle(DS.ColorToken.textMuted)
                     if !outgoingBlockedTasks.isEmpty {
                         // Blocked count (spec §9): how many tasks this one blocks.
                         Text("\(outgoingBlockedTasks.count)")
                             .nexusType(.caption)
-                            .foregroundStyle(NexusColor.Text.tertiary)
+                            .foregroundStyle(DS.ColorToken.textTertiary)
                             .accessibilityLabel("Blocks \(outgoingBlockedTasks.count) tasks")
                     }
                     Spacer()
@@ -79,10 +79,10 @@ extension TaskDetailInspector {
                         blockPickerPresented = true
                     } label: {
                         Label("Add", systemImage: "plus")
-                            .font(NexusType.bodySmall)
+                            .font(DS.FontToken.body)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
                     .popover(isPresented: $blockPickerPresented, arrowEdge: .bottom) {
                         blockPickerPopover
                     }
@@ -95,7 +95,7 @@ extension TaskDetailInspector {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Blocked by")
                         .nexusType(.caption)
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
                     blockedByList
                 }
             }
@@ -152,13 +152,13 @@ extension TaskDetailInspector {
         VStack(alignment: .leading, spacing: 10) {
             Text(picker.title)
                 .nexusType(.caption)
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(DS.ColorToken.textMuted)
             TextField(picker.placeholder, text: picker.text)
                 .onChange(of: picker.text.wrappedValue) { _, _ in picker.onSearch() }
             if picker.candidates.isEmpty {
                 Text(picker.emptyLabel)
                     .font(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             } else {
                 ForEach(picker.candidates, id: \.id) { candidate in
                     Button {
@@ -166,10 +166,10 @@ extension TaskDetailInspector {
                     } label: {
                         HStack {
                             Text(candidate.title)
-                                .foregroundStyle(NexusColor.Text.primary)
+                                .foregroundStyle(DS.ColorToken.textPrimary)
                             Spacer()
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(NexusColor.Text.tertiary)
+                                .foregroundStyle(DS.ColorToken.textTertiary)
                         }
                         .contentShape(Rectangle())
                     }

@@ -27,11 +27,11 @@ struct ParentTaskPickerSheet: View {
             HStack {
                 Text("Subtask of…")
                     .nexusType(.h3)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.plain)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             }
 
             TextField("Find parent task", text: $searchText)
@@ -41,11 +41,11 @@ struct ParentTaskPickerSheet: View {
                 Text(error)
                     .font(.caption)
                     // MP-2 burned: error text renders via primary ink
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
             } else if candidates.isEmpty {
                 Text("No eligible root tasks in this project.")
                     .font(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(candidates, id: \.id) { candidate in
@@ -54,11 +54,11 @@ struct ParentTaskPickerSheet: View {
                         } label: {
                             HStack {
                                 Text(candidate.title)
-                                    .foregroundStyle(NexusColor.Text.primary)
+                                    .foregroundStyle(DS.ColorToken.textPrimary)
                                 Spacer()
                                 Image(systemName: "arrow.turn.down.right")
                                     // MP-2 burned: decorative affordance glyph → tertiary ink
-                                    .foregroundStyle(NexusColor.Text.tertiary)
+                                    .foregroundStyle(DS.ColorToken.textTertiary)
                             }
                             .contentShape(Rectangle())
                         }
@@ -69,7 +69,7 @@ struct ParentTaskPickerSheet: View {
         }
         .padding(20)
         .frame(minWidth: 360, minHeight: 220, alignment: .topLeading)
-        .background(NexusColor.Background.base)
+        .background(DS.ColorToken.backgroundApp)
         .task { reload() }
     }
 
@@ -215,12 +215,12 @@ extension TaskDetailInspector {
                 HStack(spacing: 6) {
                     Text("Blocks")
                         .nexusType(.caption)
-                        .foregroundStyle(NexusColor.Text.muted)
+                        .foregroundStyle(DS.ColorToken.textMuted)
                     if !outgoingBlockedTasks.isEmpty {
                         // Blocked count (spec §9): how many tasks this one blocks.
                         Text("\(outgoingBlockedTasks.count)")
                             .nexusType(.caption)
-                            .foregroundStyle(NexusColor.Text.tertiary)
+                            .foregroundStyle(DS.ColorToken.textTertiary)
                             .accessibilityLabel("Blocks \(outgoingBlockedTasks.count) tasks")
                     }
                 }
@@ -233,7 +233,7 @@ extension TaskDetailInspector {
                     Text("Blocked by")
                         .nexusType(.caption)
                         // MP-2 burned: emphasis label → primary ink (state conveyed by copy)
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
                     blockedByList
                 }
             }
@@ -244,7 +244,7 @@ extension TaskDetailInspector {
         VStack(alignment: .leading, spacing: 10) {
             Text("Subtasks")
                 .nexusType(.caption)
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(DS.ColorToken.textMuted)
 
             Button {
                 createNewSubtask()
@@ -253,13 +253,13 @@ extension TaskDetailInspector {
             }
             .buttonStyle(.plain)
             // MP-2 burned: decorative action affordance → tertiary ink
-            .foregroundStyle(NexusColor.Text.tertiary)
+            .foregroundStyle(DS.ColorToken.textTertiary)
 
             if let subtaskActionError {
                 Text(subtaskActionError)
                     .font(.caption)
                     // MP-2 burned: error text renders via primary ink
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
             }
         }
     }
@@ -268,7 +268,7 @@ extension TaskDetailInspector {
         VStack(alignment: .leading, spacing: 10) {
             Text("Parent task")
                 .nexusType(.caption)
-                .foregroundStyle(NexusColor.Text.muted)
+                .foregroundStyle(DS.ColorToken.textMuted)
 
             if let parentTask = parentTaskPicker.parent {
                 NexusChip(
@@ -280,7 +280,7 @@ extension TaskDetailInspector {
             } else {
                 Text("Root task")
                     .font(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             }
 
             TextField("Make subtask of…", text: $parentTaskPicker.searchText)
@@ -294,11 +294,11 @@ extension TaskDetailInspector {
                         } label: {
                             HStack {
                                 Text(candidate.title)
-                                    .foregroundStyle(NexusColor.Text.primary)
+                                    .foregroundStyle(DS.ColorToken.textPrimary)
                                 Spacer()
                                 Image(systemName: "plus.circle.fill")
                                     // MP-2 burned: decorative affordance glyph → tertiary ink
-                                    .foregroundStyle(NexusColor.Text.tertiary)
+                                    .foregroundStyle(DS.ColorToken.textTertiary)
                             }
                         }
                         .buttonStyle(.plain)
@@ -314,7 +314,7 @@ extension TaskDetailInspector {
         if outgoingBlockedTasks.isEmpty {
             Text("Doesn't block anything yet")
                 .font(.caption)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .foregroundStyle(DS.ColorToken.textTertiary)
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -354,11 +354,11 @@ extension TaskDetailInspector {
                         } label: {
                             HStack {
                                 Text(candidate.title)
-                                    .foregroundStyle(NexusColor.Text.primary)
+                                    .foregroundStyle(DS.ColorToken.textPrimary)
                                 Spacer()
                                 Image(systemName: "plus.circle.fill")
                                     // MP-2 burned: decorative affordance glyph → tertiary ink
-                                    .foregroundStyle(NexusColor.Text.tertiary)
+                                    .foregroundStyle(DS.ColorToken.textTertiary)
                             }
                         }
                         .buttonStyle(.plain)

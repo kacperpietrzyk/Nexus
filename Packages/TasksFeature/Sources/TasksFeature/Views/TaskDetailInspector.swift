@@ -84,7 +84,7 @@ public struct TaskDetailInspector: View {
         layoutBody
             // Liquid re-skin: `.wide` is transparent (the Mac modal host paints
             // liquid glass behind it); `.column` (iOS) keeps the opaque base.
-            .background(layout == .wide ? Color.clear : NexusColor.Background.base)
+            .background(layout == .wide ? Color.clear : DS.ColorToken.backgroundApp)
             // Detached overlay/sheet hosts don't inherit the app-root `.tint`;
             // re-assert the liquid accent for native controls (was Text.primary).
             .tint(DS.ColorToken.accentPrimary)
@@ -111,8 +111,8 @@ public struct TaskDetailInspector: View {
             HStack(alignment: .top, spacing: 8) {
                 TextField("Title", text: $task.title, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(NexusType.h2)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.title)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                     .lineLimit(1...3)
                     .onChange(of: task.title) { _, _ in saveDebounced() }
                     .onSubmit { save() }
@@ -124,13 +124,13 @@ public struct TaskDetailInspector: View {
                             .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
                     .background(
                         NexusColor.Background.control.opacity(0.6),
                         in: Circle()
                     )
                     .overlay(
-                        Circle().stroke(NexusColor.Line.hairline, lineWidth: 1)
+                        Circle().stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
                     )
                     .accessibilityLabel("Close inspector")
                     .keyboardShortcut(.cancelAction)
@@ -191,7 +191,7 @@ public struct TaskDetailInspector: View {
             if allDay {
                 Text("Timed schedule disabled in all-day mode")
                     .font(.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             } else {
                 dateRow("Start") {
                     NexusDateField(
@@ -214,7 +214,7 @@ public struct TaskDetailInspector: View {
                 if let durationLabel {
                     Text("Duration: \(durationLabel)")
                         .font(.caption)
-                        .foregroundStyle(NexusColor.Text.tertiary)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                 }
             }
 
@@ -227,8 +227,8 @@ public struct TaskDetailInspector: View {
     func dateRow<Field: View>(_ label: String, @ViewBuilder field: () -> Field) -> some View {
         HStack(spacing: 8) {
             Text(label)
-                .font(NexusType.bodySmall)
-                .foregroundStyle(NexusColor.Text.secondary)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textSecondary)
             Spacer(minLength: 8)
             field()
         }
@@ -247,8 +247,8 @@ public struct TaskDetailInspector: View {
     ) -> some View {
         let inner = VStack(alignment: .leading, spacing: 12) {
             Text(title.uppercased())
-                .font(NexusType.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -429,8 +429,8 @@ extension TaskDetailInspector {
     fileprivate var priorityPicker: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("PRIORITY")
-                .font(NexusType.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             NexusSegmentedControl(
                 items: [
                     .init(id: TaskPriority.none, label: "None"),
@@ -463,7 +463,7 @@ extension TaskDetailInspector {
                 }
                 .buttonStyle(.plain)
                 // MP-2 burned: destructive action text renders via primary ink
-                .foregroundStyle(NexusColor.Text.primary)
+                .foregroundStyle(DS.ColorToken.textPrimary)
             }
         }
     }

@@ -18,8 +18,8 @@ extension TaskDetailInspector {
                 TextField("—", text: $estimateMinutesDraft)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
-                    .font(NexusType.bodySmall)
-                    .foregroundStyle(NexusColor.Text.primary)
+                    .font(DS.FontToken.body)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
                     .frame(width: 56)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
@@ -41,8 +41,8 @@ extension TaskDetailInspector {
                     // the draft from the stored value, so double-firing is harmless.
                     .onDisappear { commitEstimate() }
                 Text("min")
-                    .font(NexusType.bodySmall)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.body)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             }
         }
     }

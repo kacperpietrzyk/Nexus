@@ -20,8 +20,8 @@ extension TaskDetailInspector {
         if canPromoteToProject {
             inspectorCard("Project") {
                 Text("Promote this task into a project. Its notes become the project page and its subtasks become phases.")
-                    .font(NexusType.bodySmall)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.body)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
 
                 NexusButton(
                     variant: .outline,
@@ -43,7 +43,7 @@ extension TaskDetailInspector {
                 if let promoteError {
                     Text(promoteError)
                         .font(.caption)
-                        .foregroundStyle(NexusColor.Text.primary)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
                 }
             }
         }

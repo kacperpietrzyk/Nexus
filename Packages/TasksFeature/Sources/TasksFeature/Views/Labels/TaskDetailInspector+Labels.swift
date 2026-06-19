@@ -29,8 +29,8 @@ extension TaskDetailInspector {
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("TAGS")
-                .font(NexusType.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             TagsEditor(tags: $task.tags) { save() }
         }
     }
@@ -42,7 +42,7 @@ extension TaskDetailInspector {
         if assignedLabels.isEmpty {
             Text("No labels")
                 .font(.caption)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .foregroundStyle(DS.ColorToken.textTertiary)
         } else {
             FlowLabels.removable(labels: assignedLabels) { label in
                 removeLabel(label)
@@ -69,8 +69,8 @@ extension TaskDetailInspector {
         let selectedID = assignedLabels.first { $0.group == group }?.id
         return VStack(alignment: .leading, spacing: 6) {
             Text(groupTitle(group).uppercased())
-                .font(NexusType.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             NexusSelect(
                 selection: groupBinding(group: group, selectedID: selectedID),
                 options: [UUID?.none] + options.map { Optional($0.id) },
@@ -82,8 +82,8 @@ extension TaskDetailInspector {
             )
             if let caption = groupCaption(group) {
                 Text(caption)
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             }
         }
     }

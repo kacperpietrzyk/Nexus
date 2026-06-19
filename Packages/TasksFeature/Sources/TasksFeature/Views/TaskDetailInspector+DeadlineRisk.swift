@@ -40,11 +40,11 @@ extension TaskDetailInspector {
         if let risk = selectedTaskRisk, risk.severity != .onTrack {
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "exclamationmark.triangle")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.secondary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
                 Text(Self.deadlineRiskRowMessage(risk))
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }
