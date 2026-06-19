@@ -22,6 +22,10 @@ struct ProjectHeader: View {
     let onEdit: () -> Void
 
     @State private var statusError: String?
+    @State private var addingKeyDate = false
+    @State private var labelDraft = ""
+    @State private var dateDraft = Date.now
+    @State private var contractualDraft = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
@@ -41,13 +45,9 @@ struct ProjectHeader: View {
                     .lineLimit(1)
 
                 statusMenu
-
-                if let stage {
-                    LiquidPill(stage.displayName, color: DS.ColorToken.statusNeutral, filled: false)
-                }
-
+                stageMenu
                 Spacer(minLength: DS.Space.m)
-
+                addKeyDateButton
                 LiquidIconButton(
                     systemImage: "pencil",
                     accessibilityLabel: "Edit project",
@@ -62,42 +62,7 @@ struct ProjectHeader: View {
                     .lineLimit(2)
             }
 
-            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
-                Text(
-                    "Created \(Self.dateFormatter.string(from: project.createdAt))"
-                        + "  ·  Updated \(Self.dateFormatter.string(from: project.updatedAt))"
-                )
-                .font(DS.FontToken.metadata)
-                .foregroundStyle(DS.ColorToken.textTertiary)
-
-                if let clientName, !clientName.isEmpty {
-                    Text("·")
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                    Text(clientName)
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textSecondary)
-                }
-
-                if let vendor = project.vendor, !vendor.isEmpty {
-                    Text("·")
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                    Text(vendor)
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textSecondary)
-                }
-
-                if let statusError {
-                    Text(statusError)
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.statusDanger)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-            }
-
+            metadataRow
             progressBlock
         }
     }
@@ -180,6 +145,168 @@ struct ProjectHeader: View {
         case .inReview: return DS.ColorToken.accentPurple
         case .completed: return DS.ColorToken.accentCyan
         case .cancelled: return DS.ColorToken.statusDanger
+        }
+    }
+
+    // MARK: - Stage menu
+
+    /// Editable stage chip: shown when the project type has a pipeline preset.
+    /// Mirrors `statusMenu` — writes via `ProjectRepository`, refreshes via
+    /// `reloadOnStoreChange` (no manual reload needed).
+    @ViewBuilder
+    private var stageMenu: some View {
+        if !project.type.stages.isEmpty {
+            Menu {
+                ForEach(project.type.stages, id: \.self) { s in
+                    Button {
+                        setStage(s)
+                    } label: {
+                        if s == project.stage {
+                            Label(s.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(s.displayName)
+                        }
+                    }
+                }
+                if project.stage != nil {
+                    Divider()
+                    Button("Clear stage", role: .destructive) { clearStage() }
+                }
+            } label: {
+                LiquidPill(
+                    project.stage?.displayName ?? "Set stage",
+                    color: DS.ColorToken.statusNeutral,
+                    filled: false
+                )
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .fixedSize()
+            .accessibilityLabel(
+                project.stage.map { "Stage: \($0.displayName)" } ?? "Set stage"
+            )
+        }
+    }
+
+    @MainActor
+    private func setStage(_ s: ProjectStage) {
+        do {
+            try ProjectRepository(context: modelContext).setStage(s, on: project)
+            statusError = nil
+        } catch {
+            statusError = String(describing: error)
+        }
+    }
+
+    @MainActor
+    private func clearStage() {
+        do {
+            try ProjectRepository(context: modelContext).clearStage(on: project)
+            statusError = nil
+        } catch {
+            statusError = String(describing: error)
+        }
+    }
+
+    // MARK: - Add key date
+
+    private var addKeyDateButton: some View {
+        LiquidIconButton(
+            systemImage: "calendar.badge.plus",
+            accessibilityLabel: "Add key date",
+            action: { addingKeyDate = true }
+        )
+        .popover(isPresented: $addingKeyDate) {
+            addKeyDateForm
+        }
+    }
+
+    private var addKeyDateForm: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            Text("Add Key Date")
+                .font(DS.FontToken.body.weight(.semibold))
+                .foregroundStyle(DS.ColorToken.textPrimary)
+
+            TextField("Label", text: $labelDraft)
+                .textFieldStyle(.roundedBorder)
+
+            DatePicker("Date", selection: $dateDraft, displayedComponents: .date)
+
+            Toggle("Contractual", isOn: $contractualDraft)
+
+            HStack {
+                Spacer()
+                Button("Save") {
+                    saveKeyDate()
+                }
+                .disabled(labelDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(DS.Space.m)
+        .frame(minWidth: 280)
+    }
+
+    @MainActor
+    private func saveKeyDate() {
+        let trimmed = labelDraft.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try ProjectKeyDateRepository(context: modelContext).setKeyDate(
+                projectID: project.id,
+                anchorKey: UUID().uuidString,
+                label: trimmed,
+                date: dateDraft,
+                isContractual: contractualDraft
+            )
+            statusError = nil
+            addingKeyDate = false
+            labelDraft = ""
+            dateDraft = .now
+            contractualDraft = false
+        } catch {
+            statusError = String(describing: error)
+        }
+    }
+
+    // MARK: - Metadata row
+
+    private var metadataRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
+            Text(
+                "Created \(Self.dateFormatter.string(from: project.createdAt))"
+                    + "  ·  Updated \(Self.dateFormatter.string(from: project.updatedAt))"
+            )
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textTertiary)
+
+            if let clientName, !clientName.isEmpty {
+                Text("·")
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                Text(clientName)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+            }
+
+            if let vendor = project.vendor, !vendor.isEmpty {
+                Text("·")
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                Text(vendor)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+            }
+
+            if let statusError {
+                Text(statusError)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.statusDanger)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
         }
     }
 
