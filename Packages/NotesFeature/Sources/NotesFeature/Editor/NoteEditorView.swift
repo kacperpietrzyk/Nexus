@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import NexusCore
 import NexusUI
 import SwiftUI
@@ -54,15 +55,13 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
 
     var body: some View {
-        ScrollViewReader { _ in
-            editorList
-        }
-        .navigationTitle(model.title.isEmpty ? "Untitled" : model.title)
-        #if os(iOS)
+        editorList
+            .navigationTitle(model.title.isEmpty ? "Untitled" : model.title)
+            #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .task(id: note.id) { rebindModel() }
-        #if os(iOS)
+            #endif
+            .task(id: note.id) { rebindModel() }
+            #if os(iOS)
         .task(id: selectedPhotoItem) {
             await handleSelectedPhotoItem(selectedPhotoItem)
         }
@@ -149,6 +148,7 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     #if os(macOS)
     @State private var focusedBlockID: UUID?
     @FocusState private var fieldFocus: UUID?
+    @State private var dropTargetID: UUID?
 
     private var documentBody: some View {
         ScrollView {
@@ -174,22 +174,72 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
 
     @ViewBuilder private var macBlockRows: some View {
         ForEach(Array(model.blocks.enumerated()), id: \.element.id) { index, block in
-            BlockView(
+            DocumentBlockRow(
                 block: block,
                 model: model,
-                onOpenRef: { openRef($0) },
                 ordinal: ordinals[block.id],
                 isEditing: focusedBlockID == block.id,
-                onActivate: { focusedBlockID = block.id; fieldFocus = block.id },
-                focusBinding: $fieldFocus
+                fieldFocus: $fieldFocus,
+                isDropTarget: dropTargetID == block.id,
+                topPadding: BlockRhythm.spacingBefore(
+                    block.kind, previous: index > 0 ? model.blocks[index - 1].kind : nil),
+                onActivate: {
+                    focusedBlockID = block.id; fieldFocus = block.id
+                },
+                onOpenRef: { openRef($0) },
+                onAdd: {
+                    model.insert(.paragraph, after: block.id)
+                    let idx = model.blocks.firstIndex(where: { $0.id == block.id })
+                    if let i = idx, model.blocks.indices.contains(i + 1) {
+                        let new = model.blocks[i + 1]
+                        focusedBlockID = new.id
+                        fieldFocus = new.id
+                    }
+                },
+                onDelete: { model.remove(id: block.id) },
+                onMoveUp: { moveBlock(block.id, by: -1) },
+                onMoveDown: { moveBlock(block.id, by: 1) },
+                turnInto: turnIntoOptions(for: block),
+                onDrop: { draggedID in performBlockDrop(draggedID, onto: block.id) },
+                setDropTarget: {
+                    dropTargetID = $0 ? block.id : (dropTargetID == block.id ? nil : dropTargetID)
+                }
             )
-            .padding(.top, BlockRhythm.spacingBefore(
-                block.kind, previous: index > 0 ? model.blocks[index - 1].kind : nil))
         }
         .onChange(of: fieldFocus) { _, newValue in
             // Clicking away (focus lost) returns the block to rendered mode.
             if newValue == nil { focusedBlockID = nil }
         }
+    }
+
+    private func moveBlock(_ id: UUID, by delta: Int) {
+        guard let from = model.blocks.firstIndex(where: { $0.id == id }) else { return }
+        let to = from + delta
+        guard model.blocks.indices.contains(to) else { return }
+        // SwiftUI move semantics: destination is the index to insert BEFORE.
+        model.move(from: IndexSet(integer: from), to: delta > 0 ? to + 1 : to)
+    }
+
+    private func performBlockDrop(_ draggedID: String, onto targetID: UUID) -> Bool {
+        guard
+            let fromID = UUID(uuidString: draggedID),
+            let from = model.blocks.firstIndex(where: { $0.id == fromID }),
+            let to = model.blocks.firstIndex(where: { $0.id == targetID }),
+            from != to
+        else { return false }
+        model.move(from: IndexSet(integer: from), to: to > from ? to + 1 : to)
+        return true
+    }
+
+    private func turnIntoOptions(for block: Block) -> [(String, () -> Void)] {
+        [
+            ("Text", { model.convert(blockID: block.id, to: .paragraph) }),
+            ("Heading", { model.convert(blockID: block.id, to: .heading(level: 2)) }),
+            ("To-do", { model.convert(blockID: block.id, to: .todo) }),
+            ("Bulleted", { model.convert(blockID: block.id, to: .bulleted) }),
+            ("Numbered", { model.convert(blockID: block.id, to: .numbered) }),
+            ("Quote", { model.convert(blockID: block.id, to: .quote) }),
+        ]
     }
     #endif
 
