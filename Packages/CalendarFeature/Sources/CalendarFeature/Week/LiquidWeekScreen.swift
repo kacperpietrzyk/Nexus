@@ -120,14 +120,8 @@ public struct LiquidWeekScreen: View {
     private let onAddTask: (() -> Void)?
 
     @State var editorTarget: WeekEditorTarget?
-    @State private var manualBlockRequest: ManualBlockRequest?
     @State var availableCalendars: [CalendarInfo] = []
     @State var undo = UndoController()
-
-    private struct ManualBlockRequest: Identifiable {
-        let taskID: UUID
-        var id: UUID { taskID }
-    }
 
     public init(
         viewModel: CalendarViewModel,
@@ -174,9 +168,6 @@ public struct LiquidWeekScreen: View {
             _Concurrency.Task { await viewModel.load() }
         }
         .weekEventEditorSheet(target: $editorTarget, viewModel: viewModel, calendars: availableCalendars)
-        .sheet(item: $manualBlockRequest) { request in
-            manualBlockSheet(request)
-        }
         .undoToast(undo)
     }
 
@@ -463,7 +454,7 @@ public struct LiquidWeekScreen: View {
 
     /// Drop on the grid: schedule the task at the snapped slot for its own
     /// estimate (1 h default) via `addManualBlock` — the same accepted-block +
-    /// mirror-event path `ManualBlockView` commits through.
+    /// mirror-event path used throughout the scheduling seam.
     @MainActor
     private func schedule(taskID: UUID, at start: Date) async {
         guard let task = viewModel.unscheduledTasks.first(where: { $0.id == taskID }) else { return }
@@ -491,27 +482,6 @@ public struct LiquidWeekScreen: View {
             )
             viewModel.reloadUnscheduledTasks()
         }
-    }
-
-    /// Drop-zone fallback: open the existing schedule affordance pre-selected
-    /// with the dropped task (`ManualBlockView` selects the first list entry).
-    private func manualBlockSheet(_ request: ManualBlockRequest) -> some View {
-        var tasks = viewModel.schedulableTasks()
-        if let index = tasks.firstIndex(where: { $0.id == request.taskID }) {
-            tasks.insert(tasks.remove(at: index), at: 0)
-        }
-        return ManualBlockView(
-            tasks: tasks,
-            anchor: viewModel.anchor,
-            onAdd: { taskID, title, start, end in
-                _Concurrency.Task { @MainActor in
-                    await viewModel.addManualBlock(taskID: taskID, title: title, start: start, end: end)
-                    manualBlockRequest = nil
-                    viewModel.reloadUnscheduledTasks()
-                }
-            },
-            onCancel: { manualBlockRequest = nil }
-        )
     }
 
     // MARK: - Formatters (English UI rule: explicit en_US)
