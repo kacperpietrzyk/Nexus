@@ -226,6 +226,27 @@ public enum DayTimelineLayout {
         items.filter(\.isAllDay)
     }
 
+    /// Deduplicated union of all-day items across a set of per-day item lists.
+    ///
+    /// A multi-day all-day event appears in the result of `itemsForDay` for every
+    /// day it overlaps, so naively flat-mapping the visible days yields the same
+    /// item 2–7 times. This helper keeps the first occurrence by `id`, preserving
+    /// stable order (earliest start wins via sort, ties broken by id).
+    public static func allDayItems(forVisibleDays days: [Date], itemsForDay: (Date) -> [TimelineItem]) -> [TimelineItem] {
+        var seen = Set<String>()
+        var result: [TimelineItem] = []
+        for day in days {
+            for item in itemsForDay(day) where item.isAllDay {
+                if seen.insert(item.id).inserted {
+                    result.append(item)
+                }
+            }
+        }
+        return result.sorted { lhs, rhs in
+            lhs.start == rhs.start ? lhs.id < rhs.id : lhs.start < rhs.start
+        }
+    }
+
     /// A timed item clamped to the visible axis window, used during column layout.
     private struct VisibleItem {
         let item: TimelineItem

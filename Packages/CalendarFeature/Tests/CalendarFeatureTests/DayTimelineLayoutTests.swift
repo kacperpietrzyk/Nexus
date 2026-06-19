@@ -264,6 +264,63 @@ struct DayTimelineLayoutTests {
         #expect(items.isEmpty)
     }
 
+    // MARK: - allDayItems(forVisibleDays:) — dedup (Task 6)
+
+    /// A 3-day all-day event appears in `itemsForDay` for each of its days; the
+    /// union helper must return it exactly once.
+    @Test("Multi-day all-day event appears once in the visible-range union")
+    func multiDayAllDayDeduplicatedInUnion() {
+        let cal = calendar
+        let mon = dayStart  // 2026-06-08 UTC (Monday)
+        let days = (0..<7).map { mon.addingTimeInterval(Double($0) * 86_400) }
+
+        // All-day item spanning Tue–Thu (days[1]…days[3]).
+        let trip = TimelineItem(
+            id: "trip",
+            title: "Conference",
+            start: days[1],
+            end: days[4],  // exclusive end
+            kind: .event,
+            isAllDay: true
+        )
+        // One-day item on Mon.
+        let holiday = TimelineItem(
+            id: "holiday",
+            title: "Holiday",
+            start: days[0],
+            end: days[1],
+            kind: .event,
+            isAllDay: true
+        )
+
+        // Simulate itemsForDay: include the trip on every day it covers.
+        let perDay: [Date: [TimelineItem]] = [
+            days[0]: [holiday],
+            days[1]: [trip],
+            days[2]: [trip],
+            days[3]: [trip],
+        ]
+
+        let result = DayTimelineLayout.allDayItems(
+            forVisibleDays: days,
+            itemsForDay: { perDay[$0] ?? [] }
+        )
+
+        // Three per-day invocations return `trip`, but it must appear once.
+        #expect(result.count == 2)
+        #expect(result.filter { $0.id == "trip" }.count == 1)
+        #expect(result.filter { $0.id == "holiday" }.count == 1)
+        // Sorted by start: holiday (Mon) before trip (Tue).
+        #expect(result[0].id == "holiday")
+        #expect(result[1].id == "trip")
+    }
+
+    @Test("Empty visible days returns empty union")
+    func emptyVisibleDaysIsEmpty() {
+        let result = DayTimelineLayout.allDayItems(forVisibleDays: [], itemsForDay: { _ in [] })
+        #expect(result.isEmpty)
+    }
+
     // MARK: - Subtitle data (Task 5)
 
     @Test("items() carries location and organizer name into TimelineItem")

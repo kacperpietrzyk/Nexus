@@ -138,35 +138,77 @@ struct WeekGrid: View {
         .frame(height: Self.headerRowHeight)
     }
 
-    // MARK: - All-day row (34 pt, spec §Structure)
+    // MARK: - All-day row (dynamic height: 1–2 lanes × laneHeight, spec §Structure)
+
+    /// Height of one all-day lane (pill + vertical padding).
+    private static let allDayLaneHeight: CGFloat = 26
+    /// Vertical gap between stacked lanes.
+    private static let allDayLaneSpacing: CGFloat = 2
+    /// Top/bottom padding inside the all-day row.
+    private static let allDayRowPadding: CGFloat = 4
 
     private var allDayRow: some View {
-        HStack(spacing: 0) {
+        let allDayItems = DayTimelineLayout.allDayItems(forVisibleDays: days, itemsForDay: itemsForDay)
+        let layout = AllDayLaneLayout.layout(
+            items: allDayItems,
+            visibleDays: days,
+            calendar: calendar,
+            maxLanes: 2
+        )
+        let usedLanes = max(1, (layout.bars.map(\.lane).max() ?? -1) + 1)
+        let rowHeight =
+            CGFloat(usedLanes) * Self.allDayLaneHeight
+            + CGFloat(max(0, usedLanes - 1)) * Self.allDayLaneSpacing
+            + 2 * Self.allDayRowPadding
+
+        return HStack(spacing: 0) {
             Text("all-day")
                 .font(DS.FontToken.caption)
                 .foregroundStyle(DS.ColorToken.textMuted)
                 .frame(width: WeekGridMetrics.gutterWidth)
-            ForEach(days, id: \.self) { day in
-                let allDay = DayTimelineLayout.allDayItems(itemsForDay(day))
-                HStack(spacing: DS.Space.xxs) {
-                    ForEach(allDay.prefix(2)) { item in
-                        LiquidPill(
-                            item.title,
-                            color: LiquidCalendarTint(calendarHex: item.colorHex)?.accent
-                                ?? WeekEventClassifier.kind(for: item).accent
+            // One GeometryReader over the whole bar region; bars span across
+            // columns via x-offset + width, so they cannot live in per-column
+            // children.
+            GeometryReader { geo in
+                let columnWidth = geo.size.width / CGFloat(max(1, days.count))
+                ZStack(alignment: .topLeading) {
+                    ForEach(layout.bars, id: \.item.id) { bar in
+                        let accent =
+                            LiquidCalendarTint(calendarHex: bar.item.colorHex)?.accent
+                            ?? WeekEventClassifier.kind(for: bar.item).accent
+                        let xOffset = columnWidth * CGFloat(bar.startColumn) + 2
+                        let barWidth = columnWidth * CGFloat(bar.endColumn - bar.startColumn + 1) - 4
+                        let yOffset =
+                            Self.allDayRowPadding
+                            + CGFloat(bar.lane) * (Self.allDayLaneHeight + Self.allDayLaneSpacing)
+                        AllDayBarView(
+                            title: bar.item.title,
+                            color: accent,
+                            clippedStart: bar.clippedStart,
+                            clippedEnd: bar.clippedEnd
                         )
+                        .frame(width: max(0, barWidth), height: Self.allDayLaneHeight)
+                        .offset(x: xOffset, y: yOffset)
                     }
-                    if allDay.count > 2 {
-                        Text("+\(allDay.count - 2)")
-                            .font(DS.FontToken.caption)
-                            .foregroundStyle(DS.ColorToken.textTertiary)
+                    // "+N" overflow badges, one per column with overflow.
+                    ForEach(Array(layout.overflowByColumn.keys.sorted()), id: \.self) { col in
+                        if let count = layout.overflowByColumn[col] {
+                            Text("+\(count)")
+                                .font(DS.FontToken.caption)
+                                .foregroundStyle(DS.ColorToken.textTertiary)
+                                .offset(
+                                    x: columnWidth * CGFloat(col) + 4,
+                                    y: Self.allDayRowPadding
+                                        + CGFloat(min(2, (layout.bars.map(\.lane).max() ?? -1) + 1))
+                                        * (Self.allDayLaneHeight + Self.allDayLaneSpacing)
+                                        - Self.allDayLaneSpacing
+                                )
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 2)
             }
         }
-        .frame(height: WeekGridMetrics.allDayRowHeight)
+        .frame(height: rowHeight)
     }
 
     // MARK: - Hour axis
@@ -420,6 +462,54 @@ private struct WeekColumnDropDelegate: DropDelegate {
 
     private func updateSlot(_ info: DropInfo) {
         slot = WeekDropSlot(day: day, minutes: WeekGridMath.snappedMinutes(forY: info.location.y))
+    }
+}
+
+/// A single spanning all-day bar, styled to match `LiquidPill` but rendered on
+/// an `UnevenRoundedRectangle` so clipped edges (event continues beyond the
+/// visible week) can be squared while outer corners remain rounded.
+///
+/// `clippedStart` → left edge is square; `clippedEnd` → right edge is square.
+private struct AllDayBarView: View {
+    let title: String
+    let color: Color
+    let clippedStart: Bool
+    let clippedEnd: Bool
+
+    private static let radius: CGFloat = DS.Radius.s
+    private static let titleFont: Font = DS.FontToken.caption
+
+    var body: some View {
+        let r = Self.radius
+        let leadingRadius: CGFloat = clippedStart ? 0 : r
+        let trailingRadius: CGFloat = clippedEnd ? 0 : r
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: leadingRadius,
+            bottomLeadingRadius: leadingRadius,
+            bottomTrailingRadius: trailingRadius,
+            topTrailingRadius: trailingRadius,
+            style: .continuous
+        )
+        Text(title)
+            .font(Self.titleFont)
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .padding(.horizontal, DS.Space.s)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                shape
+                    .fill(color.opacity(0.16))
+                    .overlay {
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.07), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .clipShape(shape)
+                    }
+            }
+            .overlay { shape.stroke(color.opacity(0.24), lineWidth: 1) }
+            .shadow(color: color.opacity(0.08), radius: 4, x: 0, y: 0)
     }
 }
 
