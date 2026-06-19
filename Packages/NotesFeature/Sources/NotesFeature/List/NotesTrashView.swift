@@ -47,6 +47,10 @@ struct NotesTrashView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Restore All") { restoreAll() }
+                        .disabled(noteRepository == nil || deleted.isEmpty)
+                }
             }
         }
     }
@@ -78,6 +82,13 @@ struct NotesTrashView: View {
 
     private func restore(_ note: Note) {
         try? noteRepository?.restore(note)
+    }
+
+    /// Bulk recovery: restore every tombstone (e.g. after an accidental
+    /// select-all + delete). Sequential on the main actor; the store-change
+    /// debounce coalesces the refreshes.
+    private func restoreAll() {
+        for note in deleted { try? noteRepository?.restore(note) }
     }
 }
 
