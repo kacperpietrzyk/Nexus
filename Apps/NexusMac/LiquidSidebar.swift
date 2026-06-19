@@ -29,6 +29,9 @@ private let sidebarCornerRadius: CGFloat = 16
 struct LiquidSidebar: View {
     let selection: TodayNavSelection
     let inboxUnreadCount: Int
+    /// The UUID of the active saved filter, if any. Drives the selected state
+    /// on "Views" rows — set by the shell when `taskFilter == .savedFilter(id)`.
+    var activeSavedFilterID: UUID?
     let onNavigate: (TodayNavSelection) -> Void
     /// Stages a deep link for a sidebar shortcut row (e.g. a project).
     /// The host calls `navigator.open(_:deepLink:)` wrapped in animation.
@@ -104,12 +107,10 @@ struct LiquidSidebar: View {
                     ForEach(visibleSavedFilters) { filter in
                         LiquidSidebarNavRow(
                             filter.name,
-                            systemImage: filter.icon
+                            systemImage: filter.icon,
+                            isSelected: filter.id == activeSavedFilterID
                         ) {
-                            // The Tasks destination's saved-filter selection
-                            // lives in TodayDashboard-internal state (no host
-                            // seam), so this routes to Tasks unfiltered.
-                            onNavigate(.tasks)
+                            onDeepLink(.tasks, .savedFilter(filter.id))
                         }
                     }
                 }

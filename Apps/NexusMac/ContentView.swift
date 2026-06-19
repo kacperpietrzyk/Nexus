@@ -73,6 +73,10 @@ struct ContentView: View {
     // are hoisted here. `inboxItems` is the SAME already-loaded set the list
     // renders (handed up via `InboxView.onItemsChanged`) — no new query.
     @State private var inboxActiveFilter: InboxFilter = .all
+    // §1b control mode (Tasks): the active task filter is hoisted to the shell
+    // so the sidebar "Views" rows can deep-link to a saved filter directly.
+    // `TodayDashboard` reads it via the `taskFilter:` binding param.
+    @State private var taskFilter: TaskFilter = .all
     // The activity-feed rows InboxView loaded (handed up via `onItemsChanged`).
     // The feed is fully materialized (no windowing), so every filter tab count
     // reads directly from this set.
@@ -191,17 +195,37 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .nexusToggleSelectedTaskFocus)) { _ in
                 toggleSelectedTaskFocus()
             }
-            .onChange(of: navigator.destination) { _, newValue in
-                // §1 "inspector ⊥ Agent" single chokepoint: the Agent
-                // destination owns the whole content slot, so clear any
-                // selected task on EVERY transition into `.agent` — covers
-                // the ⌘⇧A handler, a direct `sparkles` rail tap, and any
-                // future programmatic writer. Keeps state genuinely clean,
-                // not merely visually masked by the inspector predicate.
-                if newValue == .agent {
-                    selectedTask = nil
-                }
+            .onChange(of: navigator.destination, consumeDestinationChange)
+            // §1b saved-filter deep-link: sidebar "Views" rows stage a
+            // `.savedFilter(id)` deep-link via `navigator.open(.tasks, deepLink:)`.
+            // Consuming it here (on `dashboardBody`, always mounted) sets
+            // the hoisted filter and navigates to Tasks. Unlike Notes/People
+            // detail pushes: NO `detailCrumb`, NO `onPopToRoot` — this is a
+            // filter state change, not a detail navigation; the breadcrumb
+            // stays "Tasks".
+            .onChange(of: navigator.pendingDeepLink, initial: true) { _, link in
+                consumeSavedFilterDeepLink(link)
             }
+    }
+
+    /// §1 "inspector ⊥ Agent": clear selected task on every transition into
+    /// `.agent`. Extracted from `dashboardBody` to stay within the type-checker budget.
+    @MainActor
+    private func consumeDestinationChange(_: TodayNavSelection, _ newValue: TodayNavSelection) {
+        if newValue == .agent {
+            selectedTask = nil
+        }
+    }
+
+    /// §1b: consume a `.savedFilter` deep-link staged by the sidebar "Views" rows.
+    /// Extracted from the `dashboardBody` modifier chain to stay within the
+    /// Swift type-checker budget (the chain was already at its limit).
+    @MainActor
+    private func consumeSavedFilterDeepLink(_ link: DeepLinkTarget?) {
+        if case .savedFilter(let fid)? = link {
+            taskFilter = .savedFilter(fid)
+            navigator.pendingDeepLink = nil
+        }
     }
 
     /// The shell + window chrome (overlays, sheets, bootstrap tasks), staged out
@@ -255,6 +279,10 @@ struct ContentView: View {
                 LiquidSidebar(
                     selection: selection,
                     inboxUnreadCount: inboxUnreadCount,
+                    activeSavedFilterID: {
+                        if case .savedFilter(let id) = taskFilter { return id }
+                        return nil
+                    }(),
                     onNavigate: { navigate(to: $0) },
                     onDeepLink: { destination, link in
                         withAnimation(DS.Motion.nav) {
@@ -457,6 +485,7 @@ struct ContentView: View {
             onInboxDismiss: { item in dismissFeedItem(item) },
             onInboxSnooze: { item, date in snoozeFeedItem(item, until: date) },
             onOpenTask: { openTask($0) },
+            taskFilter: $taskFilter,
             // `.meetings` mounts the Liquid Meetings screen in
             // `destinationMain` (Task 10) and never reaches this dashboard
             // router anymore — no embedded meetings content to inject.

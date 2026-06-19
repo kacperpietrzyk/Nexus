@@ -20,7 +20,7 @@ extension TodayDashboard {
             if showsNavigationRail {
                 SidebarView(
                     selection: activeSelection,
-                    taskFilter: $taskFilter,
+                    taskFilter: taskFilter,
                     inboxUnreadCount: inboxUnreadCount,
                     taskFilterTitle: taskFilterTitle,
                     onOpenCapture: onOpenCapture
