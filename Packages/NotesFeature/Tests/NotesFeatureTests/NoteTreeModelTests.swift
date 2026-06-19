@@ -98,4 +98,25 @@ struct NoteTreeModelTests {
         #expect(tree.templates.map(\.id) == [tmpl.id])
         #expect(tree.unfiled.isEmpty)
     }
+
+    @Test("FolderNode.totalNoteCount sums direct notes plus all descendants")
+    @MainActor
+    func folderTotalNoteCount() {
+        func n(_ t: String, _ folder: String) -> Note {
+            let note = Note(title: t, role: .free)
+            note.folderPath = folder
+            return note
+        }
+        let notes = [
+            n("a", "clients"),
+            n("b", "clients/knauf"),
+            n("c", "clients/knauf/meetings"),
+            n("d", "clients/acme"),
+        ]
+        let tree = NoteTreeModel.build(notes: notes, links: [], projects: [])
+        let clients = tree.library.first { $0.name == "clients" }
+        #expect(clients?.totalNoteCount == 4)
+        let knauf = clients?.children.first { $0.name == "knauf" }
+        #expect(knauf?.totalNoteCount == 2)
+    }
 }
