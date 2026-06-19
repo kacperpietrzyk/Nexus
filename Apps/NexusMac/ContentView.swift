@@ -268,6 +268,11 @@ struct ContentView: View {
             // carries the closed-Inbox case.
             .reloadOnStoreChange {
                 _Concurrency.Task { await reloadInboxCount() }
+                // Entity quick-jump commands track project/person DATA, so refresh
+                // them on store-change too. `reloadOnStoreChange` is debounced
+                // (400ms trailing edge, see StoreChangeRefresh), so a bulk import
+                // collapses to a single re-registration — no per-save churn.
+                _Concurrency.Task { await refreshNavigationEntityCommands() }
             }
     }
 
@@ -633,6 +638,108 @@ struct ContentView: View {
                 selectedTask: { selectedTask }
             )
         )
+        // Destination quick-switch for every shell surface NOT already covered by
+        // a package command. TasksComposition ships Today + Inbox (and there is no
+        // `GoToTasks`/`GoToProjects`/… in any package), so the shell registers the
+        // remaining nine here. Each runs the same `navigate(to:)` chokepoint the
+        // sidebar uses, preserving the `withAnimation(DS.Motion.nav)` envelope.
+        // SF Symbols mirror the sidebar glyphs.
+        await registerDestinationCommands()
+        // Bounded entity quick-jump (projects + people). Seeded at bootstrap and
+        // refreshed on store-change (see `dashboardChrome`'s `reloadOnStoreChange`).
+        await refreshNavigationEntityCommands()
+    }
+
+    /// Registers a `ShellNavigateCommand` for each shell destination that lacks a
+    /// package-owned palette command (Today + Inbox come from `TasksComposition`).
+    @MainActor
+    private func registerDestinationCommands() async {
+        let destinations: [DestinationCommandSpec] = [
+            .init(.meetings, "Meetings", "person.wave.2", ["meeting", "calls", "recordings"]),
+            .init(.tasks, "Tasks", "checkmark.square", ["task", "todo", "all tasks"]),
+            .init(.projects, "Projects", "square.stack.3d.up", ["project", "roadmap", "pipeline"]),
+            .init(.notes, "Notes", "note.text", ["note", "docs", "writing"]),
+            .init(.calendar, "Calendar", "calendar", ["calendar", "schedule", "events"]),
+            .init(.people, "People", "person.crop.circle", ["people", "person", "contacts"]),
+            .init(.agent, "Agent", "sparkles", ["agent", "assistant", "ai", "chat", "nexus"]),
+            .init(.stats, "Stats", "chart.bar", ["stats", "analytics", "productivity"]),
+            .init(.settings, "Settings", "gearshape", ["settings", "preferences", "config"]),
+        ]
+        for spec in destinations {
+            let destination = spec.destination
+            let command = ShellNavigateCommand(
+                id: "nav.destination.\(destination.token)",
+                title: "Go to \(spec.name)",
+                subtitle: "Open \(spec.name)",
+                iconName: spec.icon,
+                keywords: spec.keywords + [spec.name.lowercased()],
+                action: { navigate(to: destination) }
+            )
+            await CommandRegistry.shared.register(command)
+        }
+    }
+
+    /// Entity quick-jump: registers one `ShellNavigateCommand` per active project
+    /// and person so the palette can deep-link straight to a named item
+    /// ("Open project: Foo" / "Open person: Bar"). The registry is static, so this
+    /// is re-run on store-change to pick up renames/additions/soft-deletes; it
+    /// unregisters the previous `nav.project.`/`nav.person.` set first (the
+    /// registry has no by-prefix clear, so it filters `allCommands()` by id
+    /// prefix) and re-registers the current set — no `@State` bookkeeping, no leak.
+    ///
+    /// Lists are capped (projects 300, people 400) so a very large store can't
+    /// register thousands of commands; the cap is on the bounded, named sets the
+    /// SCOPE allows. Notes/meetings are intentionally NOT included — they're
+    /// large/unbounded and want a dynamic search-provider, deferred as a follow-up.
+    @MainActor
+    func refreshNavigationEntityCommands() async {
+        // 1. Drop the previously-registered entity commands.
+        let existing = await CommandRegistry.shared.allCommands()
+        for command in existing
+        where command.id.hasPrefix("nav.project.") || command.id.hasPrefix("nav.person.") {
+            await CommandRegistry.shared.unregister(id: command.id)
+        }
+
+        // 2. Active projects (not deleted, not archived), capped + name-sorted.
+        let projectDescriptor = FetchDescriptor<Project>(
+            predicate: #Predicate { $0.deletedAt == nil && $0.archivedAt == nil },
+            sortBy: [SortDescriptor(\.name)]
+        )
+        let projects = (try? modelContext.fetch(projectDescriptor)) ?? []
+        for project in projects.prefix(300) {
+            let id = project.id
+            let name = project.title
+            let command = ShellNavigateCommand(
+                id: "nav.project.\(id.uuidString)",
+                title: "Open project: \(name)",
+                subtitle: "Jump to this project",
+                iconName: "square.stack.3d.up",
+                keywords: ["project", "open", name.lowercased()],
+                action: { withAnimation(DS.Motion.nav) { navigator.open(.projects, deepLink: .project(id)) } }
+            )
+            await CommandRegistry.shared.register(command)
+        }
+
+        // 3. People (not deleted), capped + name-sorted.
+        let personDescriptor = FetchDescriptor<Person>(
+            predicate: #Predicate { $0.deletedAt == nil },
+            sortBy: [SortDescriptor(\.displayName)]
+        )
+        let people = (try? modelContext.fetch(personDescriptor)) ?? []
+        for person in people.prefix(400) {
+            let id = person.id
+            let name = person.displayName
+            guard !name.isEmpty else { continue }
+            let command = ShellNavigateCommand(
+                id: "nav.person.\(id.uuidString)",
+                title: "Open person: \(name)",
+                subtitle: "Jump to this person",
+                iconName: "person.crop.circle",
+                keywords: ["person", "people", "open", name.lowercased()],
+                action: { withAnimation(DS.Motion.nav) { navigator.open(.people, deepLink: .person(id)) } }
+            )
+            await CommandRegistry.shared.register(command)
+        }
     }
 
     @MainActor
