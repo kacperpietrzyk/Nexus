@@ -516,7 +516,7 @@ private struct ProjectPickerRow: View {
                 .foregroundStyle(DS.ColorToken.textTertiary)
                 .fixedSize()
 
-            Text("· updated \(project.updatedAt, style: .relative) ago")
+            Text("· updated \(project.updatedAt.formatted(.relative(presentation: .numeric, unitsStyle: .narrow)))")
                 .font(DS.FontToken.metadata)
                 .foregroundStyle(DS.ColorToken.textMuted)
                 .lineLimit(1)
