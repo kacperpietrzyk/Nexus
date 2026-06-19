@@ -461,7 +461,8 @@ struct ContentView: View {
     }
 
     /// Recompute the Inbox tab badge from `FeedRegistry.unreadCount`. The
-    /// registry caches the projected set and self-invalidates on store change.
+    /// registry re-projects on each call; store-change notifications trigger
+    /// a reload via `invalidate()` (no cached projection).
     @MainActor
     private func reloadInboxCount() async {
         inboxUnreadCount = (try? await FeedRegistry.shared.unreadCount(now: Date())) ?? 0

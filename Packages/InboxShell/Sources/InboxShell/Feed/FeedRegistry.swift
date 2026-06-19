@@ -20,7 +20,6 @@ public actor FeedRegistry {
 
     private var projectors: [FeedProjector] = []
     private var stateProvider: (@Sendable () async -> [String: State])?
-    private var cached: [FeedItem]?
     private nonisolated(unsafe) var storeObservers: [NSObjectProtocol] = []
     private var didStartObserving = false
 
@@ -30,15 +29,16 @@ public actor FeedRegistry {
 
     public func register(_ projector: FeedProjector) {
         projectors.append(projector)
-        cached = nil
     }
 
     public func setStateProvider(_ provider: @escaping @Sendable () async -> [String: State]) {
         stateProvider = provider
-        cached = nil
     }
 
-    public func invalidate() { cached = nil }
+    /// No-op today: items(now:) re-projects on every call, so there is no cache to drop.
+    /// Retained as the store-change/refresh coordination hook (the observers + InboxView call it
+    /// before reload) and as the seam where a future cache would be cleared.
+    public func invalidate() {}
 
     private func startObservingIfNeeded() {
         guard !didStartObserving else { return }

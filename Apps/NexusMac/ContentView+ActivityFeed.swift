@@ -61,8 +61,8 @@ extension ContentView {
     }
 
     /// The sidebar badge is the activity-feed UNREAD count (visible, unseen,
-    /// non-bridge). `FeedRegistry` caches the projected set and self-invalidates
-    /// on store change, so this is cheap to recompute.
+    /// non-bridge). `FeedRegistry` re-projects on each call; store-change
+    /// notifications trigger a reload via `invalidate()` (no cached projection).
     @MainActor
     func reloadInboxCount() async {
         inboxUnreadCount = (try? await FeedRegistry.shared.unreadCount(now: Date())) ?? 0
