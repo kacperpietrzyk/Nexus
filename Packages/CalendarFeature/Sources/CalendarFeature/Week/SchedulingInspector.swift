@@ -149,8 +149,10 @@ enum WeekIntelligence {
 
 /// The Calendar right inspector (304 pt slot, `docs/06_MODULE_CALENDAR.md`
 /// §Right inspector): unified 4-section scheduling intelligence panel —
-/// Stats, Conflicts (with inline Move), Focus — identical structure across
-/// Day/Week/Month; Conflicts and Focus hide when empty.
+/// Stats, Conflicts (with inline Move), Focus, Unscheduled Tasks — identical
+/// structure across Day/Week/Month; Conflicts and Focus hide when empty;
+/// Unscheduled fills the remaining height with its own scroll so a long list
+/// scrolls independently without pushing the fixed cards off-screen.
 public struct SchedulingInspector: View {
 
     private let viewModel: CalendarViewModel
@@ -174,17 +176,26 @@ public struct SchedulingInspector: View {
     }
 
     public var body: some View {
-        // No ScrollView — the inspector is a fixed column that fits the window
-        // height (matches the Today inspector). Empty Conflicts/Focus cards are
-        // hidden entirely; only the Stats card is always shown.
+        // Two-region layout: fixed cards (Stats, Conflicts, Focus) stay at
+        // natural height at the top; the Unscheduled section fills the
+        // remaining height with its own internal ScrollView so a long task list
+        // scrolls independently without pushing the fixed cards off-screen.
         VStack(spacing: DS.Space.m) {
-            statsCard
-            if !conflicts.isEmpty {
-                conflictsCard
+            // Fixed-height upper region: only Stats is always present;
+            // Conflicts and Focus hide entirely when empty.
+            VStack(spacing: DS.Space.m) {
+                statsCard
+                if !conflicts.isEmpty {
+                    conflictsCard
+                }
+                if !focusGaps.isEmpty {
+                    focusBlocksCard
+                }
             }
-            if !focusGaps.isEmpty {
-                focusBlocksCard
-            }
+            // Unscheduled Tasks: present in all scopes (Day/Week/Month) so
+            // drag-to-schedule works everywhere. Fills remaining height.
+            unscheduledCard
+                .frame(maxHeight: .infinity, alignment: .top)
         }
         .padding(DS.Space.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -500,6 +511,65 @@ public struct SchedulingInspector: View {
             )
             viewModel.reloadUnscheduledTasks()
         }
+    }
+
+    // MARK: - Unscheduled Tasks (4th section, drag source)
+
+    /// Unscheduled Tasks section: present in all scopes (Day/Week/Month) so
+    /// rows are always available as drag sources for the grid drop targets.
+    /// The card fills remaining height; its content scrolls independently so a
+    /// long list never pushes Stats/Conflicts/Focus off-screen.
+    private var unscheduledCard: some View {
+        LiquidGlassCard("Unscheduled Tasks") {
+            if unscheduledTasks.isEmpty {
+                inspectorEmptyLine("Every open task has a date or a scheduled block.")
+            } else {
+                // ScrollView scoped to the card interior: the list scrolls
+                // within the card bounds, not the whole inspector.
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: DS.Space.xxs) {
+                        ForEach(unscheduledTasks) { task in
+                            unscheduledTaskRow(task)
+                        }
+                    }
+                }
+            }
+        } trailing: {
+            if !unscheduledTasks.isEmpty {
+                Text("\(unscheduledTasks.count)")
+                    .font(DS.FontToken.metadata.monospacedDigit())
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+            }
+        }
+    }
+
+    /// A single draggable task row. The `.onDrag` payload is the task UUID as
+    /// a plain string (Task 11 reads this contract from the grid drop target).
+    private func unscheduledTaskRow(_ task: WeekUnscheduledTask) -> some View {
+        HStack(spacing: DS.Space.s) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textMuted)
+                .accessibilityHidden(true)
+            Text(task.title)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+                .lineLimit(1)
+            if let projectName = task.projectName {
+                LiquidPill(projectName, color: DS.ColorToken.accentCyan)
+            }
+            Spacer(minLength: DS.Space.s)
+            if let seconds = task.estimatedSeconds, seconds > 0 {
+                Text(WeekDurationText.text(for: TimeInterval(seconds)))
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+            }
+        }
+        .padding(.horizontal, DS.Space.s)
+        .frame(minHeight: 28)
+        .contentShape(Rectangle())
+        .onDrag { NSItemProvider(object: task.id.uuidString as NSString) }
+        .accessibilityLabel("Unscheduled task: \(task.title)")
     }
 
 }

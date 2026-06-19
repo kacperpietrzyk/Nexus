@@ -99,9 +99,9 @@ extension View {
 
 /// The liquid Calendar page (Task 6, `docs/06_MODULE_CALENDAR.md`): serif
 /// week-range header with Day/Week/Month switching + week navigation, then —
-/// for Week — the custom `WeekGrid` over the bottom `SchedulingStrip`. Day and
-/// Month re-mount the EXISTING `DayGridView`/`MonthGridView` under the same
-/// header (smallest viable integration; those grids are not rebuilt).
+/// for Week/Day — the custom `WeekGrid` (grid fills the full frame; scheduling
+/// intelligence + Unscheduled Tasks live in `SchedulingInspector`). Month
+/// re-mounts the EXISTING `LiquidMonthGrid` under the same header.
 ///
 /// All data is REAL: events/blocks come from the shared `CalendarViewModel`
 /// (EventKit reader + `ScheduledBlockRepository`), unscheduled tasks from the
@@ -363,9 +363,9 @@ public struct LiquidWeekScreen: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // Grid fills the full available height now that the bottom
-            // SchedulingStrip band has been removed (its contents are rehomed
-            // in Tasks 9 & 10). Clipped so the rounded-card shape stays tight.
+            // Grid fills the full available height; scheduling intelligence +
+            // Unscheduled Tasks live in SchedulingInspector (right panel).
+            // Clipped so the rounded-card shape stays tight.
             .clipped()
             .layoutPriority(1)
         case .day:
