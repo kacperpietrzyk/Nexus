@@ -32,40 +32,35 @@ internal func taskNexusStatus(for status: TaskStatus) -> NexusStatus {
     }
 }
 
-/// True when the due chip's overdue red already represents the same "you're
-/// late" fact a missed/today deadline would — so the deadline chip is
-/// suppressed to avoid two red tokens for one fact. Due wins (the overdue due
-/// chip stays the single red token). Pure + module-scope so the precedence is
-/// unit-tested and cannot silently regress; formatter tone outputs are left
-/// untouched (suppression lives in the row, not the formatter).
+/// True when a missed deadline chip should be suppressed because an overdue
+/// due chip already represents the same "you're late" fact (due wins).
 internal func suppressesDeadlineChip(
     due: DueChipFormatter.DueChipLabel,
     deadline: DeadlineBadgePresentation?
 ) -> Bool {
-    // Suppress ONLY a *missed* deadline under an overdue due chip — that is the
-    // single sanctioned redundancy (both say "you're late"; the overdue due
-    // chip wins as the one red token). Key on the semantic `kind`, never on the
-    // human-readable label or on `tone`: a "deadline TODAY" is also `.rose` but
-    // is a distinct, MORE-urgent hard-deadline fact (e.g. due slipped 3 days
-    // ago, deadline is today) and must stay visible. A neutral future deadline
-    // is likewise a distinct signal and is never suppressed.
+    // Key on `.missed` kind, not on tone — a "deadline TODAY" is also `.rose`
+    // but is a distinct more-urgent fact and must not be suppressed.
     guard let deadline, deadline.kind == .missed else { return false }
     if case .overdue = due { return true }
     return false
 }
 
-/// One row in `TaskListView`. Displays the Liquid circle checkbox, title,
-/// priority pill, tag pills, and trailing due metadata, per
-/// `docs/03_COMPONENTS.md` §TaskRow.
-///
-/// Liquid re-skin: the LabKit status glyph becomes the 14 pt circle checkbox
-/// (`LiquidTaskCheckbox`), chips become `LiquidPill`s with deterministic tag
-/// accents, and the due date renders as plain right-aligned metadata with
-/// overdue as the single red token. Mac hover reveals `NexusRowQuickActions`;
-/// touch platforms keep a visible trailing menu affordance for row actions.
+/// Pure seam for the row's project pill — unit-testable at module scope.
+internal enum TaskRowProjectPill {
+    /// Returns the label to render, or nil to omit the pill.
+    static func label(for projectName: String?) -> String? {
+        guard let name = projectName, !name.isEmpty else { return nil }
+        return name
+    }
+}
+
+/// One row in `TaskListView`: Liquid checkbox, title, priority pill, project
+/// pill, tag pills, and trailing due/deadline metadata. Mac hover reveals
+/// `NexusRowQuickActions`; touch platforms show a visible trailing menu.
 public struct TaskRowView: View {
 
     @Bindable public var task: TaskItem
+    public let projectName: String?
     public let now: Date
     public let depth: Int
     public let blockedCount: Int?
@@ -84,6 +79,7 @@ public struct TaskRowView: View {
 
     public init(
         task: TaskItem,
+        projectName: String? = nil,
         now: Date = .now,
         depth: Int = 0,
         blockedCount: Int? = nil,
@@ -97,6 +93,7 @@ public struct TaskRowView: View {
         isSelected: Bool = false
     ) {
         self._task = Bindable(task)
+        self.projectName = projectName
         self.now = now
         self.depth = depth
         self.blockedCount = blockedCount
@@ -123,6 +120,7 @@ public struct TaskRowView: View {
     private var rowContent: some View {
         RowBody(
             task: task,
+            projectName: projectName,
             now: now,
             depth: depth,
             blockedCount: blockedCount,
@@ -143,6 +141,7 @@ public struct TaskRowView: View {
 /// lightweight and the hover toggle is scoped correctly.
 private struct RowBody: View {
     let task: TaskItem
+    let projectName: String?
     let now: Date
     let depth: Int
     let blockedCount: Int?
@@ -426,11 +425,6 @@ private struct RowBody: View {
             }
     }
 
-    // Right-aligned meta cluster, ordered quiet → loud (rightmost = strongest):
-    // tags · overflow · recurrence · blocks · subtasks · deadline (only if not
-    // suppressed by an overdue due chip) · DUE. The overdue due chip is the
-    // single red urgency token and sits at the trailing edge where the eye
-    // lands first on a right-aligned cluster.
     // MARK: Compact (two-line) central content
 
     /// iPhone/compact layout: the title (with priority + the single loud due
@@ -466,12 +460,14 @@ private struct RowBody: View {
         showsDeadline: Bool,
         deadline: DeadlineBadgePresentation?
     ) -> some View {
+        let hasProject = TaskRowProjectPill.label(for: projectName) != nil
         let hasTags = !task.tags.isEmpty
         let hasRecurrence = task.recurrenceRule != nil
         let hasBlocks = (blockedCount ?? 0) > 0
         let hasSubtasks = (subtaskProgress?.total ?? 0) > 0
-        if hasTags || hasRecurrence || hasBlocks || hasSubtasks || showsDeadline {
+        if hasProject || hasTags || hasRecurrence || hasBlocks || hasSubtasks || showsDeadline {
             HStack(spacing: 6) {
+                projectPill
                 tagPills
                 if hasRecurrence {
                     recurrenceGlyph
@@ -498,6 +494,7 @@ private struct RowBody: View {
         )
         let showsDeadline = deadline != nil && !suppressesDeadlineChip(due: due, deadline: deadline)
         HStack(spacing: 6) {
+            projectPill
             tagPills
             if task.recurrenceRule != nil {
                 recurrenceGlyph
@@ -510,6 +507,13 @@ private struct RowBody: View {
                 LiquidPill(deadline.label, color: TaskRowLiquidStyle.pillColor(for: deadline.tone))
             }
             dueChipView(due)
+        }
+    }
+
+    @ViewBuilder
+    private var projectPill: some View {
+        if let label = TaskRowProjectPill.label(for: projectName) {
+            LiquidPill(label, color: DS.ColorToken.statusNeutral)
         }
     }
 

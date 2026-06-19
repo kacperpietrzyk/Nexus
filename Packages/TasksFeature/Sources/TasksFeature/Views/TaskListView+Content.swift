@@ -169,9 +169,19 @@ extension TaskListView {
         }
     }
 
+    /// Project name for the row pill, or nil to suppress it. Suppressed for
+    /// Inbox tasks (no project) and when the list is already sectioned by
+    /// project (the section header carries that context).
+    func resolvedProjectName(for item: TaskItem) -> String? {
+        guard groupBy.wrappedValue != .project else { return nil }
+        guard let projectID = item.projectID else { return nil }
+        return projectsByID[projectID]?.name
+    }
+
     func rowView(for item: TaskItem) -> some View {
         TaskRowView(
             task: item,
+            projectName: resolvedProjectName(for: item),
             now: now,
             subtaskProgress: subtaskProgressByTaskID[item.id],
             isSubtasksExpanded: expandedTaskIDs.contains(item.id),

@@ -105,6 +105,22 @@ struct DeadlineBadgeMP2NeutralTests {
     }
 }
 
+// MARK: - Project pill visibility (Task 2)
+
+@Suite("TaskRowView — project pill visibility")
+struct TaskRowProjectPillTests {
+
+    @Test("Project pill text is shown verbatim when provided")
+    func projectPillShownWhenNamePresent() {
+        #expect(TaskRowProjectPill.label(for: "CyberLab") == "CyberLab")
+    }
+
+    @Test("No project pill when name is nil")
+    func projectPillHiddenWhenNil() {
+        #expect(TaskRowProjectPill.label(for: nil as String?) == nil)
+    }
+}
+
 // MARK: - Due/deadline dedupe precedence (Linear redesign)
 
 @Suite("TaskRowView — due/deadline dedupe precedence")
