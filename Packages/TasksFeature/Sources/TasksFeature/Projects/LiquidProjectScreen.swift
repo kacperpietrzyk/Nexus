@@ -166,7 +166,6 @@ public struct LiquidProjectScreen: View {
             pickerHeader
             pickerLoadError
             pickerGrid
-                .frame(maxWidth: pickerMaxWidth, alignment: .topLeading)
         }
     }
 
@@ -255,6 +254,8 @@ public struct LiquidProjectScreen: View {
                     project: project,
                     openCount: model.openCountsByProject[project.id] ?? 0,
                     progress: model.progressByProject[project.id] ?? 0,
+                    clientName: model.clientNameByProject[project.id],
+                    nextKeyDate: model.nextKeyDateByProject[project.id],
                     onTogglePin: { togglePin(project) },
                     action: { select(project) }
                 )
@@ -390,6 +391,8 @@ private struct ProjectPickerRow: View {
     let project: Project
     let openCount: Int
     let progress: Double
+    let clientName: String?
+    let nextKeyDate: ProjectKeyDate?
     let onTogglePin: () -> Void
     let action: () -> Void
 
@@ -398,49 +401,14 @@ private struct ProjectPickerRow: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: DS.Space.m) {
-                HStack(spacing: DS.Space.s) {
-                    Image(systemName: nexusProjectGlyph(named: project.color))
-                        // 14 pt identity glyph, same scale the old root-view
-                        // rows used; no DS icon-size token.
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(DS.ColorToken.textSecondary)
-                        .frame(width: 20)
-                        .accessibilityHidden(true)
-
-                    Text(project.name)
-                        .font(DS.FontToken.bodyStrong)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                        .lineLimit(1)
-
-                    Spacer(minLength: DS.Space.s)
-
-                    #if os(macOS)
-                    LiquidPinButton(isPinned: project.isPinned, toggle: onTogglePin)
-                        .opacity(hovering || project.isPinned ? 1 : 0)
-                    #else
-                    LiquidPinButton(isPinned: project.isPinned, toggle: onTogglePin)
-                    #endif
-
-                    Image(systemName: "chevron.right")
-                        // 10 pt disclosure chevron; no DS icon-size token.
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(DS.ColorToken.textMuted)
-                        .accessibilityHidden(true)
+                titleRow
+                if clientName != nil || project.vendor != nil {
+                    identityRow
                 }
-
-                Text(ProjectFormatters.statusLabel(project.status))
-                    .font(DS.FontToken.metadata)
-                    .foregroundStyle(DS.ColorToken.textTertiary)
-
-                HStack(spacing: DS.Space.s) {
-                    LiquidProgressLine(value: progress)
-                        .accessibilityHidden(true)
-
-                    Text("\(openCount) open")
-                        .font(DS.FontToken.metadata.monospacedDigit())
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                        .fixedSize()
+                if nextKeyDate != nil || project.stage != nil {
+                    scheduleRow
                 }
+                progressRow
             }
             .padding(DS.Space.l)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -459,5 +427,87 @@ private struct ProjectPickerRow: View {
         }
         #endif
         .accessibilityLabel("\(project.name), \(openCount) open tasks")
+    }
+
+    private var titleRow: some View {
+        HStack(spacing: DS.Space.s) {
+            Image(systemName: nexusProjectGlyph(token: project.color, id: project.id))
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+
+            Text(project.name)
+                .font(DS.FontToken.bodyStrong)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+                .lineLimit(1)
+
+            LiquidPill(
+                ProjectFormatters.statusLabel(project.status),
+                color: ProjectHeader.statusColor(project.status),
+                filled: false
+            )
+
+            Spacer(minLength: DS.Space.s)
+
+            #if os(macOS)
+            LiquidPinButton(isPinned: project.isPinned, toggle: onTogglePin)
+                .opacity(hovering || project.isPinned ? 1 : 0)
+            #else
+            LiquidPinButton(isPinned: project.isPinned, toggle: onTogglePin)
+            #endif
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(DS.ColorToken.textMuted)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var identityRow: some View {
+        HStack(spacing: DS.Space.xs) {
+            if let clientName { Text(clientName) }
+            if clientName != nil, project.vendor != nil { Text("·") }
+            if let vendor = project.vendor { Text(vendor) }
+        }
+        .font(DS.FontToken.metadata)
+        .foregroundStyle(DS.ColorToken.textTertiary)
+        .lineLimit(1)
+    }
+
+    private var scheduleRow: some View {
+        HStack(spacing: DS.Space.s) {
+            if let nextKeyDate {
+                Label {
+                    Text("\(nextKeyDate.label) · \(nextKeyDate.date, style: .date)")
+                } icon: {
+                    Image(systemName: nextKeyDate.isContractual ? "lock.fill" : "calendar")
+                }
+                .labelStyle(.titleAndIcon)
+            }
+            if let stage = project.stage {
+                LiquidPill(stage.displayName, color: DS.ColorToken.statusNeutral, filled: false)
+            }
+        }
+        .font(DS.FontToken.metadata)
+        .foregroundStyle(DS.ColorToken.textTertiary)
+        .lineLimit(1)
+    }
+
+    private var progressRow: some View {
+        HStack(spacing: DS.Space.s) {
+            LiquidProgressLine(value: progress)
+                .accessibilityHidden(true)
+
+            Text("\(openCount) open")
+                .font(DS.FontToken.metadata.monospacedDigit())
+                .foregroundStyle(DS.ColorToken.textTertiary)
+                .fixedSize()
+
+            Text("· updated \(project.updatedAt, style: .relative) ago")
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textMuted)
+                .lineLimit(1)
+        }
     }
 }
