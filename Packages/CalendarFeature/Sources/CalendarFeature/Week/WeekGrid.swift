@@ -12,8 +12,6 @@ enum WeekGridMetrics {
     static let dayColumnMinWidth: CGFloat = 92
     /// "hour row height: 58–64 pt".
     static let hourHeight: CGFloat = 60
-    /// "all-day row height: 34 pt".
-    static let allDayRowHeight: CGFloat = 34
     /// Brief: event blocks min height 42 pt.
     static let minBlockHeight: CGFloat = 42
     /// "8 AM–7 PM visible" — the default scroll position; the full day stays

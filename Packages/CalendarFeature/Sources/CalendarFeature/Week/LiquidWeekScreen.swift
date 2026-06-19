@@ -115,9 +115,6 @@ public struct LiquidWeekScreen: View {
     @Bindable var viewModel: CalendarViewModel
     private let calendar: Calendar
     private let now: () -> Date
-    /// App-layer capture seam for the strip's empty-state CTA (same
-    /// notification path the Today screen uses); nil hides the CTA.
-    private let onAddTask: (() -> Void)?
 
     @State var editorTarget: WeekEditorTarget?
     @State var availableCalendars: [CalendarInfo] = []
@@ -126,13 +123,11 @@ public struct LiquidWeekScreen: View {
     public init(
         viewModel: CalendarViewModel,
         calendar: Calendar = .current,
-        now: @escaping () -> Date = Date.init,
-        onAddTask: (() -> Void)? = nil
+        now: @escaping () -> Date = Date.init
     ) {
         self.viewModel = viewModel
         self.calendar = calendar
         self.now = now
-        self.onAddTask = onAddTask
     }
 
     public var body: some View {

@@ -17,10 +17,7 @@ extension ContentView {
     var liquidCalendarMain: some View {
         if let calendarViewModel {
             LiquidWeekScreen(
-                viewModel: calendarViewModel,
-                onAddTask: {
-                    NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)
-                }
+                viewModel: calendarViewModel
             )
             // Pin the view's structural identity so `destinationMain` branch
             // re-evaluations never tear down the screen's internal @State.
