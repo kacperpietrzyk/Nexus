@@ -157,6 +157,19 @@ public struct LiquidProjectScreen: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
             ProjectPipelineView(projects: model.projects) { project in
                 select(project)
+            } onSetStage: { project, stage in
+                do {
+                    let repo = ProjectRepository(context: modelContext)
+                    if let stage {
+                        try repo.setStage(stage, on: project)
+                    } else {
+                        try repo.clearStage(on: project)
+                    }
+                } catch {
+                    // setStage throws only when stage ∉ type preset;
+                    // lanes are type-scoped so this is unreachable.
+                }
+                reload()
             }
         }
     }
