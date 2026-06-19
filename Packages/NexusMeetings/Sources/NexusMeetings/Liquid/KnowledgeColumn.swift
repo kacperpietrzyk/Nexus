@@ -19,30 +19,7 @@ private func kindColor(_ kind: ItemKind) -> Color {
     }
 }
 
-/// Knowledge column (spec §Knowledge column): "Linked to" rows from the REAL
-/// outgoing `Link` edges, "Related notes" from the documented two-hop graph
-/// heuristic, and the Backlinks mini-graph. Under the wide breakpoint the
-/// same sections render inside the right inspector instead (the column
-/// collapses — 04_LAYOUT_SYSTEM.md).
-struct KnowledgeColumn: View {
-
-    let model: LiquidMeetingsModel
-    let composition: MeetingsComposition
-    @ObservedObject var router: MeetingNavigationRouter
-    let navigation: LiquidMeetingsNavigation
-
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            KnowledgeSections(
-                model: model, composition: composition, router: router, navigation: navigation
-            )
-            .padding(.bottom, DS.Space.m)
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-    }
-}
-
-/// The three knowledge cards, factored out of `KnowledgeColumn` so
+/// The three knowledge cards embedded in the right inspector
 /// `MeetingActionsInspector` can embed the identical sections when the
 /// column collapses into the inspector.
 struct KnowledgeSections: View {

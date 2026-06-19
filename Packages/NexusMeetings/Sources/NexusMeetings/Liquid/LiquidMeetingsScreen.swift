@@ -40,10 +40,11 @@ public struct LiquidMeetingsNavigation {
 private let listPaneWidth: CGFloat = 240
 
 /// Liquid Meetings / Notes Intelligence main column (Task 10, spec
-/// `docs/08_MODULE_MEETINGS_NOTES.md`): meeting list | meeting detail |
-/// knowledge column. The matching right inspector
-/// (`MeetingActionsInspector`) is mounted separately through the app shell's
-/// inspector slot; both read the same shared `LiquidMeetingsModel`.
+/// `docs/08_MODULE_MEETINGS_NOTES.md`): meeting list | meeting detail.
+/// The matching right inspector (`MeetingActionsInspector`) is mounted
+/// separately through the app shell's inspector slot; both read the same
+/// shared `LiquidMeetingsModel`. Knowledge sections (linked items, related
+/// notes, backlinks) now live exclusively in the inspector.
 public struct LiquidMeetingsScreen: View {
 
     private let model: LiquidMeetingsModel
