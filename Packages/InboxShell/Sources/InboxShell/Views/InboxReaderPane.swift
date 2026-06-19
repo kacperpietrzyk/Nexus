@@ -7,45 +7,34 @@ public enum InboxReaderEmptyState: Sendable {
 }
 
 public struct InboxReaderPane: View {
-    public let item: InboxItem?
+    public let item: FeedItem?
     public let emptyState: InboxReaderEmptyState
-    public let onOpen: @MainActor (InboxItem) -> Void
-    public let onArchive: @MainActor (InboxItem) -> Void
-    public let onSnooze: @MainActor (InboxItem, Int) -> Void
+    public let onOpen: @MainActor (FeedItem) -> Void
+    public let onDismiss: @MainActor (FeedItem) -> Void
+    public let onSnooze: @MainActor (FeedItem, Int) -> Void
 
     public init(
-        item: InboxItem?,
+        item: FeedItem?,
         emptyState: InboxReaderEmptyState = .noSelection,
-        onOpen: @escaping @MainActor (InboxItem) -> Void,
-        onArchive: @escaping @MainActor (InboxItem) -> Void,
-        onSnooze: @escaping @MainActor (InboxItem, Int) -> Void
+        onOpen: @escaping @MainActor (FeedItem) -> Void,
+        onDismiss: @escaping @MainActor (FeedItem) -> Void,
+        onSnooze: @escaping @MainActor (FeedItem, Int) -> Void
     ) {
         self.item = item
         self.emptyState = emptyState
         self.onOpen = onOpen
-        self.onArchive = onArchive
+        self.onDismiss = onDismiss
         self.onSnooze = onSnooze
     }
 
     public var body: some View {
         if let item {
-            // ScrollView added here at the call site so a long `item.body`
-            // doesn't clip — the oracle sample uses fixed text; production
-            // content is unbounded. `populated(_:)` itself is a pure
-            // VStack → glass builder.
             ScrollView {
                 populated(item)
             }
             .scrollContentBackground(.hidden)
             .readerPaneSurface()
         } else {
-            // Slice-2: neutral "nothing selected" state to the Inbox-oracle
-            // §9 idiom. `LabEmptyState(tone: .neutral)` → dashed circle 28×28
-            // (NO glyph — the 34×34 + glyph form is the .achievement tone;
-            // see self-review note), 380-wide centred, wrapped in the flat
-            // Linear reader surface (`readerPaneSurface()` → `Background.raised`
-            // + one hairline stroke + `s1` shadow). Achievement full-inbox
-            // state is SLICE 4.
             neutralEmptyState
                 .readerPaneSurface()
         }
@@ -80,51 +69,44 @@ public struct InboxReaderPane: View {
         .nexusAppear(0)
     }
 
-    // MARK: – Populated reader
-    // Structure mirrors Lab/InboxPreview.swift `reader` (oracle).
-    // Inner structure, spacing, and padding match the oracle exactly. Scroll
-    // wrapping for unbounded content is handled at the `body` call site, not
-    // here — `populated(_:)` is a pure VStack → glass builder.
+    // MARK: - Populated reader
 
-    private func populated(_ item: InboxItem) -> some View {
+    private func populated(_ item: FeedItem) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             eyebrowRow(item)
             titleText(item)
             bodyText(item)
-            if !item.tags.isEmpty {
-                tagRow(item)
-            }
             Rectangle()
                 .fill(DS.ColorToken.strokeHairline)
                 .frame(height: 1)
                 .padding(.bottom, 18)
             actionPills(item)
-            // §10: AI-proposal block omitted — no backend reachable from this surface
-            // (deferred follow-up, tracked in counts §12).
         }
     }
 
-    // 1. Eyebrow row: icon · source label · Spacer · age
-    private func eyebrowRow(_ item: InboxItem) -> some View {
+    // 1. Eyebrow row: icon · stream label · Spacer · age (suppressed for bridge)
+    private func eyebrowRow(_ item: FeedItem) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: item.nexusInboxSourceIcon)
+            Image(systemName: item.iconName)
                 .font(.system(size: 10))
                 .foregroundStyle(DS.ColorToken.textMuted)
-            Text(item.nexusInboxSourceLabel)
+            Text(item.stream.streamLabel.uppercased())
                 .font(DS.FontToken.caption)
                 .tracking(1.6)
                 .foregroundStyle(DS.ColorToken.textMuted)
             Spacer()
-            Text(item.nexusInboxRelativeTime)
-                .font(DS.FontToken.metadata)
-                .monospacedDigit()
-                .foregroundStyle(DS.ColorToken.textTertiary)
+            if item.stream != .bridge {
+                Text(item.nexusInboxRelativeTime)
+                    .font(DS.FontToken.metadata)
+                    .monospacedDigit()
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+            }
         }
         .padding(.bottom, 16)
     }
 
     // 2. Title
-    private func titleText(_ item: InboxItem) -> some View {
+    private func titleText(_ item: FeedItem) -> some View {
         Text(item.title)
             .font(DS.FontToken.title)
             .foregroundStyle(DS.ColorToken.textPrimary)
@@ -132,9 +114,9 @@ public struct InboxReaderPane: View {
             .padding(.bottom, 10)
     }
 
-    // 3. Body — always rendered; empty string for bodyless items (§10: no placeholder copy)
-    private func bodyText(_ item: InboxItem) -> some View {
-        Text(item.body ?? "")
+    // 3. Body / subtitle
+    private func bodyText(_ item: FeedItem) -> some View {
+        Text(item.subtitle ?? "")
             .font(DS.FontToken.body)
             .foregroundStyle(DS.ColorToken.textSecondary)
             .lineSpacing(4)
@@ -142,36 +124,26 @@ public struct InboxReaderPane: View {
             .padding(.bottom, 18)
     }
 
-    // 4. Tag chips — rendered only when item.tags is non-empty
-    private func tagRow(_ item: InboxItem) -> some View {
-        HStack(spacing: 8) {
-            ForEach(item.tags, id: \.self) { tag in
-                LiquidPill(tag, color: DS.ColorToken.statusNeutral)
-            }
-        }
-        .padding(.bottom, 22)
-    }
-
-    // 6. Action pills wired to the real closures
-    private func actionPills(_ item: InboxItem) -> some View {
+    // 4. Action pills — bridge: Open only; others: Open + Snooze + Dismiss
+    private func actionPills(_ item: FeedItem) -> some View {
         HStack(spacing: 9) {
-            LiquidPrimaryButton("Send to Tasks", systemImage: "arrow.right.circle") {
+            LiquidPrimaryButton("Open", systemImage: "arrow.up.right.circle") {
                 onOpen(item)
             }
-            ReaderGhostButton("Snooze", systemImage: "moon.zzz") {
-                onSnooze(item, 24)
-            }
-            ReaderGhostButton("Archive", systemImage: "archivebox") {
-                onArchive(item)
+            if item.stream != .bridge {
+                ReaderGhostButton("Snooze", systemImage: "moon.zzz") {
+                    onSnooze(item, 24)
+                }
+                ReaderGhostButton("Dismiss", systemImage: "xmark.circle") {
+                    onDismiss(item)
+                }
             }
         }
         .padding(.bottom, 16)
     }
 }
 
-/// Secondary reader action: a quiet glass button (soft fill, hairline stroke,
-/// hover wash) one emphasis step below ``LiquidPrimaryButton`` — the
-/// 03_COMPONENTS.md §IconButton fill ladder applied to a labelled control.
+/// Secondary reader action: a quiet glass button.
 private struct ReaderGhostButton: View {
     let title: String
     let systemImage: String
@@ -193,8 +165,6 @@ private struct ReaderGhostButton: View {
                     .lineLimit(1)
             }
             .font(DS.FontToken.button)
-            // Pin to intrinsic width so a labelled secondary never wraps inside
-            // the fixed-width reader pane (matches LiquidPrimaryButton's idiom).
             .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(hovering ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary)
             .padding(.horizontal, DS.Space.m)
@@ -209,9 +179,6 @@ private struct ReaderGhostButton: View {
             }
             .contentShape(Rectangle())
         }
-        // House press idiom: 0.97 scale on press via the shared style (the
-        // labelled-control sibling of LiquidPrimaryButton). Was `.plain` —
-        // it depressed on hover only, one step behind the polished surfaces.
         .buttonStyle(NexusPressableButtonStyle())
         #if os(macOS)
         .onHover { value in
@@ -243,9 +210,6 @@ extension InboxReaderEmptyState {
 
 private struct InboxReaderPaneSurface: ViewModifier {
     func body(content: Content) -> some View {
-        // Liquid reader surface: the inspector-grade `.sidebar` glass (denser
-        // tint than `.card`) so the reading pane reads as its own pane of
-        // glass beside the list, per the reference boards' right panes.
         content
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
