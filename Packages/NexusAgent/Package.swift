@@ -17,6 +17,7 @@ let package = Package(
         .package(path: "../NexusSearch"),
         .package(path: "../NexusUI"),
         .package(path: "../NexusAgentTools"),
+        .package(path: "../InboxShell"),
     ],
     targets: [
         .target(
@@ -37,6 +38,7 @@ let package = Package(
                 .product(name: "NexusSearch", package: "NexusSearch"),
                 .product(name: "NexusUI", package: "NexusUI"),
                 .product(name: "NexusAgentTools", package: "NexusAgentTools"),
+                .product(name: "InboxShell", package: "InboxShell"),
             ],
             linkerSettings: [
                 .linkedLibrary("sqlite3")
@@ -48,6 +50,7 @@ let package = Package(
                 "CSqliteVec",
                 "NexusAgent",
                 .product(name: "NexusSync", package: "NexusSync"),
+                .product(name: "InboxShell", package: "InboxShell"),
             ]
         ),
     ]

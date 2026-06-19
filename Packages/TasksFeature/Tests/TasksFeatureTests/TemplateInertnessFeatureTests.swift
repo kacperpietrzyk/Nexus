@@ -61,24 +61,6 @@ struct TemplateInertnessFeatureTests {
     }
 
     @MainActor
-    @Test("TasksSnoozedSource excludes snoozed templates")
-    func snoozedSourceExcludesTemplates() async throws {
-        let harness = try Harness()
-        let template = TaskItem(title: "tpl", isTemplate: true)
-        template.statusRaw = TaskStatus.snoozed.rawValue
-        template.snoozedUntil = harness.now.addingTimeInterval(3_600)
-        harness.context.insert(template)
-        try harness.context.save()
-
-        let source = TasksSnoozedSource(
-            repository: harness.repository,
-            now: { Date(timeIntervalSince1970: 1_800_000_000) }
-        )
-        let items = try await source.items()
-        #expect(items.isEmpty)
-    }
-
-    @MainActor
     @Test("NotificationSnapshotEncoder excludes templates")
     func snapshotEncoderExcludesTemplates() throws {
         let harness = try Harness()

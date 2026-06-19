@@ -48,20 +48,19 @@ struct ContentView: View {
     // Internal (not private): read by `captureOverlay` in the sibling extension.
     @State var capturePresented = false
     @State var captureMode: CapturePane.Mode = .task
-    @State private var inboxUnreadCount = 0
+    // Internal (not `private`): mutated by `reloadInboxCount` in the
+    // `ContentView+ActivityFeed` extension (sibling file).
+    @State var inboxUnreadCount = 0
     // §1a control mode (Inbox): the filter-tab control was relocated from
     // the Inbox list-panel header into the shell's top-bar band, so its
     // active selection + the per-category counts the oracle tab idiom shows
     // are hoisted here. `inboxItems` is the SAME already-loaded set the list
     // renders (handed up via `InboxView.onItemsChanged`) — no new query.
     @State private var inboxActiveFilter: InboxFilter = .all
-    @State private var inboxItems: [InboxItem] = []
-    // TRUE inbox total (sum of every source's count, uncapped). The Inbox list
-    // is now windowed, so `inboxItems` is only a page — the "All" filter tab
-    // reads this instead so its count stays the real total. Maintained by
-    // `reloadInboxCount` (the total only changes on a store write, which that
-    // store-change path already covers).
-    @State private var inboxTotalCount = 0
+    // The activity-feed rows InboxView loaded (handed up via `onItemsChanged`).
+    // The feed is fully materialized (no windowing), so every filter tab count
+    // reads directly from this set.
+    @State private var inboxItems: [FeedItem] = []
     // Calendar surface view-model. Lazily built once from the live container +
     // the shared EventKit provider so its scope/anchor state survives rail
     // switches. Internal (not `private`): read from `ContentView+LiquidCalendar`.
@@ -273,26 +272,14 @@ struct ContentView: View {
                 ForEach(InboxFilter.allCases, id: \.self) { filter in
                     InboxFilterTab(
                         label: filter.displayLabel,
-                        // "All" = the true windowed total; the category tabs derive
-                        // from the loaded set (no people/digests/mention source is
-                        // registered, so those are 0 today regardless of windowing).
-                        count: filter == .all ? inboxTotalCount : filter.count(in: inboxItems),
+                        // Every tab counts directly off the loaded feed — the feed
+                        // is fully materialized, so "All" is just `inboxItems.count`.
+                        count: filter.count(in: inboxItems),
                         isActive: inboxActiveFilter == filter
                     ) {
                         inboxActiveFilter = filter
                     }
                 }
-
-                Spacer(minLength: DS.Space.m)
-
-                NexusButton(variant: .ghost, size: .sm, action: markInboxRead) {
-                    HStack(spacing: DS.Space.xxs) {
-                        Image(systemName: "envelope.open")
-                        Text("Mark Read")
-                    }
-                }
-                .help("Mark inbox items read")
-                .accessibilityLabel("Mark inbox items read")
             }
         } else if selection == .agent, let agentViewModel {
             AgentTopControl(viewModel: agentViewModel)
@@ -396,10 +383,6 @@ struct ContentView: View {
         }
     }
 
-    private func markInboxRead() {
-        NotificationCenter.default.post(name: .nexusMarkInboxRead, object: nil)
-    }
-
     private var dashboardContent: some View {
         TodayDashboard(
             selection: $selection,
@@ -409,6 +392,9 @@ struct ContentView: View {
             onOpenInboxItem: { openInboxItem($0) },
             inboxActiveFilter: $inboxActiveFilter,
             onInboxItemsChanged: { inboxItems = $0 },
+            onInboxMarkSeen: { item in markFeedItemSeen(item) },
+            onInboxDismiss: { item in dismissFeedItem(item) },
+            onInboxSnooze: { item, date in snoozeFeedItem(item, until: date) },
             onOpenTask: { openTask($0) },
             // `.meetings` mounts the Liquid Meetings screen in
             // `destinationMain` (Task 10) and never reaches this dashboard
@@ -542,10 +528,9 @@ struct ContentView: View {
             openDailyNote: { openTodaysDailyNote() },
             openGraph: { openNotesGraph() }
         )
-        // Shell-level bulk-operation palette commands (InboxShell-owned): post
-        // the existing notification paths the active surfaces already observe.
-        await CommandRegistry.shared.register(MarkAllInboxReadCommand())
+        // Shell-level bulk-operation palette command (InboxShell-owned).
         await CommandRegistry.shared.register(SelectAllItemsCommand())
+        await bootstrapActivityFeed(container: modelContext.container)
         guard let taskRepository else { return }
         await TasksComposition.bootstrap(
             repository: taskRepository,
@@ -591,38 +576,6 @@ struct ContentView: View {
         }
     }
 
-    @MainActor
-    private func reloadInboxCount() async {
-        // The sidebar badge is the UNREAD count, so it must subtract items the
-        // user has marked read — otherwise it re-shows the full total every time
-        // it recomputes (e.g. after navigating away from the Inbox), even though
-        // InboxView itself shows them read. Reads the same persisted store
-        // InboxView writes (id == stable TaskItem.id).
-        //
-        // Uses the cheap `totalCount()` (a `fetchCount`, no materialization)
-        // instead of `allItems()` — the Inbox is windowed now, and recomputing
-        // the badge must not re-materialize ~1383 rows. Formula is identical to
-        // `InboxView.unreadCount` so the badge doesn't jump on Inbox enter/exit.
-        let total = (try? await InboxSourceRegistry.shared.totalCount()) ?? 0
-        let read = InboxReadStateStore.shared.load()
-        inboxTotalCount = total
-        inboxUnreadCount = max(0, total - read.count)
-    }
-
-    @MainActor
-    private func openInboxItem(_ item: InboxItem) {
-        let id = item.id
-        let descriptor = FetchDescriptor<TaskItem>(
-            predicate: #Predicate { task in
-                task.id == id && task.deletedAt == nil
-            }
-        )
-        // Route through `openTask` so the inspector/Agent mutual exclusion
-        // holds for inbox-opened tasks too (otherwise opening an inbox item
-        // while the Agent pane is up reproduces the triple-occupy dead-void).
-        guard let task = try? modelContext.fetch(descriptor).first else { return }
-        openTask(task)
-    }
 }
 
 /// A single Inbox filter tab for the §1a control-mode top bar. Structural

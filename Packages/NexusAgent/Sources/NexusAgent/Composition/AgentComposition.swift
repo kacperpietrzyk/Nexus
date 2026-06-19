@@ -152,7 +152,7 @@ public struct AgentComposition {
         let chatCoordinator = ProposalCoordinator(dispatcher: toolDispatcher)
 
         // MARK: - Proactive insights infrastructure
-        let pendingStore = PendingInsightStore()
+        let pendingStore = PendingInsightStore(repository: AgentInsightRepository(context: context))
         let cooldownStore = InsightCooldownStore()
         let dayPlanRunner = FoundationComposition.makeLocalRunner(
             modelContext: context,

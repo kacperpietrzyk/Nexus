@@ -8,7 +8,7 @@ import Testing
 @Suite("NexusMigrationPlan")
 struct NexusMigrationPlanTests {
 
-    @Test("plan declares V1 through V15 schemas in order")
+    @Test("plan declares V1 through V17 schemas in order")
     func schemaOrder() {
         let names = NexusMigrationPlan.schemas.map { String(describing: $0) }
         #expect(
@@ -28,24 +28,26 @@ struct NexusMigrationPlanTests {
                 "NexusSchemaV13",
                 "NexusSchemaV14",
                 "NexusSchemaV15",
+                "NexusSchemaV16",
+                "NexusSchemaV17",
             ])
     }
 
-    @Test("plan has fourteen lightweight stages")
+    @Test("plan has sixteen lightweight stages")
     func stages() {
-        #expect(NexusMigrationPlan.stages.count == 14)
+        #expect(NexusMigrationPlan.stages.count == 16)
         // MigrationStage doesn't expose `.kind` publicly, but we can encode-check via debug repr.
         let descriptions = NexusMigrationPlan.stages.map { String(describing: $0) }
         #expect(descriptions.allSatisfy { $0.contains("lightweight") })
     }
 
-    @Test func migrationPlanEndsAtV15() {
-        #expect(NexusMigrationPlan.schemas.last?.versionIdentifier == Schema.Version(15, 0, 0))
+    @Test func migrationPlanEndsAtV17() {
+        #expect(NexusMigrationPlan.schemas.last?.versionIdentifier == Schema.Version(17, 0, 0))
         #expect(NexusMigrationPlan.stages.count == NexusMigrationPlan.schemas.count - 1)
     }
 
-    @Test func planRegistersV15AsLightweightTail() {
-        #expect(NexusMigrationPlan.schemas.contains { $0 == NexusSchemaV15.self })
+    @Test func planRegistersV17AsLightweightTail() {
+        #expect(NexusMigrationPlan.schemas.contains { $0 == NexusSchemaV17.self })
         #expect(NexusMigrationPlan.stages.count == NexusMigrationPlan.schemas.count - 1)
     }
 

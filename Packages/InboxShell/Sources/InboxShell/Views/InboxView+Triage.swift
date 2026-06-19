@@ -1,35 +1,29 @@
 import NexusUI
 import SwiftUI
 
-// Platform layouts, bulk actions, iOS compact row, snooze picker, and context
-// menus — extracted to keep InboxView.swift under swiftlint's 400-line limit.
-// Mirrors the TodayDashboard+DigestData.swift / +Standalone.swift pattern.
+// Platform layouts, bulk actions, iOS compact row, and snooze picker.
+// Extracted to keep InboxView.swift under swiftlint's file-length limit.
 
 // MARK: - macOS layout
 
 #if os(macOS)
 extension InboxView {
     var macLayout: some View {
-        // Inbox-oracle 2-column geometry: LEFT list panel + RIGHT reader pane
-        // fixed 380. §1a control mode: filter tabs live in the Mac shell top-bar.
         VStack(spacing: 0) {
             macHeaderBand
             HStack(alignment: .top, spacing: 0) {
                 InboxListPanel(
                     items: filteredItems,
                     error: error,
-                    totalsBySourceID: sourceTotals,
-                    readItemIDs: $readItemIDs,
                     selectedItem: $selectedItem,
                     selection: selection,
-                    onReachEnd: { Task { await loadMore() } },
-                    onMarkRead: { item in markRead(item) },
-                    onMarkUnread: { item in markUnread(item) },
-                    onArchive: { item in Task { await archive(item) } },
-                    onDelete: { item in Task { await delete(item) } },
-                    onSnooze: { item, hours in Task { await snooze(item, hours: hours) } },
-                    onSnoozeTomorrow: { item in Task { await snoozeTomorrow(item) } },
-                    onOpen: { item in onOpen(item) }
+                    onOpen: { item in open(item) },
+                    onDismiss: { item in Task { await dismiss(item) } },
+                    onSnooze: { item, hours in
+                        let date = Date().addingTimeInterval(TimeInterval(hours * 60 * 60))
+                        Task { await snooze(item, until: date) }
+                    },
+                    onCustomSnooze: { item in snoozeTarget = item }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
@@ -38,9 +32,12 @@ extension InboxView {
                 InboxReaderPane(
                     item: selectedItem,
                     emptyState: filteredItems.isEmpty ? .emptyInbox : .noSelection,
-                    onOpen: { item in onOpen(item) },
-                    onArchive: { item in Task { await archive(item) } },
-                    onSnooze: { item, hours in Task { await snooze(item, hours: hours) } }
+                    onOpen: { item in open(item) },
+                    onDismiss: { item in Task { await dismiss(item) } },
+                    onSnooze: { item, hours in
+                        let date = Date().addingTimeInterval(TimeInterval(hours * 60 * 60))
+                        Task { await snooze(item, until: date) }
+                    }
                 )
                 .frame(width: InboxLayout.readerWidth)
                 .frame(maxHeight: .infinity)
@@ -53,28 +50,19 @@ extension InboxView {
         .overlay(alignment: .bottom) {
             BulkActionBar(model: selection, allIDs: filteredItems.map(\.id), actions: macBulkActions)
         }
-        .undoToast(undo)
         .task { await reload(selectFirstItem: true) }
         .reloadOnStoreChange {
             Task {
-                await registry.invalidateCache()
+                await registry.invalidate()
                 await reload(selectFirstItem: false)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .nexusMarkInboxRead)) { _ in
-            Task { await markAllRead() }
-        }
-        .onChange(of: readItemIDs) { _, _ in onUnreadCountChanged(unreadCount) }
         .sheet(item: $snoozeTarget) { item in
             SnoozePickerSheet(
                 item: item,
                 onConfirm: { date in
                     snoozeTarget = nil
-                    Task { try? await registry.snooze(item, until: date) }
-                    Task {
-                        await registry.invalidateCache()
-                        await reload(selectFirstItem: false)
-                    }
+                    Task { await snooze(item, until: date) }
                 },
                 onDismiss: { snoozeTarget = nil }
             )
@@ -84,11 +72,6 @@ extension InboxView {
     var macHeaderBand: some View {
         HStack(spacing: DS.Space.s) {
             Spacer()
-            Button("Mark all read") { Task { await markAllRead() } }
-                .font(DS.FontToken.button)
-                .foregroundStyle(DS.ColorToken.textSecondary)
-                .buttonStyle(.plain)
-            Divider().frame(height: 14)
             if selection.isSelecting {
                 Button("Cancel") {
                     withAnimation(DS.Motion.panelReveal) { selection.exitSelection() }
@@ -111,40 +94,16 @@ extension InboxView {
 
     var macBulkActions: [BulkAction] {
         [
-            BulkAction(label: "Read", systemImage: "envelope.open") {
-                let ids = Array(selection.selectedIDs)
-                readItemIDs.formUnion(ids)
-                readStateStore.save(readItemIDs)
+            BulkAction(label: "Dismiss", systemImage: "xmark.circle") {
+                let selected = items.filter { selection.selectedIDs.contains($0.id) && $0.stream != .bridge }
                 selection.exitSelection()
-                onUnreadCountChanged(unreadCount)
+                Task { for item in selected { await dismiss(item) } }
             },
             BulkAction(label: "Snooze 1h", systemImage: "moon.zzz") {
-                let selected = items.filter { selection.selectedIDs.contains($0.id) }
+                let selected = items.filter { selection.selectedIDs.contains($0.id) && $0.stream != .bridge }
+                let date = Date().addingTimeInterval(3_600)
                 selection.exitSelection()
-                Task { for item in selected { await snooze(item, hours: 1) } }
-            },
-            BulkAction(label: "Archive", systemImage: "archivebox") {
-                let selected = items.filter { selection.selectedIDs.contains($0.id) }
-                selection.exitSelection()
-                Task { for item in selected { await archive(item) } }
-            },
-            BulkAction(label: "Delete", systemImage: "trash", role: .destructive) {
-                let selected = items.filter { selection.selectedIDs.contains($0.id) }
-                selection.exitSelection()
-                Task {
-                    for item in selected { try? await registry.delete(item) }
-                    await registry.invalidateCache()
-                    await reload(selectFirstItem: false)
-                    onUnreadCountChanged(unreadCount)
-                    let count = selected.count
-                    undo.show(message: "Deleted \(count)") {
-                        Task {
-                            for item in selected { try? await registry.restore(item) }
-                            await registry.invalidateCache()
-                            await reload(selectFirstItem: false)
-                        }
-                    }
-                }
+                Task { for item in selected { await snooze(item, until: date) } }
             },
         ]
     }
@@ -167,17 +126,14 @@ extension InboxView {
         .overlay(alignment: .bottom) {
             BulkActionBar(model: selection, allIDs: filteredItems.map(\.id), actions: iosBulkActions)
         }
-        .undoToast(undo)
         .task { await reload(selectFirstItem: false) }
-        // Pull-to-refresh means "force fresh": invalidate so sources whose data
-        // can change without a ModelContext.didSave re-query.
         .refreshable {
-            await registry.invalidateCache()
+            await registry.invalidate()
             await reload(selectFirstItem: false)
         }
         .reloadOnStoreChange {
             Task {
-                await registry.invalidateCache()
+                await registry.invalidate()
                 await reload(selectFirstItem: false)
             }
         }
@@ -186,11 +142,7 @@ extension InboxView {
                 item: item,
                 onConfirm: { date in
                     snoozeTarget = nil
-                    Task { try? await registry.snooze(item, until: date) }
-                    Task {
-                        await registry.invalidateCache()
-                        await reload(selectFirstItem: false)
-                    }
+                    Task { await snooze(item, until: date) }
                 },
                 onDismiss: { snoozeTarget = nil }
             )
@@ -208,10 +160,6 @@ extension InboxView {
                 .buttonStyle(.plain)
             }
             Spacer()
-            Button("Mark all read") { Task { await markAllRead() } }
-                .font(DS.FontToken.button)
-                .foregroundStyle(DS.ColorToken.textSecondary)
-                .buttonStyle(.plain)
             if !selection.isSelecting {
                 Button("Select") {
                     withAnimation(DS.Motion.panelReveal) { selection.enterSelection() }
@@ -226,40 +174,16 @@ extension InboxView {
 
     var iosBulkActions: [BulkAction] {
         [
-            BulkAction(label: "Read", systemImage: "envelope.open") {
-                let ids = Array(selection.selectedIDs)
-                readItemIDs.formUnion(ids)
-                readStateStore.save(readItemIDs)
+            BulkAction(label: "Dismiss", systemImage: "xmark.circle") {
+                let selected = items.filter { selection.selectedIDs.contains($0.id) && $0.stream != .bridge }
                 selection.exitSelection()
-                onUnreadCountChanged(unreadCount)
+                Task { for item in selected { await dismiss(item) } }
             },
             BulkAction(label: "Snooze 1h", systemImage: "moon.zzz") {
-                let selected = items.filter { selection.selectedIDs.contains($0.id) }
+                let selected = items.filter { selection.selectedIDs.contains($0.id) && $0.stream != .bridge }
+                let date = Date().addingTimeInterval(3_600)
                 selection.exitSelection()
-                Task { for item in selected { await snooze(item, hours: 1) } }
-            },
-            BulkAction(label: "Archive", systemImage: "archivebox") {
-                let selected = items.filter { selection.selectedIDs.contains($0.id) }
-                selection.exitSelection()
-                Task { for item in selected { await archive(item) } }
-            },
-            BulkAction(label: "Delete", systemImage: "trash", role: .destructive) {
-                let selected = items.filter { selection.selectedIDs.contains($0.id) }
-                selection.exitSelection()
-                Task {
-                    for item in selected { try? await registry.delete(item) }
-                    await registry.invalidateCache()
-                    await reload(selectFirstItem: false)
-                    onUnreadCountChanged(unreadCount)
-                    let count = selected.count
-                    undo.show(message: "Deleted \(count)") {
-                        Task {
-                            for item in selected { try? await registry.restore(item) }
-                            await registry.invalidateCache()
-                            await reload(selectFirstItem: false)
-                        }
-                    }
-                }
+                Task { for item in selected { await snooze(item, until: date) } }
             },
         ]
     }
@@ -273,7 +197,7 @@ extension InboxView {
                 ContentUnavailableView(
                     "Inbox is empty",
                     systemImage: "tray",
-                    description: Text("New mentions, digests, and captured items appear here.")
+                    description: Text("New agent insights and meeting summaries appear here.")
                 )
                 .listRowBackground(Color.clear)
             } else {
@@ -282,10 +206,10 @@ extension InboxView {
                         if selection.isSelecting {
                             withAnimation(DS.Motion.selection) { selection.toggle(id: item.id) }
                         } else {
-                            onOpen(item)
+                            open(item)
                         }
                     } label: {
-                        InboxCompactRow(item: item, isUnread: !readItemIDs.contains(item.id))
+                        InboxCompactRow(item: item, isUnread: item.seenAt == nil && item.stream != .bridge)
                     }
                     .buttonStyle(.plain)
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -299,25 +223,21 @@ extension InboxView {
                         selection.enterSelection()
                         withAnimation(DS.Motion.selection) { selection.toggle(id: item.id) }
                     }
-                    .onAppear {
-                        if item.id == filteredItems.last?.id { Task { await loadMore() } }
-                    }
                     .contextMenu { iosContextMenu(for: item) }
-                    .swipeActions(edge: .leading) {
-                        Button {
-                            Task { await archive(item) }
-                        } label: {
-                            Label("Archive", systemImage: "archivebox")
-                        }
-                        .tint(DS.ColorToken.textSecondary)
-                    }
                     .swipeActions(edge: .trailing) {
-                        Button {
-                            Task { await snooze(item, hours: 1) }
-                        } label: {
-                            Label("1h", systemImage: "clock")
+                        if item.stream != .bridge {
+                            Button {
+                                Task { await snooze(item, until: Date().addingTimeInterval(3_600)) }
+                            } label: {
+                                Label("1h", systemImage: "clock")
+                            }
+                            .tint(DS.ColorToken.textSecondary)
+                            Button(role: .destructive) {
+                                Task { await dismiss(item) }
+                            } label: {
+                                Label("Dismiss", systemImage: "xmark.circle")
+                            }
                         }
-                        .tint(DS.ColorToken.textSecondary)
                     }
                 }
             }
@@ -328,54 +248,31 @@ extension InboxView {
     }
 
     @ViewBuilder
-    func iosContextMenu(for item: InboxItem) -> some View {
-        let isUnread = !readItemIDs.contains(item.id)
-        if isUnread {
-            Button {
-                markRead(item)
-            } label: {
-                Label("Mark Read", systemImage: "envelope.open")
-            }
-        } else {
-            Button {
-                markUnread(item)
-            } label: {
-                Label("Mark Unread", systemImage: "envelope.badge")
-            }
-        }
+    func iosContextMenu(for item: FeedItem) -> some View {
         Button {
-            onOpen(item)
+            open(item)
         } label: {
             Label("Open", systemImage: "arrow.up.right.square")
         }
-        Divider()
-        Menu("Snooze") {
-            Button {
-                Task { await snooze(item, hours: 1) }
-            } label: {
-                Label("1 Hour", systemImage: "clock")
+        if item.stream != .bridge {
+            Divider()
+            Menu("Snooze") {
+                Button {
+                    Task { await snooze(item, until: Date().addingTimeInterval(3_600)) }
+                } label: {
+                    Label("1 Hour", systemImage: "clock")
+                }
+                Button {
+                    snoozeTarget = item
+                } label: {
+                    Label("Custom\u{2026}", systemImage: "calendar")
+                }
             }
-            Button {
-                Task { await snoozeTomorrow(item) }
+            Button(role: .destructive) {
+                Task { await dismiss(item) }
             } label: {
-                Label("Tomorrow", systemImage: "sunrise")
+                Label("Dismiss", systemImage: "xmark.circle")
             }
-            Button {
-                snoozeTarget = item
-            } label: {
-                Label("Custom\u{2026}", systemImage: "calendar")
-            }
-        }
-        Button {
-            Task { await archive(item) }
-        } label: {
-            Label("Archive", systemImage: "archivebox")
-        }
-        Divider()
-        Button(role: .destructive) {
-            Task { await delete(item) }
-        } label: {
-            Label("Delete", systemImage: "trash")
         }
     }
 }
@@ -383,7 +280,7 @@ extension InboxView {
 // MARK: - iOS compact row
 
 struct InboxCompactRow: View {
-    let item: InboxItem
+    let item: FeedItem
     let isUnread: Bool
 
     var body: some View {
@@ -396,17 +293,11 @@ struct InboxCompactRow: View {
                 Text(item.title)
                     .font(isUnread ? DS.FontToken.bodyStrong : DS.FontToken.body)
                     .foregroundStyle(DS.ColorToken.textPrimary)
-                if let body = item.body, !body.isEmpty {
-                    Text(body)
+                if let subtitle = item.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
                         .font(DS.FontToken.metadata)
                         .foregroundStyle(DS.ColorToken.textTertiary)
                         .lineLimit(2)
-                }
-                if !item.tags.isEmpty {
-                    Text(item.tags.map { "#\($0)" }.joined(separator: " "))
-                        .font(DS.FontToken.metadata)
-                        // Tag metadata sits one ink step below the snippet.
-                        .foregroundStyle(DS.ColorToken.textTertiary)
                 }
             }
         }
@@ -417,11 +308,9 @@ struct InboxCompactRow: View {
 
 // MARK: - Snooze picker sheet
 
-/// Minimal date-picker sheet for "Custom snooze". Presented from both platforms
-/// when the user picks "Custom\u{2026}" from the context menu. Liquid design language:
-/// `presentationBackground(.thinMaterial)` + `LiquidPrimaryButton` confirm.
+/// Minimal date-picker sheet for "Custom snooze".
 struct SnoozePickerSheet: View {
-    let item: InboxItem
+    let item: FeedItem
     let onConfirm: (Date) -> Void
     let onDismiss: () -> Void
 
