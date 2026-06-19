@@ -377,8 +377,9 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
 
     private var blockRows: some View {
-        ForEach(model.blocks) { block in
-            BlockView(block: block, model: model, onOpenRef: { openRef($0) })
+        let ordinals = NumberedOrdinals.ordinals(for: model.blocks)
+        return ForEach(model.blocks) { block in
+            BlockView(block: block, model: model, onOpenRef: { openRef($0) }, ordinal: ordinals[block.id])
                 .listRowSeparator(.hidden)
                 .swipeActions(edge: .trailing) {
                     if model.canEdit {

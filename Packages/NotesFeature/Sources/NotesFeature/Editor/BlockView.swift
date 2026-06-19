@@ -17,6 +17,8 @@ struct BlockView: View {
     let block: Block
     let model: NoteEditorModel
     let onOpenRef: (UUID) -> Void
+    /// Resolved 1-based ordinal for `.numbered` blocks (nil for all other kinds).
+    var ordinal: Int? = nil
 
     var body: some View {
         switch block.kind {
@@ -31,7 +33,7 @@ struct BlockView: View {
         case .bulleted(let runs):
             ListBlockEditor(block: block, model: model, runs: runs, marker: "•")
         case .numbered(let runs):
-            ListBlockEditor(block: block, model: model, runs: runs, marker: "1.")
+            ListBlockEditor(block: block, model: model, runs: runs, marker: ordinal.map { "\($0)." } ?? "1.")
         case .quote(let runs):
             QuoteBlockView(block: block, model: model, runs: runs)
         case .code(let language, let text):
