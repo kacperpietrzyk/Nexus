@@ -1,15 +1,17 @@
 // Packages/NexusAgent/Tests/NexusAgentTests/PendingInsightStorePersistenceTests.swift
 import Foundation
+import NexusCore
 import SwiftData
 import Testing
-import NexusCore
+
 @testable import NexusAgent
 
 @MainActor
 @Suite struct PendingInsightStorePersistenceTests {
     private func repo() throws -> AgentInsightRepository {
-        let c = try ModelContainer(for: Schema([AgentInsightRecord.self]),
-                                   configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let c = try ModelContainer(
+            for: Schema([AgentInsightRecord.self]),
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         return AgentInsightRepository(context: ModelContext(c))
     }
     private func proposal() -> Proposal {

@@ -13,10 +13,11 @@ public struct AgentInsightRepository {
 
     /// Open (unresolved) records, newest first.
     public func open() throws -> [AgentInsightRecord] {
-        try context.fetch(FetchDescriptor<AgentInsightRecord>(
-            predicate: #Predicate { $0.resolvedAt == nil },
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        ))
+        try context.fetch(
+            FetchDescriptor<AgentInsightRecord>(
+                predicate: #Predicate { $0.resolvedAt == nil },
+                sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+            ))
     }
 
     /// Insert unless an open record with the same `dedupeKey` already exists.
@@ -34,9 +35,13 @@ public struct AgentInsightRepository {
 
     public func resolve(id: UUID) throws {
         let target = id
-        guard let record = try context.fetch(FetchDescriptor<AgentInsightRecord>(
-            predicate: #Predicate { $0.id == target }
-        )).first else { return }
+        guard
+            let record = try context.fetch(
+                FetchDescriptor<AgentInsightRecord>(
+                    predicate: #Predicate { $0.id == target }
+                )
+            ).first
+        else { return }
         record.resolvedAt = now()
         try context.save()
     }

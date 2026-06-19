@@ -1,7 +1,8 @@
 // Packages/NexusAgent/Tests/NexusAgentTests/ProposalCodableTests.swift
 import Foundation
-import Testing
 import NexusCore
+import Testing
+
 @testable import NexusAgent
 
 @Suite struct ProposalCodableTests {
