@@ -160,6 +160,12 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .nexusGoToSettings)) { _ in
                 navigate(to: .settings)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .nexusNavBack)) { _ in
+                withAnimation(DS.Motion.nav) { navigator.goBack() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .nexusNavForward)) { _ in
+                withAnimation(DS.Motion.nav) { navigator.goForward() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .nexusOpenDailyNote)) { _ in
                 openTodaysDailyNote()
             }
@@ -244,7 +250,11 @@ struct ContentView: View {
                     leading: { toolbarLeading },
                     onOpenCommandPalette: { commandPalettePresented = true },
                     onOpenInbox: { navigate(to: .inbox) },
-                    onOpenCapture: openTaskCapture
+                    onOpenCapture: openTaskCapture,
+                    canGoBack: navigator.canGoBack,
+                    canGoForward: navigator.canGoForward,
+                    onBack: { withAnimation(DS.Motion.nav) { navigator.goBack() } },
+                    onForward: { withAnimation(DS.Motion.nav) { navigator.goForward() } }
                 )
             },
             main: { destinationMain },

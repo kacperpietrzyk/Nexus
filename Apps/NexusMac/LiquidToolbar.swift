@@ -10,14 +10,42 @@ import SwiftUI
 ///   posts `.nexusOpenCommandPalette`, handled by `ContentView`)
 /// - bell → Inbox destination
 /// - New → the existing capture seam (`.nexusOpenCapture`, same as ⌘N/⌘⌃N)
+///
+/// Back/forward chevrons (`canGoBack`/`canGoForward`) sit at the very leading
+/// edge — they are the ONLY chevron back affordances in the app (native
+/// `NavigationStack` chevrons are suppressed per-destination in later tasks).
 struct LiquidToolbar<Leading: View>: View {
     @ViewBuilder let leading: () -> Leading
     let onOpenCommandPalette: () -> Void
     let onOpenInbox: () -> Void
     let onOpenCapture: () -> Void
+    let canGoBack: Bool
+    let canGoForward: Bool
+    let onBack: () -> Void
+    let onForward: () -> Void
 
     var body: some View {
         HStack(spacing: DS.Space.m) {
+            HStack(spacing: DS.Space.xs) {
+                LiquidIconButton(
+                    systemImage: "chevron.left",
+                    accessibilityLabel: "Back",
+                    action: onBack
+                )
+                .opacity(canGoBack ? 1 : 0.35)
+                .disabled(!canGoBack)
+                .help("Back (⌘[)")
+
+                LiquidIconButton(
+                    systemImage: "chevron.right",
+                    accessibilityLabel: "Forward",
+                    action: onForward
+                )
+                .opacity(canGoForward ? 1 : 0.35)
+                .disabled(!canGoForward)
+                .help("Forward (⌘])")
+            }
+
             leading()
                 .frame(maxWidth: .infinity, alignment: .leading)
 
