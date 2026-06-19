@@ -113,6 +113,31 @@ enum TaskRowLiquidStyle {
     }
 }
 
+// MARK: - Status mapping (testable seam — module-scope, not @MainActor)
+
+/// Maps a `TaskStatus` to the achromatic `NexusStatus` glyph state.
+/// Exhaustive switch — no `default` so adding a new `TaskStatus` case is a compile error.
+internal func taskNexusStatus(for status: TaskStatus) -> NexusStatus {
+    switch status {
+    case .open: return .todo
+    case .done: return .done
+    case .snoozed: return .inReview
+    }
+}
+
+// MARK: - Project pill
+
+/// Pure seam for the row's project pill — unit-testable at module scope.
+/// Lives here alongside `visibleTags` / `priorityLabel` as it is a pure
+/// visibility/style helper with no view dependencies.
+internal enum TaskRowProjectPill {
+    /// Returns the label to render, or nil to omit the pill.
+    static func label(for projectName: String?) -> String? {
+        guard let name = projectName, !name.isEmpty else { return nil }
+        return name
+    }
+}
+
 // MARK: - Liquid checkbox state
 
 /// Three-state circle checkbox for the Liquid task row. Snoozed renders as a

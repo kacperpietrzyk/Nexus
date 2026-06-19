@@ -16,11 +16,22 @@ import SwiftUI
 /// convention in this inspector) rather than via an environment key.
 extension TaskDetailInspector {
 
-    var labelsCard: some View {
-        inspectorCard("Labels") {
+    var classificationCard: some View {
+        inspectorCard("Classification") {
+            tagsSection
             assignedLabelsSection
             labelGroupPickers
             freeLabelCreator
+        }
+    }
+
+    @ViewBuilder
+    private var tagsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("TAGS")
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
+            TagsEditor(tags: $task.tags) { save() }
         }
     }
 
@@ -31,7 +42,7 @@ extension TaskDetailInspector {
         if assignedLabels.isEmpty {
             Text("No labels")
                 .font(.caption)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .foregroundStyle(DS.ColorToken.textTertiary)
         } else {
             FlowLabels.removable(labels: assignedLabels) { label in
                 removeLabel(label)
@@ -58,8 +69,8 @@ extension TaskDetailInspector {
         let selectedID = assignedLabels.first { $0.group == group }?.id
         return VStack(alignment: .leading, spacing: 6) {
             Text(groupTitle(group).uppercased())
-                .font(NexusType.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             NexusSelect(
                 selection: groupBinding(group: group, selectedID: selectedID),
                 options: [UUID?.none] + options.map { Optional($0.id) },
@@ -69,6 +80,11 @@ extension TaskDetailInspector {
                 },
                 accessibilityLabel: groupTitle(group)
             )
+            if let caption = groupCaption(group) {
+                Text(caption)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+            }
         }
     }
 
@@ -87,9 +103,17 @@ extension TaskDetailInspector {
 
     private func groupTitle(_ group: LabelGroup) -> String {
         switch group {
-        case .domain: return "Domain"
-        case .gate: return "Gate"
+        case .domain: return "Type"
+        case .gate: return "Decision"
         case .free: return "Labels"
+        }
+    }
+
+    private func groupCaption(_ group: LabelGroup) -> String? {
+        switch group {
+        case .domain: return "Feature / bug / infra / security — drives agent suggestion."
+        case .gate: return "Needs decision / decided — gates workflow."
+        case .free: return nil
         }
     }
 

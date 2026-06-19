@@ -55,8 +55,8 @@ struct CycleAssignmentPicker: View {
 
             if let error {
                 Text(error)
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
                     .lineLimit(2)
             }
         }

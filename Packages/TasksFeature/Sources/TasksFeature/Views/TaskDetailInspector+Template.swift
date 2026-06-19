@@ -12,8 +12,8 @@ extension TaskDetailInspector {
                 Text(
                     "This task is a template. It stays out of Today, Upcoming, Inbox, and stats, and can't be completed."
                 )
-                .font(NexusType.bodySmall)
-                .foregroundStyle(NexusColor.Text.secondary)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textSecondary)
                 NexusButton(variant: .outline, size: .sm, action: instantiateFromTemplate) {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.square.on.square")

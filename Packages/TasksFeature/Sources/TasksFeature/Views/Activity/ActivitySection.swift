@@ -23,17 +23,17 @@ struct ActivitySection: View {
         VStack(alignment: .leading, spacing: 6) {
             if entries.isEmpty {
                 Text("No activity yet")
-                    .font(NexusType.caption)
-                    .foregroundStyle(NexusColor.Text.tertiary)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             } else {
                 ForEach(entries, id: \.id) { entry in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(ActivityEntryFormatter.sentence(for: entry, projectName: projectName))
-                            .font(NexusType.body)
-                            .foregroundStyle(NexusColor.Text.primary)
+                            .font(DS.FontToken.body)
+                            .foregroundStyle(DS.ColorToken.textPrimary)
                         Text("· \(entry.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                            .font(NexusType.caption)
-                            .foregroundStyle(NexusColor.Text.tertiary)
+                            .font(DS.FontToken.metadata)
+                            .foregroundStyle(DS.ColorToken.textTertiary)
                     }
                 }
             }

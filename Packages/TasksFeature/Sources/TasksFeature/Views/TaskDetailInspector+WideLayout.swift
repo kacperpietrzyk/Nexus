@@ -25,18 +25,18 @@ extension TaskDetailInspector {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     headerCard
-                    workflowCard
-                    cycleCard
-                    labelsCard
-                    aiAssistCard
+                    classificationCard
                     scheduleCard
                     deadlineCard
                     remindersCard
                     recurrenceCard
+                    workflowCard
+                    cycleCard
                     linksCard
+                    notesCard
+                    aiAssistCard
                     promoteCard
                     templateCard
-                    notesCard
                     commentsCard
                     activityCard
                 }
@@ -67,16 +67,16 @@ extension TaskDetailInspector {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 16) {
                     headerCard
-                    workflowCard
-                    cycleCard
-                    labelsCard
+                    classificationCard
                     scheduleCard
-                }
-                VStack(alignment: .leading, spacing: 16) {
-                    aiAssistCard
                     deadlineCard
                     remindersCard
                     recurrenceCard
+                }
+                VStack(alignment: .leading, spacing: 16) {
+                    aiAssistCard
+                    workflowCard
+                    cycleCard
                     promoteCard
                     templateCard
                 }

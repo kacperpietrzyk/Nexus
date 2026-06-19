@@ -20,18 +20,6 @@ extension UTType {
     static let nexusTaskItemID = UTType(exportedAs: "com.kacperpietrzyk.nexus.task-item-id")
 }
 
-// MARK: - Status mapping (testable seam — module-scope, not @MainActor)
-
-/// Maps a `TaskStatus` to the achromatic `NexusStatus` glyph state.
-/// Exhaustive switch — no `default` so adding a new `TaskStatus` case is a compile error.
-internal func taskNexusStatus(for status: TaskStatus) -> NexusStatus {
-    switch status {
-    case .open: return .todo
-    case .done: return .done
-    case .snoozed: return .inReview
-    }
-}
-
 /// True when the due chip's overdue red already represents the same "you're
 /// late" fact a missed/today deadline would — so the deadline chip is
 /// suppressed to avoid two red tokens for one fact. Due wins (the overdue due
@@ -54,18 +42,13 @@ internal func suppressesDeadlineChip(
     return false
 }
 
-/// One row in `TaskListView`. Displays the Liquid circle checkbox, title,
-/// priority pill, tag pills, and trailing due metadata, per
-/// `docs/03_COMPONENTS.md` §TaskRow.
-///
-/// Liquid re-skin: the LabKit status glyph becomes the 14 pt circle checkbox
-/// (`LiquidTaskCheckbox`), chips become `LiquidPill`s with deterministic tag
-/// accents, and the due date renders as plain right-aligned metadata with
-/// overdue as the single red token. Mac hover reveals `NexusRowQuickActions`;
-/// touch platforms keep a visible trailing menu affordance for row actions.
+/// One row in `TaskListView`: Liquid checkbox, title, priority pill, project
+/// pill, tag pills, and trailing due/deadline metadata. Mac hover reveals
+/// `NexusRowQuickActions`; touch platforms show a visible trailing menu.
 public struct TaskRowView: View {
 
     @Bindable public var task: TaskItem
+    public let projectName: String?
     public let now: Date
     public let depth: Int
     public let blockedCount: Int?
@@ -84,6 +67,7 @@ public struct TaskRowView: View {
 
     public init(
         task: TaskItem,
+        projectName: String? = nil,
         now: Date = .now,
         depth: Int = 0,
         blockedCount: Int? = nil,
@@ -97,6 +81,7 @@ public struct TaskRowView: View {
         isSelected: Bool = false
     ) {
         self._task = Bindable(task)
+        self.projectName = projectName
         self.now = now
         self.depth = depth
         self.blockedCount = blockedCount
@@ -123,6 +108,7 @@ public struct TaskRowView: View {
     private var rowContent: some View {
         RowBody(
             task: task,
+            projectName: projectName,
             now: now,
             depth: depth,
             blockedCount: blockedCount,
@@ -143,6 +129,7 @@ public struct TaskRowView: View {
 /// lightweight and the hover toggle is scoped correctly.
 private struct RowBody: View {
     let task: TaskItem
+    let projectName: String?
     let now: Date
     let depth: Int
     let blockedCount: Int?
@@ -427,10 +414,11 @@ private struct RowBody: View {
     }
 
     // Right-aligned meta cluster, ordered quiet → loud (rightmost = strongest):
-    // tags · overflow · recurrence · blocks · subtasks · deadline (only if not
-    // suppressed by an overdue due chip) · DUE. The overdue due chip is the
-    // single red urgency token and sits at the trailing edge where the eye
-    // lands first on a right-aligned cluster.
+    // project · tags · overflow · recurrence · blocks · subtasks · deadline
+    // (only if not suppressed by an overdue due chip) · DUE. The quiet project
+    // pill sits at the leading edge; the overdue due chip is the single red
+    // urgency token at the trailing edge where the eye lands first on a
+    // right-aligned cluster.
     // MARK: Compact (two-line) central content
 
     /// iPhone/compact layout: the title (with priority + the single loud due
@@ -466,12 +454,14 @@ private struct RowBody: View {
         showsDeadline: Bool,
         deadline: DeadlineBadgePresentation?
     ) -> some View {
+        let hasProject = TaskRowProjectPill.label(for: projectName) != nil
         let hasTags = !task.tags.isEmpty
         let hasRecurrence = task.recurrenceRule != nil
         let hasBlocks = (blockedCount ?? 0) > 0
         let hasSubtasks = (subtaskProgress?.total ?? 0) > 0
-        if hasTags || hasRecurrence || hasBlocks || hasSubtasks || showsDeadline {
+        if hasProject || hasTags || hasRecurrence || hasBlocks || hasSubtasks || showsDeadline {
             HStack(spacing: 6) {
+                projectPill
                 tagPills
                 if hasRecurrence {
                     recurrenceGlyph
@@ -498,6 +488,7 @@ private struct RowBody: View {
         )
         let showsDeadline = deadline != nil && !suppressesDeadlineChip(due: due, deadline: deadline)
         HStack(spacing: 6) {
+            projectPill
             tagPills
             if task.recurrenceRule != nil {
                 recurrenceGlyph
@@ -510,6 +501,13 @@ private struct RowBody: View {
                 LiquidPill(deadline.label, color: TaskRowLiquidStyle.pillColor(for: deadline.tone))
             }
             dueChipView(due)
+        }
+    }
+
+    @ViewBuilder
+    private var projectPill: some View {
+        if let label = TaskRowProjectPill.label(for: projectName) {
+            LiquidPill(label, color: DS.ColorToken.statusNeutral)
         }
     }
 

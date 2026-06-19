@@ -36,8 +36,8 @@ extension TaskDetailInspector {
     private var workflowStatePicker: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("STATE")
-                .font(NexusType.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             NexusSelect(
                 selection: workflowSelectionBinding,
                 options: [WorkflowStateSelection.unset] + WorkflowState.allCases.map { .set($0) },
@@ -92,8 +92,8 @@ extension TaskDetailInspector {
     private var agentPicker: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("AGENT")
-                .font(NexusType.eyebrow)
-                .foregroundStyle(NexusColor.Text.tertiary)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.textTertiary)
             NexusSelect(
                 selection: agentSelectionBinding,
                 options: [AgentSelection.none] + AgentAssignee.allCases.map { .assigned($0) },
@@ -119,10 +119,10 @@ extension TaskDetailInspector {
                 assignAgent(suggestion)
             } label: {
                 Label("Suggested: \(agentLabel(suggestion))", systemImage: "wand.and.stars")
-                    .font(NexusType.caption)
+                    .font(DS.FontToken.metadata)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(NexusColor.Text.tertiary)
+            .foregroundStyle(DS.ColorToken.textTertiary)
             .accessibilityLabel("Assign suggested agent \(agentLabel(suggestion))")
         }
     }

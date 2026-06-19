@@ -28,14 +28,8 @@ extension TaskListView {
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     windowedRow(for: item, index: i, loadedCount: flatList.count)
                 }
-            case .all, .upcoming, .completed, .templates, .byTag:
-                ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
-                    row(for: item, appearIndex: i)
-                }
-            case .inbox:
-                ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
-                    row(for: item, appearIndex: i)
-                }
+            case .all, .upcoming, .completed, .templates, .byTag, .inbox:
+                groupedFlatContent
             case .project, .projectSection, .cycle:
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     row(for: item, appearIndex: i)
@@ -81,6 +75,27 @@ extension TaskListView {
             .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
             .listRowBackground(containerBackground)
             .listRowSeparator(.hidden)
+    }
+
+    @ViewBuilder
+    var groupedFlatContent: some View {
+        if groupBy.wrappedValue == .none {
+            ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
+                row(for: item, appearIndex: i)
+            }
+        } else {
+            let sections = taskGroupSections(
+                flatList, by: groupBy.wrappedValue, projectsByID: projectsByID,
+                now: now, calendar: Self.groupingCalendar
+            )
+            ForEach(sections, id: \.key) { group in
+                section(group.key, items: group.items)
+            }
+        }
+    }
+
+    static var groupingCalendar: Calendar {
+        var c = Calendar(identifier: .iso8601); c.timeZone = .current; return c
     }
 
     @ViewBuilder
@@ -169,9 +184,19 @@ extension TaskListView {
         }
     }
 
+    /// Project name for the row pill, or nil to suppress it. Suppressed for
+    /// Inbox tasks (no project) and when the list is already sectioned by
+    /// project (the section header carries that context).
+    func resolvedProjectName(for item: TaskItem) -> String? {
+        guard groupBy.wrappedValue != .project else { return nil }
+        guard let projectID = item.projectID else { return nil }
+        return projectsByID[projectID]?.name
+    }
+
     func rowView(for item: TaskItem) -> some View {
         TaskRowView(
             task: item,
+            projectName: resolvedProjectName(for: item),
             now: now,
             subtaskProgress: subtaskProgressByTaskID[item.id],
             isSubtasksExpanded: expandedTaskIDs.contains(item.id),

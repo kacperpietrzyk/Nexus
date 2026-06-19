@@ -37,6 +37,8 @@ public struct TaskListView: View {
     // `internal` so the +Paging extension can surface a load-more failure.
     @State var error: String?
     @State var refinement = TaskListRefinement()
+    @AppStorage(NexusPreferences.Keys.taskListGroupBy) private var groupByRaw = TaskGroupBy.none.rawValue
+    @State var projectsByID: [UUID: Project] = [:]
     @State var refinementLabels: [TaskLabel] = []
     // Memoized labeled-task-id resolution (FIX 3a): only re-queries
     // LinkRepository when `refinement.labelID` changes.
@@ -84,7 +86,13 @@ public struct TaskListView: View {
         }
         #endif
         .safeAreaInset(edge: .top, spacing: 0) {
-            TaskListFilterBar(refinement: $refinement, availableLabels: refinementLabels, selection: selection)
+            TaskListFilterBar(
+                refinement: $refinement,
+                availableLabels: refinementLabels,
+                selection: selection,
+                groupBy: groupBy,
+                showsGroupBy: filterSupportsGrouping
+            )
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             BulkActionBar(
@@ -113,6 +121,9 @@ public struct TaskListView: View {
         .task { loadRefinementLabels() }
         .onChange(of: now) { _, _ in reload() }
         .onChange(of: refinement) { _, _ in reload() }
+        // Group-by flips `.all` between windowed (none) and full-load (grouped),
+        // so a change must re-resolve the data set, not just re-section in place.
+        .onChange(of: groupByRaw) { _, _ in reload() }
         .reloadOnStoreChange {
             // A store change can mutate the label→task graph without changing the
             // selected label, so drop the memoized id-set before re-filtering.
@@ -221,6 +232,8 @@ extension TaskListView {
                 for: visibleRootTasks,
                 modelContext: modelContext
             )
+            projectsByID = Dictionary(
+                loadActiveProjects().map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             error = nil
         } catch {
             self.error = String(describing: error)
@@ -262,6 +275,30 @@ extension TaskListView {
     var isSavedFilter: Bool {
         if case .savedFilter = filter { return true }
         return false
+    }
+
+    /// Render-time grouping selection. Lives OUTSIDE `refinement` on purpose:
+    /// changing it re-sections already-fetched rows and must NOT trigger a
+    /// `reload()` (which `refinement` changes do).
+    var groupBy: Binding<TaskGroupBy> {
+        Binding(
+            get: { TaskGroupBy(rawValue: groupByRaw) ?? .none },
+            set: { groupByRaw = $0.rawValue }
+        )
+    }
+
+    /// Group-by is offered only on the flat filters that render an
+    /// undifferentiated list. `.today` has semantic buckets; project/cycle/
+    /// saved-filter views are already structured.
+    private var filterSupportsGrouping: Bool {
+        switch filter {
+        // Flat filters offer grouping. `.all` shows the chip even while windowed
+        // (picking a group drops windowing and loads the full set — see
+        // `isWindowing`); hiding it there would make the feature invisible on the
+        // main task list, which is almost always windowed.
+        case .all, .upcoming, .inbox, .completed, .templates, .byTag: return true
+        case .today, .project, .projectSection, .cycle, .savedFilter: return false
+        }
     }
 
     /// Whether the resolved data set for the current filter has zero rows.
