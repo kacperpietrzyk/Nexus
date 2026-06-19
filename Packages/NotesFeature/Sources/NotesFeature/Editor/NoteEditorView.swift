@@ -173,6 +173,10 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             .padding(.vertical, DS.Space.l)
         }
         .liquidLightCard(cornerRadius: DS.Radius.l)
+        // Outer margin so the document card doesn't butt against the navigator /
+        // window edges (the gap that existed before the LazyVStack rewrite).
+        .padding(.horizontal, DS.Space.l)
+        .padding(.vertical, DS.Space.l)
     }
 
     private var ordinals: [UUID: Int] { NumberedOrdinals.ordinals(for: model.blocks) }
