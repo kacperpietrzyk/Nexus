@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import NexusCore
 
 /// Maps engine world space to view space: scale around the view center, then
 /// translate by the pan offset. Pure math, unit-tested apart from gestures.

@@ -1,5 +1,4 @@
 import Foundation
-import NexusCore
 
 /// Stable identity of a graph node: the `(kind, id)` endpoint pair stored on
 /// `Link` rows. `Comparable` gives the assembler and the layout engine a total

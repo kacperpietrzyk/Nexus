@@ -1,4 +1,5 @@
 import Foundation
+import NexusCore
 
 /// Deterministic force-directed layout: Hooke springs along edges, pairwise
 /// repulsion, gravity toward the origin, semi-implicit Euler integration, and
