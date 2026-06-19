@@ -37,14 +37,7 @@ public enum GraphForceLayout {
         }
         let sim = Simulation(nodeCount: n, links: links, forceField: force, position: seeded)
         for _ in 0..<max(1, iterations) { sim.tick() }
-        // kinetics.position is `package`-scoped in Grape — use Mirror to read it cross-package.
-        let mirror = Mirror(reflecting: sim.kinetics)
-        var settled: [SIMD2<Double>] = seeded  // fallback: seeded positions
-        for child in mirror.children where child.label == "position" {
-            if let arr = child.value as? UnsafeArray<SIMD2<Double>> {
-                settled = arr.asArray()
-            }
-        }
+        let settled = sim.kinetics.positions
         return Dictionary(
             uniqueKeysWithValues: nodes.enumerated().map { offset, node in
                 let v = settled[offset]
