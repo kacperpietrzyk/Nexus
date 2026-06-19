@@ -1,7 +1,8 @@
 // Packages/NexusAgent/Tests/NexusAgentTests/DailyBriefProjectorTests.swift
 import Foundation
-import Testing
 import InboxShell
+import Testing
+
 @testable import NexusAgent
 
 @Suite struct DailyBriefProjectorTests {

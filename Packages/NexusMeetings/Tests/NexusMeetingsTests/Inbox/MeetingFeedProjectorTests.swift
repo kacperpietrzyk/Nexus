@@ -1,7 +1,8 @@
 // Packages/NexusMeetings/Tests/NexusMeetingsTests/MeetingFeedProjectorTests.swift
 import Foundation
-import Testing
 import InboxShell
+import Testing
+
 @testable import NexusMeetings
 
 @Suite struct MeetingFeedProjectorTests {

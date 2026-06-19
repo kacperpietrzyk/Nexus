@@ -1,7 +1,8 @@
 // Packages/TasksFeature/Tests/TasksFeatureTests/UnscheduledBridgeProjectorTests.swift
 import Foundation
-import Testing
 import InboxShell
+import Testing
+
 @testable import TasksFeature
 
 @MainActor

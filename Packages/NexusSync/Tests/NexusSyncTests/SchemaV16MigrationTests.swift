@@ -1,7 +1,8 @@
+import NexusCore
 import SwiftData
 import Testing
+
 @testable import NexusSync
-import NexusCore
 
 @Suite struct SchemaV16MigrationTests {
     @Test func v16IncludesFeedItemStateAndKeepsV15Models() {
