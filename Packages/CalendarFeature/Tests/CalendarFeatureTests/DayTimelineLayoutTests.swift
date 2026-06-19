@@ -263,4 +263,31 @@ struct DayTimelineLayoutTests {
         let items = DayTimelineLayout.items(forDay: dayStart, events: [], blocks: [], calendar: calendar)
         #expect(items.isEmpty)
     }
+
+    // MARK: - Subtitle data (Task 5)
+
+    @Test("items() carries location and organizer name into TimelineItem")
+    func subtitleDataCarriedThrough() {
+        let cal = calendar
+        let organizer = CalendarEvent.Attendee(name: "Kamil")
+        let event = CalendarEvent(
+            id: "e-subtitle",
+            title: "Design Review",
+            start: dayStart.addingTimeInterval(10 * 3600),
+            end: dayStart.addingTimeInterval(11 * 3600),
+            location: "Sala Galaxy",
+            organizer: organizer
+        )
+
+        let items = DayTimelineLayout.items(
+            forDay: dayStart,
+            events: [event],
+            blocks: [],
+            calendar: cal
+        )
+
+        #expect(items.count == 1)
+        #expect(items[0].location == "Sala Galaxy")
+        #expect(items[0].organizer == "Kamil")
+    }
 }
