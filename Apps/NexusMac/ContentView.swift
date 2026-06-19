@@ -37,8 +37,16 @@ struct ContentView: View {
     // helper recording control (cancel/pause), re-homed from the deleted MeetingsTabView.
     @Environment(\.meetingHelperControl) var meetingHelperControl
 
+    // Internal (not `private`): drives all destination switches through the
+    // NexusNavigator keystone (Task 2) — back/forward history, crumbs, and
+    // deep-links all hang off this one instance. Extensions read `selection`
+    // (the computed accessor below) and call `navigate(to:)` as before.
+    @State var navigator = NexusNavigator()
+
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
-    @State var selection: TodayNavSelection = .today
+    // A computed read-through so every `selection == .X` call site compiles
+    // unchanged and all three extension files keep working without modification.
+    var selection: TodayNavSelection { navigator.destination }
     // Internal: read from the `ContentView+CaptureAndPeek` extension.
     @State var selectedTask: TaskItem?
     @State private var customSnoozeTask: TaskItem?
@@ -164,7 +172,7 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .nexusToggleSelectedTaskFocus)) { _ in
                 toggleSelectedTaskFocus()
             }
-            .onChange(of: selection) { _, newValue in
+            .onChange(of: navigator.destination) { _, newValue in
                 // §1 "inspector ⊥ Agent" single chokepoint: the Agent
                 // destination owns the whole content slot, so clear any
                 // selected task on EVERY transition into `.agent` — covers
@@ -369,9 +377,19 @@ struct ContentView: View {
     // anyway (no `NexusTopBar`), so this is defensive plumbing parity only.
     private var shellTitle: String { selection.title }
 
+    /// Binding bridge: lets `TodayDashboard` write the destination through the
+    /// same `navigate(to:)` chokepoint as every other caller, preserving the
+    /// `withAnimation(DS.Motion.nav)` envelope and the navigator invariants.
+    private var selectionBinding: Binding<TodayNavSelection> {
+        Binding(
+            get: { navigator.destination },
+            set: { navigate(to: $0) }
+        )
+    }
+
     private var dashboardContent: some View {
         TodayDashboard(
-            selection: $selection,
+            selection: selectionBinding,
             chrome: .embedded,
             inboxUnreadCount: inboxUnreadCount,
             onInboxUnreadCountChanged: { inboxUnreadCount = $0 },
@@ -410,7 +428,7 @@ struct ContentView: View {
     /// Internal (not `private`): called from the `ContentView+LiquidToday` extension.
     @MainActor
     func navigate(to destination: TodayNavSelection) {
-        withAnimation(DS.Motion.nav) { selection = destination }
+        withAnimation(DS.Motion.nav) { navigator.open(destination) }
     }
 
     /// Opening a task's detail inspector while the Agent destination is
