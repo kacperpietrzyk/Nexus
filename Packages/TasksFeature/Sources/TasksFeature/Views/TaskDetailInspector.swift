@@ -155,8 +155,6 @@ public struct TaskDetailInspector: View {
 
             NexusToggle("Pin as focus", isOn: $task.pinnedAsFocus)
                 .onChange(of: task.pinnedAsFocus) { _, _ in save() }
-
-            TagsEditor(tags: $task.tags) { save() }
         }
     }
 

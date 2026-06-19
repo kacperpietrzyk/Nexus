@@ -16,11 +16,22 @@ import SwiftUI
 /// convention in this inspector) rather than via an environment key.
 extension TaskDetailInspector {
 
-    var labelsCard: some View {
-        inspectorCard("Labels") {
+    var classificationCard: some View {
+        inspectorCard("Classification") {
+            tagsSection
             assignedLabelsSection
             labelGroupPickers
             freeLabelCreator
+        }
+    }
+
+    @ViewBuilder
+    private var tagsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("TAGS")
+                .font(NexusType.eyebrow)
+                .foregroundStyle(NexusColor.Text.tertiary)
+            TagsEditor(tags: $task.tags) { save() }
         }
     }
 

@@ -27,7 +27,7 @@ extension TaskDetailInspector {
                     headerCard
                     workflowCard
                     cycleCard
-                    labelsCard
+                    classificationCard
                     aiAssistCard
                     scheduleCard
                     deadlineCard
@@ -69,7 +69,7 @@ extension TaskDetailInspector {
                     headerCard
                     workflowCard
                     cycleCard
-                    labelsCard
+                    classificationCard
                     scheduleCard
                 }
                 VStack(alignment: .leading, spacing: 16) {
