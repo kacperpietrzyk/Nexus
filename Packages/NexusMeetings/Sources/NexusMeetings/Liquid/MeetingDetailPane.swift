@@ -193,21 +193,13 @@ struct MeetingDetailPane: View {
         return parts.joined(separator: " · ")
     }
 
-    /// Returns `true` when the name is an auto-generated placeholder
-    /// ("Participant 1", "Speaker_2", etc.) rather than a real display name.
-    private func isPlaceholder(_ name: String) -> Bool {
-        name.range(
-            of: "^(participant|speaker)[ _]?\\d+$",
-            options: [.regularExpression, .caseInsensitive]
-        ) != nil
-    }
-
     /// `true` when every attendee carries a placeholder name or equals their
     /// raw speaker ID — i.e. nobody has been renamed/assigned yet.
     private var allAttendeesAreUnassigned: Bool {
         guard !model.attendees.isEmpty else { return false }
         return model.attendees.allSatisfy { attendee in
-            attendee.name == attendee.id || isPlaceholder(attendee.name)
+            attendee.name == attendee.id
+                || MeetingPeopleLinker.isNumberedPlaceholder(attendee.name)
         }
     }
 
