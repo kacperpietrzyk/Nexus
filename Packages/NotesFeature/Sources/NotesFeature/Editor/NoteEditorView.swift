@@ -318,10 +318,6 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
         #if os(macOS)
         return
             slab
-            .overlay {
-                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                    .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
-            }
             .padding(.vertical, DS.Space.s)
             .listRowSeparator(.hidden)
         #else
@@ -376,15 +372,22 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     /// The "add tag" text field. iOS-only autocorrect/capitalization suppression is
     /// applied here (outside the `HStack` chain) so no `#if` sits mid-modifier-chain.
     private var tagInputField: some View {
+        #if os(iOS)
         let field = NexusTextField("Add tag", text: $newTag, isEnabled: model.canEdit)
             .onSubmit { commitTag() }
-        #if os(iOS)
         return
             field
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
         #else
-        return field.frame(maxWidth: 420, alignment: .leading)
+        return
+            TextField("Add tag", text: $newTag)
+                .textFieldStyle(.plain)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .frame(maxWidth: 420, alignment: .leading)
+                .onSubmit { commitTag() }
+                .disabled(!model.canEdit)
         #endif
     }
 
@@ -421,15 +424,22 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
 
     private var folderInputField: some View {
+        #if os(iOS)
         let field = NexusTextField("No folder", text: $folderText, isEnabled: model.canEdit)
             .onSubmit { commitFolder() }
-        #if os(iOS)
         return
             field
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
         #else
-        return field.frame(maxWidth: 420, alignment: .leading)
+        return
+            TextField("No folder", text: $folderText)
+                .textFieldStyle(.plain)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .frame(maxWidth: 420, alignment: .leading)
+                .onSubmit { commitFolder() }
+                .disabled(!model.canEdit)
         #endif
     }
 
@@ -456,20 +466,34 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     private var addPropertyField: some View {
         // The .frame cap is macOS-only; the #if is applied outside the HStack modifier
         // chain to avoid mid-chain conditional compilation (mirrors tagInputField pattern).
-        let stack = HStack(spacing: 6) {
-            Image(systemName: "plus.circle")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textTertiary)
-            NexusTextField("Add property", text: $newPropertyKey)
-                .onSubmit {
-                    model.addProperty(key: newPropertyKey)
-                    newPropertyKey = ""
-                }
-        }
         #if os(macOS)
-        return stack.frame(maxWidth: 420, alignment: .leading)
+        return
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                TextField("Add property", text: $newPropertyKey)
+                    .textFieldStyle(.plain)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+                    .onSubmit {
+                        model.addProperty(key: newPropertyKey)
+                        newPropertyKey = ""
+                    }
+            }
+            .frame(maxWidth: 420, alignment: .leading)
         #else
-        return stack
+        return
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                NexusTextField("Add property", text: $newPropertyKey)
+                    .onSubmit {
+                        model.addProperty(key: newPropertyKey)
+                        newPropertyKey = ""
+                    }
+            }
         #endif
     }
 
