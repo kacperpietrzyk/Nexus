@@ -223,6 +223,8 @@ extension TaskListView {
                 for: visibleRootTasks,
                 modelContext: modelContext
             )
+            projectsByID = Dictionary(
+                loadActiveProjects().map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             error = nil
         } catch {
             self.error = String(describing: error)
@@ -258,7 +260,6 @@ extension TaskListView {
     @MainActor
     private func bulkMovePresent() {
         bulkMoveActiveProjects = loadActiveProjects()
-        projectsByID = Dictionary(bulkMoveActiveProjects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         bulkMovePickerPresented = true
     }
 
