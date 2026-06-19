@@ -43,6 +43,11 @@ public enum NoteTreeModel {
                 && lhs.children == rhs.children
                 && lhs.notes.map(\.id) == rhs.notes.map(\.id)
         }
+
+        /// This folder's own notes plus every descendant folder's notes.
+        public var totalNoteCount: Int {
+            notes.count + children.reduce(0) { $0 + $1.totalNoteCount }
+        }
     }
 
     public struct Tree: Equatable {

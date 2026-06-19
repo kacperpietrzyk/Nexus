@@ -18,6 +18,7 @@ struct NotesTrashView: View {
     let noteRepository: NoteRepository?
 
     @Environment(\.dismiss) private var dismiss
+    @State private var restoreResult: String?
 
     // Tombstones only, most-recently-deleted first. The `@Query` tracks the live
     // store, so a Restore drops the row immediately (its `deletedAt` clears).
@@ -47,6 +48,21 @@ struct NotesTrashView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Restore All") { restoreAll() }
+                        .disabled(noteRepository == nil || deleted.isEmpty)
+                }
+            }
+            .alert(
+                "Restore failed",
+                isPresented: Binding(
+                    get: { restoreResult != nil },
+                    set: { if !$0 { restoreResult = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { restoreResult = nil }
+            } message: {
+                Text(restoreResult ?? "")
             }
         }
     }
@@ -77,7 +93,34 @@ struct NotesTrashView: View {
     }
 
     private func restore(_ note: Note) {
-        try? noteRepository?.restore(note)
+        guard let noteRepository else { return }
+        do {
+            try noteRepository.restore(note)
+        } catch {
+            let title = note.title.isEmpty ? "Untitled" : note.title
+            restoreResult = "Could not restore \"\(title)\": \(error.localizedDescription)"
+        }
+    }
+
+    /// Bulk recovery: restore every tombstone (e.g. after an accidental
+    /// select-all + delete). Sequential on the main actor; the store-change
+    /// debounce coalesces the refreshes. Presents a result alert on partial failure.
+    private func restoreAll() {
+        guard let noteRepository else { return }
+        let total = deleted.count
+        var ok = 0
+        var fail = 0
+        for note in deleted {
+            do {
+                try noteRepository.restore(note)
+                ok += 1
+            } catch {
+                fail += 1
+            }
+        }
+        if fail > 0 {
+            restoreResult = "Restored \(ok) of \(total). \(fail) could not be restored."
+        }
     }
 }
 

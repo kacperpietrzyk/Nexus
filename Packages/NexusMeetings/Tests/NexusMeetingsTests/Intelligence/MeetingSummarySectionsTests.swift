@@ -295,3 +295,121 @@ import Testing
     #expect(insights.topTerms.count == 5)
     #expect(insights.topTerms == ["alpha", "bravo", "charlie", "delta", "echo"])
 }
+
+// MARK: - insights: speaker-label stripping + Polish fillers
+
+@Test func topTermsExcludeSpeakerLabelsAndPolishFillers() {
+    let transcript = """
+        Participant 1: żeby zrobić wdrożenie systemu, może po prostu wiem
+        Participant 2: wdrożenie systemu to wdrożenie, prostu wiem
+        """
+    let insights = MeetingInsights.insights(durationSec: 600, segments: [], transcriptText: transcript)
+    // Speaker label must not be a topic.
+    #expect(insights.topTerms.contains("participant") == false)
+    // Polish fillers must be filtered (diacritic-folded match).
+    for filler in ["zeby", "moze", "prostu", "wiem"] {
+        #expect(insights.topTerms.contains { $0.folding(options: .diacriticInsensitive, locale: nil) == filler } == false)
+    }
+    // The real repeated topic survives.
+    #expect(insights.topTerms.contains { $0.folding(options: .diacriticInsensitive, locale: nil) == "wdrozenie" })
+}
+
+// MARK: - insights: top terms from segments (Circleback import format)
+
+/// Circleback `transcriptText` shape: `"[00:00:00] Participant 1\n<text>\n"`.
+/// The speaker-header line must NOT leak into topics; `bylo` (real ł, not ASCII)
+/// must be blocked by the stopword fold; `takiego/trzeba/dobra` idem.
+@Test func topTermsUsesSegmentTextNotTranscriptHeaders() {
+    let transcriptText = """
+        [00:00:00] Participant 1
+        wdrożenie systemu było takiego trzeba dobra wdrożenie wdrożenie
+        [00:00:30] Participant 2
+        wdrożenie systemu to wdrożenie dobra trzeba
+        """
+    let segments = [
+        MeetingSpeakerSegment(
+            startMs: 0, endMs: 30_000, speaker: "Participant 1",
+            text: "wdrożenie systemu było takiego trzeba dobra wdrożenie wdrożenie"
+        ),
+        MeetingSpeakerSegment(
+            startMs: 30_000, endMs: 60_000, speaker: "Participant 2",
+            text: "wdrożenie systemu to wdrożenie dobra trzeba"
+        ),
+    ]
+    let insights = MeetingInsights.insights(
+        durationSec: 60, segments: segments, transcriptText: transcriptText
+    )
+    // Speaker-header words must not appear.
+    #expect(insights.topTerms.contains("participant") == false)
+    // Polish fillers (real ł spelling for było) must be blocked.
+    let foldedTerms = insights.topTerms.map {
+        $0.lowercased().replacingOccurrences(of: "ł", with: "l")
+            .folding(options: .diacriticInsensitive, locale: nil)
+    }
+    #expect(foldedTerms.contains("bylo") == false)
+    #expect(foldedTerms.contains("takiego") == false)
+    #expect(foldedTerms.contains("trzeba") == false)
+    #expect(foldedTerms.contains("dobra") == false)
+    // Real domain term survives.
+    #expect(insights.topTerms.contains { $0.folding(options: .diacriticInsensitive, locale: nil) == "wdrozenie" })
+    // Word count still reflects the full transcriptText (not just segment text).
+    #expect(insights.wordCount > 0)
+}
+
+// MARK: - insights: nam/zrobić generic Polish fillers
+
+/// "nam" and "zrobić" (+ "zrobic" ASCII-folded) are generic fillers that must be
+/// filtered out of Top Topics even when they appear multiple times.  Real domain
+/// terms (e.g. "harmony") must survive regardless.
+@Test func topTermsDropsNamZrobicFillers() {
+    let transcript = "harmony harmony harmony nam nam zrobić zrobić zrobic mam masz"
+    let insights = MeetingInsights.insights(durationSec: nil, segments: [], transcriptText: transcript)
+    // Real domain term survives.
+    #expect(insights.topTerms.contains("harmony"))
+    // Generic fillers must not appear (compare folded).
+    let foldedTerms = insights.topTerms.map {
+        $0.lowercased()
+            .replacingOccurrences(of: "ł", with: "l")
+            .folding(options: .diacriticInsensitive, locale: nil)
+    }
+    for filler in ["nam", "nas", "mam", "masz", "zrobic", "robic"] {
+        #expect(
+            foldedTerms.contains(filler) == false,
+            "Filler '\(filler)' leaked into topTerms: \(insights.topTerms)"
+        )
+    }
+}
+
+// MARK: - insights: speaker-name mapping
+
+@Test func speakerSharesUseAssignedDisplayNames() {
+    let segments = [
+        MeetingSpeakerSegment(startMs: 0, endMs: 6_000, speaker: "Participant 1", text: "a"),
+        MeetingSpeakerSegment(startMs: 6_000, endMs: 10_000, speaker: "Participant 2", text: "b"),
+    ]
+    let names = ["participant 1": "Janek", "participant 2": "Kacper"]
+    let insights = MeetingInsights.insights(
+        durationSec: 10,
+        segments: segments,
+        transcriptText: "x",
+        speakerNames: names
+    )
+    // "Participant 1" talks 6s (60%), so it should appear first after rename.
+    #expect(insights.speakerShares.first?.speaker == "Janek")
+    #expect(insights.speakerShares.contains { $0.speaker == "Participant 1" } == false)
+}
+
+@Test func speakerSharesMergeSameDisplayName() {
+    let segments = [
+        MeetingSpeakerSegment(startMs: 0, endMs: 4_000, speaker: "participant_1", text: "a"),
+        MeetingSpeakerSegment(startMs: 4_000, endMs: 10_000, speaker: "Participant 1", text: "b"),
+    ]
+    // Both raw keys canonicalize to "participant 1" → same display name.
+    let names = ["participant 1": "Janek"]
+    let insights = MeetingInsights.insights(
+        durationSec: 10, segments: segments, transcriptText: "x", speakerNames: names
+    )
+    #expect(insights.speakerShares.count == 1)
+    #expect(insights.speakerShares[0].speaker == "Janek")
+    #expect(insights.speakerShares[0].talkMs == 10_000)  // 4000 + 6000 summed, not last-wins
+}

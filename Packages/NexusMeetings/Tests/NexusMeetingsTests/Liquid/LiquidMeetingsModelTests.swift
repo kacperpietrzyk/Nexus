@@ -124,6 +124,60 @@ struct LiquidMeetingsModelTests {
             kind: .note, id: note.id, context: harness.context)
         #expect(title == nil)
     }
+
+    // MARK: - assignSpeaker panel path (imported meeting)
+
+    /// Regression: People-panel inline assign for IMPORTED meetings (Circleback)
+    /// must relabel the transcript even when `participant.speakerID` is underscored
+    /// ("Participant_1") while `segment.speaker` keeps the spaced raw form
+    /// ("Participant 1"). The panel passes the underscored speakerID as `rawSpeaker`;
+    /// without the resolution fix the displayNameMap exact-match misses → the
+    /// stored `transcriptText` still shows "Participant 1" after the assign.
+    @Test func assignSpeakerPanelPathRelabelsImportedTranscript() throws {
+        let harness = try Harness()
+
+        // Build an imported-shaped meeting: speakerID underscored, segment speaker spaced.
+        let participant = MeetingParticipant(
+            speakerID: "Participant_1",
+            displayName: "Participant 1"
+        )
+        let segment = MeetingSpeakerSegment(
+            startMs: 0, endMs: 1000, speaker: "Participant 1", text: "hello world"
+        )
+        let meeting = MeetingsTestSupport.meeting(
+            title: "Circleback import",
+            status: .ready
+        )
+        meeting.participantsJSON = try MeetingParticipant.encode([participant])
+        meeting.segmentsJSON = try MeetingSpeakerSegment.encode([segment])
+        try harness.composition.meetingRepository.insert(meeting)
+
+        // Load so model.meeting is populated (required for assignSpeaker).
+        let model = LiquidMeetingsModel()
+        model.reload(composition: harness.composition, selectedID: meeting.id)
+        #expect(model.meeting != nil, "Precondition: meeting must be selected")
+
+        // Panel passes the underscored speakerID (Attendee.id == participant.speakerID).
+        model.assignSpeaker(
+            rawSpeaker: "Participant_1",
+            displayName: "Janek Kowalski",
+            personID: nil,
+            composition: harness.composition
+        )
+
+        // Re-fetch the persisted row to assert on the stored transcriptText.
+        let saved = try harness.composition.meetingRepository.find(id: meeting.id)
+        let transcriptText = saved?.transcriptText ?? ""
+
+        #expect(
+            transcriptText.contains("Janek Kowalski"),
+            "transcriptText must show 'Janek Kowalski' after panel assign; got: \(transcriptText)"
+        )
+        #expect(
+            !transcriptText.contains("] Participant 1\n"),
+            "transcriptText must NOT still show unresolved 'Participant 1' label"
+        )
+    }
 }
 
 // MARK: - Harness

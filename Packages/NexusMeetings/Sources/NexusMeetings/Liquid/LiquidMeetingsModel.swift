@@ -84,13 +84,6 @@ public final class LiquidMeetingsModel {
     /// 2-hop "related notes" — see `relatedNotes(context:)` for the heuristic.
     public private(set) var relatedNotes: [RelatedNote] = []
 
-    // MARK: Layout
-
-    /// Written by the screen from its measured width: under the spec's wide
-    /// breakpoint the Knowledge Column collapses into the right inspector
-    /// (04_LAYOUT_SYSTEM.md §Wide desktop — only 1600 pt+ windows "show
-    /// knowledge column and right actions simultaneously").
-    public var knowledgeCollapsed = false
     // `internal(set)` so extension files can set error state without a public setter.
     public internal(set) var loadError: String?
 
@@ -137,10 +130,22 @@ public final class LiquidMeetingsModel {
         }
         meeting = selected
         sections = MeetingSummarySections.parse(summaryText: selected.summaryText)
+        let segments = (try? MeetingSpeakerSegment.decode(selected.segmentsJSON)) ?? []
+        let participants =
+            selected.participantsJSON
+            .flatMap { try? MeetingParticipant.decode($0) } ?? []
+        var speakerNames: [String: String] = [:]
+        for participant in participants {
+            let name = participant.displayName.trimmingCharacters(in: .whitespaces)
+            let sid = participant.speakerID.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, name != sid else { continue }
+            speakerNames[canonicalSpeakerKey(participant.speakerID)] = name
+        }
         insights = MeetingInsights.insights(
             durationSec: selected.durationSec > 0 ? selected.durationSec : nil,
-            segments: (try? MeetingSpeakerSegment.decode(selected.segmentsJSON)) ?? [],
-            transcriptText: selected.transcriptText
+            segments: segments,
+            transcriptText: selected.transcriptText,
+            speakerNames: speakerNames
         )
         attendees = Self.attendees(of: selected)
         actionItems = Self.actionItems(of: selected, context: composition.meetingRepository.context)
@@ -210,6 +215,70 @@ public final class LiquidMeetingsModel {
     public var openActionItems: [TaskItem] { actionItems.filter { $0.status != .done } }
 
     // MARK: - Mutations
+
+    /// Assigns a speaker to a name / person contact, mirroring the rename action
+    /// in `TranscriptViewModel`. Writes `participantsJSON`, re-renders
+    /// `transcriptText`, and fires the people linker so the graph edge is created
+    /// — exactly the same steps `TranscriptViewModel.rename` performs.
+    /// Call from any surface (e.g. the People section in the right inspector)
+    /// without needing a hosted `TranscriptViewModel`.
+    public func assignSpeaker(
+        rawSpeaker: String,
+        displayName: String,
+        personID: UUID?,
+        composition: MeetingsComposition
+    ) {
+        do {
+            let trimmedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedDisplayName.isEmpty else { return }
+            guard let meeting else { return }
+            let repository = composition.meetingRepository
+            guard let liveMeeting = try repository.find(id: meeting.id) else { return }
+
+            let currentParticipants = try MeetingParticipant.decode(
+                liveMeeting.participantsJSON ?? Data())
+            // Resolve rawSpeaker to the segment's own spelling so the exact-match
+            // in MergeStage.displayNameMap (keyed on seg.speaker) hits after the
+            // rename. Imported meetings (e.g. Circleback) store the participant
+            // speakerID with underscores ("Participant_1") while the transcript
+            // segment keeps the raw spaced form ("Participant 1"); passing the
+            // underscored form to renameSpeaker writes speakerID = "Participant_1",
+            // which the displayNameMap exact-match misses → transcript never updates.
+            let storedSegments =
+                (try? MeetingSpeakerSegment.decode(liveMeeting.segmentsJSON)) ?? []
+            let resolvedRawSpeaker =
+                storedSegments
+                .first(where: {
+                    canonicalSpeakerKey($0.speaker) == canonicalSpeakerKey(rawSpeaker)
+                })
+                .map(\.speaker)
+                ?? rawSpeaker
+            var nextParticipants = renameSpeaker(
+                in: currentParticipants,
+                rawSpeaker: resolvedRawSpeaker,
+                to: trimmedDisplayName,
+                personID: personID
+            )
+            nextParticipants.sort {
+                $0.speakerID.localizedStandardCompare($1.speakerID) == .orderedAscending
+            }
+            liveMeeting.participantsJSON = try MeetingParticipant.encode(nextParticipants)
+            let merge = MergeStage()
+            liveMeeting.transcriptText = merge.renderLinear(
+                storedSegments, participants: nextParticipants)
+            liveMeeting.updatedAt = Date()
+            try repository.upsert(liveMeeting)
+
+            let meetingID = meeting.id
+            let peopleLinker = composition.peopleLinker
+            Task { @MainActor [peopleLinker, repository] in
+                guard let saved = try? repository.find(id: meetingID) else { return }
+                _ = try? await peopleLinker.link(meeting: saved)
+            }
+        } catch {
+            loadError = String(describing: error)
+        }
+    }
 
     /// Pins or unpins a meeting so it surfaces in the Today view.
     public func togglePin(_ meeting: Meeting, composition: MeetingsComposition) {
