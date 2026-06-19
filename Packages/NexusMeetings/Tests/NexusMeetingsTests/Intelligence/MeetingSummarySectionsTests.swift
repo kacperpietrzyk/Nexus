@@ -313,3 +313,22 @@ import Testing
     // The real repeated topic survives.
     #expect(insights.topTerms.contains { $0.folding(options: .diacriticInsensitive, locale: nil) == "wdrozenie" })
 }
+
+// MARK: - insights: speaker-name mapping
+
+@Test func speakerSharesUseAssignedDisplayNames() {
+    let segments = [
+        MeetingSpeakerSegment(startMs: 0, endMs: 6_000, speaker: "Participant 1", text: "a"),
+        MeetingSpeakerSegment(startMs: 6_000, endMs: 10_000, speaker: "Participant 2", text: "b"),
+    ]
+    let names = ["participant 1": "Janek", "participant 2": "Kacper"]
+    let insights = MeetingInsights.insights(
+        durationSec: 10,
+        segments: segments,
+        transcriptText: "x",
+        speakerNames: names
+    )
+    // "Participant 1" talks 6s (60%), so it should appear first after rename.
+    #expect(insights.speakerShares.first?.speaker == "Janek")
+    #expect(insights.speakerShares.contains { $0.speaker == "Participant 1" } == false)
+}

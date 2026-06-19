@@ -193,7 +193,8 @@ public struct MeetingInsights: Equatable, Sendable {
     public static func insights(
         durationSec: Int?,
         segments: [MeetingSpeakerSegment],
-        transcriptText: String?
+        transcriptText: String?,
+        speakerNames: [String: String] = [:]
     ) -> MeetingInsights {
         let raw = transcriptText ?? ""
         let rawWords =
@@ -209,7 +210,7 @@ public struct MeetingInsights: Equatable, Sendable {
             .filter { $0.isEmpty == false }
         return MeetingInsights(
             durationText: durationText(seconds: durationSec),
-            speakerShares: speakerShares(from: segments),
+            speakerShares: speakerShares(from: segments, names: speakerNames),
             wordCount: rawWords.count,
             topTerms: topTerms(words: termWords)
         )
@@ -273,10 +274,14 @@ public struct MeetingInsights: Equatable, Sendable {
         return "\(remainder)s"
     }
 
-    private static func speakerShares(from segments: [MeetingSpeakerSegment]) -> [SpeakerShare] {
+    private static func speakerShares(
+        from segments: [MeetingSpeakerSegment],
+        names: [String: String] = [:]
+    ) -> [SpeakerShare] {
         var talkMsBySpeaker: [String: Int] = [:]
         for segment in segments where segment.endMs > segment.startMs {
-            talkMsBySpeaker[segment.speaker, default: 0] += segment.endMs - segment.startMs
+            let label = names[canonicalSpeakerKey(segment.speaker)] ?? segment.speaker
+            talkMsBySpeaker[label, default: 0] += segment.endMs - segment.startMs
         }
         let totalMs = talkMsBySpeaker.values.reduce(0, +)
         guard totalMs > 0 else { return [] }

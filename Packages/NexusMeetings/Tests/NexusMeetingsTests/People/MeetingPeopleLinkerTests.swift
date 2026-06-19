@@ -219,6 +219,28 @@ struct MeetingPeopleLinkerTests {
         #expect(try activePeople(repo).map(\.displayName) == ["Carol"])
     }
 
+    @Test func explicitFreeTextRenameOfPlaceholderCreatesPerson() async throws {
+        // When the user renames "Participant 1" to a real name via free-text (no personID),
+        // the linker must still create a Person — the placeholder guard only blocks
+        // AUTOMATIC linking where displayName == speakerID or is still a numbered label.
+        let context = try makeContext()
+        let repo = PersonRepository(context: context)
+        let meeting = try meeting(participants: [
+            // After user rename: displayName is a real name, speakerID is the raw token.
+            MeetingParticipant(speakerID: "Participant 1", displayName: "Janek Kowalski")
+        ])
+        context.insert(meeting)
+        try context.save()
+
+        let linker = MeetingPeopleLinker(people: repo)
+        let linked = try await linker.link(meeting: meeting)
+
+        #expect(linked.map(\.displayName) == ["Janek Kowalski"])
+        #expect(try activePeople(repo).count == 1)
+        let person = try repo.aggregate(linked[0])
+        #expect(person.meetings == [meeting.id])
+    }
+
     @Test func placeholderMatcherRecognizesPatterns() {
         #expect(MeetingPeopleLinker.isNumberedPlaceholder("Participant 1"))
         #expect(MeetingPeopleLinker.isNumberedPlaceholder("participant_2"))

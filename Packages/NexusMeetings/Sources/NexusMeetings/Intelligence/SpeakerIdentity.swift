@@ -4,7 +4,7 @@ import Foundation
 /// participant `speakerID` with spaces replaced by underscores while transcript
 /// segments keep the raw spelling; without normalization a rename appends a
 /// duplicate participant instead of updating the existing one.
-public func canonicalSpeakerKey(_ raw: String) -> String {
+func canonicalSpeakerKey(_ raw: String) -> String {
     raw
         .replacingOccurrences(of: "_", with: " ")
         .folding(options: .diacriticInsensitive, locale: nil)
@@ -22,7 +22,7 @@ public func canonicalSpeakerKey(_ raw: String) -> String {
 /// and `TranscriptViewModel.displayName(for:)` — both exact-match on `speakerID` —
 /// in sync with the segment's `speaker` field, so the renamed label is actually
 /// visible in the transcript after the update.
-public func renameSpeaker(
+func renameSpeaker(
     in participants: [MeetingParticipant],
     rawSpeaker: String,
     to displayName: String,

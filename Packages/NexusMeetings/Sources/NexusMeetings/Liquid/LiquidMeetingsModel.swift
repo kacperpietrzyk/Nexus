@@ -137,10 +137,21 @@ public final class LiquidMeetingsModel {
         }
         meeting = selected
         sections = MeetingSummarySections.parse(summaryText: selected.summaryText)
+        let segments = (try? MeetingSpeakerSegment.decode(selected.segmentsJSON)) ?? []
+        let participants =
+            selected.participantsJSON
+            .flatMap { try? MeetingParticipant.decode($0) } ?? []
+        var speakerNames: [String: String] = [:]
+        for participant in participants {
+            let name = participant.displayName.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, name != participant.speakerID else { continue }
+            speakerNames[canonicalSpeakerKey(participant.speakerID)] = participant.displayName
+        }
         insights = MeetingInsights.insights(
             durationSec: selected.durationSec > 0 ? selected.durationSec : nil,
-            segments: (try? MeetingSpeakerSegment.decode(selected.segmentsJSON)) ?? [],
-            transcriptText: selected.transcriptText
+            segments: segments,
+            transcriptText: selected.transcriptText,
+            speakerNames: speakerNames
         )
         attendees = Self.attendees(of: selected)
         actionItems = Self.actionItems(of: selected, context: composition.meetingRepository.context)
