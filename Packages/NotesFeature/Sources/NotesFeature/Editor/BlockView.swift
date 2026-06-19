@@ -150,6 +150,7 @@ private struct TextBlockEditor: View {
                     trigger = InlineLinkInsertion.detectTrigger(in: newValue)
                 }
                 .onSubmit { commit() }
+                .onDisappear { commit() }
                 .submitLabel(.return)
             if let trigger {
                 InlineLinkAutocomplete(query: trigger.query, excludingNoteID: model.noteID) { candidate in
@@ -202,11 +203,8 @@ private struct ListBlockEditor: View {
                     .modifier(OptionalFocus(binding: focusBinding, id: block.id))
                     .onAppear { draft = InlineRunRendering.plainText(runs) }
                     .onChange(of: block.id) { _, _ in draft = InlineRunRendering.plainText(runs) }
-                    .onSubmit {
-                        if draft != InlineRunRendering.plainText(runs) {
-                            model.setPlainText(draft, forBlock: block.id)
-                        }
-                    }
+                    .onSubmit { commit() }
+                    .onDisappear { commit() }
             } else {
                 Text(InlineRunRendering.attributed(runs))
                     .nexusType(.body)
@@ -216,6 +214,11 @@ private struct ListBlockEditor: View {
                     .onTapGesture { if model.canEdit { onActivate?() } }
             }
         }
+    }
+
+    private func commit() {
+        guard draft != InlineRunRendering.plainText(runs) else { return }
+        model.setPlainText(draft, forBlock: block.id)
     }
 }
 
@@ -242,11 +245,8 @@ private struct QuoteBlockView: View {
                     .foregroundStyle(NexusColor.Text.secondary)
                     .modifier(OptionalFocus(binding: focusBinding, id: block.id))
                     .onAppear { draft = InlineRunRendering.plainText(runs) }
-                    .onSubmit {
-                        if draft != InlineRunRendering.plainText(runs) {
-                            model.setPlainText(draft, forBlock: block.id)
-                        }
-                    }
+                    .onSubmit { commit() }
+                    .onDisappear { commit() }
             } else {
                 Text(InlineRunRendering.attributed(runs))
                     .nexusType(.body)
@@ -258,6 +258,11 @@ private struct QuoteBlockView: View {
             }
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func commit() {
+        guard draft != InlineRunRendering.plainText(runs) else { return }
+        model.setPlainText(draft, forBlock: block.id)
     }
 }
 
@@ -320,9 +325,8 @@ private struct TodoBlockView: View {
                     .modifier(OptionalFocus(binding: focusBinding, id: block.id))
                     .onAppear { draft = liveTitle }
                     .onChange(of: block.id) { _, _ in draft = liveTitle }
-                    .onSubmit {
-                        if draft != liveTitle { model.editTodoText(draft, blockID: block.id) }
-                    }
+                    .onSubmit { commit() }
+                    .onDisappear { commit() }
             } else {
                 Text(liveTitle)
                     .nexusType(.body)
@@ -339,6 +343,11 @@ private struct TodoBlockView: View {
     private var isDone: Bool { task?.status == .done }
     // Live title from the TaskItem (truth); falls back to the cached run label.
     private var liveTitle: String { task?.title ?? InlineRunRendering.plainText(runs) }
+
+    private func commit() {
+        guard draft != liveTitle else { return }
+        model.editTodoText(draft, blockID: block.id)
+    }
 }
 
 // MARK: - Code
