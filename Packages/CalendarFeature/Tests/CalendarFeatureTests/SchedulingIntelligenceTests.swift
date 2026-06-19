@@ -402,4 +402,22 @@ struct SchedulingIntelligenceTests {
         #expect(insights.totals[.meeting] == 75 * 60 as TimeInterval)
         #expect(insights.totals[.meeting]! <= insights.totalScheduled)
     }
+
+    // MARK: - statsRange(scope:anchor:calendar:)
+
+    @Test func statsRangeDay() {
+        let cal = Calendar(identifier: .gregorian)
+        let anchor = cal.date(from: DateComponents(year: 2026, month: 6, day: 26, hour: 14))!
+        let r = SchedulingIntelligence.statsRange(scope: .day, anchor: anchor, calendar: cal)
+        #expect(cal.isDate(r.start, inSameDayAs: anchor))
+        #expect(r.duration == 24 * 3600)
+    }
+
+    @Test func statsRangeMonthCoversWholeMonth() {
+        let cal = Calendar(identifier: .gregorian)
+        let anchor = cal.date(from: DateComponents(year: 2026, month: 6, day: 19))!
+        let r = SchedulingIntelligence.statsRange(scope: .month, anchor: anchor, calendar: cal)
+        #expect(cal.component(.day, from: r.start) == 1)
+        #expect(r.duration >= 28 * 24 * 3600)
+    }
 }

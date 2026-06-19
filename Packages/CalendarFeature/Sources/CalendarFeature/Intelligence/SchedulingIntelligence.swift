@@ -167,6 +167,32 @@ public enum SchedulingIntelligence {
         return TimeInsights(totals: totals, totalScheduled: unionDuration(of: scheduled))
     }
 
+    // MARK: - Scope → stats range
+
+    /// Returns the `DateInterval` that a stats panel should cover when the
+    /// calendar is showing `scope` anchored at `anchor`.
+    ///
+    /// - `.day`   → the calendar day containing `anchor` (exactly 24 h).
+    /// - `.week`  → the week-of-year period containing `anchor`.
+    /// - `.month` → the calendar month containing `anchor`.
+    ///
+    /// Falls back to the 24-hour day interval if the calendar cannot produce a
+    /// period (degenerate input).
+    public static func statsRange(
+        scope: CalendarScope,
+        anchor: Date,
+        calendar: Calendar
+    ) -> DateInterval {
+        let unit: Calendar.Component
+        switch scope {
+        case .day: unit = .day
+        case .week: unit = .weekOfYear
+        case .month: unit = .month
+        }
+        return calendar.dateInterval(of: unit, for: anchor)
+            ?? DateInterval(start: calendar.startOfDay(for: anchor), duration: 24 * 3600)
+    }
+
     // MARK: - Interval helpers
 
     /// The event's range clipped to `window`, or nil when all-day, outside the
