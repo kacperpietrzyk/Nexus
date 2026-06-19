@@ -127,35 +127,71 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
 
     // MARK: - Sections
 
-    /// The block list. On macOS it is hosted as a Liquid glass document panel
-    /// (the platform `List` background is hidden so the glass shows through);
-    /// iOS keeps the platform-native list. Same rows, same interactions.
+    /// The block list. On macOS a `ScrollView`+`LazyVStack` document body (reading
+    /// measure + focus-to-edit); iOS keeps the platform-native `List` (swipe/reorder).
     private var editorList: some View {
+        #if os(macOS)
+        return documentBody
+        #else
         let list = List {
-            if model.role == .dailyNote {
-                dailyNoteNavRow
-            }
+            if model.role == .dailyNote { dailyNoteNavRow }
             titleField
             propertiesSection
             blockRows
             insertRow
-            if !backlinks.isEmpty {
-                backlinksSection
-            }
+            if !backlinks.isEmpty { backlinksSection }
         }
         .listStyle(.plain)
-        #if os(macOS)
-        return
-            list
-            .scrollContentBackground(.hidden)
-            .padding(.vertical, DS.Space.s)
-            .liquidLightCard(cornerRadius: DS.Radius.l)
-            .padding(.horizontal, DS.Space.xl)
-            .padding(.vertical, DS.Space.l)
-        #else
         return list
         #endif
     }
+
+    #if os(macOS)
+    @State private var focusedBlockID: UUID?
+    @FocusState private var fieldFocus: UUID?
+
+    private var documentBody: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                if model.role == .dailyNote { dailyNoteNavRow }
+                titleField
+                propertiesSection
+                macBlockRows
+                insertRow
+                if !backlinks.isEmpty { backlinksSection }
+            }
+            .frame(maxWidth: 680, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, DS.Space.xl)
+            .padding(.vertical, DS.Space.l)
+        }
+        .liquidLightCard(cornerRadius: DS.Radius.l)
+        .padding(.horizontal, DS.Space.xl)
+        .padding(.vertical, DS.Space.l)
+    }
+
+    private var ordinals: [UUID: Int] { NumberedOrdinals.ordinals(for: model.blocks) }
+
+    @ViewBuilder private var macBlockRows: some View {
+        ForEach(Array(model.blocks.enumerated()), id: \.element.id) { index, block in
+            BlockView(
+                block: block,
+                model: model,
+                onOpenRef: { openRef($0) },
+                ordinal: ordinals[block.id],
+                isEditing: focusedBlockID == block.id,
+                onActivate: { focusedBlockID = block.id; fieldFocus = block.id },
+                focusBinding: $fieldFocus
+            )
+            .padding(.top, BlockRhythm.spacingBefore(
+                block.kind, previous: index > 0 ? model.blocks[index - 1].kind : nil))
+        }
+        .onChange(of: fieldFocus) { _, newValue in
+            // Clicking away (focus lost) returns the block to rendered mode.
+            if newValue == nil { focusedBlockID = nil }
+        }
+    }
+    #endif
 
     private var titleField: some View {
         // Document title heading (not a form field): keep the display font — a
