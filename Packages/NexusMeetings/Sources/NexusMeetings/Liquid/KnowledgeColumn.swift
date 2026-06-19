@@ -200,7 +200,6 @@ struct KnowledgeSections {
                 nodes: model.graphItems,
                 onTap: { open($0) }
             )
-            .frame(height: 190)
         }
     }
 
@@ -278,49 +277,211 @@ private struct PersonRow: Identifiable {
     }
 }
 
-/// Backlinks mini-graph (spec §Backlinks): central meeting node, 1-hop linked
-/// nodes around it, thin 1 px `Canvas` lines, glass node pills. Node taps
-/// navigate through the same seams as the list rows.
+/// Collision-safe backlinks graph (spec §Backlinks).
+///
+/// In-panel **mini** mode: capped at `miniMaxNodes` peripheral nodes; positions
+/// computed by `placeNodes(...)` which guarantees no two pill rects overlap and
+/// all stay within the card bounds.  The centre node is rendered as a small
+/// accent dot to avoid overlapping the peripheral pills.  Tapping any pill
+/// navigates directly.  Tapping the "expand" chevron opens the full graph in a
+/// popover where all nodes + full-width labels are shown.
+///
+/// **Full** mode (inside the popover): all nodes, larger canvas, no node cap.
 private struct BacklinksGraph: View {
+
+    // MARK: Configuration
+
+    /// Pill dimensions used by the layout helper for the mini-graph.
+    private static let miniPillSize = CGSize(width: 88, height: 22)
+    /// Maximum number of peripheral nodes shown in the mini-graph.
+    private static let miniMaxNodes = 5
+    /// Height of the mini-graph card.
+    private static let miniHeight: CGFloat = 190
+    /// Popover canvas size.
+    private static let fullSize = CGSize(width: 360, height: 280)
+    /// Pill dimensions for the full graph in the popover.
+    private static let fullPillSize = CGSize(width: 120, height: 24)
 
     let centerTitle: String
     let nodes: [LiquidMeetingsModel.LinkedItem]
     let onTap: (LiquidMeetingsModel.LinkedItem) -> Void
 
+    @State private var showingFullGraph = false
+
+    // MARK: - Body
+
     var body: some View {
+        miniGraph
+            .popover(isPresented: $showingFullGraph) {
+                fullGraphPopover
+            }
+    }
+
+    // MARK: - Mini-graph (collision-safe)
+
+    @ViewBuilder
+    private var miniGraph: some View {
         GeometryReader { proxy in
-            let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
-            let positions = nodePositions(in: proxy.size)
+            let size = proxy.size
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let rects = placeNodes(
+                nodes.count,
+                in: size,
+                pillSize: Self.miniPillSize,
+                maxNodes: Self.miniMaxNodes
+            )
+            // Only render as many nodes as we placed rects for.
+            let visibleNodes = Array(nodes.prefix(rects.count))
 
             ZStack {
+                // Lines from centre to each peripheral node centre.
                 Canvas { context, _ in
-                    for position in positions {
+                    for rect in rects {
+                        let nodeCenter = CGPoint(x: rect.midX, y: rect.midY)
                         var path = Path()
                         path.move(to: center)
-                        path.addLine(to: position)
+                        path.addLine(to: nodeCenter)
                         context.stroke(
                             path, with: .color(DS.ColorToken.strokeStrong), lineWidth: 1)
                     }
                 }
 
-                ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
+                // Peripheral node pills.
+                ForEach(Array(zip(visibleNodes, rects)), id: \.0.id) { node, rect in
                     Button {
                         onTap(node)
                     } label: {
-                        nodePill(node.title, color: kindColor(node.kind), emphasized: false)
+                        nodePill(
+                            node.title,
+                            color: kindColor(node.kind),
+                            emphasized: false,
+                            pillSize: Self.miniPillSize
+                        )
                     }
                     .buttonStyle(.plain)
-                    .position(positions[index])
+                    .position(CGPoint(x: rect.midX, y: rect.midY))
                     .accessibilityLabel("\(node.kind.displayName): \(node.title)")
                 }
 
-                nodePill(centerTitle, color: DS.ColorToken.accentPrimary, emphasized: true)
+                // Centre node — small accent dot to avoid pill-on-pill collision.
+                Circle()
+                    .fill(DS.ColorToken.accentPrimary)
+                    .frame(width: 10, height: 10)
+                    .overlay {
+                        Circle().stroke(DS.ColorToken.accentPrimary.opacity(0.4), lineWidth: 2)
+                    }
                     .position(center)
+                    .accessibilityLabel(centerTitle)
+                    .accessibilityHint("Meeting centre node")
+
+                // Expand button — bottom-trailing corner.
+                Button {
+                    showingFullGraph = true
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(DS.ColorToken.textMuted)
+                        .padding(4)
+                        .background {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(DS.ColorToken.glassStrong)
+                        }
+                }
+                .buttonStyle(.plain)
+                .position(
+                    CGPoint(x: size.width - 14, y: size.height - 14)
+                )
+                .accessibilityLabel("Expand backlinks graph")
             }
         }
+        .frame(height: Self.miniHeight)
     }
 
-    private func nodePill(_ title: String, color: Color, emphasized: Bool) -> some View {
+    // MARK: - Full-graph popover
+
+    private var fullGraphPopover: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            HStack {
+                Text("Backlinks")
+                    .font(DS.FontToken.caption.weight(.semibold))
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+                Spacer(minLength: 0)
+                Button {
+                    showingFullGraph = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(DS.ColorToken.textMuted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+            }
+            .padding(.bottom, DS.Space.xxs)
+
+            fullGraphCanvas
+        }
+        .padding(DS.Space.m)
+        .frame(width: Self.fullSize.width)
+    }
+
+    @ViewBuilder
+    private var fullGraphCanvas: some View {
+        let size = Self.fullSize
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let rects = placeNodes(
+            nodes.count,
+            in: size,
+            pillSize: Self.fullPillSize,
+            maxNodes: nodes.count  // show all in the full view
+        )
+        let visibleNodes = Array(nodes.prefix(rects.count))
+
+        ZStack {
+            Canvas { context, _ in
+                for rect in rects {
+                    let nodeCenter = CGPoint(x: rect.midX, y: rect.midY)
+                    var path = Path()
+                    path.move(to: center)
+                    path.addLine(to: nodeCenter)
+                    context.stroke(
+                        path, with: .color(DS.ColorToken.strokeStrong), lineWidth: 1)
+                }
+            }
+
+            ForEach(Array(zip(visibleNodes, rects)), id: \.0.id) { node, rect in
+                Button {
+                    onTap(node)
+                    showingFullGraph = false
+                } label: {
+                    nodePill(
+                        node.title,
+                        color: kindColor(node.kind),
+                        emphasized: false,
+                        pillSize: Self.fullPillSize
+                    )
+                }
+                .buttonStyle(.plain)
+                .position(CGPoint(x: rect.midX, y: rect.midY))
+                .accessibilityLabel("\(node.kind.displayName): \(node.title)")
+            }
+
+            // Centre pill — full label, room in the popover.
+            nodePill(
+                centerTitle,
+                color: DS.ColorToken.accentPrimary,
+                emphasized: true,
+                pillSize: Self.fullPillSize
+            )
+            .position(center)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    // MARK: - Pill
+
+    private func nodePill(
+        _ title: String, color: Color, emphasized: Bool, pillSize: CGSize
+    ) -> some View {
         Text(title)
             .font(emphasized ? DS.FontToken.caption.weight(.semibold) : DS.FontToken.caption)
             .foregroundStyle(
@@ -328,8 +489,7 @@ private struct BacklinksGraph: View {
             )
             .lineLimit(1)
             .padding(.horizontal, DS.Space.s)
-            .frame(height: 20)
-            .frame(maxWidth: 96)
+            .frame(width: pillSize.width, height: pillSize.height)
             .background {
                 Capsule(style: .continuous).fill(DS.ColorToken.glassStrong)
             }
@@ -337,20 +497,6 @@ private struct BacklinksGraph: View {
                 Capsule(style: .continuous)
                     .stroke(color.opacity(emphasized ? 0.6 : 0.35), lineWidth: 1)
             }
-    }
-
-    /// Evenly spreads the 1-hop nodes on an ellipse inset from the card edges.
-    private func nodePositions(in size: CGSize) -> [CGPoint] {
-        let inset: CGFloat = 52
-        let radiusX = max(40, size.width / 2 - inset)
-        let radiusY = max(30, size.height / 2 - 18)
-        return nodes.indices.map { index in
-            let angle = (Double(index) / Double(max(1, nodes.count))) * 2 * .pi - .pi / 2
-            return CGPoint(
-                x: size.width / 2 + radiusX * CGFloat(cos(angle)),
-                y: size.height / 2 + radiusY * CGFloat(sin(angle))
-            )
-        }
     }
 }
 #endif
