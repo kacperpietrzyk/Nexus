@@ -341,6 +341,19 @@ struct ProjectRepositoryTests {
         #expect(project.customFields["k"] == nil)
     }
 
+    // MARK: - clearStage
+
+    @MainActor
+    @Test func clearStageRemovesStageKeepingStatus() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let project = try repo.create(name: "Impl", type: .implementation)
+        try repo.setStage(.installation, on: project)
+        #expect(project.stage == .installation)
+        try repo.clearStage(on: project)
+        #expect(project.stage == nil)
+    }
+
     // MARK: - setPinned
 
     @MainActor
