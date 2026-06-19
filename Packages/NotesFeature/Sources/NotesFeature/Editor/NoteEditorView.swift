@@ -218,10 +218,6 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             }
         }
         .padding(DS.Space.m)
-        .background {
-            RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                .fill(DS.ColorToken.glassSoft)
-        }
         .overlay {
             RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
                 .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
@@ -273,8 +269,9 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             field
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
+            .frame(maxWidth: 420, alignment: .leading)
         #else
-        return field
+        return field.frame(maxWidth: 420, alignment: .leading)
         #endif
     }
 
@@ -318,8 +315,9 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
             field
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
+            .frame(maxWidth: 420, alignment: .leading)
         #else
-        return field
+        return field.frame(maxWidth: 420, alignment: .leading)
         #endif
     }
 
@@ -353,6 +351,7 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
                     model.addProperty(key: newPropertyKey)
                     newPropertyKey = ""
                 }
+                .frame(maxWidth: 420, alignment: .leading)
         }
     }
 
