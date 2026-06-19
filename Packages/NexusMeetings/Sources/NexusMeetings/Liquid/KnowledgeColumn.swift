@@ -19,6 +19,20 @@ private func kindColor(_ kind: ItemKind) -> Color {
     }
 }
 
+/// SF Symbol name for a linked-item kind.  Pure function — no state
+/// dependencies — defined once here so `KnowledgeSections` and
+/// `RelatedKnowledgeSection` share the same mapping.
+private func kindIcon(_ kind: ItemKind) -> String {
+    switch kind {
+    case .task: return "checklist"
+    case .note: return "doc.text"
+    case .project: return "folder"
+    case .meeting: return "calendar"
+    case .person: return "person"
+    default: return "circle"
+    }
+}
+
 // MARK: - Related chips grouping helper
 
 /// Groups knowledge-link items (persons excluded) by kind for the panel.
@@ -214,7 +228,7 @@ struct KnowledgeSections {
     /// projects select + open the Projects screen; meetings re-route the
     /// meetings router. Kinds without a surface are not rendered (the model
     /// drops them at resolve time).
-    func open(_ item: LiquidMeetingsModel.LinkedItem) {
+    private func open(_ item: LiquidMeetingsModel.LinkedItem) {
         switch item.kind {
         case .task:
             let id = item.targetID
@@ -237,42 +251,6 @@ struct KnowledgeSections {
         }
     }
 
-    /// Routes any graph node by (kind, id). Mirrors `open(_:)` routing but
-    /// takes a `GraphNodeID` directly so depth-2 nodes (not in `graphItems`)
-    /// can also be navigated from the knowledge graph sheet.
-    func openGraphNode(_ node: GraphNodeID) {
-        switch node.kind {
-        case .task:
-            let id = node.id
-            var descriptor = FetchDescriptor<TaskItem>(
-                predicate: #Predicate { $0.id == id && $0.deletedAt == nil })
-            descriptor.fetchLimit = 1
-            guard let task = try? composition.meetingRepository.context.fetch(descriptor).first
-            else { return }
-            navigation.openTask(task)
-        case .note:
-            navigation.openNotes()
-        case .project:
-            navigation.openProject(node.id)
-        case .person:
-            navigation.openPeople()
-        case .meeting:
-            router.navigate(to: node.id)
-        default:
-            break
-        }
-    }
-
-    func kindIcon(_ kind: ItemKind) -> String {
-        switch kind {
-        case .task: return "checklist"
-        case .note: return "doc.text"
-        case .project: return "folder"
-        case .meeting: return "calendar"
-        case .person: return "person"
-        default: return "circle"
-        }
-    }
 }
 
 // MARK: - Placeholder check (nonisolated copy for use in synchronous contexts)
@@ -447,17 +425,6 @@ private struct RelatedKnowledgeSection: View {
                     onSelect: { openGraphNode($0) }
                 )
             }
-        }
-    }
-
-    private func kindIcon(_ kind: ItemKind) -> String {
-        switch kind {
-        case .task: return "checklist"
-        case .note: return "doc.text"
-        case .project: return "folder"
-        case .meeting: return "calendar"
-        case .person: return "person"
-        default: return "circle"
         }
     }
 
