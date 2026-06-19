@@ -356,6 +356,30 @@ import Testing
     #expect(insights.wordCount > 0)
 }
 
+// MARK: - insights: nam/zrobić generic Polish fillers
+
+/// "nam" and "zrobić" (+ "zrobic" ASCII-folded) are generic fillers that must be
+/// filtered out of Top Topics even when they appear multiple times.  Real domain
+/// terms (e.g. "harmony") must survive regardless.
+@Test func topTermsDropsNamZrobicFillers() {
+    let transcript = "harmony harmony harmony nam nam zrobić zrobić zrobic mam masz"
+    let insights = MeetingInsights.insights(durationSec: nil, segments: [], transcriptText: transcript)
+    // Real domain term survives.
+    #expect(insights.topTerms.contains("harmony"))
+    // Generic fillers must not appear (compare folded).
+    let foldedTerms = insights.topTerms.map {
+        $0.lowercased()
+            .replacingOccurrences(of: "ł", with: "l")
+            .folding(options: .diacriticInsensitive, locale: nil)
+    }
+    for filler in ["nam", "nas", "mam", "masz", "zrobic", "robic"] {
+        #expect(
+            foldedTerms.contains(filler) == false,
+            "Filler '\(filler)' leaked into topTerms: \(insights.topTerms)"
+        )
+    }
+}
+
 // MARK: - insights: speaker-name mapping
 
 @Test func speakerSharesUseAssignedDisplayNames() {

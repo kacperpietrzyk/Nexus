@@ -279,6 +279,8 @@ public struct MeetingInsights: Equatable, Sendable {
         "wlasnie", "znaczy", "dlatego", "teraz", "dobrze", "prosze", "wtedy",
         "jeszcze", "takie", "taki", "taka", "cos", "kogo", "sobie", "mnie",
         "takiego", "trzeba", "dobra", "dobry", "bylo", "byli", "aha", "wlasciwie",
+        // Polish pronouns / generic verbs confirmed filler in real transcripts
+        "nam", "nas", "nami", "mam", "masz", "mamy", "zrobic", "robic", "robie",
         // English contractions folded to alphanumerics
         "youre", "dont", "thats", "iam", "weve", "well", "okay", "yeah",
     ]
