@@ -50,6 +50,11 @@ enum WeekIntelligence {
 
     /// Free ≥1 h gaps left in TODAY's workday when today is one of `days`
     /// (clamped to `now` so past gaps never get suggested).
+    ///
+    /// Returns at most 2 suggestions, each ≤2 h, with starts rounded UP to the
+    /// next whole hour — so "now = 10:57" yields 11:00–13:00, not 10:57–12:57.
+    /// A few clean round-hour windows read better than slicing the whole
+    /// afternoon into N consecutive 2 h blocks.
     static func todayFocusGaps(
         events: [CalendarEvent],
         days: [Date],
@@ -60,15 +65,41 @@ enum WeekIntelligence {
             let today = days.first(where: { calendar.isDate($0, inSameDayAs: now) }),
             let window = workdayWindow(for: today, calendar: calendar)
         else { return [] }
-        let start = max(window.start, now)
-        guard start < window.end else { return [] }
-        return SchedulingIntelligence.suggestedFocusBlocks(
+        let clampedStart = max(window.start, now)
+        guard clampedStart < window.end else { return [] }
+        // Round the search start UP to the next whole hour so suggestions
+        // begin at clean times. If clampedStart is already on the hour, no-op.
+        let searchStart = ceilToHour(clampedStart, calendar: calendar)
+        guard searchStart < window.end else { return [] }
+        let raw = SchedulingIntelligence.suggestedFocusBlocks(
             events: events,
-            within: DateInterval(start: start, end: window.end),
-            // Discrete 2 h suggestions per the reference board — an empty
-            // workday must not read as one 10 h "focus block".
+            within: DateInterval(start: searchStart, end: window.end),
+            // 2 h per block — an empty workday must not read as one 10 h slab.
             maximumDuration: 2 * 3600
         )
+        // Cap to 2 suggestions — a "few" clean windows, not the whole afternoon.
+        return Array(raw.prefix(2))
+    }
+
+    /// Rounds `date` up to the start of the next whole hour. If `date` is
+    /// already exactly on the hour, returns it unchanged.
+    static func ceilToHour(_ date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        guard
+            let minute = components.minute,
+            let second = components.second,
+            minute != 0 || second != 0
+        else { return date }
+        // Truncate to the current hour then add one hour.
+        var truncated = components
+        truncated.minute = 0
+        truncated.second = 0
+        truncated.nanosecond = 0
+        guard
+            let hourStart = calendar.date(from: truncated),
+            let nextHour = calendar.date(byAdding: .hour, value: 1, to: hourStart)
+        else { return date }
+        return nextHour
     }
 
     /// First `duration`-long slot inside the week's workday windows starting
@@ -131,7 +162,6 @@ public struct SchedulingInspector: View {
 
     /// Spec §Meeting Load mirrors the Today Focus Timer ring scale (62–70 pt).
     private static let ringSize: CGFloat = 66
-    private static let maxFocusGapRows = 3
 
     public init(
         viewModel: CalendarViewModel,
@@ -412,13 +442,12 @@ public struct SchedulingInspector: View {
 
     // MARK: - Focus
 
-    /// Focus card: "Today's focus" — real free gaps in today's workday (≥1 h,
-    /// ≤2 h each). Hidden entirely when no gaps remain.
-    @ViewBuilder
+    /// Focus card: "Today's focus" — at most 2 round-hour 2 h gaps in today's
+    /// workday. Hidden entirely when no gaps remain.
     private var focusBlocksCard: some View {
         LiquidGlassCard("Today's focus") {
             VStack(spacing: DS.Space.s) {
-                ForEach(focusGaps.prefix(Self.maxFocusGapRows), id: \.start) { gap in
+                ForEach(focusGaps, id: \.start) { gap in
                     focusGapRow(gap)
                 }
             }
@@ -473,7 +502,4 @@ public struct SchedulingInspector: View {
         }
     }
 
-    private static let insightOrder: [SchedulingIntelligence.EventCategory] = [
-        .meeting, .focus, .project, .personal, .admin, .other,
-    ]
 }
