@@ -155,12 +155,6 @@ public struct PersonProfileView: View {
     @ViewBuilder
     private func header(_ person: Person) -> some View {
         HStack(spacing: DS.Space.m) {
-            #if os(macOS)
-            LiquidIconButton(systemImage: "chevron.left", accessibilityLabel: "Back") {
-                dismiss()
-            }
-            #endif
-
             LiquidAvatar(name: person.displayName, size: 48)
 
             VStack(alignment: .leading, spacing: DS.Space.xxs) {

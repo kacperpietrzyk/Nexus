@@ -38,21 +38,45 @@ public struct PeopleListView: View {
     )
     var people: [Person]
 
-    @State var path: [UUID] = []
+    // Path hoist (Task 9 navigation pass): macOS shell passes a binding so the
+    // breadcrumb owns back and deep-links; iOS leaves it nil → internal @State.
+    // `path` computed property with `nonmutating set` keeps every `path.append` /
+    // `path.removeAll` call site byte-identical; only the real-Binding site uses
+    // `pathBinding`.
+    @State var internalPath: [UUID] = []
+    private let externalPath: Binding<[UUID]>?
+    var path: [UUID] {
+        get { externalPath?.wrappedValue ?? internalPath }
+        nonmutating set {
+            if let externalPath { externalPath.wrappedValue = newValue } else { internalPath = newValue }
+        }
+    }
+    var pathBinding: Binding<[UUID]> { Binding(get: { path }, set: { path = $0 }) }
+    // macOS breadcrumb feed: deepest path id + display name, `(nil, nil)` at root.
+    private let onActivePersonChange: ((UUID?, String?) -> Void)?
+
     @State var searchText = ""
     @State var newPersonError: String?
     @State var meetingCounts: [UUID: Int] = [:]
     @State var fromMeetingsExpanded = false
     @State var selection = SelectionModel<UUID>()
 
-    public init() {}
+    /// `path` nil → internal `@State` (iOS + legacy); the macOS shell passes a
+    /// binding to hoist back/deep-link control. `onActivePersonChange` is macOS-only.
+    public init(
+        path externalPath: Binding<[UUID]>? = nil,
+        onActivePersonChange: ((UUID?, String?) -> Void)? = nil
+    ) {
+        self.externalPath = externalPath
+        self.onActivePersonChange = onActivePersonChange
+    }
 
     var model: PeopleListModel {
         PeopleListFiltering.sectionedModel(people, query: searchText)
     }
 
     public var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: pathBinding) {
             platformContent
                 .navigationDestination(for: UUID.self) { id in
                     PersonProfileView(personID: id)
@@ -75,6 +99,15 @@ public struct PeopleListView: View {
                     selection.enterSelection()
                     selection.selectAll(people.map(\.id))
                 }
+                #if os(macOS)
+            // Publish the breadcrumb leaf for the shell: deepest path id +
+            // the person's displayName, or `(nil, nil)` at root.
+            .onChange(of: path, initial: true) { _, newPath in
+                let lastID = newPath.last
+                let name = lastID.flatMap { id in people.first(where: { $0.id == id })?.displayName }
+                onActivePersonChange?(lastID, (name?.isEmpty ?? true) ? nil : name)
+            }
+                #endif
         }
     }
 

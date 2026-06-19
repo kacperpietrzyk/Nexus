@@ -19,6 +19,7 @@ import TasksFeature
 // the same structural growth that disables `file_length` on the iOS shell.
 // The daily-note (O4) wiring crossed 600 lines.
 // swiftlint:disable file_length
+// swiftlint:disable:next type_body_length
 struct ContentView: View {
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     @Environment(\.modelContext) var modelContext
@@ -47,6 +48,8 @@ struct ContentView: View {
     // back and deep-links route through `pendingDeepLink`. `NotesListView` reads
     // this binding instead of its own internal `@State` on macOS.
     @State private var notesPath: [UUID] = []
+    // People navigation path, hoisted to the shell (Task 9) — same idiom as Notes.
+    @State private var peoplePath: [UUID] = []
 
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     // A computed read-through so every `selection == .X` call site compiles
@@ -391,8 +394,24 @@ struct ContentView: View {
             // `ContentView+LiquidCalendar`.
             liquidCalendarMain
         } else if selection == .people {
-            // People / Contacts surface (spec §6); owns its own NavigationStack.
-            PeopleListView()
+            // People / Contacts surface (spec §6). Path hoisted to the shell
+            // (Task 9) so the breadcrumb is the single back affordance and
+            // deep-links route through `pendingDeepLink`.
+            PeopleListView(
+                path: $peoplePath,
+                onActivePersonChange: { id, name in
+                    navigator.detailCrumb = id.map {
+                        NavCrumb(id: "person:\($0)", label: name ?? "Person", isLeaf: true)
+                    }
+                }
+            )
+            .onAppear { navigator.onPopToRoot = { peoplePath.removeAll() } }
+            .onChange(of: navigator.pendingDeepLink, initial: true) { _, link in
+                if case .person(let pid)? = link {
+                    peoplePath = [pid]
+                    navigator.pendingDeepLink = nil
+                }
+            }
         } else if selection == .settings {
             // Native two-pane in-shell Settings (Task 9): reads the
             // `MacSettingsDependencies` bundle NexusMacApp injects into the
