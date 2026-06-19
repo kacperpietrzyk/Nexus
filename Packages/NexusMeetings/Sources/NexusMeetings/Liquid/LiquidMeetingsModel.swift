@@ -237,9 +237,25 @@ public final class LiquidMeetingsModel {
 
             let currentParticipants = try MeetingParticipant.decode(
                 liveMeeting.participantsJSON ?? Data())
+            // Resolve rawSpeaker to the segment's own spelling so the exact-match
+            // in MergeStage.displayNameMap (keyed on seg.speaker) hits after the
+            // rename. Imported meetings (e.g. Circleback) store the participant
+            // speakerID with underscores ("Participant_1") while the transcript
+            // segment keeps the raw spaced form ("Participant 1"); passing the
+            // underscored form to renameSpeaker writes speakerID = "Participant_1",
+            // which the displayNameMap exact-match misses → transcript never updates.
+            let storedSegments =
+                (try? MeetingSpeakerSegment.decode(liveMeeting.segmentsJSON)) ?? []
+            let resolvedRawSpeaker =
+                storedSegments
+                .first(where: {
+                    canonicalSpeakerKey($0.speaker) == canonicalSpeakerKey(rawSpeaker)
+                })
+                .map(\.speaker)
+                ?? rawSpeaker
             var nextParticipants = renameSpeaker(
                 in: currentParticipants,
-                rawSpeaker: rawSpeaker,
+                rawSpeaker: resolvedRawSpeaker,
                 to: trimmedDisplayName,
                 personID: personID
             )
@@ -247,8 +263,6 @@ public final class LiquidMeetingsModel {
                 $0.speakerID.localizedStandardCompare($1.speakerID) == .orderedAscending
             }
             liveMeeting.participantsJSON = try MeetingParticipant.encode(nextParticipants)
-            let storedSegments =
-                (try? MeetingSpeakerSegment.decode(liveMeeting.segmentsJSON)) ?? []
             let merge = MergeStage()
             liveMeeting.transcriptText = merge.renderLinear(
                 storedSegments, participants: nextParticipants)
