@@ -31,6 +31,12 @@ public struct TimelineItem: Identifiable, Equatable, Sendable {
     /// block). Runtime-only, computed by `BlockConflictDetector` and published
     /// via `CalendarViewModel.conflictedBlockIDs`. Always false for events.
     public let isConflicted: Bool
+    /// Physical or virtual meeting room; nil for blocks and events without a
+    /// location. Populated at the `items()` boundary from `CalendarEvent.location`.
+    public let location: String?
+    /// Display name of the event organizer; nil when absent or for blocks.
+    /// Mapped from `CalendarEvent.organizer?.name` at the `items()` boundary.
+    public let organizer: String?
 
     public init(
         id: String,
@@ -41,7 +47,9 @@ public struct TimelineItem: Identifiable, Equatable, Sendable {
         blockID: UUID? = nil,
         colorHex: String? = nil,
         isAllDay: Bool = false,
-        isConflicted: Bool = false
+        isConflicted: Bool = false,
+        location: String? = nil,
+        organizer: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -52,6 +60,8 @@ public struct TimelineItem: Identifiable, Equatable, Sendable {
         self.colorHex = colorHex
         self.isAllDay = isAllDay
         self.isConflicted = isConflicted
+        self.location = location
+        self.organizer = organizer
     }
 }
 
@@ -129,7 +139,9 @@ public enum DayTimelineLayout {
                     end: event.end,
                     kind: .event,
                     colorHex: event.calendarColorHex,
-                    isAllDay: event.isAllDay
+                    isAllDay: event.isAllDay,
+                    location: event.location,
+                    organizer: event.organizer?.name
                 )
             )
         }
@@ -212,6 +224,27 @@ public enum DayTimelineLayout {
     /// All-day items for `day`, for the pinned banner above the hour axis (S3a).
     public static func allDayItems(_ items: [TimelineItem]) -> [TimelineItem] {
         items.filter(\.isAllDay)
+    }
+
+    /// Deduplicated union of all-day items across a set of per-day item lists.
+    ///
+    /// A multi-day all-day event appears in the result of `itemsForDay` for every
+    /// day it overlaps, so naively flat-mapping the visible days yields the same
+    /// item 2–7 times. This helper keeps the first occurrence by `id`, preserving
+    /// stable order (earliest start wins via sort, ties broken by id).
+    public static func allDayItems(forVisibleDays days: [Date], itemsForDay: (Date) -> [TimelineItem]) -> [TimelineItem] {
+        var seen = Set<String>()
+        var result: [TimelineItem] = []
+        for day in days {
+            for item in itemsForDay(day) where item.isAllDay {
+                if seen.insert(item.id).inserted {
+                    result.append(item)
+                }
+            }
+        }
+        return result.sorted { lhs, rhs in
+            lhs.start == rhs.start ? lhs.id < rhs.id : lhs.start < rhs.start
+        }
     }
 
     /// A timed item clamped to the visible axis window, used during column layout.

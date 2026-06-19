@@ -80,9 +80,13 @@ struct WeekEventBlock: View {
     private static let titleFont = Font.system(size: 12, weight: .semibold)
     /// Spec §Week grid: time line 10–11 pt secondary.
     private static let timeFont = Font.system(size: 10, weight: .regular).monospacedDigit()
+    /// Subtitle: location/organizer secondary line, 10 pt.
+    private static let subtitleFont = Font.system(size: 10, weight: .regular)
     /// Title (~15 pt) + time (~13 pt) + 2×8 pt padding need ≥ ~46 pt; below
     /// that only the title fits without clipping.
     private static let timeLineMinHeight: CGFloat = 46
+    /// Title + time + subtitle (~13 pt) + 2 pt spacing + 2×8 pt padding ≥ ~64 pt.
+    private static let subtitleMinHeight: CGFloat = 64
 
     private var kind: LiquidEventKind { WeekEventClassifier.kind(for: item) }
 
@@ -114,6 +118,13 @@ struct WeekEventBlock: View {
                         .font(Self.timeFont)
                         .foregroundStyle(DS.ColorToken.textSecondary)
                         .lineLimit(1)
+                }
+                if height >= Self.subtitleMinHeight, let subtitle = subtitleText {
+                    Text(subtitle)
+                        .font(Self.subtitleFont)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
             .padding(DS.Space.s)
@@ -157,6 +168,13 @@ struct WeekEventBlock: View {
 
     private var timeText: String {
         "\(Self.timeFormatter.string(from: item.start)) – \(Self.timeFormatter.string(from: item.end))"
+    }
+
+    /// Prefer location; fall back to organizer. Nil when neither is available.
+    private var subtitleText: String? {
+        if let location = item.location, !location.isEmpty { return location }
+        if let organizer = item.organizer, !organizer.isEmpty { return organizer }
+        return nil
     }
 
     /// English UI rule: explicit en_US (system locale may be pl_PL).

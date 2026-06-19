@@ -50,6 +50,11 @@ enum WeekIntelligence {
 
     /// Free ≥1 h gaps left in TODAY's workday when today is one of `days`
     /// (clamped to `now` so past gaps never get suggested).
+    ///
+    /// Returns at most 2 suggestions, each ≤2 h, with starts rounded UP to the
+    /// next whole hour — so "now = 10:57" yields 11:00–13:00, not 10:57–12:57.
+    /// A few clean round-hour windows read better than slicing the whole
+    /// afternoon into N consecutive 2 h blocks.
     static func todayFocusGaps(
         events: [CalendarEvent],
         days: [Date],
@@ -60,15 +65,41 @@ enum WeekIntelligence {
             let today = days.first(where: { calendar.isDate($0, inSameDayAs: now) }),
             let window = workdayWindow(for: today, calendar: calendar)
         else { return [] }
-        let start = max(window.start, now)
-        guard start < window.end else { return [] }
-        return SchedulingIntelligence.suggestedFocusBlocks(
+        let clampedStart = max(window.start, now)
+        guard clampedStart < window.end else { return [] }
+        // Round the search start UP to the next whole hour so suggestions
+        // begin at clean times. If clampedStart is already on the hour, no-op.
+        let searchStart = ceilToHour(clampedStart, calendar: calendar)
+        guard searchStart < window.end else { return [] }
+        let raw = SchedulingIntelligence.suggestedFocusBlocks(
             events: events,
-            within: DateInterval(start: start, end: window.end),
-            // Discrete 2 h suggestions per the reference board — an empty
-            // workday must not read as one 10 h "focus block".
+            within: DateInterval(start: searchStart, end: window.end),
+            // 2 h per block — an empty workday must not read as one 10 h slab.
             maximumDuration: 2 * 3600
         )
+        // Cap to 2 suggestions — a "few" clean windows, not the whole afternoon.
+        return Array(raw.prefix(2))
+    }
+
+    /// Rounds `date` up to the start of the next whole hour. If `date` is
+    /// already exactly on the hour, returns it unchanged.
+    static func ceilToHour(_ date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        guard
+            let minute = components.minute,
+            let second = components.second,
+            minute != 0 || second != 0
+        else { return date }
+        // Truncate to the current hour then add one hour.
+        var truncated = components
+        truncated.minute = 0
+        truncated.second = 0
+        truncated.nanosecond = 0
+        guard
+            let hourStart = calendar.date(from: truncated),
+            let nextHour = calendar.date(byAdding: .hour, value: 1, to: hourStart)
+        else { return date }
+        return nextHour
     }
 
     /// First `duration`-long slot inside the week's workday windows starting
@@ -99,13 +130,29 @@ enum WeekIntelligence {
         }
         return nil
     }
+
+    /// Enumerates every calendar day that starts within `range` (inclusive of
+    /// `range.start`, exclusive of `range.end`). Used to scope meeting-load
+    /// over the stats interval rather than over `visibleDays`, which for month
+    /// scope is the 42-day grid rather than the calendar month.
+    static func daysIn(_ range: DateInterval, calendar: Calendar) -> [Date] {
+        var days: [Date] = []
+        var cursor = calendar.startOfDay(for: range.start)
+        while cursor < range.end {
+            days.append(cursor)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return days
+    }
 }
 
 /// The Calendar right inspector (304 pt slot, `docs/06_MODULE_CALENDAR.md`
-/// §Right inspector): Scheduling Intelligence as vertical glass cards —
-/// Meeting Load, Conflicts, Suggested Focus Blocks, Quick Reschedule, and
-/// Time Insights — all derived from the SAME `CalendarViewModel` the main
-/// column renders, via the `SchedulingIntelligence` seams.
+/// §Right inspector): unified 4-section scheduling intelligence panel —
+/// Stats, Conflicts (with inline Move), Focus, Unscheduled Tasks — identical
+/// structure across Day/Week/Month; Conflicts and Focus hide when empty;
+/// Unscheduled fills the remaining height with its own scroll so a long list
+/// scrolls independently without pushing the fixed cards off-screen.
 public struct SchedulingInspector: View {
 
     private let viewModel: CalendarViewModel
@@ -117,7 +164,6 @@ public struct SchedulingInspector: View {
 
     /// Spec §Meeting Load mirrors the Today Focus Timer ring scale (62–70 pt).
     private static let ringSize: CGFloat = 66
-    private static let maxFocusGapRows = 3
 
     public init(
         viewModel: CalendarViewModel,
@@ -130,17 +176,26 @@ public struct SchedulingInspector: View {
     }
 
     public var body: some View {
-        // No ScrollView — the inspector is a fixed column that fits the window
-        // height (matches the Today inspector). Empty cards collapse to a
-        // single muted line via `inspectorEmptyLine`.
+        // Two-region layout: fixed cards (Stats, Conflicts, Focus) stay at
+        // natural height at the top; the Unscheduled section fills the
+        // remaining height with its own internal ScrollView so a long task list
+        // scrolls independently without pushing the fixed cards off-screen.
         VStack(spacing: DS.Space.m) {
-            meetingLoadCard
-            conflictsCard
-            focusBlocksCard
-            if !conflicts.isEmpty && (viewModel.hasCalendarAccess || LiquidReferenceMode.isEnabled) {
-                quickRescheduleCard
+            // Fixed-height upper region: only Stats is always present;
+            // Conflicts and Focus hide entirely when empty.
+            VStack(spacing: DS.Space.m) {
+                statsCard
+                if !conflicts.isEmpty {
+                    conflictsCard
+                }
+                if !focusGaps.isEmpty {
+                    focusBlocksCard
+                }
             }
-            timeInsightsCard
+            // Unscheduled Tasks: present in all scopes (Day/Week/Month) so
+            // drag-to-schedule works everywhere. Fills remaining height.
+            unscheduledCard
+                .frame(maxHeight: .infinity, alignment: .top)
         }
         .padding(DS.Space.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -182,15 +237,6 @@ public struct SchedulingInspector: View {
         SchedulingIntelligence.conflicts(in: intelligenceEvents)
     }
 
-    private var meetingLoad: Double {
-        WeekIntelligence.weekMeetingLoad(
-            events: intelligenceEvents,
-            days: intelligenceDays,
-            calendar: calendar,
-            mirroredEventIDs: mirroredEventIDs
-        )
-    }
-
     private var focusGaps: [DateInterval] {
         if let reference {
             return reference.focusGaps
@@ -203,18 +249,45 @@ public struct SchedulingInspector: View {
         )
     }
 
-    private var weekWindow: DateInterval {
-        if let first = intelligenceDays.first, let last = intelligenceDays.last {
-            let start = calendar.startOfDay(for: first)
-            let lastStart = calendar.startOfDay(for: last)
-            let end = calendar.date(byAdding: .day, value: 1, to: lastStart) ?? lastStart
-            return DateInterval(start: start, end: end)
+    /// The stats interval for the current scope+anchor — determines what range
+    /// the Stats card covers and what label it shows.
+    private var statsRange: DateInterval {
+        SchedulingIntelligence.statsRange(
+            scope: viewModel.scope,
+            anchor: viewModel.anchor,
+            calendar: calendar
+        )
+    }
+
+    /// "Today" / "This week" / "This month" — follows scope.
+    private var statsLabel: String {
+        switch viewModel.scope {
+        case .day: return "Today"
+        case .week: return "This week"
+        case .month: return "This month"
         }
-        // `viewModel.window` is a named tuple `(start: Date, end: Date)`, not
-        // a DateInterval — the conversion here is intentional, for the
-        // interval-based SchedulingIntelligence API.
-        let window = viewModel.window
-        return DateInterval(start: window.start, end: window.end)
+    }
+
+    /// Meeting load computed over the scope-scoped stats interval (not over
+    /// `intelligenceDays`, which for month is a 42-day grid).
+    private var statsMeetingLoad: Double {
+        let days = WeekIntelligence.daysIn(statsRange, calendar: calendar)
+        return WeekIntelligence.weekMeetingLoad(
+            events: intelligenceEvents,
+            days: days,
+            calendar: calendar,
+            mirroredEventIDs: mirroredEventIDs
+        )
+    }
+
+    /// Time insights computed over the scope-scoped stats interval.
+    private var statsInsights: SchedulingIntelligence.TimeInsights {
+        let mirrored = mirroredEventIDs
+        return SchedulingIntelligence.timeInsights(
+            events: intelligenceEvents,
+            week: statsRange,
+            classify: { WeekEventClassifier.category(for: $0, mirroredEventIDs: mirrored) }
+        )
     }
 
     /// Compact empty affordance for inspector cards: one muted line, no hero
@@ -227,92 +300,166 @@ public struct SchedulingInspector: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Meeting Load
+    // MARK: - Stats (merged Meeting Load + Time Insights)
 
-    private var meetingLoadCard: some View {
-        LiquidGlassCard("Meeting Load") {
-            HStack(spacing: DS.Space.m) {
-                LiquidCircularProgress(
-                    value: meetingLoad,
-                    title: "\(Int((meetingLoad * 100).rounded()))%",
-                    size: Self.ringSize,
-                    color: DS.ColorToken.accentPurple
-                )
-                Text("of this week's workday hours are in meetings.")
-                    .font(DS.FontToken.metadata)
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
+    /// Unified stats card: meeting-load ring + total-scheduled / in-meetings
+    /// hour lines. Scope label ("Today" / "This week" / "This month") and the
+    /// computed interval both follow `viewModel.scope` + `viewModel.anchor`.
+    private var statsCard: some View {
+        LiquidGlassCard(statsLabel) {
+            VStack(spacing: DS.Space.m) {
+                // Meeting-load ring row
+                HStack(spacing: DS.Space.m) {
+                    LiquidCircularProgress(
+                        value: statsMeetingLoad,
+                        title: "\(Int((statsMeetingLoad * 100).rounded()))%",
+                        size: Self.ringSize,
+                        color: DS.ColorToken.accentPurple
+                    )
+                    Text("of workday hours are in meetings.")
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                // Hour lines: total scheduled + in meetings
+                if statsInsights.totalScheduled > 0 {
+                    LiquidDividerLine()
+                    HStack {
+                        Text("Total scheduled")
+                            .font(DS.FontToken.metadata)
+                            .foregroundStyle(DS.ColorToken.textSecondary)
+                        Spacer()
+                        Text(WeekDurationText.text(for: statsInsights.totalScheduled))
+                            .font(DS.FontToken.body.monospacedDigit())
+                            .foregroundStyle(DS.ColorToken.textPrimary)
+                    }
+                    let meetingTotal = statsInsights.total(for: .meeting)
+                    if meetingTotal > 0 {
+                        HStack {
+                            Text("In meetings")
+                                .font(DS.FontToken.metadata)
+                                .foregroundStyle(DS.ColorToken.textSecondary)
+                            Spacer()
+                            Text(WeekDurationText.text(for: meetingTotal))
+                                .font(DS.FontToken.body.monospacedDigit())
+                                .foregroundStyle(DS.ColorToken.textPrimary)
+                        }
+                    }
+                }
             }
         }
     }
 
     // MARK: - Conflicts
 
-    @ViewBuilder
+    /// Conflicts card: hidden when zero conflicts. Each conflict row has an
+    /// inline [Move] button that targets the next-fit gap — the standalone
+    /// Quick Reschedule card has been folded into this section.
     private var conflictsCard: some View {
         LiquidGlassCard("Conflicts") {
-            if conflicts.isEmpty {
-                inspectorEmptyLine("No overlapping events this week.")
-            } else {
-                VStack(spacing: DS.Space.s) {
-                    ForEach(conflicts) { conflict in
-                        conflictRow(conflict)
-                    }
+            VStack(spacing: DS.Space.s) {
+                ForEach(conflicts) { conflict in
+                    conflictRow(conflict)
                 }
             }
         } trailing: {
-            if !conflicts.isEmpty {
-                Text("\(conflicts.count)")
-                    .font(DS.FontToken.bodyStrong.monospacedDigit())
-                    .foregroundStyle(DS.ColorToken.statusDanger)
-            }
+            Text("\(conflicts.count)")
+                .font(DS.FontToken.bodyStrong.monospacedDigit())
+                .foregroundStyle(DS.ColorToken.statusDanger)
         }
     }
 
-    /// Tapping a conflict opens the existing event editor on its first event.
+    /// Conflict row: tapping the title region opens the editor; the trailing
+    /// [Move] button reschedules the second event to the next free gap.
+    /// The two interactions are separate tap targets so they do not nest.
     private func conflictRow(_ conflict: SchedulingIntelligence.EventConflict) -> some View {
-        Button {
-            editorTarget = .edit(conflict.first.id)
-        } label: {
-            HStack(alignment: .top, spacing: DS.Space.s) {
-                Circle()
-                    .fill(DS.ColorToken.statusDanger)
-                    .frame(width: 5, height: 5)
-                    .padding(.top, 5)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("\(conflict.first.title) ↔ \(conflict.second.title)")
-                        .font(DS.FontToken.body)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                        .lineLimit(2)
-                    Text(
-                        "Overlap \(WeekEventBlock.timeFormatter.string(from: conflict.overlap.start)) – "
-                            + WeekEventBlock.timeFormatter.string(from: conflict.overlap.end)
-                    )
-                    .font(DS.FontToken.metadata)
-                    .foregroundStyle(DS.ColorToken.textTertiary)
+        let event = conflict.second
+        let duration = event.end.timeIntervalSince(event.start)
+        let gap = WeekIntelligence.nextFitGap(
+            after: max(event.end, now()),
+            duration: duration,
+            events: intelligenceEvents,
+            days: intelligenceDays,
+            calendar: calendar
+        )
+        return HStack(alignment: .top, spacing: DS.Space.s) {
+            // Tappable text region — opens the editor on the first event.
+            Button {
+                editorTarget = .edit(conflict.first.id)
+            } label: {
+                HStack(alignment: .top, spacing: DS.Space.s) {
+                    Circle()
+                        .fill(DS.ColorToken.statusDanger)
+                        .frame(width: 5, height: 5)
+                        .padding(.top, 5)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(conflict.first.title) ↔ \(conflict.second.title)")
+                            .font(DS.FontToken.body)
+                            .foregroundStyle(DS.ColorToken.textPrimary)
+                            .lineLimit(2)
+                        Text(
+                            "Overlap \(WeekEventBlock.timeFormatter.string(from: conflict.overlap.start)) – "
+                                + WeekEventBlock.timeFormatter.string(from: conflict.overlap.end)
+                        )
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
+                        if let gap {
+                            Text("Next free: \(Self.gapLabelFormatter.string(from: gap.start))")
+                                .font(DS.FontToken.metadata)
+                                .foregroundStyle(DS.ColorToken.textTertiary)
+                        }
+                    }
                 }
-                Spacer(minLength: 0)
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open conflicting event \(conflict.first.title)")
+
+            Spacer(minLength: DS.Space.s)
+
+            // Inline Move button — reschedules the second event; only shown
+            // when a free slot exists and the calendar is writable.
+            if let gap, viewModel.hasCalendarAccess || LiquidReferenceMode.isEnabled {
+                Button("Move") {
+                    reschedule(eventID: event.id, to: gap)
+                }
+                .buttonStyle(.plain)
+                .font(DS.FontToken.caption)
+                .foregroundStyle(DS.ColorToken.accentPrimaryHover)
+                .accessibilityLabel("Move \(event.title) to the next free gap")
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Open conflicting event \(conflict.first.title)")
     }
 
-    // MARK: - Suggested Focus Blocks
+    private func reschedule(eventID: String, to gap: DateInterval) {
+        guard !LiquidReferenceMode.isEnabled else { return }
+        guard var draft = viewModel.draft(forEventID: eventID, calendars: availableCalendars) else { return }
+        draft.start = gap.start
+        draft.end = gap.end
+        _Concurrency.Task { @MainActor in
+            await viewModel.updateEvent(id: eventID, draft: draft)
+        }
+    }
 
-    @ViewBuilder
+    /// English UI rule: explicit en_US (system locale may be pl_PL).
+    private static let gapLabelFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = "EEE h:mm a"
+        return formatter
+    }()
+
+    // MARK: - Focus
+
+    /// Focus card: "Today's focus" — at most 2 round-hour 2 h gaps in today's
+    /// workday. Hidden entirely when no gaps remain.
     private var focusBlocksCard: some View {
-        LiquidGlassCard("Suggested Focus Blocks") {
-            if focusGaps.isEmpty {
-                inspectorEmptyLine("No free focus gaps left in today's workday.")
-            } else {
-                VStack(spacing: DS.Space.s) {
-                    ForEach(focusGaps.prefix(Self.maxFocusGapRows), id: \.start) { gap in
-                        focusGapRow(gap)
-                    }
+        LiquidGlassCard("Today's focus") {
+            VStack(spacing: DS.Space.s) {
+                ForEach(focusGaps, id: \.start) { gap in
+                    focusGapRow(gap)
                 }
             }
         }
@@ -366,136 +513,65 @@ public struct SchedulingInspector: View {
         }
     }
 
-    // MARK: - Quick Reschedule
+    // MARK: - Unscheduled Tasks (4th section, drag source)
 
-    /// One-tap move of a conflict's second event into the next free workday
-    /// gap that fits it, through the EXISTING `updateEvent` seam. Rendered
-    /// only when conflicts exist and the calendar is writable.
-    private var quickRescheduleCard: some View {
-        LiquidGlassCard("Quick Reschedule") {
-            VStack(spacing: DS.Space.s) {
-                ForEach(conflicts) { conflict in
-                    quickRescheduleRow(conflict)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func quickRescheduleRow(_ conflict: SchedulingIntelligence.EventConflict) -> some View {
-        let event = conflict.second
-        let duration = event.end.timeIntervalSince(event.start)
-        let gap = WeekIntelligence.nextFitGap(
-            after: max(event.end, now()),
-            duration: duration,
-            events: intelligenceEvents,
-            days: intelligenceDays,
-            calendar: calendar
-        )
-        HStack(spacing: DS.Space.s) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(event.title)
-                    .font(DS.FontToken.body)
-                    .foregroundStyle(DS.ColorToken.textPrimary)
-                    .lineLimit(1)
-                if let gap {
-                    Text("Next free: \(Self.gapLabelFormatter.string(from: gap.start))")
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                } else {
-                    Text("No free slot this week.")
-                        .font(DS.FontToken.metadata)
-                        .foregroundStyle(DS.ColorToken.textTertiary)
-                }
-            }
-            Spacer(minLength: DS.Space.s)
-            if let gap {
-                Button("Move") {
-                    reschedule(eventID: event.id, to: gap)
-                }
-                .buttonStyle(.plain)
-                .font(DS.FontToken.caption)
-                .foregroundStyle(DS.ColorToken.accentPrimaryHover)
-                .accessibilityLabel("Move \(event.title) to the next free gap")
-            }
-        }
-    }
-
-    private func reschedule(eventID: String, to gap: DateInterval) {
-        guard !LiquidReferenceMode.isEnabled else { return }
-        guard var draft = viewModel.draft(forEventID: eventID, calendars: availableCalendars) else { return }
-        draft.start = gap.start
-        draft.end = gap.end
-        _Concurrency.Task { @MainActor in
-            await viewModel.updateEvent(id: eventID, draft: draft)
-        }
-    }
-
-    /// English UI rule: explicit en_US (system locale may be pl_PL).
-    private static let gapLabelFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.dateFormat = "EEE h:mm a"
-        return formatter
-    }()
-
-    // MARK: - Time Insights
-
-    @ViewBuilder
-    private var timeInsightsCard: some View {
-        let mirrored = mirroredEventIDs
-        let insights = SchedulingIntelligence.timeInsights(
-            events: intelligenceEvents,
-            week: weekWindow,
-            classify: { WeekEventClassifier.category(for: $0, mirroredEventIDs: mirrored) }
-        )
-        LiquidGlassCard("Time Insights") {
-            if insights.totalScheduled == 0 {
-                inspectorEmptyLine("Nothing scheduled this week yet.")
+    /// Unscheduled Tasks section: present in all scopes (Day/Week/Month) so
+    /// rows are always available as drag sources for the grid drop targets.
+    /// The card fills remaining height; its content scrolls independently so a
+    /// long list never pushes Stats/Conflicts/Focus off-screen.
+    private var unscheduledCard: some View {
+        LiquidGlassCard("Unscheduled Tasks") {
+            if unscheduledTasks.isEmpty {
+                inspectorEmptyLine("Every open task has a date or a scheduled block.")
             } else {
-                VStack(spacing: DS.Space.s) {
-                    ForEach(Self.insightOrder, id: \.self) { category in
-                        let total = insights.total(for: category)
-                        if total > 0 {
-                            insightRow(
-                                label: WeekEventClassifier.label(for: category),
-                                color: WeekEventClassifier.kind(for: category).accent,
-                                seconds: total
-                            )
+                // ScrollView scoped to the card interior: the list scrolls
+                // within the card bounds, not the whole inspector.
+                // LazyVStack so rows are materialized on demand — prevents
+                // stalls when the unscheduled bucket is large (~1000+ items).
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: DS.Space.xxs) {
+                        ForEach(unscheduledTasks) { task in
+                            unscheduledTaskRow(task)
                         }
                     }
-                    LiquidDividerLine()
-                    HStack {
-                        Text("Total scheduled")
-                            .font(DS.FontToken.metadata)
-                            .foregroundStyle(DS.ColorToken.textSecondary)
-                        Spacer()
-                        Text(WeekDurationText.text(for: insights.totalScheduled))
-                            .font(DS.FontToken.bodyStrong.monospacedDigit())
-                            .foregroundStyle(DS.ColorToken.textPrimary)
-                    }
                 }
+            }
+        } trailing: {
+            if !unscheduledTasks.isEmpty {
+                Text("\(unscheduledTasks.count)")
+                    .font(DS.FontToken.metadata.monospacedDigit())
+                    .foregroundStyle(DS.ColorToken.textTertiary)
             }
         }
     }
 
-    private static let insightOrder: [SchedulingIntelligence.EventCategory] = [
-        .meeting, .focus, .project, .personal, .admin, .other,
-    ]
-
-    private func insightRow(label: String, color: Color, seconds: TimeInterval) -> some View {
+    /// A single draggable task row. The `.onDrag` payload is the task UUID as
+    /// a plain string (Task 11 reads this contract from the grid drop target).
+    private func unscheduledTaskRow(_ task: WeekUnscheduledTask) -> some View {
         HStack(spacing: DS.Space.s) {
-            Circle()
-                .fill(color)
-                .frame(width: 6, height: 6)
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textMuted)
                 .accessibilityHidden(true)
-            Text(label)
+            Text(task.title)
                 .font(DS.FontToken.body)
-                .foregroundStyle(DS.ColorToken.textSecondary)
-            Spacer()
-            Text(WeekDurationText.text(for: seconds))
-                .font(DS.FontToken.body.monospacedDigit())
                 .foregroundStyle(DS.ColorToken.textPrimary)
+                .lineLimit(1)
+            if let projectName = task.projectName {
+                LiquidPill(projectName, color: DS.ColorToken.accentCyan)
+            }
+            Spacer(minLength: DS.Space.s)
+            if let seconds = task.estimatedSeconds, seconds > 0 {
+                Text(WeekDurationText.text(for: TimeInterval(seconds)))
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+            }
         }
+        .padding(.horizontal, DS.Space.s)
+        .frame(minHeight: 28)
+        .contentShape(Rectangle())
+        .onDrag { NSItemProvider(object: task.id.uuidString as NSString) }
+        .accessibilityLabel("Unscheduled task: \(task.title)")
     }
+
 }

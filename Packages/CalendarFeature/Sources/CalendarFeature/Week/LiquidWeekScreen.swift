@@ -99,9 +99,9 @@ extension View {
 
 /// The liquid Calendar page (Task 6, `docs/06_MODULE_CALENDAR.md`): serif
 /// week-range header with Day/Week/Month switching + week navigation, then —
-/// for Week — the custom `WeekGrid` over the bottom `SchedulingStrip`. Day and
-/// Month re-mount the EXISTING `DayGridView`/`MonthGridView` under the same
-/// header (smallest viable integration; those grids are not rebuilt).
+/// for Week/Day — the custom `WeekGrid` (grid fills the full frame; scheduling
+/// intelligence + Unscheduled Tasks live in `SchedulingInspector`). Month
+/// re-mounts the EXISTING `LiquidMonthGrid` under the same header.
 ///
 /// All data is REAL: events/blocks come from the shared `CalendarViewModel`
 /// (EventKit reader + `ScheduledBlockRepository`), unscheduled tasks from the
@@ -115,30 +115,19 @@ public struct LiquidWeekScreen: View {
     @Bindable var viewModel: CalendarViewModel
     private let calendar: Calendar
     private let now: () -> Date
-    /// App-layer capture seam for the strip's empty-state CTA (same
-    /// notification path the Today screen uses); nil hides the CTA.
-    private let onAddTask: (() -> Void)?
 
     @State var editorTarget: WeekEditorTarget?
-    @State private var manualBlockRequest: ManualBlockRequest?
     @State var availableCalendars: [CalendarInfo] = []
     @State var undo = UndoController()
-
-    private struct ManualBlockRequest: Identifiable {
-        let taskID: UUID
-        var id: UUID { taskID }
-    }
 
     public init(
         viewModel: CalendarViewModel,
         calendar: Calendar = .current,
-        now: @escaping () -> Date = Date.init,
-        onAddTask: (() -> Void)? = nil
+        now: @escaping () -> Date = Date.init
     ) {
         self.viewModel = viewModel
         self.calendar = calendar
         self.now = now
-        self.onAddTask = onAddTask
     }
 
     public var body: some View {
@@ -155,7 +144,12 @@ public struct LiquidWeekScreen: View {
             }
             content
         }
-        .padding(DS.Space.l)
+        // Bottom intentionally excluded: the grid fills the frame bottom to
+        // align with the sidebar's bottom edge (both are inset from the window
+        // edge by shellOuterVerticalPadding = 12 pt in LiquidAppShell). Adding
+        // DS.Space.l (16 pt) here would raise the grid's baseline above the
+        // sidebar's. Top + horizontal keep the header and banner insets intact.
+        .padding([.top, .horizontal], DS.Space.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             await viewModel.load()
@@ -169,9 +163,6 @@ public struct LiquidWeekScreen: View {
             _Concurrency.Task { await viewModel.load() }
         }
         .weekEventEditorSheet(target: $editorTarget, viewModel: viewModel, calendars: availableCalendars)
-        .sheet(item: $manualBlockRequest) { request in
-            manualBlockSheet(request)
-        }
         .undoToast(undo)
     }
 
@@ -358,32 +349,11 @@ public struct LiquidWeekScreen: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // The grid dominates the page; the strip stays a fixed band
-            // (04_LAYOUT_SYSTEM.md §Calendar Week — grid over a bottom strip).
+            // Grid fills the full available height; scheduling intelligence +
+            // Unscheduled Tasks live in SchedulingInspector (right panel).
+            // Clipped so the rounded-card shape stays tight.
+            .clipped()
             .layoutPriority(1)
-            SchedulingStrip(
-                tasks: reference?.unscheduledTasks ?? viewModel.unscheduledTasks,
-                focusGap: reference?.primaryFocusGap
-                    ?? WeekIntelligence.todayFocusGaps(
-                        events: viewModel.events,
-                        days: viewModel.visibleDays,
-                        calendar: calendar,
-                        now: now()
-                    ).first,
-                onScheduleTopTask: { gap in
-                    guard reference == nil else { return }
-                    scheduleTopTask(into: gap)
-                },
-                onDropTaskToZone: { taskID in
-                    guard reference == nil else { return }
-                    manualBlockRequest = ManualBlockRequest(taskID: taskID)
-                },
-                onAddTask: onAddTask
-            )
-            // Fixed strip band so the grid keeps the page. Reference
-            // proportions put the grid clearly dominant (~75% of the content
-            // column), so the strip stays a thin band (~1/8), not 1/5.
-            .frame(height: 150)
         case .day:
             // Day = a single-column WeekGrid, so it inherits the exact Liquid
             // styling (glass card, hour axis, current-time line) instead of the
@@ -421,6 +391,7 @@ public struct LiquidWeekScreen: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
         case .month:
             // Liquid-native month grid (glass card + DS tokens), not the legacy
             // NexusColor `MonthGridView` still used by the iOS CalendarView.
@@ -436,6 +407,7 @@ public struct LiquidWeekScreen: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
         }
     }
 
@@ -477,7 +449,7 @@ public struct LiquidWeekScreen: View {
 
     /// Drop on the grid: schedule the task at the snapped slot for its own
     /// estimate (1 h default) via `addManualBlock` — the same accepted-block +
-    /// mirror-event path `ManualBlockView` commits through.
+    /// mirror-event path used throughout the scheduling seam.
     @MainActor
     private func schedule(taskID: UUID, at start: Date) async {
         guard let task = viewModel.unscheduledTasks.first(where: { $0.id == taskID }) else { return }
@@ -505,27 +477,6 @@ public struct LiquidWeekScreen: View {
             )
             viewModel.reloadUnscheduledTasks()
         }
-    }
-
-    /// Drop-zone fallback: open the existing schedule affordance pre-selected
-    /// with the dropped task (`ManualBlockView` selects the first list entry).
-    private func manualBlockSheet(_ request: ManualBlockRequest) -> some View {
-        var tasks = viewModel.schedulableTasks()
-        if let index = tasks.firstIndex(where: { $0.id == request.taskID }) {
-            tasks.insert(tasks.remove(at: index), at: 0)
-        }
-        return ManualBlockView(
-            tasks: tasks,
-            anchor: viewModel.anchor,
-            onAdd: { taskID, title, start, end in
-                _Concurrency.Task { @MainActor in
-                    await viewModel.addManualBlock(taskID: taskID, title: title, start: start, end: end)
-                    manualBlockRequest = nil
-                    viewModel.reloadUnscheduledTasks()
-                }
-            },
-            onCancel: { manualBlockRequest = nil }
-        )
     }
 
     // MARK: - Formatters (English UI rule: explicit en_US)

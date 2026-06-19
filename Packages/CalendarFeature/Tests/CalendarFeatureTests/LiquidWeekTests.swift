@@ -226,23 +226,41 @@ struct LiquidWeekTests {
         #expect(load == 0)
     }
 
-    @Test("Today's focus gaps clamp to now and skip weeks not containing today")
+    @Test("Today's focus gaps: at most 2 suggestions, starts rounded to the hour")
     func todayFocusGaps() {
-        let now = date(hours: 10)  // Monday 10:00
-        let gaps = WeekIntelligence.todayFocusGaps(
+        // now = 10:57 → search rounds UP to 11:00; meeting 12–13 splits the
+        // workday into 11–12 (1 h) and 13–18 (5 h). After 2 h chunking the
+        // raw list is [11:00–12:00, 13:00–15:00, 15:00–17:00, 17:00–18:00].
+        // The cap keeps only the first 2: [11:00–12:00, 13:00–15:00].
+        let nowOdd = date(hours: 10 + 57.0 / 60.0)  // 10:57
+        let gapsOdd = WeekIntelligence.todayFocusGaps(
             events: [event("m", from: 12, to: 13)],
             days: Self.weekDays,
             calendar: Self.calendar,
-            now: now
+            now: nowOdd
         )
-        // Free 10–12 and 13–18, chunked into ≤2 h suggestions (the 13–18 gap
-        // splits 13–15 / 15–17 / 17–18).
+        #expect(gapsOdd.count <= 2)
         #expect(
-            gaps == [
+            gapsOdd == [
+                DateInterval(start: date(hours: 11), end: date(hours: 12)),
+                DateInterval(start: date(hours: 13), end: date(hours: 15)),
+            ]
+        )
+
+        // now = 10:00 exactly (already on the hour) — no rounding needed.
+        // Free 10–12 and 13–18; cap yields first 2: [10:00–12:00, 13:00–15:00].
+        let nowHour = date(hours: 10)  // Monday 10:00
+        let gapsHour = WeekIntelligence.todayFocusGaps(
+            events: [event("m", from: 12, to: 13)],
+            days: Self.weekDays,
+            calendar: Self.calendar,
+            now: nowHour
+        )
+        #expect(gapsHour.count <= 2)
+        #expect(
+            gapsHour == [
                 DateInterval(start: date(hours: 10), end: date(hours: 12)),
                 DateInterval(start: date(hours: 13), end: date(hours: 15)),
-                DateInterval(start: date(hours: 15), end: date(hours: 17)),
-                DateInterval(start: date(hours: 17), end: date(hours: 18)),
             ]
         )
 
@@ -252,9 +270,25 @@ struct LiquidWeekTests {
             events: [],
             days: otherWeek,
             calendar: Self.calendar,
-            now: now
+            now: nowHour
         )
         #expect(none.isEmpty)
+    }
+
+    @Test("ceilToHour rounds fractional time up to the next whole hour")
+    func ceilToHourRounding() {
+        // 10:57 → 11:00
+        let oddMinute = date(hours: 10 + 57.0 / 60.0)
+        let rounded = WeekIntelligence.ceilToHour(oddMinute, calendar: Self.calendar)
+        #expect(rounded == date(hours: 11))
+
+        // 10:00 exactly → unchanged
+        let onHour = date(hours: 10)
+        #expect(WeekIntelligence.ceilToHour(onHour, calendar: Self.calendar) == onHour)
+
+        // 10:01 → 11:00
+        let oneMinute = date(hours: 10 + 1.0 / 60.0)
+        #expect(WeekIntelligence.ceilToHour(oneMinute, calendar: Self.calendar) == date(hours: 11))
     }
 
     @Test("nextFitGap finds the first slot that fits, rolling into later days")
