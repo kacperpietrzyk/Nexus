@@ -389,12 +389,12 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
         #else
         return
             TextField("Add tag", text: $newTag)
-                .textFieldStyle(.plain)
-                .font(DS.FontToken.metadata)
-                .foregroundStyle(DS.ColorToken.textSecondary)
-                .frame(maxWidth: 420, alignment: .leading)
-                .onSubmit { commitTag() }
-                .disabled(!model.canEdit)
+            .textFieldStyle(.plain)
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textSecondary)
+            .frame(maxWidth: 420, alignment: .leading)
+            .onSubmit { commitTag() }
+            .disabled(!model.canEdit)
         #endif
     }
 
@@ -441,12 +441,12 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
         #else
         return
             TextField("No folder", text: $folderText)
-                .textFieldStyle(.plain)
-                .font(DS.FontToken.metadata)
-                .foregroundStyle(DS.ColorToken.textSecondary)
-                .frame(maxWidth: 420, alignment: .leading)
-                .onSubmit { commitFolder() }
-                .disabled(!model.canEdit)
+            .textFieldStyle(.plain)
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textSecondary)
+            .frame(maxWidth: 420, alignment: .leading)
+            .onSubmit { commitFolder() }
+            .disabled(!model.canEdit)
         #endif
     }
 

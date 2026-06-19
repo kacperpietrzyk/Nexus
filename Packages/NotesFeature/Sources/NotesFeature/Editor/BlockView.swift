@@ -34,6 +34,8 @@ struct BlockView: View {
     let block: Block
     let model: NoteEditorModel
     let onOpenRef: (UUID) -> Void
+    // Defaulted-nil optionals keep the dormant-seam ergonomics (iOS omits them).
+    // swiftlint:disable implicit_optional_initialization
     /// Resolved 1-based ordinal for `.numbered` blocks (nil for all other kinds).
     var ordinal: Int? = nil
     /// When `false` text-bearing blocks render as static `Text`; defaults to `true`
@@ -44,6 +46,7 @@ struct BlockView: View {
     /// Passed into text-bearing sub-views so the `TextField` gains SwiftUI focus when
     /// the block transitions to editing state. Nil = no programmatic focus management.
     var focusBinding: FocusState<UUID?>.Binding? = nil
+    // swiftlint:enable implicit_optional_initialization
 
     var body: some View {
         switch block.kind {
