@@ -193,17 +193,58 @@ public struct MeetingInsights: Equatable, Sendable {
     public static func insights(
         durationSec: Int?,
         segments: [MeetingSpeakerSegment],
-        transcriptText: String?
+        transcriptText: String?,
+        speakerNames: [String: String] = [:]
     ) -> MeetingInsights {
-        let words = (transcriptText ?? "")
+        let raw = transcriptText ?? ""
+        // wordCount always reflects the full raw transcript so the metric is stable
+        // regardless of whether segments are available.
+        let rawWords =
+            raw
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { $0.isEmpty == false }
+        // topTerms: prefer clean segment text (no speaker labels / timestamps).
+        // The Circleback-imported `transcriptText` shape is
+        //   "[HH:MM:SS] Speaker Label\n<spoken text>\n"
+        // so iterating lines and stripping the speaker-prefix misses the header
+        // line entirely. Each MeetingSpeakerSegment.text is the spoken text only.
+        // Fall back to the line-stripping path only when there are no segments.
+        let termWords: [String]
+        if segments.isEmpty == false {
+            termWords =
+                segments
+                .map(\.text)
+                .joined(separator: " ")
+                .components(separatedBy: .whitespacesAndNewlines)
+                .filter { $0.isEmpty == false }
+        } else {
+            termWords =
+                raw
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .map(spokenText(fromTranscriptLine:))
+                .joined(separator: " ")
+                .components(separatedBy: .whitespacesAndNewlines)
+                .filter { $0.isEmpty == false }
+        }
         return MeetingInsights(
             durationText: durationText(seconds: durationSec),
-            speakerShares: speakerShares(from: segments),
-            wordCount: words.count,
-            topTerms: topTerms(words: words)
+            speakerShares: speakerShares(from: segments, names: speakerNames),
+            wordCount: rawWords.count,
+            topTerms: topTerms(words: termWords)
         )
+    }
+
+    /// Drops a leading `"<Speaker>: "` label from a transcript line so the speaker
+    /// name does not pollute topic extraction. A line counts as having a speaker
+    /// prefix only when the text before the first `": "` is short (≤ 5 words) and
+    /// label-like; otherwise the line is returned unchanged (a colon inside prose
+    /// must not eat the sentence).
+    static func spokenText(fromTranscriptLine line: Substring) -> String {
+        guard let range = line.range(of: ": ") else { return String(line) }
+        let label = line[line.startIndex..<range.lowerBound]
+        let wordCount = label.split(separator: " ").count
+        guard wordCount >= 1, wordCount <= 5 else { return String(line) }
+        return String(line[range.upperBound...])
     }
 
     // MARK: - Internals
@@ -213,9 +254,13 @@ public struct MeetingInsights: Equatable, Sendable {
 
     /// Small, fixed stopword list. Transcripts are realistically English or
     /// Polish (see imported Circleback fixtures), so the list mixes the most
-    /// common terms of both instead of doing language detection. Entries are
-    /// stored diacritic-folded; candidate terms are folded before lookup so
-    /// "się" matches "sie" while displayed terms keep their diacritics.
+    /// common terms of both instead of doing language detection.
+    ///
+    /// Entries are stored in the same folded form produced by `foldForStopwords(_:)`:
+    /// lowercased, `ł→l` replacement, then `.diacriticInsensitive` fold. Candidate
+    /// terms are folded identically before lookup so e.g. "było" (real ł, not ASCII)
+    /// matches "bylo". Note that `.diacriticInsensitive` alone does NOT remove ł
+    /// because ł is a distinct letter in Polish, not a base letter with a diacritic.
     /// Terms shorter than `minTermLength` are dropped before this check.
     private static let stopwords: Set<String> = [
         // English
@@ -224,12 +269,30 @@ public struct MeetingInsights: Equatable, Sendable {
         "can", "could", "just", "about", "what", "which", "who", "there", "then",
         "than", "they", "them", "his", "her", "its", "all", "any", "been", "did",
         "does", "into", "more", "some", "very", "when", "where", "how", "also",
-        // Polish (diacritic-folded)
+        // Polish (diacritic+ł folded)
         "nie", "jest", "sie", "jak", "ale", "dla", "czy", "tak", "byc", "byl",
         "byla", "bylo", "oraz", "lub", "tym", "tego", "ten", "tej", "juz", "tez",
         "wiec", "przez", "ktory", "ktora", "ktore", "bedzie", "mamy", "jako",
         "czyli", "tylko", "jego", "jej", "tam", "gdzie", "kiedy", "albo",
+        // Polish fillers leaking from real transcripts (diacritic+ł folded)
+        "zeby", "moze", "prostu", "wiem", "mozna", "bardzo", "troche", "jakby",
+        "wlasnie", "znaczy", "dlatego", "teraz", "dobrze", "prosze", "wtedy",
+        "jeszcze", "takie", "taki", "taka", "cos", "kogo", "sobie", "mnie",
+        "takiego", "trzeba", "dobra", "dobry", "bylo", "byli", "aha", "wlasciwie",
+        // Polish pronouns / generic verbs confirmed filler in real transcripts
+        "nam", "nas", "nami", "mam", "masz", "mamy", "zrobic", "robic", "robie",
+        // English contractions folded to alphanumerics
+        "youre", "dont", "thats", "iam", "weve", "well", "okay", "yeah",
     ]
+
+    /// Folds a term for stopword comparison: lowercase → replace ł with l → diacritic strip.
+    /// ł is a distinct Polish letter that `.diacriticInsensitive` does not remove,
+    /// so we handle it explicitly. The caller keeps the original spelling for display.
+    private static func foldForStopwords(_ term: String) -> String {
+        term
+            .replacingOccurrences(of: "ł", with: "l")
+            .folding(options: .diacriticInsensitive, locale: nil)
+    }
 
     private static func durationText(seconds: Int?) -> String? {
         guard let seconds, seconds > 0 else { return nil }
@@ -245,10 +308,14 @@ public struct MeetingInsights: Equatable, Sendable {
         return "\(remainder)s"
     }
 
-    private static func speakerShares(from segments: [MeetingSpeakerSegment]) -> [SpeakerShare] {
+    private static func speakerShares(
+        from segments: [MeetingSpeakerSegment],
+        names: [String: String] = [:]
+    ) -> [SpeakerShare] {
         var talkMsBySpeaker: [String: Int] = [:]
         for segment in segments where segment.endMs > segment.startMs {
-            talkMsBySpeaker[segment.speaker, default: 0] += segment.endMs - segment.startMs
+            let label = names[canonicalSpeakerKey(segment.speaker)] ?? segment.speaker
+            talkMsBySpeaker[label, default: 0] += segment.endMs - segment.startMs
         }
         let totalMs = talkMsBySpeaker.values.reduce(0, +)
         guard totalMs > 0 else { return [] }
@@ -262,7 +329,7 @@ public struct MeetingInsights: Equatable, Sendable {
     }
 
     private static func topTerms(words: [String]) -> [String] {
-        // Counts are keyed by the diacritic-folded form so spelling variants like
+        // Counts are keyed by the diacritic+ł folded form so spelling variants like
         // "wdrożenie"/"wdrozenie" merge into one term; the first-seen original
         // spelling is kept for display.
         var counts: [String: (display: String, count: Int)] = [:]
@@ -270,7 +337,7 @@ public struct MeetingInsights: Equatable, Sendable {
             let scalars = word.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
             let term = String(String.UnicodeScalarView(scalars))
             guard term.count >= minTermLength else { continue }
-            let folded = term.folding(options: .diacriticInsensitive, locale: nil)
+            let folded = foldForStopwords(term)
             guard stopwords.contains(folded) == false else { continue }
             counts[folded, default: (display: term, count: 0)].count += 1
         }

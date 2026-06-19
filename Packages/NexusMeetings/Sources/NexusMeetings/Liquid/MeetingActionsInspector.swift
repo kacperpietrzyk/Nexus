@@ -5,12 +5,14 @@ import NexusCore
 import NexusUI
 import SwiftUI
 
-/// Right inspector for the Meetings screen (spec §Right inspector), 304 pt
-/// shell slot: Follow-up Tasks, Send Summary, Insights, Next Meeting. Every
-/// card reads the shared `LiquidMeetingsModel`; only REAL actions ship —
-/// "Send to attendees" / "Share to channel" from the mockup have no backend
-/// (no mail/channel integration exists) and are intentionally omitted in
-/// favor of a real clipboard copy and the system share sheet.
+/// Right inspector for the Meetings screen (spec §Right inspector), 304 pt.
+/// Fixed section order (top→bottom):
+///   1. Processing — conditional, in-flight pipeline only.
+///   2. People (ANCHOR) — attendees + linked people + assign cue.
+///   3. Insights (ANCHOR) — aggregates.
+///   4. Follow-ups — open action items; hidden when empty.
+///   5. Related — notes + backlinks; hidden when both empty.
+///   6. Next Meeting — hidden when no upcoming meeting.
 public struct MeetingActionsInspector: View {
 
     private let model: LiquidMeetingsModel
@@ -18,7 +20,13 @@ public struct MeetingActionsInspector: View {
     @ObservedObject private var router: MeetingNavigationRouter
     private let navigation: LiquidMeetingsNavigation
 
-    @State private var copiedFeedback = false
+    // MARK: - Inline speaker assign sheet state
+
+    /// The raw speaker ID being assigned (e.g. `"Speaker_1"`). Non-nil while
+    /// the `RenameSpeakerSheet` is presented from the People section.
+    @State private var assigningSpeaker: String?
+    @State private var assignDraft = ""
+    @State private var assignError: String?
 
     public init(
         model: LiquidMeetingsModel,
@@ -36,33 +44,102 @@ public struct MeetingActionsInspector: View {
         ScrollView(showsIndicators: false) {
             // 04_LAYOUT_SYSTEM.md: inspector cards stack vertically, spacing 12.
             VStack(spacing: DS.Space.m) {
+                // 1. Processing — conditional (in-flight pipeline only)
                 if let meeting = model.meeting, shouldShowCancelCard(for: meeting) {
                     cancelProcessingCard(meeting)
                 }
+
                 if model.meeting != nil {
-                    followUpCard
-                    sendSummaryCard
+                    // 2. People — ANCHOR (always shown when a meeting is selected)
+                    KnowledgeSections(
+                        model: model, composition: composition, router: router,
+                        navigation: navigation,
+                        onAssignSpeaker: { rawSpeaker in
+                            assigningSpeaker = rawSpeaker
+                            assignDraft = model.attendees.first(where: { $0.id == rawSpeaker })?.name ?? rawSpeaker
+                            assignError = nil
+                        }
+                    ).peopleSection
+
+                    // 3. Insights — ANCHOR
                     insightsCard
-                }
-                nextMeetingCard
-                if model.knowledgeCollapsed, model.meeting != nil {
-                    // Under the wide breakpoint the Knowledge Column collapses
-                    // into this inspector (04_LAYOUT_SYSTEM.md §Wide desktop).
+
+                    // 4. Follow-ups — empty-hides
+                    if !model.openActionItems.isEmpty {
+                        followUpCard
+                    }
+
+                    // 5. Related (notes + backlinks) — empty-hides
                     KnowledgeSections(
                         model: model, composition: composition, router: router,
                         navigation: navigation
-                    )
+                    ).relatedSection
+
+                    // 6. Next Meeting — empty-hides
+                    if let next = model.nextMeeting {
+                        nextMeetingCard(next)
+                    }
                 }
             }
             .padding(DS.Space.m)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // The transient "Copied" state belongs to the meeting it was copied
-        // from — clear it on selection change so a quick switch never shows
-        // a stale confirmation for a summary that was never copied.
-        .onChange(of: router.selectedMeetingID) { _, _ in
-            copiedFeedback = false
+        .sheet(
+            isPresented: Binding(
+                get: { assigningSpeaker != nil },
+                set: { isPresented in
+                    if !isPresented { dismissAssignSheet() }
+                }
+            )
+        ) {
+            assignSheet
         }
+    }
+
+    // MARK: - Inline speaker assign sheet
+
+    @ViewBuilder
+    private var assignSheet: some View {
+        let people = (try? composition.personRepository.allActive()) ?? []
+        let suggestions = (try? composition.meetingRepository.distinctParticipantNames()) ?? []
+        RenameSpeakerSheet(
+            speaker: assigningSpeaker ?? "",
+            draft: $assignDraft,
+            errorMessage: assignError,
+            style: .liquid,
+            people: people,
+            attendeeSuggestions: [],
+            suggestions: suggestions,
+            existingPersonForCandidate: { _ in nil },
+            onCancel: { dismissAssignSheet() },
+            onSavePerson: { person in
+                guard let rawSpeaker = assigningSpeaker else { return }
+                model.assignSpeaker(
+                    rawSpeaker: rawSpeaker,
+                    displayName: person.displayName,
+                    personID: person.id,
+                    composition: composition
+                )
+                dismissAssignSheet()
+            },
+            onSave: {
+                guard let rawSpeaker = assigningSpeaker else { return }
+                let trimmed = assignDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                model.assignSpeaker(
+                    rawSpeaker: rawSpeaker,
+                    displayName: trimmed,
+                    personID: nil,
+                    composition: composition
+                )
+                dismissAssignSheet()
+            }
+        )
+    }
+
+    private func dismissAssignSheet() {
+        assigningSpeaker = nil
+        assignDraft = ""
+        assignError = nil
     }
 
     // MARK: - Cancel processing
@@ -90,102 +167,23 @@ public struct MeetingActionsInspector: View {
 
     // MARK: - Follow-up Tasks
 
-    /// Open action items of the selected meeting; the checkbox completes
-    /// through the real task repository (same path as the detail card).
+    /// Open action items of the selected meeting; only rendered when non-empty.
     @ViewBuilder
     private var followUpCard: some View {
         LiquidGlassCard("Follow-up Tasks") {
-            if model.openActionItems.isEmpty {
-                inspectorEmpty("No open follow-ups for this meeting.")
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(model.openActionItems, id: \.id) { task in
-                        LiquidTaskRow(
-                            task.title,
-                            isDone: task.status == .done,
-                            metadata: task.dueAt.map {
-                                LiquidMeetingsFormat.dayAndTime.string(from: $0)
-                            },
-                            onToggle: { model.toggleActionItem(task, composition: composition) }
-                        )
-                    }
+            VStack(spacing: 0) {
+                ForEach(model.openActionItems, id: \.id) { task in
+                    LiquidTaskRow(
+                        task.title,
+                        isDone: task.status == .done,
+                        metadata: task.dueAt.map {
+                            LiquidMeetingsFormat.dayAndTime.string(from: $0)
+                        },
+                        onToggle: { model.toggleActionItem(task, composition: composition) }
+                    )
                 }
             }
         }
-    }
-
-    // MARK: - Send Summary
-
-    @ViewBuilder
-    private var sendSummaryCard: some View {
-        LiquidGlassCard("Send Summary") {
-            if summaryText.isEmpty {
-                inspectorEmpty("Nothing to share yet — the summary appears after processing.")
-            } else {
-                VStack(spacing: DS.Space.xs) {
-                    actionRow(
-                        systemImage: copiedFeedback ? "checkmark" : "doc.on.doc",
-                        title: copiedFeedback ? "Copied" : "Copy summary"
-                    ) {
-                        copySummary()
-                    }
-                    // System share sheet over the real summary text (ShareLink
-                    // presents NSSharingServicePicker on macOS).
-                    ShareLink(item: summaryText) {
-                        actionRowLabel(systemImage: "square.and.arrow.up", title: "Share summary…")
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private var summaryText: String {
-        (model.meeting?.summaryText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func copySummary() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(summaryText, forType: .string)
-        withAnimation(DS.Motion.selection) { copiedFeedback = true }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            withAnimation(DS.Motion.selection) { copiedFeedback = false }
-        }
-    }
-
-    private func actionRow(
-        systemImage: String, title: String, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            actionRowLabel(systemImage: systemImage, title: title)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func actionRowLabel(systemImage: String, title: String) -> some View {
-        HStack(spacing: DS.Space.s) {
-            Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textSecondary)
-                .frame(width: 16)
-            Text(title)
-                .font(DS.FontToken.body)
-                .foregroundStyle(DS.ColorToken.textPrimary)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, DS.Space.s)
-        .frame(height: 30)
-        .background {
-            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                .fill(Color.white.opacity(0.04))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
-                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
-        }
-        .contentShape(Rectangle())
     }
 
     // MARK: - Insights
@@ -268,33 +266,63 @@ public struct MeetingActionsInspector: View {
     // MARK: - Next Meeting
 
     /// Next upcoming meeting by `startedAt > now` — real store read; the CTA
-    /// opens it in this screen. The mockup's "add talking points" has no
-    /// backing surface and is omitted.
+    /// opens it in this screen. Only rendered when a next meeting exists.
     @ViewBuilder
-    private var nextMeetingCard: some View {
+    private func nextMeetingCard(_ next: Meeting) -> some View {
         LiquidGlassCard("Next Meeting") {
-            if let next = model.nextMeeting {
-                VStack(alignment: .leading, spacing: DS.Space.s) {
-                    Text(next.title)
-                        .font(DS.FontToken.bodyStrong)
-                        .foregroundStyle(DS.ColorToken.textPrimary)
-                        .lineLimit(2)
-                    HStack(spacing: DS.Space.xxs) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(DS.ColorToken.textMuted)
-                        Text(LiquidMeetingsFormat.dayAndTime.string(from: next.startedAt))
-                            .font(DS.FontToken.metadata)
-                            .foregroundStyle(DS.ColorToken.textTertiary)
-                    }
-                    actionRow(systemImage: "arrow.right", title: "Open meeting") {
-                        router.navigate(to: next.id)
-                    }
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                Text(next.title)
+                    .font(DS.FontToken.bodyStrong)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                    .lineLimit(2)
+                HStack(spacing: DS.Space.xxs) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(DS.ColorToken.textMuted)
+                    Text(LiquidMeetingsFormat.dayAndTime.string(from: next.startedAt))
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textTertiary)
                 }
-            } else {
-                inspectorEmpty("No upcoming meetings scheduled.")
+                actionRow(systemImage: "arrow.right", title: "Open meeting") {
+                    router.navigate(to: next.id)
+                }
             }
         }
+    }
+
+    // MARK: - Shared affordances
+
+    private func actionRow(
+        systemImage: String, title: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            actionRowLabel(systemImage: systemImage, title: title)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func actionRowLabel(systemImage: String, title: String) -> some View {
+        HStack(spacing: DS.Space.s) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(DS.ColorToken.textSecondary)
+                .frame(width: 16)
+            Text(title)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textPrimary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DS.Space.s)
+        .frame(height: 30)
+        .background {
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+        }
+        .contentShape(Rectangle())
     }
 
     private func inspectorEmpty(_ text: String) -> some View {
