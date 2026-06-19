@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import NexusCore
 import NexusUI
 import SwiftUI
@@ -54,15 +55,13 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
 
     var body: some View {
-        ScrollViewReader { _ in
-            editorList
-        }
-        .navigationTitle(model.title.isEmpty ? "Untitled" : model.title)
-        #if os(iOS)
+        editorList
+            .navigationTitle(model.title.isEmpty ? "Untitled" : model.title)
+            #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .task(id: note.id) { rebindModel() }
-        #if os(iOS)
+            #endif
+            .task(id: note.id) { rebindModel() }
+            #if os(iOS)
         .task(id: selectedPhotoItem) {
             await handleSelectedPhotoItem(selectedPhotoItem)
         }
@@ -127,44 +126,146 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
 
     // MARK: - Sections
 
-    /// The block list. On macOS it is hosted as a Liquid glass document panel
-    /// (the platform `List` background is hidden so the glass shows through);
-    /// iOS keeps the platform-native list. Same rows, same interactions.
+    /// The block list. On macOS a `ScrollView`+`LazyVStack` document body (reading
+    /// measure + focus-to-edit); iOS keeps the platform-native `List` (swipe/reorder).
     private var editorList: some View {
+        #if os(macOS)
+        return documentBody
+        #else
         let list = List {
-            if model.role == .dailyNote {
-                dailyNoteNavRow
-            }
+            if model.role == .dailyNote { dailyNoteNavRow }
             titleField
             propertiesSection
             blockRows
             insertRow
-            if !backlinks.isEmpty {
-                backlinksSection
-            }
+            if !backlinks.isEmpty { backlinksSection }
         }
         .listStyle(.plain)
-        #if os(macOS)
-        return
-            list
-            .scrollContentBackground(.hidden)
-            .padding(.vertical, DS.Space.s)
-            .liquidLightCard(cornerRadius: DS.Radius.l)
-            .padding(.horizontal, DS.Space.xl)
-            .padding(.vertical, DS.Space.l)
-        #else
         return list
         #endif
     }
 
+    #if os(macOS)
+    @State private var focusedBlockID: UUID?
+    @FocusState private var fieldFocus: UUID?
+    @State private var dropTargetID: UUID?
+
+    /// Non-block rows (title, properties, insert, backlinks) carry this leading
+    /// inset so their text lines up with block text, which sits to the right of
+    /// the 34pt hover gutter + the row's `DS.Space.xs` spacing.
+    private var macBlockTextInset: CGFloat { 34 + DS.Space.xs }
+
+    private var documentBody: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                if model.role == .dailyNote { dailyNoteNavRow.padding(.leading, macBlockTextInset) }
+                titleField.padding(.leading, macBlockTextInset)
+                propertiesSection.padding(.leading, macBlockTextInset)
+                macBlockRows
+                insertRow.padding(.leading, macBlockTextInset)
+                if !backlinks.isEmpty { backlinksSection.padding(.leading, macBlockTextInset) }
+            }
+            // Left-anchored reading column (not centered — the centering read as
+            // "wasted space"); capped so a wide window doesn't yield 200-char lines.
+            .frame(maxWidth: 900, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, DS.Space.xl)
+            .padding(.vertical, DS.Space.l)
+        }
+        .liquidLightCard(cornerRadius: DS.Radius.l)
+        // Outer margin so the document card doesn't butt against the navigator /
+        // window edges (the gap that existed before the LazyVStack rewrite).
+        .padding(.horizontal, DS.Space.l)
+        .padding(.vertical, DS.Space.l)
+    }
+
+    private var ordinals: [UUID: Int] { NumberedOrdinals.ordinals(for: model.blocks) }
+
+    @ViewBuilder private var macBlockRows: some View {
+        ForEach(Array(model.blocks.enumerated()), id: \.element.id) { index, block in
+            DocumentBlockRow(
+                block: block,
+                model: model,
+                ordinal: ordinals[block.id],
+                isEditing: focusedBlockID == block.id,
+                fieldFocus: $fieldFocus,
+                isDropTarget: dropTargetID == block.id,
+                topPadding: BlockRhythm.spacingBefore(
+                    block.kind, previous: index > 0 ? model.blocks[index - 1].kind : nil),
+                onActivate: {
+                    focusedBlockID = block.id; fieldFocus = block.id
+                },
+                onOpenRef: { openRef($0) },
+                onAdd: {
+                    model.insert(.paragraph, after: block.id)
+                    let idx = model.blocks.firstIndex(where: { $0.id == block.id })
+                    if let i = idx, model.blocks.indices.contains(i + 1) {
+                        let new = model.blocks[i + 1]
+                        focusedBlockID = new.id
+                        fieldFocus = new.id
+                    }
+                },
+                onDelete: { model.remove(id: block.id) },
+                onMoveUp: { moveBlock(block.id, by: -1) },
+                onMoveDown: { moveBlock(block.id, by: 1) },
+                turnInto: turnIntoOptions(for: block),
+                onDrop: { draggedID in performBlockDrop(draggedID, onto: block.id) },
+                setDropTarget: {
+                    dropTargetID = $0 ? block.id : (dropTargetID == block.id ? nil : dropTargetID)
+                }
+            )
+        }
+        .onChange(of: fieldFocus) { _, newValue in
+            // Clicking away (focus lost) returns the block to rendered mode.
+            if newValue == nil { focusedBlockID = nil }
+        }
+    }
+
+    private func moveBlock(_ id: UUID, by delta: Int) {
+        guard let from = model.blocks.firstIndex(where: { $0.id == id }) else { return }
+        let to = from + delta
+        guard model.blocks.indices.contains(to) else { return }
+        // SwiftUI move semantics: destination is the index to insert BEFORE.
+        model.move(from: IndexSet(integer: from), to: delta > 0 ? to + 1 : to)
+    }
+
+    private func performBlockDrop(_ draggedID: String, onto targetID: UUID) -> Bool {
+        guard
+            let fromID = UUID(uuidString: draggedID),
+            let from = model.blocks.firstIndex(where: { $0.id == fromID }),
+            let to = model.blocks.firstIndex(where: { $0.id == targetID }),
+            from != to
+        else { return false }
+        model.move(from: IndexSet(integer: from), to: to > from ? to + 1 : to)
+        return true
+    }
+
+    private func turnIntoOptions(for block: Block) -> [(String, () -> Void)] {
+        [
+            ("Text", { model.convert(blockID: block.id, to: .paragraph) }),
+            ("Heading", { model.convert(blockID: block.id, to: .heading(level: 2)) }),
+            ("To-do", { model.convert(blockID: block.id, to: .todo) }),
+            ("Bulleted", { model.convert(blockID: block.id, to: .bulleted) }),
+            ("Numbered", { model.convert(blockID: block.id, to: .numbered) }),
+            ("Quote", { model.convert(blockID: block.id, to: .quote) }),
+        ]
+    }
+    #endif
+
+    @FocusState private var titleFocused: Bool
+
     private var titleField: some View {
         // Document title heading (not a form field): keep the display font — a
-        // tile-boxed NexusTextField would flatten the page title.
-        TextField("Title", text: $model.title)
+        // tile-boxed NexusTextField would flatten the page title. `axis: .vertical`
+        // lets a long title wrap instead of truncating; commit on blur (Return
+        // inserts a newline on a vertical field, so onSubmit alone won't fire).
+        TextField("Title", text: $model.title, axis: .vertical)
             .textFieldStyle(.plain)
             .font(DS.FontToken.displayMedium)
             .foregroundStyle(DS.ColorToken.textPrimary)
             .disabled(!model.canEdit)
+            .focused($titleFocused)
+            .onChange(of: titleFocused) { _, focused in if !focused { model.commitTitle() } }
             .onSubmit { model.commitTitle() }
             .listRowSeparator(.hidden)
     }
@@ -219,11 +320,14 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
         }
         .padding(DS.Space.m)
         #if os(macOS)
+        // Inline metadata (no card), but keep a hairline bottom border as the
+        // "delikatna przerwa" separating properties from the document body.
         return
             slab
-            .overlay {
-                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                    .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(DS.ColorToken.strokeHairline)
+                    .frame(height: 1)
             }
             .padding(.vertical, DS.Space.s)
             .listRowSeparator(.hidden)
@@ -279,15 +383,22 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     /// The "add tag" text field. iOS-only autocorrect/capitalization suppression is
     /// applied here (outside the `HStack` chain) so no `#if` sits mid-modifier-chain.
     private var tagInputField: some View {
+        #if os(iOS)
         let field = NexusTextField("Add tag", text: $newTag, isEnabled: model.canEdit)
             .onSubmit { commitTag() }
-        #if os(iOS)
         return
             field
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
         #else
-        return field.frame(maxWidth: 420, alignment: .leading)
+        return
+            TextField("Add tag", text: $newTag)
+            .textFieldStyle(.plain)
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textSecondary)
+            .frame(maxWidth: 420, alignment: .leading)
+            .onSubmit { commitTag() }
+            .disabled(!model.canEdit)
         #endif
     }
 
@@ -324,15 +435,22 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
 
     private var folderInputField: some View {
+        #if os(iOS)
         let field = NexusTextField("No folder", text: $folderText, isEnabled: model.canEdit)
             .onSubmit { commitFolder() }
-        #if os(iOS)
         return
             field
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
         #else
-        return field.frame(maxWidth: 420, alignment: .leading)
+        return
+            TextField("No folder", text: $folderText)
+            .textFieldStyle(.plain)
+            .font(DS.FontToken.metadata)
+            .foregroundStyle(DS.ColorToken.textSecondary)
+            .frame(maxWidth: 420, alignment: .leading)
+            .onSubmit { commitFolder() }
+            .disabled(!model.canEdit)
         #endif
     }
 
@@ -359,26 +477,41 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     private var addPropertyField: some View {
         // The .frame cap is macOS-only; the #if is applied outside the HStack modifier
         // chain to avoid mid-chain conditional compilation (mirrors tagInputField pattern).
-        let stack = HStack(spacing: 6) {
-            Image(systemName: "plus.circle")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(DS.ColorToken.textTertiary)
-            NexusTextField("Add property", text: $newPropertyKey)
-                .onSubmit {
-                    model.addProperty(key: newPropertyKey)
-                    newPropertyKey = ""
-                }
-        }
         #if os(macOS)
-        return stack.frame(maxWidth: 420, alignment: .leading)
+        return
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                TextField("Add property", text: $newPropertyKey)
+                    .textFieldStyle(.plain)
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+                    .onSubmit {
+                        model.addProperty(key: newPropertyKey)
+                        newPropertyKey = ""
+                    }
+            }
+            .frame(maxWidth: 420, alignment: .leading)
         #else
-        return stack
+        return
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                NexusTextField("Add property", text: $newPropertyKey)
+                    .onSubmit {
+                        model.addProperty(key: newPropertyKey)
+                        newPropertyKey = ""
+                    }
+            }
         #endif
     }
 
     private var blockRows: some View {
-        ForEach(model.blocks) { block in
-            BlockView(block: block, model: model, onOpenRef: { openRef($0) })
+        let ordinals = NumberedOrdinals.ordinals(for: model.blocks)
+        return ForEach(model.blocks) { block in
+            BlockView(block: block, model: model, onOpenRef: { openRef($0) }, ordinal: ordinals[block.id])
                 .listRowSeparator(.hidden)
                 .swipeActions(edge: .trailing) {
                     if model.canEdit {
