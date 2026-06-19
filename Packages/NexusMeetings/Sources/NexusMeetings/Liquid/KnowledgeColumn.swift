@@ -432,7 +432,8 @@ private struct BacklinksGraph: View {
             nodes.count,
             in: size,
             pillSize: Self.fullPillSize,
-            maxNodes: nodes.count  // show all in the full view
+            maxNodes: nodes.count,  // show all in the full view
+            centerClear: Self.fullPillSize  // reserve space for the centre pill
         )
         let visibleNodes = Array(nodes.prefix(rects.count))
 
