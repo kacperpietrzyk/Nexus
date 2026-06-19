@@ -19,9 +19,9 @@ private func kindColor(_ kind: ItemKind) -> Color {
     }
 }
 
-/// The three knowledge cards embedded in the right inspector
-/// `MeetingActionsInspector` can embed the identical sections when the
-/// column collapses into the inspector.
+/// The knowledge cards embedded in the right inspector `MeetingActionsInspector`.
+/// Exposed as two focused sections so the inspector can place them at distinct
+/// positions in the panel IA (People high, Related low).
 struct KnowledgeSections: View {
 
     let model: LiquidMeetingsModel
@@ -31,98 +31,161 @@ struct KnowledgeSections: View {
 
     var body: some View {
         VStack(spacing: DS.Space.m) {
-            linkedToCard
-            relatedNotesCard
-            backlinksCard
+            peopleSection
+            relatedSection
         }
     }
 
-    // MARK: - Linked to
+    // MARK: - People section (ANCHOR)
 
+    /// Merged attendees + linked Person contacts into a single "People" card.
+    /// Assigned speakers (personID set) show name + link chevron.
+    /// Unassigned speakers show the raw label + an "Assign in Transcript" cue.
+    /// Always shown (anchor) — renders an empty-state row when there are no
+    /// attendees rather than disappearing.
     @ViewBuilder
-    private var linkedToCard: some View {
-        LiquidGlassCard("Linked to") {
-            if model.linkedItems.isEmpty {
-                emptyNote("Nothing linked yet. Links appear as the graph grows.")
+    var peopleSection: some View {
+        LiquidGlassCard("People") {
+            let rows = peopleRows
+            if rows.isEmpty {
+                emptyNote("No participants recorded for this meeting.")
             } else {
                 VStack(spacing: DS.Space.xs) {
-                    ForEach(model.linkedItems) { item in
-                        linkedRow(item)
+                    ForEach(rows) { row in
+                        personRow(row)
                     }
                 }
             }
         }
     }
 
-    private func linkedRow(_ item: LiquidMeetingsModel.LinkedItem) -> some View {
-        Button {
-            open(item)
-        } label: {
+    /// Merged, deduplicated set of attendees and linked-person items.
+    /// Attendees take priority; linked person items whose personID already appears
+    /// as an attendee's personID are suppressed (no double row).
+    private var peopleRows: [PersonRow] {
+        var result: [PersonRow] = []
+        var seenPersonIDs = Set<UUID>()
+
+        // Attendees from participantsJSON (speakers the pipeline found)
+        for attendee in model.attendees {
+            if let pid = attendee.personID {
+                guard seenPersonIDs.insert(pid).inserted else { continue }
+            }
+            result.append(PersonRow(attendee: attendee))
+        }
+
+        // Linked Person items from the graph that weren't already surfaced as attendees
+        for item in model.linkedItems where item.kind == .person {
+            guard seenPersonIDs.insert(item.targetID).inserted else { continue }
+            result.append(PersonRow(linkedItem: item))
+        }
+
+        return result
+    }
+
+    @ViewBuilder
+    private func personRow(_ row: PersonRow) -> some View {
+        if row.targetID != nil {
+            // Assigned person — opens People destination
+            Button {
+                navigation.openPeople()
+            } label: {
+                personRowLabel(row: row, showChevron: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(row.name), assigned to contact")
+            .accessibilityHint("Opens People")
+        } else {
+            // Unassigned speaker — hint to assign via the Transcript tab
             HStack(spacing: DS.Space.s) {
-                LiquidPill(item.kind.displayName, color: kindColor(item.kind))
-                Text(item.title)
-                    .font(DS.FontToken.body)
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
+                personRowLabel(row: row, showChevron: false)
+                Text("Assign in Transcript")
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textMuted)
+            }
+        }
+    }
+
+    private func personRowLabel(row: PersonRow, showChevron: Bool) -> some View {
+        HStack(spacing: DS.Space.s) {
+            LiquidPill("Person", color: DS.ColorToken.accentGreen)
+            Text(row.name)
+                .font(DS.FontToken.body)
+                .foregroundStyle(
+                    row.targetID != nil
+                        ? DS.ColorToken.textSecondary : DS.ColorToken.textTertiary
+                )
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if showChevron {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(DS.ColorToken.textMuted)
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 
-    // MARK: - Related notes
+    // MARK: - Related section (empty-hides)
 
+    /// Merged "Related notes" list + Backlinks graph under one "Related" card.
+    /// Hidden entirely when both are empty (empty-hides: no card rendered).
     @ViewBuilder
-    private var relatedNotesCard: some View {
-        LiquidGlassCard("Related notes") {
-            if model.relatedNotes.isEmpty {
-                emptyNote("No related notes — none share links with this meeting.")
-            } else {
-                VStack(spacing: DS.Space.xs) {
-                    ForEach(model.relatedNotes) { note in
-                        Button {
-                            // Notes has no per-note deep-link seam yet; the
-                            // honest action is opening the Notes destination.
-                            navigation.openNotes()
-                        } label: {
-                            HStack(spacing: DS.Space.s) {
-                                Image(systemName: "doc.text")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(DS.ColorToken.accentAmber)
-                                Text(note.title)
-                                    .font(DS.FontToken.body)
-                                    .foregroundStyle(DS.ColorToken.textSecondary)
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .contentShape(Rectangle())
+    var relatedSection: some View {
+        let hasRelatedNotes = !model.relatedNotes.isEmpty
+        let hasBacklinks = !model.graphItems.isEmpty
+        if hasRelatedNotes || hasBacklinks {
+            LiquidGlassCard("Related") {
+                VStack(spacing: DS.Space.m) {
+                    if hasRelatedNotes {
+                        relatedNotesList
+                    }
+                    if hasBacklinks {
+                        if hasRelatedNotes {
+                            Divider()
+                                .overlay(DS.ColorToken.strokeHairline)
                         }
-                        .buttonStyle(.plain)
+                        backlinksGraph
                     }
                 }
             }
         }
     }
 
-    // MARK: - Backlinks graph
+    @ViewBuilder
+    private var relatedNotesList: some View {
+        VStack(spacing: DS.Space.xs) {
+            ForEach(model.relatedNotes) { note in
+                Button {
+                    // Notes has no per-note deep-link seam yet; open the Notes destination.
+                    navigation.openNotes()
+                } label: {
+                    HStack(spacing: DS.Space.s) {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(DS.ColorToken.accentAmber)
+                        Text(note.title)
+                            .font(DS.FontToken.body)
+                            .foregroundStyle(DS.ColorToken.textSecondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
 
     @ViewBuilder
-    private var backlinksCard: some View {
-        LiquidGlassCard("Backlinks") {
-            if model.graphItems.isEmpty {
-                emptyNote("No backlinks yet — this meeting isn't referenced anywhere.")
-            } else if let meeting = model.meeting {
-                BacklinksGraph(
-                    centerTitle: meeting.title,
-                    nodes: model.graphItems,
-                    onTap: { open($0) }
-                )
-                .frame(height: 190)
-            }
+    private var backlinksGraph: some View {
+        if let meeting = model.meeting {
+            BacklinksGraph(
+                centerTitle: meeting.title,
+                nodes: model.graphItems,
+                onTap: { open($0) }
+            )
+            .frame(height: 190)
         }
     }
 
@@ -164,6 +227,32 @@ struct KnowledgeSections: View {
         default:
             break
         }
+    }
+}
+
+// MARK: - PersonRow
+
+/// A display row in the People section — either an attendee from the transcript
+/// or a person linked via the graph.
+private struct PersonRow: Identifiable {
+    let id: String
+    let name: String
+    /// Set if the attendee was assigned to a `Person` contact (personID) or if
+    /// this row comes from a linked-person graph item (targetID). Used to
+    /// distinguish "assigned" (shows chevron + openPeople) from "unassigned"
+    /// (shows Assign button routing to Transcript).
+    let targetID: UUID?
+
+    init(attendee: LiquidMeetingsModel.Attendee) {
+        self.id = "attendee-\(attendee.id)"
+        self.name = attendee.name
+        self.targetID = attendee.personID
+    }
+
+    init(linkedItem: LiquidMeetingsModel.LinkedItem) {
+        self.id = "linked-\(linkedItem.id)"
+        self.name = linkedItem.title
+        self.targetID = linkedItem.targetID
     }
 }
 

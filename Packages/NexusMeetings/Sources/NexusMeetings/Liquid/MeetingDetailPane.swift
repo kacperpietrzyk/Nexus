@@ -26,6 +26,7 @@ struct MeetingDetailPane: View {
 
     @State private var tab: MeetingDetailTab = .overview
     @State private var summaryExpanded = false
+    @State private var summaryCopied = false
 
     var body: some View {
         if let meeting = model.meeting {
@@ -88,6 +89,8 @@ struct MeetingDetailPane: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Start a recording by picking a meeting window")
+                summaryCopyButton(meeting)
+                summaryShareButton(meeting)
                 shareButton(meeting)
             }
         }
@@ -153,6 +156,71 @@ struct MeetingDetailPane: View {
             badges.append(("Processing", DS.ColorToken.statusWarning))
         }
         return badges
+    }
+
+    // MARK: - Summary actions (Copy / Share)
+
+    /// The plain-text AI summary for Copy/Share — trimmed to avoid trailing
+    /// whitespace on the clipboard. Distinct from `exportMarkdownDocument`
+    /// which is the full meeting document used by the Markdown share button.
+    private var summaryText: String {
+        (model.meeting?.summaryText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// "Copy summary" icon button — copies `summaryText` to the clipboard with
+    /// a transient checkmark feedback. Only active when summary is non-empty.
+    @ViewBuilder
+    private func summaryCopyButton(_ meeting: Meeting) -> some View {
+        let text = summaryText
+        if !text.isEmpty {
+            Button {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(text, forType: .string)
+                withAnimation(DS.Motion.selection) { summaryCopied = true }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2))
+                    withAnimation(DS.Motion.selection) { summaryCopied = false }
+                }
+            } label: {
+                headerIconLabel(
+                    systemImage: summaryCopied ? "checkmark" : "doc.on.doc"
+                )
+            }
+            .buttonStyle(.plain)
+            .help(summaryCopied ? "Copied" : "Copy summary")
+            .onChange(of: meeting.id) { _, _ in summaryCopied = false }
+        }
+    }
+
+    /// "Share summary" button — presents `NSSharingServicePicker` over the
+    /// plain summary text. Only active when summary is non-empty.
+    @ViewBuilder
+    private func summaryShareButton(_ meeting: Meeting) -> some View {
+        let text = summaryText
+        if !text.isEmpty {
+            ShareLink(item: text) {
+                headerIconLabel(systemImage: "text.bubble")
+            }
+            .buttonStyle(.plain)
+            .help("Share summary…")
+        }
+    }
+
+    private func headerIconLabel(systemImage: String) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(DS.ColorToken.textSecondary)
+            .frame(width: 24, height: 24)
+            .background {
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: DS.Radius.s, style: .continuous)
+                    .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
     }
 
     /// System share picker over the full meeting Markdown document (frontmatter
