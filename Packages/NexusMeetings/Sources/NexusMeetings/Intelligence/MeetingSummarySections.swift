@@ -195,15 +195,37 @@ public struct MeetingInsights: Equatable, Sendable {
         segments: [MeetingSpeakerSegment],
         transcriptText: String?
     ) -> MeetingInsights {
-        let words = (transcriptText ?? "")
+        let raw = transcriptText ?? ""
+        let rawWords =
+            raw
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { $0.isEmpty == false }
+        let termWords =
+            raw
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(spokenText(fromTranscriptLine:))
+            .joined(separator: " ")
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { $0.isEmpty == false }
         return MeetingInsights(
             durationText: durationText(seconds: durationSec),
             speakerShares: speakerShares(from: segments),
-            wordCount: words.count,
-            topTerms: topTerms(words: words)
+            wordCount: rawWords.count,
+            topTerms: topTerms(words: termWords)
         )
+    }
+
+    /// Drops a leading `"<Speaker>: "` label from a transcript line so the speaker
+    /// name does not pollute topic extraction. A line counts as having a speaker
+    /// prefix only when the text before the first `": "` is short (≤ 5 words) and
+    /// label-like; otherwise the line is returned unchanged (a colon inside prose
+    /// must not eat the sentence).
+    static func spokenText(fromTranscriptLine line: Substring) -> String {
+        guard let range = line.range(of: ": ") else { return String(line) }
+        let label = line[line.startIndex..<range.lowerBound]
+        let wordCount = label.split(separator: " ").count
+        guard wordCount >= 1, wordCount <= 5 else { return String(line) }
+        return String(line[range.upperBound...])
     }
 
     // MARK: - Internals
@@ -229,6 +251,12 @@ public struct MeetingInsights: Equatable, Sendable {
         "byla", "bylo", "oraz", "lub", "tym", "tego", "ten", "tej", "juz", "tez",
         "wiec", "przez", "ktory", "ktora", "ktore", "bedzie", "mamy", "jako",
         "czyli", "tylko", "jego", "jej", "tam", "gdzie", "kiedy", "albo",
+        // Polish fillers leaking from real transcripts (diacritic-folded)
+        "zeby", "moze", "prostu", "wiem", "mozna", "bardzo", "troche", "jakby",
+        "wlasnie", "znaczy", "dlatego", "teraz", "dobrze", "prosze", "wtedy",
+        "jeszcze", "takie", "taki", "taka", "cos", "kogo", "sobie", "mnie",
+        // English contractions folded to alphanumerics
+        "youre", "dont", "thats", "iam", "weve", "well", "okay", "yeah",
     ]
 
     private static func durationText(seconds: Int?) -> String? {

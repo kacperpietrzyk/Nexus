@@ -295,3 +295,21 @@ import Testing
     #expect(insights.topTerms.count == 5)
     #expect(insights.topTerms == ["alpha", "bravo", "charlie", "delta", "echo"])
 }
+
+// MARK: - insights: speaker-label stripping + Polish fillers
+
+@Test func topTermsExcludeSpeakerLabelsAndPolishFillers() {
+    let transcript = """
+        Participant 1: żeby zrobić wdrożenie systemu, może po prostu wiem
+        Participant 2: wdrożenie systemu to wdrożenie, prostu wiem
+        """
+    let insights = MeetingInsights.insights(durationSec: 600, segments: [], transcriptText: transcript)
+    // Speaker label must not be a topic.
+    #expect(insights.topTerms.contains("participant") == false)
+    // Polish fillers must be filtered (diacritic-folded match).
+    for filler in ["zeby", "moze", "prostu", "wiem"] {
+        #expect(insights.topTerms.contains { $0.folding(options: .diacriticInsensitive, locale: nil) == filler } == false)
+    }
+    // The real repeated topic survives.
+    #expect(insights.topTerms.contains { $0.folding(options: .diacriticInsensitive, locale: nil) == "wdrozenie" })
+}
