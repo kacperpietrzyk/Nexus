@@ -3,12 +3,12 @@ import NexusCore
 
 /// Which set of notes the right-pane list shows. Drives `NoteListResolver`.
 public enum NoteContainer: Hashable, Sendable {
-    case overview            // Pinned + Recent — the default entry slice
+    case overview  // Pinned + Recent — the default entry slice
     case unfiled
     case journal
     case templates
     case project(UUID)
-    case folder(String)      // a Library folder path; notes directly at this path
+    case folder(String)  // a Library folder path; notes directly at this path
 }
 
 /// Pure mapping from a selected `NoteContainer` (+ the already-built tree) to the

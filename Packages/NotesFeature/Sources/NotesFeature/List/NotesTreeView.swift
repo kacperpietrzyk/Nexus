@@ -364,7 +364,7 @@ struct NotesTreeView: View {
     // MARK: - Selection
 
     private func selectContainer(_ container: NoteContainer) {
-        path = []          // leave the editor → show the list
+        path = []  // leave the editor → show the list
         selectedContainer = container
     }
 
