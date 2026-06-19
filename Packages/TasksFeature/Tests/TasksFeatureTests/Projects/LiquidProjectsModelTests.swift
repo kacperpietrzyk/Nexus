@@ -12,6 +12,7 @@ struct LiquidProjectsModelTests {
     private func makeContext() throws -> ModelContext {
         let container = try ModelContainer(
             for: Project.self, TaskItem.self, Section.self, Note.self, Comment.self, Link.self, Cycle.self,
+            Organization.self, ProjectKeyDate.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         return ModelContext(container)
@@ -228,5 +229,25 @@ struct LiquidProjectsModelTests {
         #expect(snapshot.risks.count >= 2)
         #expect(snapshot.activity.count >= 3)
         #expect(snapshot.progress > 0.5)
+    }
+
+    @MainActor
+    @Test func pickerExposesClientNameAndNextKeyDate() throws {
+        let context = try makeContext()  // existing helper in this suite
+        let org = Organization(name: "ACME")
+        context.insert(org)
+        let project = try ProjectRepository(context: context).create(name: "P", type: .implementation)
+        try ProjectRepository(context: context).setClient(org.id, on: project)
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let kd = ProjectKeyDateRepository(context: context)
+        try kd.setKeyDate(projectID: project.id, anchorKey: "past", label: "Past", date: now.addingTimeInterval(-86_400))
+        try kd.setKeyDate(projectID: project.id, anchorKey: "soon", label: "Kickoff", date: now.addingTimeInterval(86_400))
+        try kd.setKeyDate(projectID: project.id, anchorKey: "later", label: "Go-live", date: now.addingTimeInterval(5 * 86_400))
+
+        let model = LiquidProjectsModel()
+        model.reload(modelContext: context, now: now)
+
+        #expect(model.clientNameByProject[project.id] == "ACME")
+        #expect(model.nextKeyDateByProject[project.id]?.anchorKey == "soon")  // soonest upcoming, not past/later
     }
 }
