@@ -421,6 +421,7 @@ public struct LiquidWeekScreen: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
         }
     }
 
