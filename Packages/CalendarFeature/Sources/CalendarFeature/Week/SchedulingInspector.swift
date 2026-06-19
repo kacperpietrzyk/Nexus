@@ -526,8 +526,10 @@ public struct SchedulingInspector: View {
             } else {
                 // ScrollView scoped to the card interior: the list scrolls
                 // within the card bounds, not the whole inspector.
+                // LazyVStack so rows are materialized on demand — prevents
+                // stalls when the unscheduled bucket is large (~1000+ items).
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: DS.Space.xxs) {
+                    LazyVStack(spacing: DS.Space.xxs) {
                         ForEach(unscheduledTasks) { task in
                             unscheduledTaskRow(task)
                         }
