@@ -63,27 +63,12 @@ struct KnowledgeSections {
     }
 
     /// Merged, deduplicated set of attendees and linked-person items.
-    /// Attendees take priority; linked person items whose personID already appears
-    /// as an attendee's personID are suppressed (no double row).
+    /// Deduplication is by canonical speaker name so that a junk "Participant N"
+    /// `Person` entity (created by the V11→V12 backfill) doesn't produce a
+    /// second row alongside the unassigned attendee of the same name.
     private var peopleRows: [PersonRow] {
-        var result: [PersonRow] = []
-        var seenPersonIDs = Set<UUID>()
-
-        // Attendees from participantsJSON (speakers the pipeline found)
-        for attendee in model.attendees {
-            if let pid = attendee.personID {
-                guard seenPersonIDs.insert(pid).inserted else { continue }
-            }
-            result.append(PersonRow(attendee: attendee))
-        }
-
-        // Linked Person items from the graph that weren't already surfaced as attendees
-        for item in model.linkedItems where item.kind == .person {
-            guard seenPersonIDs.insert(item.targetID).inserted else { continue }
-            result.append(PersonRow(linkedItem: item))
-        }
-
-        return result
+        let linkedPersons = model.linkedItems.filter { $0.kind == .person }
+        return dedupedPeopleRows(attendees: model.attendees, linkedPersons: linkedPersons)
     }
 
     @ViewBuilder
@@ -244,11 +229,83 @@ struct KnowledgeSections {
     }
 }
 
+// MARK: - Placeholder check (nonisolated copy for use in synchronous contexts)
+
+/// Returns `true` when `name` matches the auto-generated placeholder pattern
+/// ("Participant N", "Speaker N", etc.). Mirrors `MeetingPeopleLinker.isNumberedPlaceholder`
+/// but is nonisolated so it can be called from synchronous free functions.
+private func isPlaceholderName(_ name: String) -> Bool {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    return trimmed.range(
+        of: "^(participant|speaker)[ _]?\\d+$",
+        options: [.regularExpression, .caseInsensitive]
+    ) != nil
+}
+
+// MARK: - Dedup helper
+
+/// Builds the deduped `[PersonRow]` for the People section.
+///
+/// Groups attendees and linked `Person` graph items by `canonicalSpeakerKey`.
+/// Within each canonical-name group the row is **assigned** (shows chevron)
+/// only when there is a real, non-placeholder person link; otherwise it is
+/// **unassigned** (shows Assign button).
+///
+/// This prevents junk "Participant N" `Person` entities (created by the
+/// V11→V12 backfill) from generating a second duplicate row alongside the
+/// unassigned attendee of the same name.
+///
+/// Pure function — no store access, no SwiftUI, fully unit-testable.
+func dedupedPeopleRows(
+    attendees: [LiquidMeetingsModel.Attendee],
+    linkedPersons: [LiquidMeetingsModel.LinkedItem]
+) -> [PersonRow] {
+    // Build a lookup: canonical name → first non-placeholder linked person.
+    var linkedByKey: [String: LiquidMeetingsModel.LinkedItem] = [:]
+    for item in linkedPersons {
+        let key = canonicalSpeakerKey(item.title)
+        guard linkedByKey[key] == nil else { continue }
+        // Only count it as a real assignment when the name is not a numbered placeholder.
+        if !isPlaceholderName(item.title) {
+            linkedByKey[key] = item
+        }
+    }
+
+    var result: [PersonRow] = []
+    var seenKeys = Set<String>()
+
+    for attendee in attendees {
+        let key = canonicalSpeakerKey(attendee.name)
+        guard seenKeys.insert(key).inserted else { continue }
+
+        if let personID = attendee.personID, !isPlaceholderName(attendee.name) {
+            // Attendee already has a real person assignment in participantsJSON.
+            result.append(PersonRow(id: "attendee-\(attendee.id)", name: attendee.name, targetID: personID, rawSpeaker: nil))
+        } else if let linked = linkedByKey[key] {
+            // Real (non-placeholder) linked person matches this attendee by name.
+            result.append(PersonRow(id: "attendee-\(attendee.id)", name: attendee.name, targetID: linked.targetID, rawSpeaker: nil))
+        } else {
+            // Unassigned — surface the Assign button.
+            result.append(PersonRow(id: "attendee-\(attendee.id)", name: attendee.name, targetID: nil, rawSpeaker: attendee.id))
+        }
+    }
+
+    // Linked persons whose name has no matching attendee (graph-only entries).
+    for item in linkedPersons {
+        let key = canonicalSpeakerKey(item.title)
+        guard seenKeys.insert(key).inserted else { continue }
+        result.append(PersonRow(linkedItem: item))
+    }
+
+    return result
+}
+
 // MARK: - PersonRow
 
 /// A display row in the People section — either an attendee from the transcript
 /// or a person linked via the graph.
-private struct PersonRow: Identifiable {
+struct PersonRow: Identifiable {
     let id: String
     let name: String
     /// Set if the attendee was assigned to a `Person` contact (personID) or if
@@ -260,13 +317,11 @@ private struct PersonRow: Identifiable {
     /// for unassigned attendee rows; nil for linked-person graph-only rows.
     let rawSpeaker: String?
 
-    init(attendee: LiquidMeetingsModel.Attendee) {
-        self.id = "attendee-\(attendee.id)"
-        self.name = attendee.name
-        self.targetID = attendee.personID
-        // Expose the raw speakerID only for unassigned speakers so the Assign
-        // button can pass it to `assignSpeaker(rawSpeaker:...)`.
-        self.rawSpeaker = attendee.personID == nil ? attendee.id : nil
+    init(id: String, name: String, targetID: UUID?, rawSpeaker: String?) {
+        self.id = id
+        self.name = name
+        self.targetID = targetID
+        self.rawSpeaker = rawSpeaker
     }
 
     init(linkedItem: LiquidMeetingsModel.LinkedItem) {
