@@ -30,6 +30,10 @@ public final class LiquidProjectsModel {
     public private(set) var openCountsByProject: [UUID: Int] = [:]
     /// done/total completion per project for the picker rows.
     public private(set) var progressByProject: [UUID: Double] = [:]
+    /// Client/org display name per project for the Grid card (one grouped fetch).
+    public private(set) var clientNameByProject: [UUID: String] = [:]
+    /// Soonest upcoming key date per project for the Grid card (one grouped fetch).
+    public private(set) var nextKeyDateByProject: [UUID: ProjectKeyDate] = [:]
     public private(set) var roadmapBars: [RoadmapModel.ProjectBar] = []
     public private(set) var roadmapCycles: [RoadmapModel.CycleBar] = []
 
@@ -99,11 +103,17 @@ public final class LiquidProjectsModel {
             FetchDescriptor<ProjectSection>(predicate: #Predicate { $0.deletedAt == nil })
         )
         let sectionsByProject = Dictionary(grouping: sections, by: { $0.projectID })
+
+        // One grouped fetch for all live key dates; feeds both the roadmap bars
+        // (full list per project) and the next-key-date aggregate (soonest upcoming).
+        let keyDatesByProject = try loadKeyDatesByProject(modelContext: modelContext)
+
         let loadedRoadmapBars = loadedProjects.map {
             RoadmapModel.bar(
                 project: $0,
                 tasks: byProject[$0.id] ?? [],
                 sections: sectionsByProject[$0.id] ?? [],
+                keyDates: keyDatesByProject[$0.id] ?? [],
                 now: now
             )
         }
@@ -116,9 +126,14 @@ public final class LiquidProjectsModel {
         )
         let loadedRoadmapCycles = RoadmapModel.cycleBars(cycles)
 
-        projects = loadedProjects
+        let clientNames = try loadClientNames(for: loadedProjects, modelContext: modelContext)
+        let nextKeyDates = soonestKeyDates(from: keyDatesByProject, for: loadedProjects, now: now)
+
+        projects = ProjectGridOrder.sorted(loadedProjects)
         openCountsByProject = openCounts
         progressByProject = progresses
+        clientNameByProject = clientNames
+        nextKeyDateByProject = nextKeyDates
         roadmapBars = loadedRoadmapBars
         roadmapCycles = loadedRoadmapCycles
 
@@ -126,6 +141,52 @@ public final class LiquidProjectsModel {
         if let selectedProjectID, !projects.contains(where: { $0.id == selectedProjectID }) {
             self.selectedProjectID = nil
         }
+    }
+
+    /// Client/org display name per project — one fetch of all live orgs grouped in
+    /// memory. Projects with no client or a deleted org get no entry.
+    private func loadClientNames(
+        for projects: [Project],
+        modelContext: ModelContext
+    ) throws -> [UUID: String] {
+        let clientIDs = Set(projects.compactMap(\.clientID))
+        guard !clientIDs.isEmpty else { return [:] }
+        let orgs = try modelContext.fetch(
+            FetchDescriptor<Organization>(predicate: #Predicate { $0.deletedAt == nil })
+        )
+        let nameByID = Dictionary(orgs.map { ($0.id, $0.name) }, uniquingKeysWith: { current, _ in current })
+        var result: [UUID: String] = [:]
+        for project in projects where project.clientID != nil {
+            if let name = nameByID[project.clientID!] { result[project.id] = name }
+        }
+        return result
+    }
+
+    /// One fetch of all live key dates, grouped by project — shared by the roadmap
+    /// bar builder (full list per project) and the soonest-date aggregate.
+    private func loadKeyDatesByProject(modelContext: ModelContext) throws -> [UUID: [ProjectKeyDate]] {
+        let allKeyDates = try modelContext.fetch(
+            FetchDescriptor<ProjectKeyDate>(predicate: #Predicate { $0.deletedAt == nil })
+        )
+        return Dictionary(grouping: allKeyDates, by: { $0.projectID })
+    }
+
+    /// Soonest upcoming key date per project derived from a pre-fetched grouped dict;
+    /// `date >= startOfDay(now)`. Projects with only past/no key dates are excluded.
+    private func soonestKeyDates(
+        from keyDatesByProject: [UUID: [ProjectKeyDate]],
+        for projects: [Project],
+        now: Date
+    ) -> [UUID: ProjectKeyDate] {
+        let dayStart = Calendar.current.startOfDay(for: now)
+        var result: [UUID: ProjectKeyDate] = [:]
+        for project in projects {
+            let next = (keyDatesByProject[project.id] ?? [])
+                .filter { $0.date >= dayStart }
+                .min(by: { $0.date < $1.date })
+            if let next { result[project.id] = next }
+        }
+        return result
     }
 
     // MARK: - Selected project

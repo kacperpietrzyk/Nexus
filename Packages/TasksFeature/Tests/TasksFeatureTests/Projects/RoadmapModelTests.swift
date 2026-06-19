@@ -298,6 +298,40 @@ struct RoadmapModelTests {
 
     // MARK: - Cycles
 
+    // MARK: - Key dates
+
+    @MainActor
+    @Test func keyDatesExtendSpanAndProduceMarkers() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let project = Project(name: "P", color: "azure")
+        project.createdAt = now
+        let kdEarly = ProjectKeyDate(
+            projectID: project.id, anchorKey: "kickoff", label: "Kickoff",
+            date: now.addingTimeInterval(-10 * 86_400))
+        let kdLate = ProjectKeyDate(
+            projectID: project.id, anchorKey: "golive", label: "Go-live",
+            date: now.addingTimeInterval(30 * 86_400), isContractual: true)
+        let bar = RoadmapModel.bar(project: project, tasks: [], sections: [], keyDates: [kdEarly, kdLate], now: now)
+        #expect(bar.start <= kdEarly.date)  // early key date pulls the start back
+        #expect(bar.end == kdLate.date)  // late key date sets the end
+        #expect(bar.scheduled == true)
+        #expect(bar.keyDates.count == 2)
+        #expect(bar.keyDates.contains { $0.label == "Go-live" && $0.isContractual })
+    }
+
+    @MainActor
+    @Test func noDatesProjectIsUnscheduled() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let project = Project(name: "P", color: "azure")
+        project.createdAt = now
+        let bar = RoadmapModel.bar(project: project, tasks: [], sections: [], keyDates: [], now: now)
+        #expect(bar.scheduled == false)
+        #expect(bar.end == nil)
+        #expect(bar.keyDates.isEmpty)
+    }
+
+    // MARK: - Cycles
+
     @Test("Cycle bars ignore deleted cycles and sort by startAt then id")
     @MainActor
     func cycleBars() throws {

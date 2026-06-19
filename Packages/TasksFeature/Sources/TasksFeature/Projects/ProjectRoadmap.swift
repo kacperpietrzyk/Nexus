@@ -120,7 +120,7 @@ struct ProjectRoadmap: View {
             }
             ForEach(bars) { bar in
                 HStack(spacing: DS.Space.s) {
-                    Image(systemName: nexusProjectGlyph(named: bar.glyphToken))
+                    Image(systemName: nexusProjectGlyph(token: bar.glyphToken, id: bar.projectID))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(DS.ColorToken.textSecondary)
                         .frame(width: 16)
@@ -213,11 +213,31 @@ struct ProjectRoadmap: View {
         return "\(cycle.name), \(cycleStatusLabel(cycle.status)) cycle, starts \(start), ends \(end)"
     }
 
+    @ViewBuilder
     private func barView(_ bar: RoadmapModel.ProjectBar, window: DateInterval) -> some View {
+        if !bar.scheduled {
+            Button {
+                onSelectProject(bar.projectID)
+            } label: {
+                Text("No schedule yet — add a key date")
+                    .font(DS.FontToken.caption)
+                    .foregroundStyle(DS.ColorToken.textMuted)
+                    .frame(height: RoadmapMetrics.barHeight, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .offset(x: RoadmapModel.xOffset(for: now, in: window, zoom: zoom, calendar: calendar))
+        } else {
+            scheduledBarView(bar, window: window)
+        }
+    }
+
+    private func scheduledBarView(_ bar: RoadmapModel.ProjectBar, window: DateInterval) -> some View {
         let color = Self.healthColor(bar.health)
         let barX = RoadmapModel.xOffset(for: bar.start, in: window, zoom: zoom, calendar: calendar)
         let width = RoadmapModel.barWidth(from: bar.start, to: bar.end ?? window.end, zoom: zoom, calendar: calendar)
-        let displayWidth = bar.milestones.isEmpty ? width : max(width, RoadmapMetrics.markerSize)
+        let hasMarkers = !bar.milestones.isEmpty || !bar.keyDates.isEmpty
+        let displayWidth = hasMarkers ? max(width, RoadmapMetrics.markerSize) : width
         let shape = RoundedRectangle(cornerRadius: DS.Radius.xs, style: .continuous)
         return Button {
             onSelectProject(bar.projectID)
@@ -246,24 +266,40 @@ struct ProjectRoadmap: View {
         barX: CGFloat,
         barWidth: CGFloat
     ) -> some View {
-        ForEach(bar.milestones) { marker in
-            let markerX = RoadmapModel.xOffset(for: marker.date, in: window, zoom: zoom, calendar: calendar) - barX
-            let effectiveBarWidth = max(barWidth, RoadmapMetrics.markerSize)
-            let halfMarker = RoadmapMetrics.markerSize / 2
-            let clampedX = min(max(markerX, halfMarker), effectiveBarWidth - halfMarker)
-            // A milestone dated before the project start (markerX < 0) or past
-            // its end (> bar extent) gets clamped to the bar edge; dim it so a
-            // clamped marker isn't mistaken for a real on-edge one. The threshold
-            // is the bar's true date extent, not the half-marker render inset —
-            // an on-start milestone resolves to markerX == 0 and must stay bright.
-            let isOutOfRange = markerX < 0 || markerX > effectiveBarWidth
-            Rectangle()
-                .fill(Self.markerColor(marker.state))
-                .frame(width: RoadmapMetrics.markerSize, height: RoadmapMetrics.markerSize)
-                .rotationEffect(.degrees(45))
-                .opacity(isOutOfRange ? 0.4 : 1)
-                .offset(x: clampedX - RoadmapMetrics.markerSize / 2)
-                .accessibilityHidden(true)
+        let effectiveBarWidth = max(barWidth, RoadmapMetrics.markerSize)
+        let halfMilestone = RoadmapMetrics.markerSize / 2
+        // Key-date tick is a thin vertical capsule (width 2); half-width = 1.
+        let keyDateTickWidth: CGFloat = 2
+        let halfKeyDate: CGFloat = keyDateTickWidth / 2
+        return Group {
+            ForEach(bar.milestones) { marker in
+                let markerX = RoadmapModel.xOffset(for: marker.date, in: window, zoom: zoom, calendar: calendar) - barX
+                let clampedX = min(max(markerX, halfMilestone), effectiveBarWidth - halfMilestone)
+                // A milestone dated before the project start (markerX < 0) or past
+                // its end (> bar extent) gets clamped to the bar edge; dim it so a
+                // clamped marker isn't mistaken for a real on-edge one. The threshold
+                // is the bar's true date extent, not the half-marker render inset —
+                // an on-start milestone resolves to markerX == 0 and must stay bright.
+                let isOutOfRange = markerX < 0 || markerX > effectiveBarWidth
+                Rectangle()
+                    .fill(Self.markerColor(marker.state))
+                    .frame(width: RoadmapMetrics.markerSize, height: RoadmapMetrics.markerSize)
+                    .rotationEffect(.degrees(45))
+                    .opacity(isOutOfRange ? 0.4 : 1)
+                    .offset(x: clampedX - halfMilestone)
+                    .accessibilityHidden(true)
+            }
+            ForEach(bar.keyDates) { keyDate in
+                let markerX = RoadmapModel.xOffset(for: keyDate.date, in: window, zoom: zoom, calendar: calendar) - barX
+                let clampedX = min(max(markerX, halfKeyDate), effectiveBarWidth - halfKeyDate)
+                let isOutOfRange = markerX < 0 || markerX > effectiveBarWidth
+                Capsule()
+                    .fill(keyDate.isContractual ? DS.ColorToken.statusDanger : DS.ColorToken.accentPrimary)
+                    .frame(width: keyDateTickWidth, height: RoadmapMetrics.barHeight)
+                    .opacity(isOutOfRange ? 0.4 : 1)
+                    .offset(x: clampedX - halfKeyDate)
+                    .accessibilityHidden(true)
+            }
         }
     }
 

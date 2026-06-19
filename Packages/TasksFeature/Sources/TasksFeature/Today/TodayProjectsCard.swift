@@ -84,7 +84,7 @@ private struct TodayProjectRow: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 HStack(spacing: DS.Space.xs) {
-                    Image(systemName: nexusProjectGlyph(named: entry.project.color))
+                    Image(systemName: nexusProjectGlyph(token: entry.project.color, id: entry.project.id))
                         // Spec §Projects card: "project icon left 14 pt".
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(DS.ColorToken.textSecondary)

@@ -82,6 +82,14 @@ public final class ProjectRepository {
         try context.save()
     }
 
+    /// Removes the granular stage without touching `statusRaw` (the coarse status
+    /// the user last saw stays put). Counterpart to `setStage`.
+    public func clearStage(on project: Project) throws {
+        project.stage = nil
+        project.updatedAt = now()
+        try context.save()
+    }
+
     /// Changes the project type; clears the current stage if it is not in the new
     /// type's preset (keeps `stage ∈ type.stages || stage == nil` invariant).
     public func setType(_ type: ProjectType, on project: Project) throws {

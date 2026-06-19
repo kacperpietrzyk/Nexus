@@ -27,21 +27,32 @@ func projectHealthLabel(_ health: ProjectExecutionModel.ProjectHealth) -> String
 
 /// Standalone "Project Health" card for the Overview tab.
 /// Receives already-resolved values via init — no awareness of reference mode.
+/// When `hasDatedOpenTasks` is `false` and progress is 0 the gauge is trivially
+/// on-track (no dates to measure); an instructive subline replaces the axis.
 public struct ProjectHealthCard: View {
 
     let health: ProjectExecutionModel.ProjectHealth
     let progress: Double
     let detail: String
+    /// `false` = no open tasks carry a due date or deadline, so the 0 % gauge
+    /// is not a real signal yet. Defaulted `true` for back-compat call sites.
+    let hasDatedOpenTasks: Bool
 
     public init(
         health: ProjectExecutionModel.ProjectHealth,
         progress: Double,
-        detail: String
+        detail: String,
+        hasDatedOpenTasks: Bool = true
     ) {
         self.health = health
         self.progress = progress
         self.detail = detail
+        self.hasDatedOpenTasks = hasDatedOpenTasks
     }
+
+    /// Whether the card is in the trivially-zero state: no dated open tasks and
+    /// nothing done yet — the gauge is not yet meaningful.
+    private var isZeroState: Bool { !hasDatedOpenTasks && progress == 0 }
 
     public var body: some View {
         LiquidGlassCard("Project Health") {
@@ -67,9 +78,20 @@ public struct ProjectHealthCard: View {
                     Spacer(minLength: 0)
                 }
 
-                healthAxis
+                if isZeroState {
+                    zeroStateHint
+                } else {
+                    healthAxis
+                }
             }
         }
+    }
+
+    private var zeroStateHint: some View {
+        Text("Add tasks with due dates to track health")
+            .font(DS.FontToken.caption)
+            .foregroundStyle(DS.ColorToken.textMuted)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Spec §Project Health: "small axis Off Track / At Risk / On Track" —
