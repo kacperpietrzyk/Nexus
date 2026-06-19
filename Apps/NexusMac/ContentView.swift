@@ -44,6 +44,13 @@ struct ContentView: View {
     // (the computed accessor below) and call `navigate(to:)` as before.
     @State var navigator = NexusNavigator()
 
+    // Persists the active destination across launches (Task 13). The raw token
+    // string is stored (same as `NavLocation.destinationToken`) so it survives
+    // version-to-version; an unknown token falls back to `.today` at restore time.
+    @SceneStorage("nav.destination") private var persistedDestinationToken: String = ""
+    // One-shot guard: restore runs at most once per process launch.
+    @State private var didRestoreDestination = false
+
     // Notes navigation path, hoisted to the shell (Task 8) so the breadcrumb owns
     // back and deep-links route through `pendingDeepLink`. `NotesListView` reads
     // this binding instead of its own internal `@State` on macOS.
@@ -209,12 +216,15 @@ struct ContentView: View {
     }
 
     /// §1 "inspector ⊥ Agent": clear selected task on every transition into
-    /// `.agent`. Extracted from `dashboardBody` to stay within the type-checker budget.
+    /// `.agent`. Also persists the new destination token for launch restoration
+    /// (Task 13). Extracted from `dashboardBody` to stay within the type-checker budget.
     @MainActor
     private func consumeDestinationChange(_: TodayNavSelection, _ newValue: TodayNavSelection) {
         if newValue == .agent {
             selectedTask = nil
         }
+        // Task 13: persist destination so quit + relaunch reopens the same page.
+        persistedDestinationToken = newValue.token
     }
 
     /// §1b: consume a `.savedFilter` deep-link staged by the sidebar "Views" rows.
@@ -256,6 +266,18 @@ struct ContentView: View {
             .overlay { commandPaletteOverlay }
             .overlay { captureOverlay }
             .task {
+                // Task 13: restore the persisted destination BEFORE bootstrap so
+                // the user lands on the right page immediately. One-shot guard
+                // prevents re-restore on re-task (e.g. scene re-activation).
+                // A brief flash of .today is acceptable in this version.
+                if !didRestoreDestination {
+                    didRestoreDestination = true
+                    let token = persistedDestinationToken
+                    let candidate = token.isEmpty ? nil : TodayNavSelection.from(token: token)
+                    if let restored = candidate, restored != navigator.destination {
+                        navigator.restore(to: restored)
+                    }
+                }
                 await bootstrapNavigation()
                 await reloadInboxCount()
             }
@@ -300,7 +322,6 @@ struct ContentView: View {
                 LiquidToolbar(
                     leading: { toolbarLeading },
                     onOpenCommandPalette: { commandPalettePresented = true },
-                    onOpenInbox: { navigate(to: .inbox) },
                     onOpenCapture: openTaskCapture,
                     canGoBack: navigator.canGoBack,
                     canGoForward: navigator.canGoForward,

@@ -143,19 +143,12 @@ struct LiquidSidebar: View {
         .liquidGlass(.sidebar, radius: sidebarCornerRadius)
     }
 
+    /// Traffic-light clearance: reserves the 58 pt band where macOS traffic
+    /// lights overlap the sidebar top. The Settings icon was removed (Settings
+    /// is reachable via the pinned row and the footer avatar); the vertical
+    /// reservation must remain so content does not slide under the traffic lights.
     private var sidebarTopControl: some View {
-        HStack {
-            Spacer(minLength: 0)
-
-            LiquidIconButton(
-                systemImage: "slider.horizontal.3",
-                accessibilityLabel: "Open settings"
-            ) {
-                onNavigate(.settings)
-            }
-            .help("Open settings")
-        }
-        .frame(height: trafficLightClearance, alignment: .top)
+        Color.clear.frame(height: trafficLightClearance)
     }
 
     /// Real macOS account display name + an initials avatar; opens Settings.

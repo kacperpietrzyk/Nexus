@@ -4,11 +4,10 @@ import SwiftUI
 /// The 58 pt Liquid toolbar that tops the glass content shell
 /// (`docs/03_COMPONENTS.md` §Toolbar). Leading is a per-destination slot
 /// (breadcrumb title, Inbox filter tabs, the Agent control strip, …);
-/// trailing is the fixed search → bell → New cluster wired to the SAME seams
+/// trailing is the fixed search → New cluster wired to the SAME seams
 /// the old `NexusTopBar`/`NexusCommandBar` band used:
 /// - search field → command palette (the global ⌘K `CommandGroup` still
 ///   posts `.nexusOpenCommandPalette`, handled by `ContentView`)
-/// - bell → Inbox destination
 /// - New → the existing capture seam (`.nexusOpenCapture`, same as ⌘N/⌘⌃N)
 ///
 /// Back/forward chevrons (`canGoBack`/`canGoForward`) sit at the very leading
@@ -17,7 +16,6 @@ import SwiftUI
 struct LiquidToolbar<Leading: View>: View {
     @ViewBuilder let leading: () -> Leading
     let onOpenCommandPalette: () -> Void
-    let onOpenInbox: () -> Void
     let onOpenCapture: () -> Void
     let canGoBack: Bool
     let canGoForward: Bool
@@ -51,13 +49,6 @@ struct LiquidToolbar<Leading: View>: View {
 
             LiquidSearchField("Search anything…", action: onOpenCommandPalette)
                 .frame(width: 300)
-
-            LiquidIconButton(
-                systemImage: "bell",
-                accessibilityLabel: "Open inbox",
-                action: onOpenInbox
-            )
-            .help("Open inbox")
 
             LiquidPrimaryButton("New", systemImage: "plus", action: onOpenCapture)
                 .help("New task (⌘N)")

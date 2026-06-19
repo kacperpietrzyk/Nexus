@@ -93,4 +93,15 @@ final class NexusNavigator {
         detailCrumb = nil
         pendingDeepLink = location.detailToken.flatMap(DeepLinkTarget.init(token:))
     }
+
+    /// Launch restoration: jump to a persisted destination with a FRESH history
+    /// (no phantom back-entry). Detail is not restored.
+    func restore(to destination: TodayNavSelection) {
+        self.destination = destination
+        detailCrumb = nil
+        pendingDeepLink = nil
+        history = NavigationHistory(
+            current: NavLocation(destinationToken: destination.token, detailToken: nil)
+        )
+    }
 }
