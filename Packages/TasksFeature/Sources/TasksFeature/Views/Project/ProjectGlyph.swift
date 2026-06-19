@@ -18,9 +18,12 @@ let projectGlyphTable: [String: ProjectGlyphEntry] = [
     "slate": ProjectGlyphEntry(glyph: "seal.fill", label: "Seal"),
 ]
 
-/// Public (not internal like the rest of this file): exported for app-shell
-/// composition — the Mac `LiquidSidebar` renders the same identity glyph the
-/// Projects screen shows for each project, without duplicating this table.
+/// Legacy token → SF Symbol lookup. Returns the fixed shape mapped to
+/// `tokenName`, falling back to `circle.fill`. Use this only for picker
+/// swatches that must reflect the token choice itself (e.g. the color-token
+/// selector in `ProjectEditorSheet`). For identity display (sidebar rows,
+/// Today card, grid tiles) use `nexusProjectGlyph(token:id:)` instead,
+/// which derives a distinct shape for default-token ("azure") projects.
 public func nexusProjectGlyph(named tokenName: String) -> String {
     projectGlyphTable[tokenName]?.glyph ?? "circle.fill"
 }

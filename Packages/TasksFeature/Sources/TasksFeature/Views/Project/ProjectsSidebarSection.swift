@@ -104,7 +104,7 @@ public struct ProjectsSidebarSection: View {
                 ForEach(archivedProjects) { project in
                     ProjectSidebarRow(
                         title: project.name,
-                        systemImage: nexusProjectGlyph(named: project.color),
+                        systemImage: nexusProjectGlyph(token: project.color, id: project.id),
                         isSelected: false,
                         isDropTargeted: false,
                         depth: 0,
@@ -160,7 +160,7 @@ public struct ProjectsSidebarSection: View {
             dropTarget(projectID: project.id, sectionID: nil) { isTargeted in
                 ProjectSidebarRow(
                     title: project.name,
-                    systemImage: nexusProjectGlyph(named: project.color),
+                    systemImage: nexusProjectGlyph(token: project.color, id: project.id),
                     isSelected: selection == .project(project.id),
                     isDropTargeted: isTargeted,
                     depth: 0,

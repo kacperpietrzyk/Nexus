@@ -86,7 +86,7 @@ struct LiquidSidebar: View {
                     ForEach(activeProjects) { project in
                         LiquidSidebarNavRow(
                             project.name,
-                            systemImage: nexusProjectGlyph(named: project.color)
+                            systemImage: nexusProjectGlyph(token: project.color, id: project.id)
                         ) {
                             // No public project-selection seam on
                             // `ProjectsRootView` (its `selectedProjectID` is
