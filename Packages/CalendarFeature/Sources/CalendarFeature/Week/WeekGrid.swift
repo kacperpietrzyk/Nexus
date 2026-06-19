@@ -147,6 +147,11 @@ struct WeekGrid: View {
     /// Top/bottom padding inside the all-day row.
     private static let allDayRowPadding: CGFloat = 4
 
+    /// Height of the "+N" overflow badge strip appended below the lanes when
+    /// any column has hidden events. Sized to fit one caption glyph (~13 pt)
+    /// with 2 pt top margin.
+    private static let allDayOverflowStripHeight: CGFloat = 15
+
     private var allDayRow: some View {
         let allDayItems = DayTimelineLayout.allDayItems(forVisibleDays: days, itemsForDay: itemsForDay)
         let layout = AllDayLaneLayout.layout(
@@ -156,10 +161,14 @@ struct WeekGrid: View {
             maxLanes: 2
         )
         let usedLanes = max(1, (layout.bars.map(\.lane).max() ?? -1) + 1)
+        let hasOverflow = !layout.overflowByColumn.isEmpty
+        // Reserve an explicit badge strip when overflow is present so badges
+        // never spill outside the all-day row frame.
         let rowHeight =
             CGFloat(usedLanes) * Self.allDayLaneHeight
             + CGFloat(max(0, usedLanes - 1)) * Self.allDayLaneSpacing
             + 2 * Self.allDayRowPadding
+            + (hasOverflow ? Self.allDayOverflowStripHeight : 0)
 
         return HStack(spacing: 0) {
             Text("all-day")
@@ -171,6 +180,13 @@ struct WeekGrid: View {
             // children.
             GeometryReader { geo in
                 let columnWidth = geo.size.width / CGFloat(max(1, days.count))
+                // y where the overflow badge strip begins — immediately after
+                // the last lane row, still inside rowHeight.
+                let badgeY =
+                    Self.allDayRowPadding
+                    + CGFloat(usedLanes) * Self.allDayLaneHeight
+                    + CGFloat(max(0, usedLanes - 1)) * Self.allDayLaneSpacing
+                    + 2
                 ZStack(alignment: .topLeading) {
                     ForEach(layout.bars, id: \.item.id) { bar in
                         let accent =
@@ -190,19 +206,14 @@ struct WeekGrid: View {
                         .frame(width: max(0, barWidth), height: Self.allDayLaneHeight)
                         .offset(x: xOffset, y: yOffset)
                     }
-                    // "+N" overflow badges, one per column with overflow.
+                    // "+N" overflow badges sit in the reserved strip below the
+                    // lane rows, fully within rowHeight.
                     ForEach(Array(layout.overflowByColumn.keys.sorted()), id: \.self) { col in
                         if let count = layout.overflowByColumn[col] {
                             Text("+\(count)")
                                 .font(DS.FontToken.caption)
                                 .foregroundStyle(DS.ColorToken.textTertiary)
-                                .offset(
-                                    x: columnWidth * CGFloat(col) + 4,
-                                    y: Self.allDayRowPadding
-                                        + CGFloat(min(2, (layout.bars.map(\.lane).max() ?? -1) + 1))
-                                        * (Self.allDayLaneHeight + Self.allDayLaneSpacing)
-                                        - Self.allDayLaneSpacing
-                                )
+                                .offset(x: columnWidth * CGFloat(col) + 4, y: badgeY)
                         }
                     }
                 }
