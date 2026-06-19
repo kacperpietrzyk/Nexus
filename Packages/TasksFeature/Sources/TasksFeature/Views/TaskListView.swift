@@ -121,6 +121,9 @@ public struct TaskListView: View {
         .task { loadRefinementLabels() }
         .onChange(of: now) { _, _ in reload() }
         .onChange(of: refinement) { _, _ in reload() }
+        // Group-by flips `.all` between windowed (none) and full-load (grouped),
+        // so a change must re-resolve the data set, not just re-section in place.
+        .onChange(of: groupByRaw) { _, _ in reload() }
         .reloadOnStoreChange {
             // A store change can mutate the label→task graph without changing the
             // selected label, so drop the memoized id-set before re-filtering.
@@ -289,7 +292,11 @@ extension TaskListView {
     /// saved-filter views are already structured.
     private var filterSupportsGrouping: Bool {
         switch filter {
-        case .all, .upcoming, .inbox, .completed, .templates, .byTag: return !isWindowing
+        // Flat filters offer grouping. `.all` shows the chip even while windowed
+        // (picking a group drops windowing and loads the full set — see
+        // `isWindowing`); hiding it there would make the feature invisible on the
+        // main task list, which is almost always windowed.
+        case .all, .upcoming, .inbox, .completed, .templates, .byTag: return true
         case .today, .project, .projectSection, .cycle, .savedFilter: return false
         }
     }

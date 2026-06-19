@@ -19,7 +19,12 @@ extension TaskListView {
     var isWindowing: Bool {
         guard !refinement.isActive else { return false }
         switch filter {
-        case .all, .today:
+        case .all:
+            // `.all` pages by default, but an active group-by must section the
+            // FULL result set — a 50-item window would show partial sections.
+            // So when grouping, drop windowing and load everything.
+            return groupBy.wrappedValue == .none
+        case .today:
             return true
         default:
             return false
