@@ -9,6 +9,23 @@ import AppKit
 import UIKit
 #endif
 
+// MARK: - Focus helper
+
+/// Applies `focused(_:equals:)` when a `FocusState` binding is available; no-ops
+/// when `binding` is nil so text-bearing views work without any focus management
+/// (iOS default path and any call site that doesn't supply a binding).
+private struct OptionalFocus: ViewModifier {
+    let binding: FocusState<UUID?>.Binding?
+    let id: UUID
+    @ViewBuilder func body(content: Content) -> some View {
+        if let binding {
+            content.focused(binding, equals: id)
+        } else {
+            content
+        }
+    }
+}
+
 /// Renders + edits a single `Block`. Every block kind has its own render path
 /// (spec §5: native, no WebView except `html(raw)`). Text-bearing blocks are
 /// edited as staged plain text (spec §5 staging — inline-span mark editing is a
@@ -19,23 +36,41 @@ struct BlockView: View {
     let onOpenRef: (UUID) -> Void
     /// Resolved 1-based ordinal for `.numbered` blocks (nil for all other kinds).
     var ordinal: Int? = nil
+    /// When `false` text-bearing blocks render as static `Text`; defaults to `true`
+    /// so iOS keeps always-editable behaviour unchanged until macOS wires focus (Task 4).
+    var isEditing: Bool = true
+    /// Called when the user taps a static-text block (read path) and `model.canEdit`.
+    var onActivate: (() -> Void)? = nil
+    /// Passed into text-bearing sub-views so the `TextField` gains SwiftUI focus when
+    /// the block transitions to editing state. Nil = no programmatic focus management.
+    var focusBinding: FocusState<UUID?>.Binding? = nil
 
     var body: some View {
         switch block.kind {
         case .paragraph(let runs):
             TextBlockEditor(
-                block: block, model: model, runs: runs, font: .body, role: .paragraph)
+                block: block, model: model, runs: runs, font: .body, role: .paragraph,
+                isEditing: isEditing, onActivate: onActivate, focusBinding: focusBinding)
         case .heading(let level, let runs):
             TextBlockEditor(
-                block: block, model: model, runs: runs, font: headingFont(level), role: .heading)
+                block: block, model: model, runs: runs, font: headingFont(level), role: .heading,
+                isEditing: isEditing, onActivate: onActivate, focusBinding: focusBinding)
         case .todo(let taskRef, let runs):
-            TodoBlockView(block: block, taskRef: taskRef, runs: runs, model: model)
+            TodoBlockView(
+                block: block, taskRef: taskRef, runs: runs, model: model,
+                isEditing: isEditing, onActivate: onActivate, focusBinding: focusBinding)
         case .bulleted(let runs):
-            ListBlockEditor(block: block, model: model, runs: runs, marker: "•")
+            ListBlockEditor(
+                block: block, model: model, runs: runs, marker: "•",
+                isEditing: isEditing, onActivate: onActivate, focusBinding: focusBinding)
         case .numbered(let runs):
-            ListBlockEditor(block: block, model: model, runs: runs, marker: ordinal.map { "\($0)." } ?? "1.")
+            ListBlockEditor(
+                block: block, model: model, runs: runs, marker: ordinal.map { "\($0)." } ?? "1.",
+                isEditing: isEditing, onActivate: onActivate, focusBinding: focusBinding)
         case .quote(let runs):
-            QuoteBlockView(block: block, model: model, runs: runs)
+            QuoteBlockView(
+                block: block, model: model, runs: runs,
+                isEditing: isEditing, onActivate: onActivate, focusBinding: focusBinding)
         case .code(let language, let text):
             CodeBlockView(block: block, model: model, language: language, text: text)
         case .divider:
@@ -73,17 +108,23 @@ private struct TextBlockEditor: View {
     let runs: [InlineRun]
     let font: Font
     let role: TextRole
+    let isEditing: Bool
+    let onActivate: (() -> Void)?
+    let focusBinding: FocusState<UUID?>.Binding?
     @State private var draft: String = ""
     @State private var trigger: InlineLinkInsertion.Trigger?
 
     var body: some View {
         Group {
-            if model.canEdit {
+            if model.canEdit && isEditing {
                 editor
             } else {
                 Text(InlineRunRendering.attributed(runs))
                     .font(font)
+                    .lineSpacing(role == .heading ? 2 : 6)
                     .foregroundStyle(NexusColor.Text.primary)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if model.canEdit { onActivate?() } }
             }
         }
     }
@@ -93,7 +134,9 @@ private struct TextBlockEditor: View {
             TextField(placeholder, text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(font)
+                .lineSpacing(role == .heading ? 2 : 6)
                 .foregroundStyle(NexusColor.Text.primary)
+                .modifier(OptionalFocus(binding: focusBinding, id: block.id))
                 .onAppear { draft = InlineRunRendering.plainText(runs) }
                 .onChange(of: block.id) { _, _ in
                     draft = InlineRunRendering.plainText(runs)
@@ -137,6 +180,9 @@ private struct ListBlockEditor: View {
     let model: NoteEditorModel
     let runs: [InlineRun]
     let marker: String
+    let isEditing: Bool
+    let onActivate: (() -> Void)?
+    let focusBinding: FocusState<UUID?>.Binding?
     @State private var draft: String = ""
 
     var body: some View {
@@ -144,11 +190,13 @@ private struct ListBlockEditor: View {
             Text(marker)
                 .nexusType(.body)
                 .foregroundStyle(NexusColor.Text.tertiary)
-            if model.canEdit {
+            if model.canEdit && isEditing {
                 TextField("List item", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .nexusType(.body)
+                    .lineSpacing(6)
                     .foregroundStyle(NexusColor.Text.primary)
+                    .modifier(OptionalFocus(binding: focusBinding, id: block.id))
                     .onAppear { draft = InlineRunRendering.plainText(runs) }
                     .onChange(of: block.id) { _, _ in draft = InlineRunRendering.plainText(runs) }
                     .onSubmit {
@@ -159,7 +207,10 @@ private struct ListBlockEditor: View {
             } else {
                 Text(InlineRunRendering.attributed(runs))
                     .nexusType(.body)
+                    .lineSpacing(6)
                     .foregroundStyle(NexusColor.Text.primary)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if model.canEdit { onActivate?() } }
             }
         }
     }
@@ -169,6 +220,9 @@ private struct QuoteBlockView: View {
     let block: Block
     let model: NoteEditorModel
     let runs: [InlineRun]
+    let isEditing: Bool
+    let onActivate: (() -> Void)?
+    let focusBinding: FocusState<UUID?>.Binding?
     @State private var draft: String = ""
 
     var body: some View {
@@ -176,12 +230,14 @@ private struct QuoteBlockView: View {
             RoundedRectangle(cornerRadius: 1)
                 .fill(NexusColor.Line.strong)
                 .frame(width: 3)
-            if model.canEdit {
+            if model.canEdit && isEditing {
                 TextField("Quote", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .nexusType(.body)
+                    .lineSpacing(6)
                     .italic()
                     .foregroundStyle(NexusColor.Text.secondary)
+                    .modifier(OptionalFocus(binding: focusBinding, id: block.id))
                     .onAppear { draft = InlineRunRendering.plainText(runs) }
                     .onSubmit {
                         if draft != InlineRunRendering.plainText(runs) {
@@ -191,8 +247,11 @@ private struct QuoteBlockView: View {
             } else {
                 Text(InlineRunRendering.attributed(runs))
                     .nexusType(.body)
+                    .lineSpacing(6)
                     .italic()
                     .foregroundStyle(NexusColor.Text.secondary)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if model.canEdit { onActivate?() } }
             }
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -206,6 +265,9 @@ private struct TodoBlockView: View {
     let taskRef: UUID
     let runs: [InlineRun]
     let model: NoteEditorModel
+    let isEditing: Bool
+    let onActivate: (() -> Void)?
+    let focusBinding: FocusState<UUID?>.Binding?
     @State private var draft: String = ""
 
     // §7: the `TaskItem` is the single source of truth. Holding it via `@Query`
@@ -214,16 +276,28 @@ private struct TodoBlockView: View {
     // so the checkbox + label refresh live with no manual reload.
     @Query private var tasks: [TaskItem]
 
-    init(block: Block, taskRef: UUID, runs: [InlineRun], model: NoteEditorModel) {
+    init(
+        block: Block,
+        taskRef: UUID,
+        runs: [InlineRun],
+        model: NoteEditorModel,
+        isEditing: Bool = true,
+        onActivate: (() -> Void)? = nil,
+        focusBinding: FocusState<UUID?>.Binding? = nil
+    ) {
         self.block = block
         self.taskRef = taskRef
         self.runs = runs
         self.model = model
+        self.isEditing = isEditing
+        self.onActivate = onActivate
+        self.focusBinding = focusBinding
         _tasks = Query(filter: #Predicate<TaskItem> { $0.id == taskRef && $0.deletedAt == nil })
     }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // Checkbox is always tappable regardless of edit state; only `canEdit` gates it.
             Button {
                 model.toggleTodo(blockID: block.id)
             } label: {
@@ -233,12 +307,14 @@ private struct TodoBlockView: View {
             .buttonStyle(.plain)
             .disabled(!model.canEdit)
 
-            if model.canEdit {
+            if model.canEdit && isEditing {
                 TextField("To-do", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .nexusType(.body)
+                    .lineSpacing(6)
                     .strikethrough(isDone)
                     .foregroundStyle(isDone ? NexusColor.Text.muted : NexusColor.Text.primary)
+                    .modifier(OptionalFocus(binding: focusBinding, id: block.id))
                     .onAppear { draft = liveTitle }
                     .onChange(of: block.id) { _, _ in draft = liveTitle }
                     .onSubmit {
@@ -247,8 +323,11 @@ private struct TodoBlockView: View {
             } else {
                 Text(liveTitle)
                     .nexusType(.body)
+                    .lineSpacing(6)
                     .strikethrough(isDone)
                     .foregroundStyle(isDone ? NexusColor.Text.muted : NexusColor.Text.primary)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if model.canEdit { onActivate?() } }
             }
         }
     }
