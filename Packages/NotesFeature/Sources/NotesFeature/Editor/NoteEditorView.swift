@@ -316,8 +316,15 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
         }
         .padding(DS.Space.m)
         #if os(macOS)
+        // Inline metadata (no card), but keep a hairline bottom border as the
+        // "delikatna przerwa" separating properties from the document body.
         return
             slab
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(DS.ColorToken.strokeHairline)
+                    .frame(height: 1)
+            }
             .padding(.vertical, DS.Space.s)
             .listRowSeparator(.hidden)
         #else
