@@ -56,7 +56,7 @@ public struct MeetingActionsInspector: View {
                         navigation: navigation,
                         onAssignSpeaker: { rawSpeaker in
                             assigningSpeaker = rawSpeaker
-                            assignDraft = rawSpeaker
+                            assignDraft = model.attendees.first(where: { $0.id == rawSpeaker })?.name ?? rawSpeaker
                             assignError = nil
                         }
                     ).peopleSection

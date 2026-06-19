@@ -79,9 +79,9 @@ struct MeetingDetailPane: View {
             HStack(spacing: DS.Space.s) {
                 attendeesRow
                 Spacer(minLength: DS.Space.s)
-                ForEach(statusBadges(meeting), id: \.label) { badge in
-                    LiquidPill(badge.label, color: badge.color)
-                }
+                let status = compactStatus(meeting)
+                LiquidPill(status.label, color: status.color)
+                    .help(statusTooltip(meeting))
                 Button {
                     NotificationCenter.default.post(name: MeetingRecordingRequest.startManual, object: nil)
                 } label: {
@@ -107,22 +107,40 @@ struct MeetingDetailPane: View {
         }
     }
 
-    /// Initials avatars ONLY for real named participants (decoded from
-    /// `participantsJSON`); meetings without labeled speakers show nothing —
-    /// no fabricated people.
+    /// Initials avatars for real named participants (decoded from
+    /// `participantsJSON`). When all speakers are still placeholder-named
+    /// (e.g. "Speaker_1"), renders a compact "Assign speakers" affordance
+    /// that switches to the Transcript tab where assignment happens.
+    /// Meetings with no decoded participants show nothing — no fabricated people.
     @ViewBuilder
     private var attendeesRow: some View {
         if !model.attendees.isEmpty {
-            HStack(spacing: DS.Space.xs) {
-                HStack(spacing: -6) {
-                    ForEach(model.attendees.prefix(5)) { attendee in
-                        AttendeeAvatar(name: attendee.name)
+            if allAttendeesAreUnassigned {
+                Button {
+                    withAnimation(DS.Motion.selection) { tab = .transcript }
+                } label: {
+                    HStack(spacing: DS.Space.xxs) {
+                        Image(systemName: "person.2")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(DS.ColorToken.textMuted)
+                        Text("\(model.attendees.count) speaker\(model.attendees.count == 1 ? "" : "s") · Assign in Transcript")
+                            .font(DS.FontToken.metadata)
+                            .foregroundStyle(DS.ColorToken.textTertiary)
                     }
                 }
-                Text(attendeeNamesText)
-                    .font(DS.FontToken.metadata)
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                    .lineLimit(1)
+                .buttonStyle(.plain)
+            } else {
+                HStack(spacing: DS.Space.xs) {
+                    HStack(spacing: -6) {
+                        ForEach(model.attendees.prefix(5)) { attendee in
+                            AttendeeAvatar(name: attendee.name)
+                        }
+                    }
+                    Text(attendeeNamesText)
+                        .font(DS.FontToken.metadata)
+                        .foregroundStyle(DS.ColorToken.textSecondary)
+                        .lineLimit(1)
+                }
             }
         }
     }
@@ -133,29 +151,64 @@ struct MeetingDetailPane: View {
         return names.prefix(3).joined(separator: ", ") + " +\(names.count - 3)"
     }
 
-    /// Real-state badges (spec §Meeting detail header): Recorded/Imported from
-    /// `detectionSource`, Transcribed from a non-empty transcript, Complete
-    /// from `processingStatus == ready`, plus honest Failed / Processing.
-    private func statusBadges(_ meeting: Meeting) -> [(label: String, color: Color)] {
-        var badges: [(String, Color)] = []
-        let source = MeetingDetectionSource(rawValue: meeting.detectionSource)
-        badges.append(
-            source == .imported
-                ? ("Imported", DS.ColorToken.accentCyan) : ("Recorded", DS.ColorToken.accentBlue))
-        if !meeting.transcriptText.isEmpty {
-            badges.append(("Transcribed", DS.ColorToken.accentPurple))
-        }
+    /// Terminal/most-relevant status badge for the header: one pill that
+    /// communicates the meeting's lifecycle state. The full ordered history
+    /// (source + transcribed + processing) is surfaced via the pill's help tooltip.
+    private func compactStatus(_ meeting: Meeting) -> (label: String, color: Color) {
         let raw = meeting.processingStatus
         if MeetingProcessingStatus.isFailed(raw) {
-            badges.append(("Failed", DS.ColorToken.statusDanger))
-        } else if raw == MeetingProcessingStatus.ready.rawValue {
-            badges.append(("Complete", DS.ColorToken.accentGreen))
-        } else if raw == MeetingProcessingStatus.recording.rawValue {
-            badges.append(("Recording", DS.ColorToken.statusWarning))
-        } else {
-            badges.append(("Processing", DS.ColorToken.statusWarning))
+            return ("Failed", DS.ColorToken.statusDanger)
         }
-        return badges
+        if raw == MeetingProcessingStatus.ready.rawValue {
+            return ("Complete", DS.ColorToken.accentGreen)
+        }
+        if raw == MeetingProcessingStatus.recording.rawValue {
+            return ("Recording", DS.ColorToken.statusWarning)
+        }
+        if !meeting.transcriptText.isEmpty {
+            return ("Transcribed", DS.ColorToken.accentPurple)
+        }
+        let source = MeetingDetectionSource(rawValue: meeting.detectionSource)
+        return source == .imported
+            ? ("Imported", DS.ColorToken.accentCyan) : ("Recorded", DS.ColorToken.accentBlue)
+    }
+
+    /// Tooltip text for the compact status pill: ordered lifecycle history so
+    /// users can still see the full path without multiple pills in the header.
+    private func statusTooltip(_ meeting: Meeting) -> String {
+        var parts: [String] = []
+        let source = MeetingDetectionSource(rawValue: meeting.detectionSource)
+        parts.append(source == .imported ? "Imported" : "Recorded")
+        if !meeting.transcriptText.isEmpty { parts.append("Transcribed") }
+        let raw = meeting.processingStatus
+        if MeetingProcessingStatus.isFailed(raw) {
+            parts.append("Failed")
+        } else if raw == MeetingProcessingStatus.ready.rawValue {
+            parts.append("Complete")
+        } else if raw == MeetingProcessingStatus.recording.rawValue {
+            parts.append("Recording")
+        } else {
+            parts.append("Processing")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Returns `true` when the name is an auto-generated placeholder
+    /// ("Participant 1", "Speaker_2", etc.) rather than a real display name.
+    private func isPlaceholder(_ name: String) -> Bool {
+        name.range(
+            of: "^(participant|speaker)[ _]?\\d+$",
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    /// `true` when every attendee carries a placeholder name or equals their
+    /// raw speaker ID — i.e. nobody has been renamed/assigned yet.
+    private var allAttendeesAreUnassigned: Bool {
+        guard !model.attendees.isEmpty else { return false }
+        return model.attendees.allSatisfy { attendee in
+            attendee.name == attendee.id || isPlaceholder(attendee.name)
+        }
     }
 
     // MARK: - Summary actions (Copy / Share)
@@ -323,17 +376,12 @@ struct MeetingDetailPane: View {
     }
 
     /// Decisions card: green-check rows from the parsed `## Decisions` section
-    /// of the real summary. Summaries without a decisions section honestly
-    /// show the empty state.
+    /// of the real summary. Empty-hides — rendered only when decisions exist
+    /// (no full-height "No decisions captured" placeholder card).
     @ViewBuilder
     private var decisionsCard: some View {
-        LiquidGlassCard("Decisions") {
-            if model.sections.decisions.isEmpty {
-                LiquidEmptyState(
-                    systemImage: "checkmark.seal",
-                    message: "No decisions were captured in this meeting's summary."
-                )
-            } else {
+        if !model.sections.decisions.isEmpty {
+            LiquidGlassCard("Decisions") {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
                     ForEach(Array(model.sections.decisions.enumerated()), id: \.offset) { _, decision in
                         HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
@@ -355,15 +403,11 @@ struct MeetingDetailPane: View {
     /// Action Items card: REAL `TaskItem`s resolved from `actionItemIDs`;
     /// checkbox completes through the task repository. Owner column omitted —
     /// Nexus is single-user by design. Due date shows as row metadata.
+    /// Empty-hides — no "No action items" placeholder card when none exist.
     @ViewBuilder
     private func actionItemsCard(_ meeting: Meeting) -> some View {
-        LiquidGlassCard("Action Items") {
-            if model.actionItems.isEmpty {
-                LiquidEmptyState(
-                    systemImage: "checklist",
-                    message: "No action items were extracted from this meeting."
-                )
-            } else {
+        if !model.actionItems.isEmpty {
+            LiquidGlassCard("Action Items") {
                 VStack(spacing: 0) {
                     ForEach(model.actionItems, id: \.id) { task in
                         LiquidTaskRow(
@@ -382,12 +426,16 @@ struct MeetingDetailPane: View {
 
     /// Notes editor card (spec §Notes editor): re-hosts the EXISTING summary
     /// editor seam (`SummaryView` — view + raw-markdown `TextEditor` persisting
-    /// through `MeetingRepository`) on a sunken background per the visual
-    /// rules ("keep notes editor darker/sunken than surrounding cards"). No
-    /// new rich editor and no NotesFeature import — the meeting's notes ARE
-    /// its summary markdown.
+    /// through `MeetingRepository`). Renders via the light card recipe of the
+    /// enclosing `LiquidGlassCard` — no separate dark slab background.
+    /// The `SummaryView`'s "Edit" toggle (shown when `.liquid` + non-read-only)
+    /// is the compact "Add notes" affordance when the content is empty.
+    /// A `minHeight` of 260 pt is kept only when content exists, so an empty
+    /// Notes card does not consume unnecessary vertical space.
     private func notesCard(_ meeting: Meeting) -> some View {
-        LiquidGlassCard("Notes") {
+        let hasContent = !(model.meeting?.summaryText ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return LiquidGlassCard("Notes") {
             SummaryView(
                 meetingID: meeting.id, repository: composition.meetingRepository, style: .liquid
             )
@@ -395,15 +443,7 @@ struct MeetingDetailPane: View {
             // child's @StateObject across selection changes and keeps
             // showing the first meeting (same fix as MeetingDetailView).
             .id(meeting.id)
-            .frame(minHeight: 260)
-            .background {
-                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                    .fill(DS.ColorToken.backgroundSunken.opacity(0.55))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: DS.Radius.m, style: .continuous)
-                    .stroke(DS.ColorToken.strokeHairline, lineWidth: 1)
-            }
+            .frame(minHeight: hasContent ? 260 : nil)
         }
     }
 
