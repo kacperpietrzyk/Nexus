@@ -110,7 +110,7 @@ struct ProjectOverview: View {
         let empty = risks.isEmpty && activity.isEmpty
 
         if empty {
-            sparseCardColumn(healthCard: healthCard, risks: risks, tasks: tasks)
+            sparseCardColumn(healthCard: healthCard)
         } else {
             denseCardGrid(
                 healthCard: healthCard,
@@ -158,9 +158,7 @@ struct ProjectOverview: View {
     /// Delivery Risk / Recent Activity pair collapsed into one informative row.
     @ViewBuilder
     private func sparseCardColumn(
-        healthCard: ProjectHealthCard,
-        risks: [ProjectExecutionModel.ProjectRisk],
-        tasks: [TaskItem]
+        healthCard: ProjectHealthCard
     ) -> some View {
         VStack(spacing: DS.Space.l) {
             healthCard
