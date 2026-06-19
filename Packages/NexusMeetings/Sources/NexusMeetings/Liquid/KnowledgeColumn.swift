@@ -353,9 +353,12 @@ private struct BacklinksGraph: View {
     /// Height of the mini-graph card.
     private static let miniHeight: CGFloat = 190
     /// Popover canvas size.
-    private static let fullSize = CGSize(width: 360, height: 280)
+    /// Keep in sync with BacklinksGraphLayoutTests.popooverCanvasPlacesNodesOn2DRingNotColumn
+    /// (n=8, 104×24 pills must ring-fit: minFromSpacing≈144.7 ≤ maxRadius=186).
+    private static let fullSize = CGSize(width: 480, height: 440)
     /// Pill dimensions for the full graph in the popover.
-    private static let fullPillSize = CGSize(width: 120, height: 24)
+    /// Keep in sync with BacklinksGraphLayoutTests.popooverCanvasPlacesNodesOn2DRingNotColumn
+    private static let fullPillSize = CGSize(width: 104, height: 24)
 
     let centerTitle: String
     let nodes: [LiquidMeetingsModel.LinkedItem]

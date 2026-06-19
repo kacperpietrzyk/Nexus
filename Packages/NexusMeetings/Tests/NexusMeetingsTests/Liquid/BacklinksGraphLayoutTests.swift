@@ -140,24 +140,30 @@ struct BacklinksGraphLayoutTests {
 
     // MARK: - Popover ring test
 
-    /// For the expanded popover canvas (360×280, pill 120×24, n=6, centerClear 120×24)
-    /// nodes must be placed on a 2-D ring — not in a vertical column.
-    /// Prior to the ring fix, all nodes fell into columnFallback (single x-column).
+    /// For the expanded popover canvas (480×440, pill 104×24, n=8, centerClear 104×24)
+    /// nodes must be placed on a true 2-D ring — not in a vertical column.
+    ///
+    /// Sizes mirror BacklinksGraph.fullSize / fullPillSize — keep in sync manually
+    /// (those constants are private static so @testable import cannot reach them).
+    ///
+    /// Math: pillDiag≈106.7, minFromSpacing≈144.7, maxRadius=min(240-52-2,220-12-2)=186.
+    /// Ring fits → placeNodes must return a 2-D placement (distinctX > 1, distinctY > 1).
     @Test
     func popooverCanvasPlacesNodesOn2DRingNotColumn() {
-        let size = CGSize(width: 360, height: 280)
-        let pillSize = CGSize(width: 120, height: 24)
-        let centerClear = CGSize(width: 120, height: 24)
+        // Keep these in sync with BacklinksGraph.fullSize / fullPillSize
+        let size = CGSize(width: 480, height: 440)
+        let pillSize = CGSize(width: 104, height: 24)
+        let centerClear = CGSize(width: 104, height: 24)
 
         let rects = placeNodes(
-            6,
+            8,
             in: size,
             pillSize: pillSize,
-            maxNodes: 6,
+            maxNodes: 8,
             centerClear: centerClear
         )
 
-        #expect(rects.count == 6, "All 6 nodes should be placed")
+        #expect(rects.count == 8, "All 8 nodes should be placed")
 
         // Must be non-overlapping.
         for i in rects.indices {
@@ -176,8 +182,10 @@ struct BacklinksGraphLayoutTests {
             #expect(bounds.contains(rect), "Rect \(rect) out of bounds")
         }
 
-        // Must NOT be all-collinear (ring, not a column) — at least 2 distinct midX values.
+        // Must NOT be all-collinear on either axis (ring, not a column or row).
         let distinctX = Set(rects.map { ($0.midX * 10).rounded() })
-        #expect(distinctX.count > 1, "Nodes appear collinear (all same x); expected ring layout")
+        #expect(distinctX.count > 1, "Nodes appear collinear on X axis; expected ring layout")
+        let distinctY = Set(rects.map { ($0.midY * 10).rounded() })
+        #expect(distinctY.count > 1, "Nodes appear collinear on Y axis; expected ring layout")
     }
 }
