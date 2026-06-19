@@ -3,18 +3,8 @@ import NexusUI
 import SwiftData
 import SwiftUI
 
-/// The Notes surface: a grouped list of all live notes (the free-note knowledge
-/// base — spec §1, free notes are first-class), with a "New Note" affordance, a
-/// grouping picker (role / tag), and navigation into the block editor. Mac + iOS;
-/// the Watch projection is a separate bespoke view in the Watch app target.
-///
-/// macOS renders the Liquid composition: an in-panel header (grouping segmented
-/// control + New Note CTA) above hover-responsive glass rows — the module
-/// contributes NOTHING to the window toolbar (the Liquid shell owns that). iOS
-/// keeps the platform-native `List` + navigation-bar toolbar.
-///
-/// Mounts inside the existing app navigation, so it inherits the scene's
-/// `.modelContainer` — no separate container registration is needed.
+/// Notes surface: two-pane split (macOS: tree navigator + list/editor) or a
+/// native list (iOS). Mounts inside the app navigation; inherits `.modelContainer`.
 public struct NotesListView: View {
     @Environment(\.noteRepository) private var noteRepository
     #if os(macOS)
@@ -24,29 +14,21 @@ public struct NotesListView: View {
     @Environment(\.notesTaskRepository) private var notesTaskRepository
     #endif
 
-    // All live notes, newest-edited first. `deletedAt == nil` excludes tombstones.
-    @Query(
-        filter: #Predicate<Note> { $0.deletedAt == nil },
-        sort: \Note.updatedAt,
-        order: .reverse
-    )
+    @Query(filter: #Predicate<Note> { $0.deletedAt == nil }, sort: \Note.updatedAt, order: .reverse)
     private var notes: [Note]
 
-    // The whole Link table, folded once into a per-note backlink count map (A5).
-    // One query beats N per-row `FetchDescriptor<Link>` fetches on the main actor
-    // during scroll (the documented hot-path rule). `toKind` is an enum stored
-    // field that doesn't filter reliably in `#Predicate`, so we fold in memory.
+    // Full Link table — folded once per render into a backlink-count map.
     @Query private var links: [GraphLink]
 
     @State private var path: [UUID] = []
     @State private var newNoteError: String?
-    @State private var groupMode: NoteListGrouping.Mode = .role
     #if os(macOS)
     @State private var graphModel: NoteGraphModel?
+    @State private var selectedContainer: NoteContainer = .overview
+    @Query(filter: #Predicate<Project> { $0.deletedAt == nil && $0.archivedAt == nil })
+    private var activeProjects: [Project]
     #endif
 
-    // Folder ops (Tranche 2 Plan E). Optional-backed alert pattern, same as
-    // `newNoteError`.
     @State private var folderRenameTarget: String?
     @State private var folderRenameText = ""
     @State private var moveToNewFolderNote: Note?
@@ -66,107 +48,48 @@ public struct NotesListView: View {
     private var backlinkCounts: [UUID: Int] {
         NoteListGrouping.backlinkCounts(from: links)
     }
-
+    #if !os(macOS)
+    @State private var groupMode: NoteListGrouping.Mode = .role
     private var groups: [NoteListGrouping.Group] {
         NoteListGrouping.groups(for: notes, mode: groupMode)
     }
-
+    #endif
     public var body: some View {
+        #if os(macOS)
+        // macOS owns no outer NavigationStack — the right-pane stack inside
+        // liquidContent is the sole $path owner (see macOSRoot / liquidContent).
+        macOSRoot
+        #else
         NavigationStack(path: $path) {
             platformContent
                 .navigationDestination(for: UUID.self) { id in
-                    #if os(macOS)
-                    NoteDetailLoader(
-                        noteID: id,
-                        onOpenNote: { path.append($0) },
-                        onOpenGraph: { noteID in
-                            path.removeAll()
-                            openGraph(
-                                scope: .local(
-                                    center: GraphNodeID(.note, noteID),
-                                    depth: 1
-                                )
-                            )
-                        }
-                    )
-                    #else
                     NoteDetailLoader(noteID: id, onOpenNote: { path.append($0) })
-                    #endif
                 }
-                .alert(
-                    "Couldn't create note",
-                    isPresented: Binding(
-                        get: { newNoteError != nil },
-                        set: { if !$0 { newNoteError = nil } }
-                    )
-                ) {
-                    Button("OK", role: .cancel) { newNoteError = nil }
-                } message: {
-                    Text(newNoteError ?? "")
-                }
-                .alert(
-                    "New Folder",
-                    isPresented: Binding(
-                        get: { moveToNewFolderNote != nil },
-                        set: { if !$0 { moveToNewFolderNote = nil } }
-                    )
-                ) {
-                    TextField("Folder path", text: $newFolderText)
-                    Button("Cancel", role: .cancel) { moveToNewFolderNote = nil }
-                    Button("Move") {
-                        if let note = moveToNewFolderNote {
-                            moveNote(note, toFolder: newFolderText)
-                        }
-                        moveToNewFolderNote = nil
-                    }
-                } message: {
-                    Text("Slash-separated path, e.g. projects/nexus.")
-                }
-                .alert(
-                    "Rename Folder",
-                    isPresented: Binding(
-                        get: { folderRenameTarget != nil },
-                        set: { if !$0 { folderRenameTarget = nil } }
-                    )
-                ) {
-                    TextField("Folder path", text: $folderRenameText)
-                    Button("Cancel", role: .cancel) { folderRenameTarget = nil }
-                    Button("Rename") {
-                        if let target = folderRenameTarget {
+                .modifier(
+                    NotesSharedChrome(
+                        newNoteError: $newNoteError,
+                        moveToNewFolderNote: $moveToNewFolderNote,
+                        newFolderText: $newFolderText,
+                        folderRenameTarget: $folderRenameTarget,
+                        folderRenameText: $folderRenameText,
+                        onMoveNote: moveNote,
+                        onRenameFolder: { [noteRepository, folderRenameText] target in
                             _ = try? noteRepository?.renameFolder(from: target, to: folderRenameText)
                         }
-                        folderRenameTarget = nil
-                    }
-                } message: {
-                    Text("Notes in this folder and its subfolders move with it.")
-                }
-                .task {
-                    consumePendingDailyNoteRequest()
-                    #if os(macOS)
-                    consumePendingGraphRequest()
-                    #endif
-                }
+                    )
+                )
+                .task { consumePendingDailyNoteRequest() }
                 .onReceive(
                     NotificationCenter.default.publisher(for: .notesOpenDailyNote)
-                ) { _ in
-                    consumePendingDailyNoteRequest()
-                }
-                #if os(macOS)
-            .onReceive(
-                NotificationCenter.default.publisher(for: .notesOpenGraph)
-            ) { _ in
-                consumePendingGraphRequest()
-            }
-                #endif
+                ) { _ in consumePendingDailyNoteRequest() }
         }
+        #endif
     }
 
-    // MARK: - Platform composition
+    // MARK: - Platform composition (iOS only; macOS uses macOSRoot directly)
 
+    #if !os(macOS)
     @ViewBuilder private var platformContent: some View {
-        #if os(macOS)
-        liquidContent
-        #else
         iosContent
             .navigationTitle("Notes")
             .toolbar {
@@ -238,15 +161,58 @@ public struct NotesListView: View {
             .sheet(isPresented: $bulkMovePickerShown) {
                 iosBulkMovePicker
             }
-        #endif
     }
+    #endif
 
     #if os(macOS)
 
+    // MARK: - macOS root (no outer NavigationStack)
+
+    /// macOS entry point. No `NavigationStack` — the right-pane stack inside
+    /// `liquidContent` is the sole `$path` owner, ensuring the editor pushes in
+    /// the right pane while the tree navigator stays put.
+    private var macOSRoot: some View {
+        liquidContent
+            .modifier(
+                NotesSharedChrome(
+                    newNoteError: $newNoteError,
+                    moveToNewFolderNote: $moveToNewFolderNote,
+                    newFolderText: $newFolderText,
+                    folderRenameTarget: $folderRenameTarget,
+                    folderRenameText: $folderRenameText,
+                    onMoveNote: moveNote,
+                    onRenameFolder: { [noteRepository, folderRenameText] target in
+                        _ = try? noteRepository?.renameFolder(from: target, to: folderRenameText)
+                    }
+                )
+            )
+            .task {
+                consumePendingDailyNoteRequest()
+                consumePendingGraphRequest()
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(for: .notesOpenDailyNote)
+            ) { _ in consumePendingDailyNoteRequest() }
+            .onReceive(
+                NotificationCenter.default.publisher(for: .notesOpenGraph)
+            ) { _ in consumePendingGraphRequest() }
+    }
+
     // MARK: - macOS Liquid composition
 
+    private var noteTree: NoteTreeModel.Tree {
+        NoteTreeModel.build(
+            notes: notes,
+            links: links,
+            projects: activeProjects.map {
+                NoteTreeModel.ProjectRef(
+                    id: $0.id, title: $0.title, canonicalNoteRef: $0.canonicalNoteRef)
+            }
+        )
+    }
+
     private var liquidContent: some View {
-        VStack(spacing: 0) {
+        Group {
             if let graphModel {
                 NoteGraphView(
                     model: graphModel,
@@ -257,7 +223,43 @@ public struct NotesListView: View {
                     onClose: { self.graphModel = nil }
                 )
             } else {
-                NotesTreeView(path: $path, onOpenGraph: { openGraph(scope: .global) })
+                HSplitView {
+                    NotesTreeView(
+                        tree: noteTree,
+                        notes: notes,
+                        selectedContainer: $selectedContainer,
+                        path: $path,
+                        onOpenGraph: { openGraph(scope: .global) }
+                    )
+                    .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
+
+                    NavigationStack(path: $path) {
+                        NoteListPane(
+                            container: selectedContainer,
+                            tree: noteTree,
+                            allNotes: notes,
+                            backlinkCounts: backlinkCounts,
+                            onOpenNote: { path.append($0) },
+                            onDeleteNote: { deleteNote($0) },
+                            extraContextMenu: { note in
+                                AnyView(moveToFolderMenu(for: note))
+                            }
+                        )
+                        .navigationDestination(for: UUID.self) { id in
+                            NoteDetailLoader(
+                                noteID: id,
+                                onOpenNote: { path.append($0) },
+                                onOpenGraph: { noteID in
+                                    path.removeAll()
+                                    openGraph(
+                                        scope: .local(
+                                            center: GraphNodeID(.note, noteID), depth: 1))
+                                }
+                            )
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
             }
         }
     }
@@ -339,9 +341,7 @@ public struct NotesListView: View {
         _ = try? noteRepository?.removeFolder(path)
     }
 
-    /// "Move to Folder" submenu for a row context menu: root, every existing
-    /// folder (tree order), and a "New Folder…" prompt. Available in ALL
-    /// grouping modes — folder placement is note metadata, not a mode feature.
+    /// Context-menu submenu: move to existing folder, no folder, or new folder.
     @ViewBuilder
     private func moveToFolderMenu(for note: Note) -> some View {
         Menu("Move to Folder") {
