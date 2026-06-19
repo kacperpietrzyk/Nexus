@@ -250,4 +250,18 @@ struct LiquidProjectsModelTests {
         #expect(model.clientNameByProject[project.id] == "ACME")
         #expect(model.nextKeyDateByProject[project.id]?.anchorKey == "soon")  // soonest upcoming, not past/later
     }
+
+    @MainActor
+    @Test func pickerProjectsAreGridOrdered() throws {
+        let context = try makeContext()
+        let repo = ProjectRepository(context: context)
+        let backlog = try repo.create(name: "Backlog one")
+        try repo.setStatus(.backlog, on: backlog)
+        let active = try repo.create(name: "Active one")
+        try repo.setStatus(.active, on: active)
+        let model = LiquidProjectsModel()
+        model.reload(modelContext: context, now: .now)
+        // Active sorts ahead of backlog regardless of name.
+        #expect(model.projects.first?.id == active.id)
+    }
 }

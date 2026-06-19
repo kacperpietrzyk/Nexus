@@ -120,7 +120,7 @@ struct ProjectRoadmap: View {
             }
             ForEach(bars) { bar in
                 HStack(spacing: DS.Space.s) {
-                    Image(systemName: nexusProjectGlyph(named: bar.glyphToken))
+                    Image(systemName: nexusProjectGlyph(token: bar.glyphToken, id: bar.projectID))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(DS.ColorToken.textSecondary)
                         .frame(width: 16)

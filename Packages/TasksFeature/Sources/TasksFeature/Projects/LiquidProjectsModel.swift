@@ -123,7 +123,7 @@ public final class LiquidProjectsModel {
         let clientNames = try loadClientNames(for: loadedProjects, modelContext: modelContext)
         let nextKeyDates = try loadNextKeyDates(for: loadedProjects, modelContext: modelContext, now: now)
 
-        projects = loadedProjects
+        projects = ProjectGridOrder.sorted(loadedProjects)
         openCountsByProject = openCounts
         progressByProject = progresses
         clientNameByProject = clientNames

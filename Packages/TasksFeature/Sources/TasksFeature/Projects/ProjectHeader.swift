@@ -28,7 +28,7 @@ struct ProjectHeader: View {
             breadcrumb
 
             HStack(spacing: DS.Space.m) {
-                Image(systemName: nexusProjectGlyph(named: project.color))
+                Image(systemName: nexusProjectGlyph(token: project.color, id: project.id))
                     // 20 pt identity glyph sits optically level with the 28 pt
                     // serif display title; no DS icon-size token at this scale.
                     .font(.system(size: 20, weight: .semibold))
