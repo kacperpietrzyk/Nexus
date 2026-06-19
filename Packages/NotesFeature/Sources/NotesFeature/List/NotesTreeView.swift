@@ -7,9 +7,8 @@ import SwiftUI
 
 /// macOS knowledge-base navigator (spec §4): in-panel header + a sectioned,
 /// nested tree (Unfiled / Projects / Library / Journal / Templates). Selecting a
-/// note drives the shared `NavigationStack` into the existing block editor.
-/// Selecting a note navigates; a per-note context menu and the header New Folder
-/// button drive mutations (new folder, move, convert-to-task).
+/// folder/section/project drives the right-pane list via `selectedContainer`;
+/// tapping a note leaf opens the editor (pushes onto the shared navigation path).
 struct NotesTreeView: View {
     @Environment(\.noteRepository) private var noteRepository
     @Environment(\.notesTaskRepository) private var taskRepository
@@ -26,14 +25,10 @@ struct NotesTreeView: View {
     @State private var bulkMoveText = ""
     @State private var showBulkMoveAlert = false
 
-    @Query(filter: #Predicate<Note> { $0.deletedAt == nil }, sort: \Note.updatedAt, order: .reverse)
-    private var notes: [Note]
+    let tree: NoteTreeModel.Tree
+    let notes: [Note]
 
-    @Query private var links: [GraphLink]
-
-    @Query(filter: #Predicate<Project> { $0.deletedAt == nil && $0.archivedAt == nil })
-    private var activeProjects: [Project]
-
+    @Binding var selectedContainer: NoteContainer
     @Binding var path: [UUID]
     var onOpenGraph: (() -> Void)?
 
@@ -49,19 +44,7 @@ struct NotesTreeView: View {
     /// default empty-string value means everything is open on first launch).
     @AppStorage("notes.tree.collapsed") private var collapsedRaw = ""
 
-    private var tree: NoteTreeModel.Tree {
-        NoteTreeModel.build(
-            notes: notes,
-            links: links,
-            projects: activeProjects.map {
-                NoteTreeModel.ProjectRef(
-                    id: $0.id,
-                    title: $0.title,
-                    canonicalNoteRef: $0.canonicalNoteRef
-                )
-            }
-        )
-    }
+    @AppStorage("notes.tree.collapsedSeeded") private var collapsedSeeded = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -70,6 +53,12 @@ struct NotesTreeView: View {
             ScrollView {
                 treeBody
                     .padding(DS.Space.s)
+            }
+        }
+        .task {
+            if !collapsedSeeded {
+                setCollapsed("\u{0}sec:Unfiled", true)
+                collapsedSeeded = true
             }
         }
         .overlay(alignment: .bottom) {
@@ -191,7 +180,7 @@ struct NotesTreeView: View {
 
     @ViewBuilder private var treeBody: some View {
         if !tree.unfiled.isEmpty {
-            treeSection("Unfiled") {
+            treeSection("Unfiled", container: .unfiled) {
                 ForEach(tree.unfiled) { note in
                     leaf(note)
                 }
@@ -215,20 +204,22 @@ struct NotesTreeView: View {
                         onSelect: select,
                         onTogglePin: { note in try? noteRepository?.setPinned(note, !note.isPinned) },
                         noteMenu: noteContextMenu,
-                        selectionModel: selection
+                        selectionModel: selection,
+                        onSelectFolder: { selectContainer(.folder($0)) },
+                        isSelectedFolder: { selectedContainer == .folder($0) && path.isEmpty }
                     )
                 }
             }
         }
         if !tree.journal.isEmpty {
-            treeSection("Journal") {
+            treeSection("Journal", container: .journal) {
                 ForEach(tree.journal) { note in
                     leaf(note)
                 }
             }
         }
         if !tree.templates.isEmpty {
-            treeSection("Templates") {
+            treeSection("Templates", container: .templates) {
                 ForEach(tree.templates) { note in
                     templateLeaf(note)
                 }
@@ -255,9 +246,18 @@ struct NotesTreeView: View {
                 leaf(note)
             }
         } label: {
-            Label(proj.title, systemImage: "square.stack.3d.up")
-                .font(DS.FontToken.bodyStrong)
-                .foregroundStyle(DS.ColorToken.textPrimary)
+            HStack(spacing: DS.Space.xs) {
+                Label(proj.title, systemImage: "square.stack.3d.up")
+                    .font(DS.FontToken.bodyStrong)
+                    .foregroundStyle(DS.ColorToken.textPrimary)
+                Spacer(minLength: 0)
+                NexusCount(
+                    value: (proj.canonical == nil ? 0 : 1) + proj.notes.count,
+                    font: NexusType.metaMono
+                )
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { selectContainer(.project(proj.id)) }
         }
     }
 
@@ -329,6 +329,7 @@ struct NotesTreeView: View {
 
     @ViewBuilder private func treeSection<Content: View>(
         _ title: String,
+        container: NoteContainer? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         let key = "\u{0}sec:\(title)"
@@ -342,15 +343,30 @@ struct NotesTreeView: View {
         } label: {
             Text(title.uppercased())
                 .font(NexusType.metaMono)
-                .foregroundStyle(DS.ColorToken.textTertiary)
+                .foregroundStyle(
+                    isSelectedSection(container)
+                        ? DS.ColorToken.textPrimary : DS.ColorToken.textTertiary
+                )
                 .kerning(0.6)
                 .padding(.horizontal, DS.Space.xs)
                 .padding(.top, DS.Space.s)
                 .padding(.bottom, DS.Space.xxs)
+                .contentShape(Rectangle())
+                .onTapGesture { if let container { selectContainer(container) } }
         }
     }
 
+    private func isSelectedSection(_ container: NoteContainer?) -> Bool {
+        guard let container else { return false }
+        return selectedContainer == container && path.isEmpty
+    }
+
     // MARK: - Selection
+
+    private func selectContainer(_ container: NoteContainer) {
+        path = []          // leave the editor → show the list
+        selectedContainer = container
+    }
 
     private func select(_ id: UUID) {
         path = [id]
