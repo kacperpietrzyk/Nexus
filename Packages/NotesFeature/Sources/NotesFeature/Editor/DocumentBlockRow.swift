@@ -34,11 +34,7 @@ struct DocumentBlockRow: View {
                 blockID: block.id,
                 isHovering: hovering,
                 canEdit: model.canEdit,
-                onAdd: onAdd,
-                onDelete: onDelete,
-                onMoveUp: onMoveUp,
-                onMoveDown: onMoveDown,
-                turnInto: turnInto
+                onAdd: onAdd
             )
             BlockView(
                 block: block,
@@ -51,6 +47,11 @@ struct DocumentBlockRow: View {
             )
         }
         .padding(.top, topPadding)
+        // Full-width + a rectangular content shape so hover (and the drop target)
+        // covers the WHOLE row — otherwise the gutter only reveals when the pointer
+        // sits exactly over a glyph (the ⋮ handle is transparent until hovered).
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .overlay(alignment: .top) {
             if isDropTarget {
                 Rectangle()
@@ -59,6 +60,20 @@ struct DocumentBlockRow: View {
             }
         }
         .onHover { hovering = $0 }
+        .contextMenu {
+            if model.canEdit {
+                Menu("Turn into") {
+                    ForEach(Array(turnInto.enumerated()), id: \.offset) { _, item in
+                        Button(item.0) { item.1() }
+                    }
+                }
+                Divider()
+                Button("Move Up") { onMoveUp() }
+                Button("Move Down") { onMoveDown() }
+                Divider()
+                Button("Delete", role: .destructive) { onDelete() }
+            }
+        }
         .dropDestination(for: String.self) { items, _ in
             guard let first = items.first else { return false }
             return onDrop(first)

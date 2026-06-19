@@ -4,39 +4,23 @@ import NexusUI
 import SwiftUI
 
 /// The left hover gutter for one document block (macOS): a ⋮ drag handle (the
-/// reorder drag SOURCE — never the text), a "+" to insert below, and a menu on
-/// the handle (Delete / Turn into / Move up / Move down).
+/// reorder drag SOURCE — a plain draggable image, NOT a Menu, since a Menu would
+/// swallow the drag gesture) and a "+" to insert a block below. Block actions
+/// (Delete / Turn into / Move) live on the row's right-click context menu.
 struct BlockGutter: View {
     let blockID: UUID
     let isHovering: Bool
     let canEdit: Bool
     let onAdd: () -> Void
-    let onDelete: () -> Void
-    let onMoveUp: () -> Void
-    let onMoveDown: () -> Void
-    /// (label, action) pairs for "Turn into".
-    let turnInto: [(String, () -> Void)]
 
     var body: some View {
         HStack(spacing: 2) {
-            Menu {
-                ForEach(Array(turnInto.enumerated()), id: \.offset) { _, item in
-                    Button(item.0) { item.1() }
-                }
-                Divider()
-                Button("Move Up") { onMoveUp() }
-                Button("Move Down") { onMoveDown() }
-                Divider()
-                Button("Delete", role: .destructive) { onDelete() }
-            } label: {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 11))
-                    .foregroundStyle(DS.ColorToken.textTertiary)
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .draggable(blockID.uuidString)
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 11))
+                .foregroundStyle(DS.ColorToken.textTertiary)
+                .contentShape(Rectangle())
+                .draggable(blockID.uuidString)
+                .help("Drag to reorder")
 
             Button(action: onAdd) {
                 Image(systemName: "plus")
@@ -44,11 +28,11 @@ struct BlockGutter: View {
                     .foregroundStyle(DS.ColorToken.textTertiary)
             }
             .buttonStyle(.plain)
+            .help("Add block below")
         }
         .frame(width: 34, alignment: .leading)
         .opacity(isHovering && canEdit ? 1 : 0)
         .padding(.top, 3)
-        .accessibilityHidden(!isHovering)
     }
 }
 
