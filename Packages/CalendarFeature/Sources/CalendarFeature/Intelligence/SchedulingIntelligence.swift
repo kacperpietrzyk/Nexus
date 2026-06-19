@@ -122,10 +122,11 @@ public enum SchedulingIntelligence {
         case other
     }
 
-    /// Weekly time totals. Per-category totals sum each event's clipped
-    /// duration independently, so concurrently scheduled events of different
-    /// categories both count toward their own category; `totalScheduled` is
-    /// the union of all scheduled time and therefore never double-counts.
+    /// Weekly time totals. Per-category totals are the **union** of that
+    /// category's intervals, so overlapping events of the same category are
+    /// never double-counted; events in different categories each count toward
+    /// their own category's union. `totalScheduled` is the union of all
+    /// scheduled time. Invariant: every category total ≤ `totalScheduled`.
     public struct TimeInsights: Equatable, Sendable {
         /// Seconds per category (clipped to the week; categories with no
         /// events are absent).
@@ -146,18 +147,23 @@ public enum SchedulingIntelligence {
 
     /// Per-category time totals plus the unioned total for non-all-day events
     /// clipped to `week`. See `TimeInsights` for the overlap semantics.
+    ///
+    /// Each category total is the **union** of that category's intervals so that
+    /// overlapping events of the same category are never double-counted. This
+    /// upholds the invariant `totals[c] ≤ totalScheduled` for every category c.
     public static func timeInsights(
         events: [CalendarEvent],
         week: DateInterval,
         classify: (CalendarEvent) -> EventCategory
     ) -> TimeInsights {
-        var totals: [EventCategory: TimeInterval] = [:]
+        var categoryIntervals: [EventCategory: [DateInterval]] = [:]
         var scheduled: [DateInterval] = []
         for event in events {
             guard let interval = clip(event, to: week) else { continue }
-            totals[classify(event), default: 0] += interval.duration
+            categoryIntervals[classify(event), default: []].append(interval)
             scheduled.append(interval)
         }
+        let totals = categoryIntervals.mapValues { unionDuration(of: $0) }
         return TimeInsights(totals: totals, totalScheduled: unionDuration(of: scheduled))
     }
 
