@@ -314,6 +314,48 @@ import Testing
     #expect(insights.topTerms.contains { $0.folding(options: .diacriticInsensitive, locale: nil) == "wdrozenie" })
 }
 
+// MARK: - insights: top terms from segments (Circleback import format)
+
+/// Circleback `transcriptText` shape: `"[00:00:00] Participant 1\n<text>\n"`.
+/// The speaker-header line must NOT leak into topics; `bylo` (real ł, not ASCII)
+/// must be blocked by the stopword fold; `takiego/trzeba/dobra` idem.
+@Test func topTermsUsesSegmentTextNotTranscriptHeaders() {
+    let transcriptText = """
+        [00:00:00] Participant 1
+        wdrożenie systemu było takiego trzeba dobra wdrożenie wdrożenie
+        [00:00:30] Participant 2
+        wdrożenie systemu to wdrożenie dobra trzeba
+        """
+    let segments = [
+        MeetingSpeakerSegment(
+            startMs: 0, endMs: 30_000, speaker: "Participant 1",
+            text: "wdrożenie systemu było takiego trzeba dobra wdrożenie wdrożenie"
+        ),
+        MeetingSpeakerSegment(
+            startMs: 30_000, endMs: 60_000, speaker: "Participant 2",
+            text: "wdrożenie systemu to wdrożenie dobra trzeba"
+        ),
+    ]
+    let insights = MeetingInsights.insights(
+        durationSec: 60, segments: segments, transcriptText: transcriptText
+    )
+    // Speaker-header words must not appear.
+    #expect(insights.topTerms.contains("participant") == false)
+    // Polish fillers (real ł spelling for było) must be blocked.
+    let foldedTerms = insights.topTerms.map {
+        $0.lowercased().replacingOccurrences(of: "ł", with: "l")
+            .folding(options: .diacriticInsensitive, locale: nil)
+    }
+    #expect(foldedTerms.contains("bylo") == false)
+    #expect(foldedTerms.contains("takiego") == false)
+    #expect(foldedTerms.contains("trzeba") == false)
+    #expect(foldedTerms.contains("dobra") == false)
+    // Real domain term survives.
+    #expect(insights.topTerms.contains { $0.folding(options: .diacriticInsensitive, locale: nil) == "wdrozenie" })
+    // Word count still reflects the full transcriptText (not just segment text).
+    #expect(insights.wordCount > 0)
+}
+
 // MARK: - insights: speaker-name mapping
 
 @Test func speakerSharesUseAssignedDisplayNames() {
