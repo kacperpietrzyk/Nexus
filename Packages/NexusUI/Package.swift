@@ -15,6 +15,7 @@ let package = Package(
         .package(path: "../NexusCore"),
         .package(path: "../NexusAI"),
         .package(path: "../NexusAgentTools"),
+        .package(url: "https://github.com/li3zhen1/Grape.git", from: "1.1.0"),
     ],
     targets: [
         .target(
@@ -25,6 +26,11 @@ let package = Package(
                 .product(
                     name: "NexusAgentTools",
                     package: "NexusAgentTools",
+                    condition: .when(platforms: [.macOS, .iOS])
+                ),
+                .product(
+                    name: "ForceSimulation",
+                    package: "Grape",
                     condition: .when(platforms: [.macOS, .iOS])
                 ),
             ],
