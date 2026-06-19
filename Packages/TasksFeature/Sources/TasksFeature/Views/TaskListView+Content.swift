@@ -79,15 +79,15 @@ extension TaskListView {
 
     @ViewBuilder
     var groupedFlatContent: some View {
-        let sections = taskGroupSections(
-            flatList, by: groupBy.wrappedValue, projectsByID: projectsByID,
-            now: now, calendar: Self.groupingCalendar
-        )
         if groupBy.wrappedValue == .none {
             ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                 row(for: item, appearIndex: i)
             }
         } else {
+            let sections = taskGroupSections(
+                flatList, by: groupBy.wrappedValue, projectsByID: projectsByID,
+                now: now, calendar: Self.groupingCalendar
+            )
             ForEach(sections, id: \.key) { group in
                 section(group.key, items: group.items)
             }

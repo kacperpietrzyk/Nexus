@@ -153,7 +153,7 @@ public struct TaskDetailInspector: View {
 
             priorityPicker
 
-            NexusToggle("Pin as focus", isOn: $task.pinnedAsFocus)
+            NexusToggle("Pin to Today", isOn: $task.pinnedAsFocus)
                 .onChange(of: task.pinnedAsFocus) { _, _ in save() }
         }
     }

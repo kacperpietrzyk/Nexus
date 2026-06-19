@@ -49,4 +49,25 @@ struct TaskGroupingTests {
         #expect(sections.count == 1)
         #expect(sections[0].items.count == 2)
     }
+
+    @Test("Group by date covers tomorrow / this week / later boundaries")
+    func byDateBoundaries() {
+        let now = at("2026-06-19T12:00:00Z")
+        let tomorrow = TaskItem(title: "tm", dueAt: at("2026-06-20T09:00:00Z"))
+        let thisWeek = TaskItem(title: "tw", dueAt: at("2026-06-23T09:00:00Z"))  // 4 days out
+        let later = TaskItem(title: "lt", dueAt: at("2026-06-30T09:00:00Z"))  // 11 days out
+        let sections = taskGroupSections([later, thisWeek, tomorrow], by: .date, projectsByID: [:], now: now, calendar: cal)
+        #expect(sections.map(\.key) == ["Tomorrow", "This week", "Later"])
+    }
+
+    @Test("Group by none uses empty key and preserves input order")
+    func byNoneContract() {
+        let now = at("2026-06-19T12:00:00Z")
+        let a = TaskItem(title: "a")
+        let b = TaskItem(title: "b")
+        let sections = taskGroupSections([a, b], by: .none, projectsByID: [:], now: now, calendar: cal)
+        #expect(sections.count == 1)
+        #expect(sections[0].key.isEmpty)
+        #expect(sections[0].items.map(\.title) == ["a", "b"])
+    }
 }
