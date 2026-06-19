@@ -84,13 +84,6 @@ public final class LiquidMeetingsModel {
     /// 2-hop "related notes" — see `relatedNotes(context:)` for the heuristic.
     public private(set) var relatedNotes: [RelatedNote] = []
 
-    // MARK: Layout
-
-    /// Written by the screen from its measured width: under the spec's wide
-    /// breakpoint the Knowledge Column collapses into the right inspector
-    /// (04_LAYOUT_SYSTEM.md §Wide desktop — only 1600 pt+ windows "show
-    /// knowledge column and right actions simultaneously").
-    public var knowledgeCollapsed = false
     // `internal(set)` so extension files can set error state without a public setter.
     public internal(set) var loadError: String?
 

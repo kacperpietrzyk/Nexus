@@ -36,15 +36,8 @@ public struct LiquidMeetingsNavigation {
     }
 }
 
-/// Main-content width below which the Knowledge Column folds into the right
-/// inspector. The reference wide layout needs the middle knowledge column to
-/// survive the real shell/sidebar/inspector chrome, so the breakpoint leaves a
-/// little less dead zone before collapsing.
-private let knowledgeColumnBreakpoint: CGFloat = 920
 /// Meeting list pane width (spec §Meeting list: 230–250 pt).
 private let listPaneWidth: CGFloat = 240
-/// Knowledge column width (spec §Layout: 280–300 pt).
-private let knowledgeColumnWidth: CGFloat = 288
 
 /// Liquid Meetings / Notes Intelligence main column (Task 10, spec
 /// `docs/08_MODULE_MEETINGS_NOTES.md`): meeting list | meeting detail |
@@ -71,22 +64,18 @@ public struct LiquidMeetingsScreen: View {
     }
 
     public var body: some View {
-        GeometryReader { proxy in
-            content
-                .onAppear { applyBreakpoint(width: proxy.size.width) }
-                .onChange(of: proxy.size.width) { _, width in applyBreakpoint(width: width) }
-        }
-        .task { reloadSelectingDefault() }
-        .task(id: router.selectedMeetingID) { reload() }
-        // Coalesce local saves AND cross-process / CloudKit imports into one
-        // debounced reload. The MeetingsHelper records into a SEPARATE persistent
-        // container, so its writes never post this process's
-        // `ModelContext.didSave`; the only cross-process signal is the store-level
-        // `NSPersistentStoreRemoteChange` (also how CloudKit imports arrive) —
-        // `reloadOnStoreChange` observes both and hops to the main actor before
-        // calling `action`, so the Cancel card / processing state refreshes
-        // instead of going stale, without a reload storm during bulk writes.
-        .reloadOnStoreChange { reload() }
+        content
+            .task { reloadSelectingDefault() }
+            .task(id: router.selectedMeetingID) { reload() }
+            // Coalesce local saves AND cross-process / CloudKit imports into one
+            // debounced reload. The MeetingsHelper records into a SEPARATE persistent
+            // container, so its writes never post this process's
+            // `ModelContext.didSave`; the only cross-process signal is the store-level
+            // `NSPersistentStoreRemoteChange` (also how CloudKit imports arrive) —
+            // `reloadOnStoreChange` observes both and hops to the main actor before
+            // calling `action`, so the Cancel card / processing state refreshes
+            // instead of going stale, without a reload storm during bulk writes.
+            .reloadOnStoreChange { reload() }
     }
 
     @ViewBuilder
@@ -137,14 +126,6 @@ public struct LiquidMeetingsScreen: View {
 
                 detailColumn
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                if !model.knowledgeCollapsed, router.selectedMeetingID != nil {
-                    KnowledgeColumn(
-                        model: model, composition: composition, router: router,
-                        navigation: navigation
-                    )
-                    .frame(width: knowledgeColumnWidth)
-                }
             }
             .padding(DS.Space.l)
         }
@@ -180,13 +161,6 @@ public struct LiquidMeetingsScreen: View {
             LiquidPrimaryButton("Open Settings", action: navigation.openSettings)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func applyBreakpoint(width: CGFloat) {
-        let collapsed = width < knowledgeColumnBreakpoint
-        if model.knowledgeCollapsed != collapsed {
-            model.knowledgeCollapsed = collapsed
-        }
     }
 
     private func reload() {

@@ -45,9 +45,7 @@ public struct MeetingActionsInspector: View {
                     insightsCard
                 }
                 nextMeetingCard
-                if model.knowledgeCollapsed, model.meeting != nil {
-                    // Under the wide breakpoint the Knowledge Column collapses
-                    // into this inspector (04_LAYOUT_SYSTEM.md §Wide desktop).
+                if model.meeting != nil {
                     KnowledgeSections(
                         model: model, composition: composition, router: router,
                         navigation: navigation
