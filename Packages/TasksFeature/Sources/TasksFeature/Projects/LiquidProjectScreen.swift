@@ -7,6 +7,11 @@ import SwiftUI
 /// list used (no spec value; the execution screen itself is full-width).
 private let pickerMaxWidth: CGFloat = 720
 
+/// Uniform Grid-tile height. Sized to a full 4-row card (title + client/vendor
+/// + schedule + progress, with `DS.Space.l` padding); shorter cards pad up to
+/// this so every tile in the grid is the same size.
+private let projectCardMinHeight: CGFloat = 150
+
 /// Tabs (spec §Tabs). Three focused, non-duplicating surfaces ship:
 /// Overview (dashboard — stats + milestones + health/risk/activity),
 /// Board (full Kanban), and List (full task table). The mockup's
@@ -423,7 +428,10 @@ private struct ProjectPickerRow: View {
                 progressRow
             }
             .padding(DS.Space.l)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Uniform tile height across the grid: short cards (no client /
+            // schedule rows) pad to the same height as a full 4-row card, with
+            // content pinned to the top, so the grid reads as one even surface.
+            .frame(maxWidth: .infinity, minHeight: projectCardMinHeight, alignment: .topLeading)
             .contentShape(Rectangle())
             .liquidLightCard(cornerRadius: DS.Radius.l, isHovering: hovering)
         }
