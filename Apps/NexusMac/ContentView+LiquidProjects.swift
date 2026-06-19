@@ -25,11 +25,18 @@ extension ContentView {
         // DERIVED from selection (no loop — setting detailCrumb never sets
         // selectedProjectID). `onPopToRoot` lets the shell breadcrumb clear the
         // selection so the screen returns to the project list.
-        .onChange(of: liquidProjectsModel.selectedProjectID, initial: true) { _, id in
-            if let id, let name = liquidProjectsModel.projects.first(where: { $0.id == id })?.name {
-                navigator.detailCrumb = NavCrumb(id: "project:\(id)", label: name, isLeaf: true)
-            } else {
-                navigator.detailCrumb = nil
+        .onChange(of: liquidProjectsModel.selectedProjectID, initial: true) { _, _ in
+            updateProjectsCrumb()
+        }
+        // Re-derive the crumb when projects finish loading (cold deep-link race).
+        // If a deep-link sets selectedProjectID before `projects` loads, the first
+        // onChange above finds no name and leaves detailCrumb nil. Once the array
+        // loads (count 0→N), this fires and fills the real name in.
+        // No loop: updateProjectsCrumb only WRITES detailCrumb; it never mutates
+        // selectedProjectID or projects.
+        .onChange(of: liquidProjectsModel.projects.count) { _, _ in
+            if liquidProjectsModel.selectedProjectID != nil {
+                updateProjectsCrumb()
             }
         }
         // Consume pending deep-links staged by the sidebar or back/forward.
@@ -50,4 +57,26 @@ extension ContentView {
     /// in the Overview tab (`ProjectOverview`), so all Projects tabs render
     /// full-width. The 304 pt slot stays unused for this destination.
     var projectsInspectorSlot: (() -> AnyView)? { nil }
+
+    /// Derives and publishes `navigator.detailCrumb` from the current selection.
+    ///
+    /// - If a project is selected AND its name is resolvable, sets the leaf crumb.
+    /// - If nothing is selected, clears the crumb.
+    /// - If a project is selected but `projects` hasn't loaded yet (name not
+    ///   resolvable), leaves `detailCrumb` unchanged so a subsequent projects-load
+    ///   onChange can fill it in (cold deep-link race).
+    ///
+    /// Loop-free: this function only WRITES `navigator.detailCrumb` and never
+    /// mutates `liquidProjectsModel.selectedProjectID` or `liquidProjectsModel.projects`.
+    @MainActor func updateProjectsCrumb() {
+        guard let id = liquidProjectsModel.selectedProjectID else {
+            navigator.detailCrumb = nil
+            return
+        }
+        if let name = liquidProjectsModel.projects.first(where: { $0.id == id })?.name {
+            navigator.detailCrumb = NavCrumb(id: "project:\(id)", label: name, isLeaf: true)
+        }
+        // If projects haven't loaded yet, leave detailCrumb as-is; the
+        // `.onChange(of: liquidProjectsModel.projects.count)` will re-fire.
+    }
 }
