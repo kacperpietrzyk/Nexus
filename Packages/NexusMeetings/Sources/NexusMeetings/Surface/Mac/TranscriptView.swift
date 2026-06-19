@@ -102,9 +102,11 @@ public final class TranscriptViewModel: ObservableObject {
         guard let meeting = try repository.find(id: meetingID) else { return }
 
         let currentParticipants = try MeetingParticipant.decode(meeting.participantsJSON ?? Data())
-        var nextParticipants = currentParticipants.filter { $0.speakerID != speaker }
-        nextParticipants.append(
-            MeetingParticipant(speakerID: speaker, displayName: trimmedDisplayName, personID: personID)
+        var nextParticipants = renameSpeaker(
+            in: currentParticipants,
+            rawSpeaker: speaker,
+            to: trimmedDisplayName,
+            personID: personID
         )
         nextParticipants.sort { $0.speakerID.localizedStandardCompare($1.speakerID) == .orderedAscending }
 
