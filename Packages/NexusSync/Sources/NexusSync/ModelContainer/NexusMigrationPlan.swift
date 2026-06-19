@@ -56,6 +56,10 @@ import SwiftData
 ///   UI state — seen / dismissed / snoozed — keyed by a stable derived string. Synced
 ///   via CloudKit private DB; no `@Attribute(.unique)` per CloudKit constraints).
 ///   Pure additive — no data move, no backfill.
+/// - V16 -> V17 lightweight (additive schema: `AgentInsightRecord` entity for durable
+///   agent proposals awaiting user confirmation — stored as encoded JSON so the confirm
+///   flow survives a relaunch. Synced via CloudKit private DB; no `@Attribute(.unique)`
+///   per CloudKit constraints). Pure additive — no data move, no backfill.
 ///
 /// WHY the body -> Note move is NOT a `.custom` migration stage (a deliberate
 /// deviation from the spec's "custom stage" wording, forced by this codebase's
@@ -94,6 +98,7 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             NexusSchemaV14.self,
             NexusSchemaV15.self,
             NexusSchemaV16.self,
+            NexusSchemaV17.self,
         ]
     }
 
@@ -158,6 +163,10 @@ public enum NexusMigrationPlan: SchemaMigrationPlan {
             MigrationStage.lightweight(
                 fromVersion: NexusSchemaV15.self,
                 toVersion: NexusSchemaV16.self
+            ),
+            MigrationStage.lightweight(
+                fromVersion: NexusSchemaV16.self,
+                toVersion: NexusSchemaV17.self
             ),
         ]
     }
