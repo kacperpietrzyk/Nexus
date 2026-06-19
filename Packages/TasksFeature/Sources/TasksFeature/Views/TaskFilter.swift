@@ -35,7 +35,7 @@ extension TaskFilter {
         case .upcoming:
             return "Upcoming"
         case .inbox:
-            return "Inbox"
+            return "Unscheduled"
         case .completed:
             return "Done"
         case .templates:
