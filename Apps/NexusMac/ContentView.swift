@@ -43,6 +43,11 @@ struct ContentView: View {
     // (the computed accessor below) and call `navigate(to:)` as before.
     @State var navigator = NexusNavigator()
 
+    // Notes navigation path, hoisted to the shell (Task 8) so the breadcrumb owns
+    // back and deep-links route through `pendingDeepLink`. `NotesListView` reads
+    // this binding instead of its own internal `@State` on macOS.
+    @State private var notesPath: [UUID] = []
+
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     // A computed read-through so every `selection == .X` call site compiles
     // unchanged and all three extension files keep working without modification.
@@ -360,10 +365,26 @@ struct ContentView: View {
             // `ContentView+LiquidMeetings`.
             liquidMeetingsMain
         } else if selection == .notes {
-            // Notes content layer (spec §5): list + block editor; owns its own
-            // NavigationStack.
-            NotesListView()
-                .environment(\.notesTaskRepository, taskRepository)
+            // Notes content layer (spec §5): list + block editor. The path is
+            // hoisted to the shell (Task 8) so the breadcrumb is the back affordance
+            // and the native back-chevron is gone; deep-links route through
+            // `pendingDeepLink`.
+            NotesListView(
+                path: $notesPath,
+                onActiveNoteChange: { id, title in
+                    navigator.detailCrumb = id.map {
+                        NavCrumb(id: "note:\($0)", label: title ?? "Note", isLeaf: true)
+                    }
+                }
+            )
+            .environment(\.notesTaskRepository, taskRepository)
+            .onAppear { navigator.onPopToRoot = { notesPath.removeAll() } }
+            .onChange(of: navigator.pendingDeepLink, initial: true) { _, link in
+                if case .note(let nid)? = link {
+                    notesPath = [nid]
+                    navigator.pendingDeepLink = nil
+                }
+            }
         } else if selection == .calendar {
             // Liquid Calendar / Week Planning (Task 6): custom week grid +
             // scheduling strip; Day/Month re-mount the existing grids. See
