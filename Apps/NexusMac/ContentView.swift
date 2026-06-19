@@ -364,24 +364,10 @@ struct ContentView: View {
         NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)
     }
 
-    private var shellTitle: String {
-        switch selection {
-        case .today: return "Today"
-        case .inbox: return "Inbox"
-        case .meetings: return "Meetings"
-        case .tasks: return "Tasks"
-        case .projects: return "Projects"
-        case .notes: return "Notes"
-        case .calendar: return "Calendar"
-        case .people: return "People"
-        // The oracle Agent top bar reads "Nexus"; crumbs are unused in
-        // control mode anyway (no `NexusTopBar`), so this is defensive
-        // plumbing parity only.
-        case .agent: return "Nexus"
-        case .stats: return "Stats"
-        case .settings: return "Settings"
-        }
-    }
+    // Single source of truth lives on `TodayNavSelection.title` (TasksFeature).
+    // The oracle Agent top bar reads "Nexus"; crumbs are unused in control mode
+    // anyway (no `NexusTopBar`), so this is defensive plumbing parity only.
+    private var shellTitle: String { selection.title }
 
     private var dashboardContent: some View {
         TodayDashboard(
