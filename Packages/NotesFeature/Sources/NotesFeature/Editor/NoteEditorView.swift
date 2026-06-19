@@ -150,24 +150,29 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     @FocusState private var fieldFocus: UUID?
     @State private var dropTargetID: UUID?
 
+    /// Non-block rows (title, properties, insert, backlinks) carry this leading
+    /// inset so their text lines up with block text, which sits to the right of
+    /// the 34pt hover gutter + the row's `DS.Space.xs` spacing.
+    private var macBlockTextInset: CGFloat { 34 + DS.Space.xs }
+
     private var documentBody: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                if model.role == .dailyNote { dailyNoteNavRow }
-                titleField
-                propertiesSection
+                if model.role == .dailyNote { dailyNoteNavRow.padding(.leading, macBlockTextInset) }
+                titleField.padding(.leading, macBlockTextInset)
+                propertiesSection.padding(.leading, macBlockTextInset)
                 macBlockRows
-                insertRow
-                if !backlinks.isEmpty { backlinksSection }
+                insertRow.padding(.leading, macBlockTextInset)
+                if !backlinks.isEmpty { backlinksSection.padding(.leading, macBlockTextInset) }
             }
-            .frame(maxWidth: 680, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            // Left-anchored reading column (not centered — the centering read as
+            // "wasted space"); capped so a wide window doesn't yield 200-char lines.
+            .frame(maxWidth: 900, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, DS.Space.xl)
             .padding(.vertical, DS.Space.l)
         }
         .liquidLightCard(cornerRadius: DS.Radius.l)
-        .padding(.horizontal, DS.Space.xl)
-        .padding(.vertical, DS.Space.l)
     }
 
     private var ordinals: [UUID: Int] { NumberedOrdinals.ordinals(for: model.blocks) }
@@ -243,14 +248,20 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     }
     #endif
 
+    @FocusState private var titleFocused: Bool
+
     private var titleField: some View {
         // Document title heading (not a form field): keep the display font — a
-        // tile-boxed NexusTextField would flatten the page title.
-        TextField("Title", text: $model.title)
+        // tile-boxed NexusTextField would flatten the page title. `axis: .vertical`
+        // lets a long title wrap instead of truncating; commit on blur (Return
+        // inserts a newline on a vertical field, so onSubmit alone won't fire).
+        TextField("Title", text: $model.title, axis: .vertical)
             .textFieldStyle(.plain)
             .font(DS.FontToken.displayMedium)
             .foregroundStyle(DS.ColorToken.textPrimary)
             .disabled(!model.canEdit)
+            .focused($titleFocused)
+            .onChange(of: titleFocused) { _, focused in if !focused { model.commitTitle() } }
             .onSubmit { model.commitTitle() }
             .listRowSeparator(.hidden)
     }
