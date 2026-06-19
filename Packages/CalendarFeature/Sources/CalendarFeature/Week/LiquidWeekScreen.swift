@@ -155,7 +155,12 @@ public struct LiquidWeekScreen: View {
             }
             content
         }
-        .padding(DS.Space.l)
+        // Bottom intentionally excluded: the grid fills the frame bottom to
+        // align with the sidebar's bottom edge (both are inset from the window
+        // edge by shellOuterVerticalPadding = 12 pt in LiquidAppShell). Adding
+        // DS.Space.l (16 pt) here would raise the grid's baseline above the
+        // sidebar's. Top + horizontal keep the header and banner insets intact.
+        .padding([.top, .horizontal], DS.Space.l)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             await viewModel.load()
@@ -358,32 +363,11 @@ public struct LiquidWeekScreen: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // The grid dominates the page; the strip stays a fixed band
-            // (04_LAYOUT_SYSTEM.md §Calendar Week — grid over a bottom strip).
+            // Grid fills the full available height now that the bottom
+            // SchedulingStrip band has been removed (its contents are rehomed
+            // in Tasks 9 & 10). Clipped so the rounded-card shape stays tight.
+            .clipped()
             .layoutPriority(1)
-            SchedulingStrip(
-                tasks: reference?.unscheduledTasks ?? viewModel.unscheduledTasks,
-                focusGap: reference?.primaryFocusGap
-                    ?? WeekIntelligence.todayFocusGaps(
-                        events: viewModel.events,
-                        days: viewModel.visibleDays,
-                        calendar: calendar,
-                        now: now()
-                    ).first,
-                onScheduleTopTask: { gap in
-                    guard reference == nil else { return }
-                    scheduleTopTask(into: gap)
-                },
-                onDropTaskToZone: { taskID in
-                    guard reference == nil else { return }
-                    manualBlockRequest = ManualBlockRequest(taskID: taskID)
-                },
-                onAddTask: onAddTask
-            )
-            // Fixed strip band so the grid keeps the page. Reference
-            // proportions put the grid clearly dominant (~75% of the content
-            // column), so the strip stays a thin band (~1/8), not 1/5.
-            .frame(height: 150)
         case .day:
             // Day = a single-column WeekGrid, so it inherits the exact Liquid
             // styling (glass card, hour axis, current-time line) instead of the
@@ -421,6 +405,7 @@ public struct LiquidWeekScreen: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
         case .month:
             // Liquid-native month grid (glass card + DS tokens), not the legacy
             // NexusColor `MonthGridView` still used by the iOS CalendarView.
