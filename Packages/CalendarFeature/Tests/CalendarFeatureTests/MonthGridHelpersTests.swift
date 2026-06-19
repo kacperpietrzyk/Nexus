@@ -76,8 +76,9 @@ import Testing
     }
 
     @Test func chipCapacityLargeHeight() {
-        // 200 pt should fit plenty — just verify it grows linearly.
+        // 200 pt with chipHeight=14, spacing=1:
+        // first chip=14, each additional costs 15 → 1 + Int((200-14)/15) = 1 + Int(12.4) = 13.
         let cap = MonthGridHelpers.chipCapacity(availableHeight: 200, chipHeight: 14, chipSpacing: 1)
-        #expect(cap > 3)
+        #expect(cap == 13)
     }
 }
