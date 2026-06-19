@@ -396,15 +396,24 @@ struct ContentView: View {
             // lives inside the Tasks surface, so the shell only routes the tab.
             selectedTab = .tasks
         case .agentInsight:
-            // TODO(Plan 2): deep-link to the specific insight.
+            // Navigate to the Agent tab so the user sees the insight context.
+            // TODO(Plan 2 follow-up): present an inline ProposalConfirmCard for the
+            // matching PendingInsightStore.Entry. On Confirm, apply the proposal
+            // mutation; on Confirm OR Dismiss, call:
+            //   PendingInsightStore.resolve(id: id)
+            //   FeedItemStateRepository(context: modelContext).upsert(key: "insight:\(id.uuidString)") { $0.dismissedAt = Date() }
+            //   FeedRegistry.shared.invalidate()
+            // This requires driving AgentChatViewModel or a separate modal from
+            // ContentView — deferred to avoid deep app-shell surgery.
             selectedTab = .agent
         }
         markFeedItemSeen(item)
     }
 
-    /// Registers the app-owned activity-feed projector (DailyBrief) and the state
-    /// provider into `FeedRegistry`. Module-owned projectors register from their
-    /// own roots (Unscheduled via `TasksComposition.bootstrap`, Meeting via
+    /// Registers the app-owned activity-feed projectors (DailyBrief +
+    /// AgentInsights) and the state provider into `FeedRegistry`. Module-owned
+    /// projectors register from their own roots (Unscheduled via
+    /// `TasksComposition.bootstrap`, Meeting via
     /// `MeetingsComposition.registerInboxSource`).
     @MainActor
     private func bootstrapActivityFeed() async {
@@ -425,6 +434,17 @@ struct ContentView: View {
                     }
                 }
             )
+        )
+        await FeedRegistry.shared.register(
+            AgentInsightProjector(openProvider: {
+                try await MainActor.run {
+                    try AgentInsightRepository(context: container.mainContext).open().map {
+                        AgentInsightProjector.Row(
+                            id: $0.id, title: $0.title, kind: $0.kind, createdAt: $0.createdAt
+                        )
+                    }
+                }
+            })
         )
         await FeedRegistry.shared.setStateProvider {
             await MainActor.run {

@@ -12,10 +12,10 @@ import SwiftUI
 // `TasksComposition.bootstrap`, Meeting via `MeetingsComposition.registerInboxSource`).
 extension ContentView {
 
-    /// Registers the app-owned activity-feed projector (DailyBrief) and the
-    /// state provider into `FeedRegistry`. `container` is the Sendable
-    /// `ModelContainer` captured at the call site so the `@Sendable` closures
-    /// stay legal under strict concurrency.
+    /// Registers the app-owned activity-feed projectors (DailyBrief +
+    /// AgentInsights) and the state provider into `FeedRegistry`. `container`
+    /// is the Sendable `ModelContainer` captured at the call site so the
+    /// `@Sendable` closures stay legal under strict concurrency.
     @MainActor
     func bootstrapActivityFeed(container: ModelContainer) async {
         await FeedRegistry.shared.register(
@@ -34,6 +34,17 @@ extension ContentView {
                     }
                 }
             )
+        )
+        await FeedRegistry.shared.register(
+            AgentInsightProjector(openProvider: {
+                try await MainActor.run {
+                    try AgentInsightRepository(context: container.mainContext).open().map {
+                        AgentInsightProjector.Row(
+                            id: $0.id, title: $0.title, kind: $0.kind, createdAt: $0.createdAt
+                        )
+                    }
+                }
+            })
         )
         await FeedRegistry.shared.setStateProvider {
             await MainActor.run {
@@ -79,7 +90,15 @@ extension ContentView {
             // route to the Tasks surface today.
             navigate(to: .tasks)
         case .agentInsight:
-            // TODO(Plan 2): deep-link to the specific insight.
+            // Navigate to the Agent surface so the user sees the insight context.
+            // TODO(Plan 2 follow-up): present an inline ProposalConfirmCard for the
+            // matching PendingInsightStore.Entry. On Confirm, apply the proposal
+            // mutation; on Confirm OR Dismiss, call:
+            //   PendingInsightStore.resolve(id: id)
+            //   FeedItemStateRepository(context: modelContext).upsert(key: "insight:\(id.uuidString)") { $0.dismissedAt = Date() }
+            //   FeedRegistry.shared.invalidate()
+            // This requires driving AgentChatViewModel or a separate modal from
+            // ContentView — deferred to avoid deep app-shell surgery.
             navigate(to: .agent)
         }
         markFeedItemSeen(item)
