@@ -3,6 +3,20 @@ import Foundation
 import NexusCore
 
 public enum RoadmapModel {
+    public struct KeyDateMarker: Identifiable, Equatable, Sendable {
+        public let id: UUID
+        public let label: String
+        public let date: Date
+        public let isContractual: Bool
+
+        public init(id: UUID, label: String, date: Date, isContractual: Bool) {
+            self.id = id
+            self.label = label
+            self.date = date
+            self.isContractual = isContractual
+        }
+    }
+
     public struct ProjectBar: Identifiable, Equatable, Sendable {
         public let projectID: UUID
         public let name: String
@@ -12,6 +26,8 @@ public enum RoadmapModel {
         public let health: ProjectExecutionModel.ProjectHealth
         public let progress: Double
         public let milestones: [MilestoneMarker]
+        public let keyDates: [KeyDateMarker]
+        public let scheduled: Bool
 
         public var id: UUID { projectID }
 
@@ -23,7 +39,9 @@ public enum RoadmapModel {
             end: Date?,
             health: ProjectExecutionModel.ProjectHealth,
             progress: Double,
-            milestones: [MilestoneMarker]
+            milestones: [MilestoneMarker],
+            keyDates: [KeyDateMarker] = [],
+            scheduled: Bool = false
         ) {
             self.projectID = projectID
             self.name = name
@@ -33,6 +51,8 @@ public enum RoadmapModel {
             self.health = health
             self.progress = progress
             self.milestones = milestones
+            self.keyDates = keyDates
+            self.scheduled = scheduled
         }
     }
 
@@ -75,24 +95,21 @@ public enum RoadmapModel {
         }
     }
 
-    public static func bar(project: Project, tasks: [TaskItem], sections: [Section], now: Date) -> ProjectBar {
+    public static func bar(
+        project: Project,
+        tasks: [TaskItem],
+        sections: [Section],
+        keyDates: [ProjectKeyDate] = [],
+        now: Date
+    ) -> ProjectBar {
         let liveTasks = live(tasks, projectID: project.id)
         let liveSections = live(sections, projectID: project.id)
-        let start = spanStart(project: project, tasks: liveTasks)
-        let end = spanEnd(tasks: liveTasks, start: start)
-        let tasksBySection = tasksByLiveSection(liveTasks)
-        let markerDates = milestoneDates(tasksBySection: tasksBySection)
-        let milestones = ProjectExecutionModel.milestones(sections: liveSections, tasksBySection: tasksBySection)
-            .compactMap { milestone -> MilestoneMarker? in
-                guard let date = markerDates[milestone.id] else { return nil }
-                return MilestoneMarker(
-                    sectionID: milestone.id,
-                    title: milestone.title,
-                    date: date,
-                    state: milestone.state
-                )
-            }
-
+        let liveKeyDates = keyDates.filter { $0.projectID == project.id && $0.deletedAt == nil }
+        let keyDateDates = liveKeyDates.map(\.date)
+        let start = spanStart(project: project, tasks: liveTasks, keyDateDates: keyDateDates)
+        let end = spanEnd(tasks: liveTasks, keyDateDates: keyDateDates, start: start)
+        let keyDateMarkers = buildKeyDateMarkers(from: liveKeyDates)
+        let milestones = buildMilestones(liveTasks: liveTasks, liveSections: liveSections)
         return ProjectBar(
             projectID: project.id,
             name: project.name,
@@ -101,7 +118,9 @@ public enum RoadmapModel {
             end: end,
             health: ProjectExecutionModel.health(tasks: liveTasks, now: now),
             progress: ProjectExecutionModel.progress(tasks: liveTasks),
-            milestones: milestones
+            milestones: milestones,
+            keyDates: keyDateMarkers,
+            scheduled: end != nil || !liveKeyDates.isEmpty
         )
     }
 
@@ -164,6 +183,7 @@ public enum RoadmapModel {
         dates.append(contentsOf: bars.map(\.start))
         dates.append(contentsOf: bars.compactMap(\.end))
         dates.append(contentsOf: bars.flatMap { $0.milestones.map(\.date) })
+        dates.append(contentsOf: bars.flatMap { $0.keyDates.map(\.date) })
         dates.append(contentsOf: cycles.flatMap { [$0.startAt, $0.endAt] })
 
         let earliest = calendar.startOfDay(for: dates.min() ?? now)
@@ -229,6 +249,8 @@ public enum RoadmapModel {
         }
     }
 
+    // MARK: - Private helpers
+
     private static func live(_ tasks: [TaskItem], projectID: UUID) -> [TaskItem] {
         tasks.filter { $0.projectID == projectID && $0.deletedAt == nil && !$0.isTemplate }
     }
@@ -237,18 +259,41 @@ public enum RoadmapModel {
         sections.filter { $0.projectID == projectID && $0.deletedAt == nil }
     }
 
-    private static func spanStart(project: Project, tasks: [TaskItem]) -> Date {
+    private static func spanStart(project: Project, tasks: [TaskItem], keyDateDates: [Date]) -> Date {
         var candidates = [project.createdAt]
         candidates.append(contentsOf: tasks.compactMap(\.startAt))
         candidates.append(contentsOf: tasks.compactMap(\.dueAt))
+        candidates.append(contentsOf: keyDateDates)
         return candidates.min() ?? project.createdAt
     }
 
-    private static func spanEnd(tasks: [TaskItem], start: Date) -> Date? {
+    private static func spanEnd(tasks: [TaskItem], keyDateDates: [Date], start: Date) -> Date? {
         var candidates = tasks.compactMap(\.dueAt)
         candidates.append(contentsOf: tasks.compactMap(\.deadlineAt))
+        candidates.append(contentsOf: keyDateDates)
         guard let end = candidates.max() else { return nil }
         return max(end, start)
+    }
+
+    private static func buildKeyDateMarkers(from liveKeyDates: [ProjectKeyDate]) -> [KeyDateMarker] {
+        liveKeyDates
+            .sorted { $0.date < $1.date }
+            .map { KeyDateMarker(id: $0.id, label: $0.label, date: $0.date, isContractual: $0.isContractual) }
+    }
+
+    private static func buildMilestones(liveTasks: [TaskItem], liveSections: [Section]) -> [MilestoneMarker] {
+        let tasksBySection = tasksByLiveSection(liveTasks)
+        let markerDates = milestoneDates(tasksBySection: tasksBySection)
+        return ProjectExecutionModel.milestones(sections: liveSections, tasksBySection: tasksBySection)
+            .compactMap { milestone -> MilestoneMarker? in
+                guard let date = markerDates[milestone.id] else { return nil }
+                return MilestoneMarker(
+                    sectionID: milestone.id,
+                    title: milestone.title,
+                    date: date,
+                    state: milestone.state
+                )
+            }
     }
 
     private static func tasksByLiveSection(_ tasks: [TaskItem]) -> [UUID: [TaskItem]] {
