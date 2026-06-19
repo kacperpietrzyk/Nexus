@@ -37,6 +37,8 @@ public struct TaskListView: View {
     // `internal` so the +Paging extension can surface a load-more failure.
     @State var error: String?
     @State var refinement = TaskListRefinement()
+    @AppStorage(NexusPreferences.Keys.taskListGroupBy) private var groupByRaw = TaskGroupBy.none.rawValue
+    @State var projectsByID: [UUID: Project] = [:]
     @State var refinementLabels: [TaskLabel] = []
     // Memoized labeled-task-id resolution (FIX 3a): only re-queries
     // LinkRepository when `refinement.labelID` changes.
@@ -256,12 +258,23 @@ extension TaskListView {
     @MainActor
     private func bulkMovePresent() {
         bulkMoveActiveProjects = loadActiveProjects()
+        projectsByID = Dictionary(bulkMoveActiveProjects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         bulkMovePickerPresented = true
     }
 
     var isSavedFilter: Bool {
         if case .savedFilter = filter { return true }
         return false
+    }
+
+    /// Render-time grouping selection. Lives OUTSIDE `refinement` on purpose:
+    /// changing it re-sections already-fetched rows and must NOT trigger a
+    /// `reload()` (which `refinement` changes do).
+    var groupBy: Binding<TaskGroupBy> {
+        Binding(
+            get: { TaskGroupBy(rawValue: groupByRaw) ?? .none },
+            set: { groupByRaw = $0.rawValue }
+        )
     }
 
     /// Whether the resolved data set for the current filter has zero rows.

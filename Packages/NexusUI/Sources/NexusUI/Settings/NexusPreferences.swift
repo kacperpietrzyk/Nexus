@@ -42,6 +42,7 @@ public enum NexusPreferences {
         /// iPad-only: suppresses Auto-Lock (`isIdleTimerDisabled`) while Nexus is
         /// foreground-active, for desk-companion always-on use. Default false.
         public static let keepScreenAwakeEnabled = "nexus.display.keepScreenAwake"
+        public static let taskListGroupBy = "nexus.tasks.groupBy"
     }
 
     public static func migrateLegacyAgentPreloadSpeechKey(defaults: UserDefaults = .standard) {
