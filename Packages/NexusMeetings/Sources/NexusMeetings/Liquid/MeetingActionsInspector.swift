@@ -20,6 +20,14 @@ public struct MeetingActionsInspector: View {
     @ObservedObject private var router: MeetingNavigationRouter
     private let navigation: LiquidMeetingsNavigation
 
+    // MARK: - Inline speaker assign sheet state
+
+    /// The raw speaker ID being assigned (e.g. `"Speaker_1"`). Non-nil while
+    /// the `RenameSpeakerSheet` is presented from the People section.
+    @State private var assigningSpeaker: String?
+    @State private var assignDraft = ""
+    @State private var assignError: String?
+
     public init(
         model: LiquidMeetingsModel,
         composition: MeetingsComposition,
@@ -45,7 +53,12 @@ public struct MeetingActionsInspector: View {
                     // 2. People — ANCHOR (always shown when a meeting is selected)
                     KnowledgeSections(
                         model: model, composition: composition, router: router,
-                        navigation: navigation
+                        navigation: navigation,
+                        onAssignSpeaker: { rawSpeaker in
+                            assigningSpeaker = rawSpeaker
+                            assignDraft = rawSpeaker
+                            assignError = nil
+                        }
                     ).peopleSection
 
                     // 3. Insights — ANCHOR
@@ -71,6 +84,62 @@ public struct MeetingActionsInspector: View {
             .padding(DS.Space.m)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .sheet(
+            isPresented: Binding(
+                get: { assigningSpeaker != nil },
+                set: { isPresented in
+                    if !isPresented { dismissAssignSheet() }
+                }
+            )
+        ) {
+            assignSheet
+        }
+    }
+
+    // MARK: - Inline speaker assign sheet
+
+    @ViewBuilder
+    private var assignSheet: some View {
+        let people = (try? composition.personRepository.allActive()) ?? []
+        let suggestions = (try? composition.meetingRepository.distinctParticipantNames()) ?? []
+        RenameSpeakerSheet(
+            speaker: assigningSpeaker ?? "",
+            draft: $assignDraft,
+            errorMessage: assignError,
+            style: .liquid,
+            people: people,
+            attendeeSuggestions: [],
+            suggestions: suggestions,
+            existingPersonForCandidate: { _ in nil },
+            onCancel: { dismissAssignSheet() },
+            onSavePerson: { person in
+                guard let rawSpeaker = assigningSpeaker else { return }
+                model.assignSpeaker(
+                    rawSpeaker: rawSpeaker,
+                    displayName: person.displayName,
+                    personID: person.id,
+                    composition: composition
+                )
+                dismissAssignSheet()
+            },
+            onSave: {
+                guard let rawSpeaker = assigningSpeaker else { return }
+                let trimmed = assignDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                model.assignSpeaker(
+                    rawSpeaker: rawSpeaker,
+                    displayName: trimmed,
+                    personID: nil,
+                    composition: composition
+                )
+                dismissAssignSheet()
+            }
+        )
+    }
+
+    private func dismissAssignSheet() {
+        assigningSpeaker = nil
+        assignDraft = ""
+        assignError = nil
     }
 
     // MARK: - Cancel processing

@@ -328,7 +328,7 @@ private struct TranscriptSegmentRow: View {
     }
 }
 
-private struct RenameSpeakerSheet: View {
+struct RenameSpeakerSheet: View {
     let speaker: String
     @Binding var draft: String
     let errorMessage: String?

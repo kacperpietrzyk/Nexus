@@ -22,19 +22,22 @@ private func kindColor(_ kind: ItemKind) -> Color {
 /// The knowledge cards embedded in the right inspector `MeetingActionsInspector`.
 /// Exposed as two focused sections so the inspector can place them at distinct
 /// positions in the panel IA (People high, Related low).
-struct KnowledgeSections: View {
+///
+/// Not rendered as a whole `View` — the inspector instantiates it twice to
+/// access the two section properties individually, with `insightsCard` placed
+/// between them. `body` is intentionally removed to prevent misuse.
+@MainActor
+struct KnowledgeSections {
 
     let model: LiquidMeetingsModel
     let composition: MeetingsComposition
-    @ObservedObject var router: MeetingNavigationRouter
+    let router: MeetingNavigationRouter
     let navigation: LiquidMeetingsNavigation
-
-    var body: some View {
-        VStack(spacing: DS.Space.m) {
-            peopleSection
-            relatedSection
-        }
-    }
+    /// Called when the user taps "Assign" on an unassigned speaker row.
+    /// The argument is the raw speaker ID (e.g. `"Speaker_1"`). The inspector
+    /// owns the sheet state and presents `RenameSpeakerSheet` from outside this
+    /// struct, so `@State` is not needed here.
+    var onAssignSpeaker: ((String) -> Void)?
 
     // MARK: - People section (ANCHOR)
 
@@ -95,8 +98,20 @@ struct KnowledgeSections: View {
             .buttonStyle(.plain)
             .accessibilityLabel("\(row.name), assigned to contact")
             .accessibilityHint("Opens People")
+        } else if let rawSpeaker = row.rawSpeaker, let onAssignSpeaker {
+            // Unassigned speaker — inline Assign button
+            HStack(spacing: DS.Space.s) {
+                personRowLabel(row: row, showChevron: false)
+                Button("Assign") {
+                    onAssignSpeaker(rawSpeaker)
+                }
+                .buttonStyle(.plain)
+                .font(DS.FontToken.metadata)
+                .foregroundStyle(DS.ColorToken.accentPrimary)
+                .accessibilityHint("Assign this speaker to a contact")
+            }
         } else {
-            // Unassigned speaker — hint to assign via the Transcript tab
+            // Unassigned speaker, no assign seam available (linked-person row or no callback)
             HStack(spacing: DS.Space.s) {
                 personRowLabel(row: row, showChevron: false)
                 Text("Assign in Transcript")
@@ -240,19 +255,26 @@ private struct PersonRow: Identifiable {
     /// Set if the attendee was assigned to a `Person` contact (personID) or if
     /// this row comes from a linked-person graph item (targetID). Used to
     /// distinguish "assigned" (shows chevron + openPeople) from "unassigned"
-    /// (shows Assign button routing to Transcript).
+    /// (shows Assign button).
     let targetID: UUID?
+    /// The raw speaker ID from the transcript (e.g. `"Speaker_1"`). Non-nil only
+    /// for unassigned attendee rows; nil for linked-person graph-only rows.
+    let rawSpeaker: String?
 
     init(attendee: LiquidMeetingsModel.Attendee) {
         self.id = "attendee-\(attendee.id)"
         self.name = attendee.name
         self.targetID = attendee.personID
+        // Expose the raw speakerID only for unassigned speakers so the Assign
+        // button can pass it to `assignSpeaker(rawSpeaker:...)`.
+        self.rawSpeaker = attendee.personID == nil ? attendee.id : nil
     }
 
     init(linkedItem: LiquidMeetingsModel.LinkedItem) {
         self.id = "linked-\(linkedItem.id)"
         self.name = linkedItem.title
         self.targetID = linkedItem.targetID
+        self.rawSpeaker = nil
     }
 }
 

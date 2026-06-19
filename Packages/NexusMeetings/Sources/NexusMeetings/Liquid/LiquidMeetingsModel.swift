@@ -216,6 +216,56 @@ public final class LiquidMeetingsModel {
 
     // MARK: - Mutations
 
+    /// Assigns a speaker to a name / person contact, mirroring the rename action
+    /// in `TranscriptViewModel`. Writes `participantsJSON`, re-renders
+    /// `transcriptText`, and fires the people linker so the graph edge is created
+    /// — exactly the same steps `TranscriptViewModel.rename` performs.
+    /// Call from any surface (e.g. the People section in the right inspector)
+    /// without needing a hosted `TranscriptViewModel`.
+    public func assignSpeaker(
+        rawSpeaker: String,
+        displayName: String,
+        personID: UUID?,
+        composition: MeetingsComposition
+    ) {
+        do {
+            let trimmedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedDisplayName.isEmpty else { return }
+            guard let meeting else { return }
+            let repository = composition.meetingRepository
+            guard let liveMeeting = try repository.find(id: meeting.id) else { return }
+
+            let currentParticipants = try MeetingParticipant.decode(
+                liveMeeting.participantsJSON ?? Data())
+            var nextParticipants = renameSpeaker(
+                in: currentParticipants,
+                rawSpeaker: rawSpeaker,
+                to: trimmedDisplayName,
+                personID: personID
+            )
+            nextParticipants.sort {
+                $0.speakerID.localizedStandardCompare($1.speakerID) == .orderedAscending
+            }
+            liveMeeting.participantsJSON = try MeetingParticipant.encode(nextParticipants)
+            let storedSegments =
+                (try? MeetingSpeakerSegment.decode(liveMeeting.segmentsJSON)) ?? []
+            let merge = MergeStage()
+            liveMeeting.transcriptText = merge.renderLinear(
+                storedSegments, participants: nextParticipants)
+            liveMeeting.updatedAt = Date()
+            try repository.upsert(liveMeeting)
+
+            let meetingID = meeting.id
+            let peopleLinker = composition.peopleLinker
+            Task { @MainActor [peopleLinker, repository] in
+                guard let saved = try? repository.find(id: meetingID) else { return }
+                _ = try? await peopleLinker.link(meeting: saved)
+            }
+        } catch {
+            loadError = String(describing: error)
+        }
+    }
+
     /// Pins or unpins a meeting so it surfaces in the Today view.
     public func togglePin(_ meeting: Meeting, composition: MeetingsComposition) {
         do {
