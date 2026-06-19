@@ -28,14 +28,8 @@ extension TaskListView {
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     windowedRow(for: item, index: i, loadedCount: flatList.count)
                 }
-            case .all, .upcoming, .completed, .templates, .byTag:
-                ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
-                    row(for: item, appearIndex: i)
-                }
-            case .inbox:
-                ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
-                    row(for: item, appearIndex: i)
-                }
+            case .all, .upcoming, .completed, .templates, .byTag, .inbox:
+                groupedFlatContent
             case .project, .projectSection, .cycle:
                 ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
                     row(for: item, appearIndex: i)
@@ -81,6 +75,27 @@ extension TaskListView {
             .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
             .listRowBackground(containerBackground)
             .listRowSeparator(.hidden)
+    }
+
+    @ViewBuilder
+    var groupedFlatContent: some View {
+        let sections = taskGroupSections(
+            flatList, by: groupBy.wrappedValue, projectsByID: projectsByID,
+            now: now, calendar: Self.groupingCalendar
+        )
+        if groupBy.wrappedValue == .none {
+            ForEach(Array(flatList.enumerated()), id: \.element.id) { i, item in
+                row(for: item, appearIndex: i)
+            }
+        } else {
+            ForEach(sections, id: \.key) { group in
+                section(group.key, items: group.items)
+            }
+        }
+    }
+
+    static var groupingCalendar: Calendar {
+        var c = Calendar(identifier: .iso8601); c.timeZone = .current; return c
     }
 
     @ViewBuilder

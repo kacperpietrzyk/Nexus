@@ -86,7 +86,13 @@ public struct TaskListView: View {
         }
         #endif
         .safeAreaInset(edge: .top, spacing: 0) {
-            TaskListFilterBar(refinement: $refinement, availableLabels: refinementLabels, selection: selection)
+            TaskListFilterBar(
+                refinement: $refinement,
+                availableLabels: refinementLabels,
+                selection: selection,
+                groupBy: groupBy,
+                showsGroupBy: filterSupportsGrouping
+            )
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             BulkActionBar(
@@ -276,6 +282,16 @@ extension TaskListView {
             get: { TaskGroupBy(rawValue: groupByRaw) ?? .none },
             set: { groupByRaw = $0.rawValue }
         )
+    }
+
+    /// Group-by is offered only on the flat filters that render an
+    /// undifferentiated list. `.today` has semantic buckets; project/cycle/
+    /// saved-filter views are already structured.
+    private var filterSupportsGrouping: Bool {
+        switch filter {
+        case .all, .upcoming, .inbox, .completed, .templates, .byTag: return !isWindowing
+        case .today, .project, .projectSection, .cycle, .savedFilter: return false
+        }
     }
 
     /// Whether the resolved data set for the current filter has zero rows.

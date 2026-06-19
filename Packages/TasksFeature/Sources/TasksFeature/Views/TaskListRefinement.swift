@@ -122,6 +122,8 @@ struct TaskListFilterBar: View {
     /// the in-content bar (not `.toolbar`) because the macOS shell paints its own
     /// `NexusTopBar` and never surfaces system toolbar items.
     var selection: SelectionModel<UUID>?
+    @Binding var groupBy: TaskGroupBy
+    var showsGroupBy: Bool = false
 
     var body: some View {
         HStack(spacing: DS.Space.s) {
@@ -136,6 +138,7 @@ struct TaskListFilterBar: View {
                         .accessibilityLabel("Clear filters")
                 }
             }
+            if showsGroupBy { groupByMenu }
             Spacer(minLength: 0)
             if let selection { selectionToggle(selection) }
         }
@@ -143,6 +146,23 @@ struct TaskListFilterBar: View {
         .padding(.vertical, DS.Space.s)
         .background(barBackground)
         .tint(DS.ColorToken.textPrimary)
+    }
+
+    private var groupByMenu: some View {
+        Menu {
+            ForEach(TaskGroupBy.allCases, id: \.self) { option in
+                Button(option == .none ? "No grouping" : option.title) { groupBy = option }
+            }
+        } label: {
+            LiquidFilterChip(
+                systemImage: "rectangle.3.group",
+                text: groupBy == .none ? "Group" : groupBy.title,
+                isActive: groupBy != .none
+            )
+        }
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     @ViewBuilder
