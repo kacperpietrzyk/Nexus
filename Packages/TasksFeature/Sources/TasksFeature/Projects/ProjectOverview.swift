@@ -98,19 +98,50 @@ struct ProjectOverview: View {
         let detail =
             "\(tasks.count(where: { $0.status == .done })) done"
             + " · \(tasks.count(where: { $0.status != .done })) open"
+        let hasDatedOpenTasks = tasks.contains {
+            $0.status != .done && ($0.dueAt != nil || $0.deadlineAt != nil)
+        }
+        let healthCard = ProjectHealthCard(
+            health: health,
+            progress: progress,
+            detail: detail,
+            hasDatedOpenTasks: hasDatedOpenTasks
+        )
+        let empty = risks.isEmpty && activity.isEmpty
+
+        if empty {
+            sparseCardColumn(healthCard: healthCard, risks: risks, tasks: tasks)
+        } else {
+            denseCardGrid(
+                healthCard: healthCard,
+                risks: risks,
+                tasks: tasks,
+                activity: activity
+            )
+        }
+    }
+
+    /// Two-column grid used when there is real content on both sides.
+    ///
+    /// `minWidth` gives the two-column row a definite minimum so `ViewThatFits`
+    /// falls back to the stacked layout once the available width can't host two
+    /// readable columns (flexible cards otherwise always "fit" by shrinking, and
+    /// the second column would clip off-window).
+    @ViewBuilder
+    private func denseCardGrid(
+        healthCard: ProjectHealthCard,
+        risks: [ProjectExecutionModel.ProjectRisk],
+        tasks: [TaskItem],
+        activity: [ProjectExecutionModel.ActivityEntry]
+    ) -> some View {
         let left = VStack(spacing: DS.Space.l) {
-            ProjectHealthCard(health: health, progress: progress, detail: detail)
+            healthCard
             DeliveryRiskCard(risks: risks, tasks: tasks, onOpenTask: onOpenTask)
         }
         let right = VStack(spacing: DS.Space.l) {
             RecentActivityCard(activity: activity)
             AINextStepsCard()
         }
-
-        // `minWidth` gives the two-column row a definite minimum so
-        // `ViewThatFits` falls back to the stacked layout once the available
-        // width can't host two readable columns (flexible cards otherwise always
-        // "fit" by shrinking, and the second column would clip off-window).
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: DS.Space.l) {
                 left.frame(minWidth: overviewColumnMinWidth, maxWidth: .infinity, alignment: .top)
@@ -120,6 +151,31 @@ struct ProjectOverview: View {
                 left
                 right
             }
+        }
+    }
+
+    /// Single-column layout for sparse projects: Health + AI, with the empty
+    /// Delivery Risk / Recent Activity pair collapsed into one informative row.
+    @ViewBuilder
+    private func sparseCardColumn(
+        healthCard: ProjectHealthCard,
+        risks: [ProjectExecutionModel.ProjectRisk],
+        tasks: [TaskItem]
+    ) -> some View {
+        VStack(spacing: DS.Space.l) {
+            healthCard
+            noRisksActivityRow
+            AINextStepsCard()
+        }
+    }
+
+    /// Collapsed informative row shown when both risks and activity are empty.
+    private var noRisksActivityRow: some View {
+        LiquidGlassCard("Delivery Risk & Activity") {
+            LiquidEmptyState(
+                systemImage: "checkmark.shield",
+                message: "No risks or recent activity yet."
+            )
         }
     }
 }

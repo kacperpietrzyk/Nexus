@@ -25,7 +25,7 @@ struct MilestoneStrip: View {
             if milestones.isEmpty {
                 LiquidEmptyState(
                     systemImage: "point.topleft.down.curvedto.point.bottomright.up",
-                    message: "No sections yet — they appear here as roadmap milestones."
+                    message: "Add sections to build a roadmap — use New Section in the sidebar."
                 )
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
