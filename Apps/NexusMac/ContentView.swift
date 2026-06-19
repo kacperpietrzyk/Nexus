@@ -81,6 +81,11 @@ struct ContentView: View {
     // the shared EventKit provider so its scope/anchor state survives rail
     // switches. Internal (not `private`): read from `ContentView+LiquidCalendar`.
     @State var calendarViewModel: CalendarViewModel?
+    // Tracks whether the user drilled into Day scope from Month (Task 10).
+    // Set to `true` on Month→Day transition; cleared on any non-Day scope.
+    // Internal (not `private`): mutated by `updateCalendarCrumb` in the
+    // `ContentView+LiquidCalendar` extension.
+    @State var calendarDrilledFromMonth = false
     // Shared data feed for the Liquid Today screen (Task 5): one model drives both
     // the main column and the inspector slot. Internal: see `ContentView+LiquidToday`.
     @State var liquidTodayModel = LiquidTodayModel()
