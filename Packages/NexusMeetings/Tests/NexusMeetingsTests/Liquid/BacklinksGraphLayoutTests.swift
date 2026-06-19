@@ -137,4 +137,47 @@ struct BacklinksGraphLayoutTests {
             }
         }
     }
+
+    // MARK: - Popover ring test
+
+    /// For the expanded popover canvas (360×280, pill 120×24, n=6, centerClear 120×24)
+    /// nodes must be placed on a 2-D ring — not in a vertical column.
+    /// Prior to the ring fix, all nodes fell into columnFallback (single x-column).
+    @Test
+    func popooverCanvasPlacesNodesOn2DRingNotColumn() {
+        let size = CGSize(width: 360, height: 280)
+        let pillSize = CGSize(width: 120, height: 24)
+        let centerClear = CGSize(width: 120, height: 24)
+
+        let rects = placeNodes(
+            6,
+            in: size,
+            pillSize: pillSize,
+            maxNodes: 6,
+            centerClear: centerClear
+        )
+
+        #expect(rects.count == 6, "All 6 nodes should be placed")
+
+        // Must be non-overlapping.
+        for i in rects.indices {
+            for j in rects.indices where j > i {
+                #expect(
+                    !rects[i].insetBy(dx: 0.5, dy: 0.5)
+                        .intersects(rects[j].insetBy(dx: 0.5, dy: 0.5)),
+                    "Rects \(i) and \(j) overlap"
+                )
+            }
+        }
+
+        // Must be in bounds.
+        let bounds = CGRect(origin: .zero, size: size)
+        for rect in rects {
+            #expect(bounds.contains(rect), "Rect \(rect) out of bounds")
+        }
+
+        // Must NOT be all-collinear (ring, not a column) — at least 2 distinct midX values.
+        let distinctX = Set(rects.map { ($0.midX * 10).rounded() })
+        #expect(distinctX.count > 1, "Nodes appear collinear (all same x); expected ring layout")
+    }
 }

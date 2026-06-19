@@ -133,10 +133,12 @@ private struct BacklinksLayout {
     }
 
     /// Attempts ring placement.  Tries the spacing-only radius first (may already
-    /// clear centre post-hoc), then the centre-expanded radius.
+    /// clear centre post-hoc), then the centre-expanded radius, then the maximum
+    /// in-bounds radius (maximises angular separation for wide-short pills where
+    /// the diagonal-based bound is over-conservative).
     func ringAttempt() -> [CGRect]? {
         let minFromSpacing = (pillDiag + minGap) / (2 * sin(.pi / CGFloat(n)))
-        let candidates = [minFromSpacing, max(minFromSpacing, minRadiusFromCenter)]
+        let candidates = [minFromSpacing, max(minFromSpacing, minRadiusFromCenter), maxRadius]
         for r in candidates {
             guard r <= maxRadius else { continue }
             if let rects = ringRects(radius: r) { return rects }
