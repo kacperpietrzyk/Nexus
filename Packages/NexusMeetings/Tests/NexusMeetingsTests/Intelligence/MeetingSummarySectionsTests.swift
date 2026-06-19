@@ -332,3 +332,18 @@ import Testing
     #expect(insights.speakerShares.first?.speaker == "Janek")
     #expect(insights.speakerShares.contains { $0.speaker == "Participant 1" } == false)
 }
+
+@Test func speakerSharesMergeSameDisplayName() {
+    let segments = [
+        MeetingSpeakerSegment(startMs: 0, endMs: 4_000, speaker: "participant_1", text: "a"),
+        MeetingSpeakerSegment(startMs: 4_000, endMs: 10_000, speaker: "Participant 1", text: "b"),
+    ]
+    // Both raw keys canonicalize to "participant 1" → same display name.
+    let names = ["participant 1": "Janek"]
+    let insights = MeetingInsights.insights(
+        durationSec: 10, segments: segments, transcriptText: "x", speakerNames: names
+    )
+    #expect(insights.speakerShares.count == 1)
+    #expect(insights.speakerShares[0].speaker == "Janek")
+    #expect(insights.speakerShares[0].talkMs == 10_000)  // 4000 + 6000 summed, not last-wins
+}

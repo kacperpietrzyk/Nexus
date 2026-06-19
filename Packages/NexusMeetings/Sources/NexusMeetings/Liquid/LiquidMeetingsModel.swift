@@ -144,8 +144,9 @@ public final class LiquidMeetingsModel {
         var speakerNames: [String: String] = [:]
         for participant in participants {
             let name = participant.displayName.trimmingCharacters(in: .whitespaces)
-            guard !name.isEmpty, name != participant.speakerID else { continue }
-            speakerNames[canonicalSpeakerKey(participant.speakerID)] = participant.displayName
+            let sid = participant.speakerID.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, name != sid else { continue }
+            speakerNames[canonicalSpeakerKey(participant.speakerID)] = name
         }
         insights = MeetingInsights.insights(
             durationSec: selected.durationSec > 0 ? selected.durationSec : nil,
