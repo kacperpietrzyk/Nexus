@@ -80,6 +80,11 @@ extension TaskDetailInspector {
                 },
                 accessibilityLabel: groupTitle(group)
             )
+            if let caption = groupCaption(group) {
+                Text(caption)
+                    .font(NexusType.caption)
+                    .foregroundStyle(NexusColor.Text.tertiary)
+            }
         }
     }
 
@@ -98,9 +103,17 @@ extension TaskDetailInspector {
 
     private func groupTitle(_ group: LabelGroup) -> String {
         switch group {
-        case .domain: return "Domain"
-        case .gate: return "Gate"
+        case .domain: return "Type"
+        case .gate: return "Decision"
         case .free: return "Labels"
+        }
+    }
+
+    private func groupCaption(_ group: LabelGroup) -> String? {
+        switch group {
+        case .domain: return "Feature / bug / infra / security — drives agent suggestion."
+        case .gate: return "Needs decision / decided — gates workflow."
+        case .free: return nil
         }
     }
 
