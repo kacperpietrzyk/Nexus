@@ -294,7 +294,9 @@ struct ContentView: View {
         } else if selection == .today {
             LiquidTodayTitle()
         } else {
-            LiquidToolbarBreadcrumb(crumbs: ["Personal", shellTitle])
+            LiquidToolbarBreadcrumb(crumbs: navigator.crumbs) { crumb in
+                if !crumb.isLeaf { navigator.popToRoot() }
+            }
         }
     }
 
@@ -371,11 +373,6 @@ struct ContentView: View {
     private func openTaskCapture() {
         NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)
     }
-
-    // Single source of truth lives on `TodayNavSelection.title` (TasksFeature).
-    // The oracle Agent top bar reads "Nexus"; crumbs are unused in control mode
-    // anyway (no `NexusTopBar`), so this is defensive plumbing parity only.
-    private var shellTitle: String { selection.title }
 
     /// Binding bridge: lets `TodayDashboard` write the destination through the
     /// same `navigate(to:)` chokepoint as every other caller, preserving the
