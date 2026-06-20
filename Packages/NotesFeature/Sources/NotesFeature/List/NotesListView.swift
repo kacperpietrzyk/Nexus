@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import NexusCore
 import NexusUI
 import SwiftData
@@ -20,7 +21,22 @@ public struct NotesListView: View {
     // Full Link table — folded once per render into a backlink-count map.
     @Query private var links: [GraphLink]
 
-    @State private var path: [UUID] = []
+    // Path hoist (Task 8): macOS shell passes a binding (breadcrumb owns back +
+    // deep-links); iOS leaves it nil → internal @State. `path` is `[UUID]`-typed
+    // with a `nonmutating set` so every `path.append`/`removeAll` site is verbatim;
+    // only the two real-`Binding` (`$path`) sites become `pathBinding`.
+    @State private var internalPath: [UUID] = []
+    private let externalPath: Binding<[UUID]>?
+    private var path: [UUID] {
+        get { externalPath?.wrappedValue ?? internalPath }
+        nonmutating set {
+            if let externalPath { externalPath.wrappedValue = newValue } else { internalPath = newValue }
+        }
+    }
+    private var pathBinding: Binding<[UUID]> { Binding(get: { path }, set: { path = $0 }) }
+    // macOS breadcrumb feed: deepest path id + title, `(nil, nil)` at root.
+    private let onActiveNoteChange: ((UUID?, String?) -> Void)?
+
     @State private var newNoteError: String?
     #if os(macOS)
     @State private var graphModel: NoteGraphModel?
@@ -43,7 +59,15 @@ public struct NotesListView: View {
     @State private var bulkMovePickerShown = false
     #endif
 
-    public init() {}
+    /// `path` nil → internal `@State` (iOS + legacy); the macOS shell passes a
+    /// binding to hoist back/deep-link control. `onActiveNoteChange` is macOS-only.
+    public init(
+        path externalPath: Binding<[UUID]>? = nil,
+        onActiveNoteChange: ((UUID?, String?) -> Void)? = nil
+    ) {
+        self.externalPath = externalPath
+        self.onActiveNoteChange = onActiveNoteChange
+    }
 
     private var backlinkCounts: [UUID: Int] {
         NoteListGrouping.backlinkCounts(from: links)
@@ -60,7 +84,7 @@ public struct NotesListView: View {
         // liquidContent is the sole $path owner (see macOSRoot / liquidContent).
         macOSRoot
         #else
-        NavigationStack(path: $path) {
+        NavigationStack(path: pathBinding) {
             platformContent
                 .navigationDestination(for: UUID.self) { id in
                     NoteDetailLoader(noteID: id, onOpenNote: { path.append($0) })
@@ -196,6 +220,14 @@ public struct NotesListView: View {
             .onReceive(
                 NotificationCenter.default.publisher(for: .notesOpenGraph)
             ) { _ in consumePendingGraphRequest() }
+            // Publish the breadcrumb leaf for the shell: deepest path id + its
+            // title (resolved from the loaded `notes`), or `(nil, nil)` at root.
+            // The shell maps this to its `detailCrumb`.
+            .onChange(of: path, initial: true) { _, newPath in
+                let lastID = newPath.last
+                let title = lastID.flatMap { id in notes.first(where: { $0.id == id })?.title }
+                onActiveNoteChange?(lastID, (title?.isEmpty ?? true) ? nil : title)
+            }
     }
 
     // MARK: - macOS Liquid composition
@@ -228,26 +260,24 @@ public struct NotesListView: View {
                         tree: noteTree,
                         notes: notes,
                         selectedContainer: $selectedContainer,
-                        path: $path,
+                        path: pathBinding,
                         onOpenGraph: { openGraph(scope: .global) }
                     )
                     .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
 
-                    NavigationStack(path: $path) {
-                        NoteListPane(
-                            container: selectedContainer,
-                            tree: noteTree,
-                            allNotes: notes,
-                            backlinkCounts: backlinkCounts,
-                            onOpenNote: { path.append($0) },
-                            onDeleteNote: { deleteNote($0) },
-                            extraContextMenu: { note in
-                                AnyView(moveToFolderMenu(for: note))
-                            }
-                        )
-                        .navigationDestination(for: UUID.self) { id in
+                    // macOS: no `NavigationStack`. Pushing a note promotes the
+                    // stack's auto back-chevron into the window toolbar, which
+                    // collapses into the traffic-light zone under `.hiddenTitleBar`
+                    // AND shifts the whole layout down (Image #2/#3). The shell
+                    // breadcrumb is the back affordance, so the right pane is a
+                    // plain conditional swap on `path`: open = `path.append`,
+                    // back = the shell clears `path` (popToRoot). Same
+                    // list-replaced-by-editor behaviour the push had, minus the
+                    // chevron.
+                    Group {
+                        if let activeID = path.last {
                             NoteDetailLoader(
-                                noteID: id,
+                                noteID: activeID,
                                 onOpenNote: { path.append($0) },
                                 onOpenGraph: { noteID in
                                     path.removeAll()
@@ -256,9 +286,21 @@ public struct NotesListView: View {
                                             center: GraphNodeID(.note, noteID), depth: 1))
                                 }
                             )
+                        } else {
+                            NoteListPane(
+                                container: selectedContainer,
+                                tree: noteTree,
+                                allNotes: notes,
+                                backlinkCounts: backlinkCounts,
+                                onOpenNote: { path.append($0) },
+                                onDeleteNote: { deleteNote($0) },
+                                extraContextMenu: { note in
+                                    AnyView(moveToFolderMenu(for: note))
+                                }
+                            )
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
@@ -364,7 +406,13 @@ public struct NotesListView: View {
         do {
             let note = try DailyNoteService(repository: noteRepository)
                 .openOrCreate(for: Date.now)
+            #if os(macOS)
+            // Fresh daily-note open replaces the stack so the breadcrumb reads
+            // `Notes › <day>` (not a deep drill); linked-note drill still appends.
+            path = [note.id]
+            #else
             path.append(note.id)
+            #endif
         } catch {
             newNoteError = error.localizedDescription
         }

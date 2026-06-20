@@ -28,7 +28,9 @@ struct ProjectHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
+            #if !os(macOS)
             breadcrumb
+            #endif
 
             HStack(spacing: DS.Space.m) {
                 Image(systemName: nexusProjectGlyph(token: project.color, id: project.id))

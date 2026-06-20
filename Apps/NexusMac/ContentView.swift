@@ -19,6 +19,7 @@ import TasksFeature
 // the same structural growth that disables `file_length` on the iOS shell.
 // The daily-note (O4) wiring crossed 600 lines.
 // swiftlint:disable file_length
+// swiftlint:disable:next type_body_length
 struct ContentView: View {
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
     @Environment(\.modelContext) var modelContext
@@ -37,8 +38,30 @@ struct ContentView: View {
     // helper recording control (cancel/pause), re-homed from the deleted MeetingsTabView.
     @Environment(\.meetingHelperControl) var meetingHelperControl
 
+    // Internal (not `private`): drives all destination switches through the
+    // NexusNavigator keystone (Task 2) — back/forward history, crumbs, and
+    // deep-links all hang off this one instance. Extensions read `selection`
+    // (the computed accessor below) and call `navigate(to:)` as before.
+    @State var navigator = NexusNavigator()
+
+    // Persists the active destination across launches (Task 13). The raw token
+    // string is stored (same as `NavLocation.destinationToken`) so it survives
+    // version-to-version; an unknown token falls back to `.today` at restore time.
+    @SceneStorage("nav.destination") private var persistedDestinationToken: String = ""
+    // One-shot guard: restore runs at most once per process launch.
+    @State private var didRestoreDestination = false
+
+    // Notes navigation path, hoisted to the shell (Task 8) so the breadcrumb owns
+    // back and deep-links route through `pendingDeepLink`. `NotesListView` reads
+    // this binding instead of its own internal `@State` on macOS.
+    @State private var notesPath: [UUID] = []
+    // People navigation path, hoisted to the shell (Task 9) — same idiom as Notes.
+    @State private var peoplePath: [UUID] = []
+
     // Internal (not `private`): read from the `ContentView+LiquidToday` extension.
-    @State var selection: TodayNavSelection = .today
+    // A computed read-through so every `selection == .X` call site compiles
+    // unchanged and all three extension files keep working without modification.
+    var selection: TodayNavSelection { navigator.destination }
     // Internal: read from the `ContentView+CaptureAndPeek` extension.
     @State var selectedTask: TaskItem?
     @State private var customSnoozeTask: TaskItem?
@@ -57,6 +80,10 @@ struct ContentView: View {
     // are hoisted here. `inboxItems` is the SAME already-loaded set the list
     // renders (handed up via `InboxView.onItemsChanged`) — no new query.
     @State private var inboxActiveFilter: InboxFilter = .all
+    // §1b control mode (Tasks): the active task filter is hoisted to the shell
+    // so the sidebar "Views" rows can deep-link to a saved filter directly.
+    // `TodayDashboard` reads it via the `taskFilter:` binding param.
+    @State private var taskFilter: TaskFilter = .all
     // The activity-feed rows InboxView loaded (handed up via `onItemsChanged`).
     // The feed is fully materialized (no windowing), so every filter tab count
     // reads directly from this set.
@@ -65,6 +92,11 @@ struct ContentView: View {
     // the shared EventKit provider so its scope/anchor state survives rail
     // switches. Internal (not `private`): read from `ContentView+LiquidCalendar`.
     @State var calendarViewModel: CalendarViewModel?
+    // Tracks whether the user drilled into Day scope from Month (Task 10).
+    // Set to `true` on Month→Day transition; cleared on any non-Day scope.
+    // Internal (not `private`): mutated by `updateCalendarCrumb` in the
+    // `ContentView+LiquidCalendar` extension.
+    @State var calendarDrilledFromMonth = false
     // Shared data feed for the Liquid Today screen (Task 5): one model drives both
     // the main column and the inspector slot. Internal: see `ContentView+LiquidToday`.
     @State var liquidTodayModel = LiquidTodayModel()
@@ -152,6 +184,12 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .nexusGoToSettings)) { _ in
                 navigate(to: .settings)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .nexusNavBack)) { _ in
+                withAnimation(DS.Motion.nav) { navigator.back() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .nexusNavForward)) { _ in
+                withAnimation(DS.Motion.nav) { navigator.goForward() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .nexusOpenDailyNote)) { _ in
                 openTodaysDailyNote()
             }
@@ -164,17 +202,40 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .nexusToggleSelectedTaskFocus)) { _ in
                 toggleSelectedTaskFocus()
             }
-            .onChange(of: selection) { _, newValue in
-                // §1 "inspector ⊥ Agent" single chokepoint: the Agent
-                // destination owns the whole content slot, so clear any
-                // selected task on EVERY transition into `.agent` — covers
-                // the ⌘⇧A handler, a direct `sparkles` rail tap, and any
-                // future programmatic writer. Keeps state genuinely clean,
-                // not merely visually masked by the inspector predicate.
-                if newValue == .agent {
-                    selectedTask = nil
-                }
+            .onChange(of: navigator.destination, consumeDestinationChange)
+            // §1b saved-filter deep-link: sidebar "Views" rows stage a
+            // `.savedFilter(id)` deep-link via `navigator.open(.tasks, deepLink:)`.
+            // Consuming it here (on `dashboardBody`, always mounted) sets
+            // the hoisted filter and navigates to Tasks. Unlike Notes/People
+            // detail pushes: NO `detailCrumb`, NO `onPopToRoot` — this is a
+            // filter state change, not a detail navigation; the breadcrumb
+            // stays "Tasks".
+            .onChange(of: navigator.pendingDeepLink, initial: true) { _, link in
+                consumeSavedFilterDeepLink(link)
             }
+    }
+
+    /// §1 "inspector ⊥ Agent": clear selected task on every transition into
+    /// `.agent`. Also persists the new destination token for launch restoration
+    /// (Task 13). Extracted from `dashboardBody` to stay within the type-checker budget.
+    @MainActor
+    private func consumeDestinationChange(_: TodayNavSelection, _ newValue: TodayNavSelection) {
+        if newValue == .agent {
+            selectedTask = nil
+        }
+        // Task 13: persist destination so quit + relaunch reopens the same page.
+        persistedDestinationToken = newValue.token
+    }
+
+    /// §1b: consume a `.savedFilter` deep-link staged by the sidebar "Views" rows.
+    /// Extracted from the `dashboardBody` modifier chain to stay within the
+    /// Swift type-checker budget (the chain was already at its limit).
+    @MainActor
+    private func consumeSavedFilterDeepLink(_ link: DeepLinkTarget?) {
+        if case .savedFilter(let fid)? = link {
+            taskFilter = .savedFilter(fid)
+            navigator.pendingDeepLink = nil
+        }
     }
 
     /// The shell + window chrome (overlays, sheets, bootstrap tasks), staged out
@@ -205,6 +266,18 @@ struct ContentView: View {
             .overlay { commandPaletteOverlay }
             .overlay { captureOverlay }
             .task {
+                // Task 13: restore the persisted destination BEFORE bootstrap so
+                // the user lands on the right page immediately. One-shot guard
+                // prevents re-restore on re-task (e.g. scene re-activation).
+                // A brief flash of .today is acceptable in this version.
+                if !didRestoreDestination {
+                    didRestoreDestination = true
+                    let token = persistedDestinationToken
+                    let candidate = token.isEmpty ? nil : TodayNavSelection.from(token: token)
+                    if let restored = candidate, restored != navigator.destination {
+                        navigator.restore(to: restored)
+                    }
+                }
                 await bootstrapNavigation()
                 await reloadInboxCount()
             }
@@ -217,6 +290,11 @@ struct ContentView: View {
             // carries the closed-Inbox case.
             .reloadOnStoreChange {
                 _Concurrency.Task { await reloadInboxCount() }
+                // Entity quick-jump commands track project/person DATA, so refresh
+                // them on store-change too. `reloadOnStoreChange` is debounced
+                // (400ms trailing edge, see StoreChangeRefresh), so a bulk import
+                // collapses to a single re-registration — no per-save churn.
+                _Concurrency.Task { await refreshNavigationEntityCommands() }
             }
     }
 
@@ -228,15 +306,27 @@ struct ContentView: View {
                 LiquidSidebar(
                     selection: selection,
                     inboxUnreadCount: inboxUnreadCount,
-                    onNavigate: { navigate(to: $0) }
+                    activeSavedFilterID: {
+                        if case .savedFilter(let id) = taskFilter { return id }
+                        return nil
+                    }(),
+                    onNavigate: { navigate(to: $0) },
+                    onDeepLink: { destination, link in
+                        withAnimation(DS.Motion.nav) {
+                            navigator.open(destination, deepLink: link)
+                        }
+                    }
                 )
             },
             toolbar: {
                 LiquidToolbar(
                     leading: { toolbarLeading },
                     onOpenCommandPalette: { commandPalettePresented = true },
-                    onOpenInbox: { navigate(to: .inbox) },
-                    onOpenCapture: openTaskCapture
+                    onOpenCapture: openTaskCapture,
+                    canGoBack: navigator.canGoBackOrPopDetail,
+                    canGoForward: navigator.canGoForward,
+                    onBack: { withAnimation(DS.Motion.nav) { navigator.back() } },
+                    onForward: { withAnimation(DS.Motion.nav) { navigator.goForward() } }
                 )
             },
             main: { destinationMain },
@@ -286,7 +376,9 @@ struct ContentView: View {
         } else if selection == .today {
             LiquidTodayTitle()
         } else {
-            LiquidToolbarBreadcrumb(crumbs: ["Personal", shellTitle])
+            LiquidToolbarBreadcrumb(crumbs: navigator.crumbs) { crumb in
+                if !crumb.isLeaf { navigator.popToRoot() }
+            }
         }
     }
 
@@ -335,18 +427,50 @@ struct ContentView: View {
             // `ContentView+LiquidMeetings`.
             liquidMeetingsMain
         } else if selection == .notes {
-            // Notes content layer (spec §5): list + block editor; owns its own
-            // NavigationStack.
-            NotesListView()
-                .environment(\.notesTaskRepository, taskRepository)
+            // Notes content layer (spec §5): list + block editor. The path is
+            // hoisted to the shell (Task 8) so the breadcrumb is the back affordance
+            // and the native back-chevron is gone; deep-links route through
+            // `pendingDeepLink`.
+            NotesListView(
+                path: $notesPath,
+                onActiveNoteChange: { id, title in
+                    navigator.detailCrumb = id.map {
+                        NavCrumb(id: "note:\($0)", label: title ?? "Note", isLeaf: true)
+                    }
+                }
+            )
+            .environment(\.notesTaskRepository, taskRepository)
+            .onAppear { navigator.onPopToRoot = { notesPath.removeAll() } }
+            .onChange(of: navigator.pendingDeepLink, initial: true) { _, link in
+                if case .note(let nid)? = link {
+                    notesPath = [nid]
+                    navigator.pendingDeepLink = nil
+                }
+            }
         } else if selection == .calendar {
             // Liquid Calendar / Week Planning (Task 6): custom week grid +
             // scheduling strip; Day/Month re-mount the existing grids. See
             // `ContentView+LiquidCalendar`.
             liquidCalendarMain
         } else if selection == .people {
-            // People / Contacts surface (spec §6); owns its own NavigationStack.
-            PeopleListView()
+            // People / Contacts surface (spec §6). Path hoisted to the shell
+            // (Task 9) so the breadcrumb is the single back affordance and
+            // deep-links route through `pendingDeepLink`.
+            PeopleListView(
+                path: $peoplePath,
+                onActivePersonChange: { id, name in
+                    navigator.detailCrumb = id.map {
+                        NavCrumb(id: "person:\($0)", label: name ?? "Person", isLeaf: true)
+                    }
+                }
+            )
+            .onAppear { navigator.onPopToRoot = { peoplePath.removeAll() } }
+            .onChange(of: navigator.pendingDeepLink, initial: true) { _, link in
+                if case .person(let pid)? = link {
+                    peoplePath = [pid]
+                    navigator.pendingDeepLink = nil
+                }
+            }
         } else if selection == .settings {
             // Native two-pane in-shell Settings (Task 9): reads the
             // `MacSettingsDependencies` bundle NexusMacApp injects into the
@@ -364,28 +488,19 @@ struct ContentView: View {
         NotificationCenter.default.post(name: .nexusOpenCapture, object: CapturePane.Mode.task)
     }
 
-    private var shellTitle: String {
-        switch selection {
-        case .today: return "Today"
-        case .inbox: return "Inbox"
-        case .meetings: return "Meetings"
-        case .tasks: return "Tasks"
-        case .projects: return "Projects"
-        case .notes: return "Notes"
-        case .calendar: return "Calendar"
-        case .people: return "People"
-        // The oracle Agent top bar reads "Nexus"; crumbs are unused in
-        // control mode anyway (no `NexusTopBar`), so this is defensive
-        // plumbing parity only.
-        case .agent: return "Nexus"
-        case .stats: return "Stats"
-        case .settings: return "Settings"
-        }
+    /// Binding bridge: lets `TodayDashboard` write the destination through the
+    /// same `navigate(to:)` chokepoint as every other caller, preserving the
+    /// `withAnimation(DS.Motion.nav)` envelope and the navigator invariants.
+    private var selectionBinding: Binding<TodayNavSelection> {
+        Binding(
+            get: { navigator.destination },
+            set: { navigate(to: $0) }
+        )
     }
 
     private var dashboardContent: some View {
         TodayDashboard(
-            selection: $selection,
+            selection: selectionBinding,
             chrome: .embedded,
             inboxUnreadCount: inboxUnreadCount,
             onInboxUnreadCountChanged: { inboxUnreadCount = $0 },
@@ -396,6 +511,7 @@ struct ContentView: View {
             onInboxDismiss: { item in dismissFeedItem(item) },
             onInboxSnooze: { item, date in snoozeFeedItem(item, until: date) },
             onOpenTask: { openTask($0) },
+            taskFilter: $taskFilter,
             // `.meetings` mounts the Liquid Meetings screen in
             // `destinationMain` (Task 10) and never reaches this dashboard
             // router anymore — no embedded meetings content to inject.
@@ -424,7 +540,7 @@ struct ContentView: View {
     /// Internal (not `private`): called from the `ContentView+LiquidToday` extension.
     @MainActor
     func navigate(to destination: TodayNavSelection) {
-        withAnimation(DS.Motion.nav) { selection = destination }
+        withAnimation(DS.Motion.nav) { navigator.open(destination) }
     }
 
     /// Opening a task's detail inspector while the Agent destination is
@@ -543,6 +659,108 @@ struct ContentView: View {
                 selectedTask: { selectedTask }
             )
         )
+        // Destination quick-switch for every shell surface NOT already covered by
+        // a package command. TasksComposition ships Today + Inbox (and there is no
+        // `GoToTasks`/`GoToProjects`/… in any package), so the shell registers the
+        // remaining nine here. Each runs the same `navigate(to:)` chokepoint the
+        // sidebar uses, preserving the `withAnimation(DS.Motion.nav)` envelope.
+        // SF Symbols mirror the sidebar glyphs.
+        await registerDestinationCommands()
+        // Bounded entity quick-jump (projects + people). Seeded at bootstrap and
+        // refreshed on store-change (see `dashboardChrome`'s `reloadOnStoreChange`).
+        await refreshNavigationEntityCommands()
+    }
+
+    /// Registers a `ShellNavigateCommand` for each shell destination that lacks a
+    /// package-owned palette command (Today + Inbox come from `TasksComposition`).
+    @MainActor
+    private func registerDestinationCommands() async {
+        let destinations: [DestinationCommandSpec] = [
+            .init(.meetings, "Meetings", "person.wave.2", ["meeting", "calls", "recordings"]),
+            .init(.tasks, "Tasks", "checkmark.square", ["task", "todo", "all tasks"]),
+            .init(.projects, "Projects", "square.stack.3d.up", ["project", "roadmap", "pipeline"]),
+            .init(.notes, "Notes", "note.text", ["note", "docs", "writing"]),
+            .init(.calendar, "Calendar", "calendar", ["calendar", "schedule", "events"]),
+            .init(.people, "People", "person.crop.circle", ["people", "person", "contacts"]),
+            .init(.agent, "Agent", "sparkles", ["agent", "assistant", "ai", "chat", "nexus"]),
+            .init(.stats, "Stats", "chart.bar", ["stats", "analytics", "productivity"]),
+            .init(.settings, "Settings", "gearshape", ["settings", "preferences", "config"]),
+        ]
+        for spec in destinations {
+            let destination = spec.destination
+            let command = ShellNavigateCommand(
+                id: "nav.destination.\(destination.token)",
+                title: "Go to \(spec.name)",
+                subtitle: "Open \(spec.name)",
+                iconName: spec.icon,
+                keywords: spec.keywords + [spec.name.lowercased()],
+                action: { navigate(to: destination) }
+            )
+            await CommandRegistry.shared.register(command)
+        }
+    }
+
+    /// Entity quick-jump: registers one `ShellNavigateCommand` per active project
+    /// and person so the palette can deep-link straight to a named item
+    /// ("Open project: Foo" / "Open person: Bar"). The registry is static, so this
+    /// is re-run on store-change to pick up renames/additions/soft-deletes; it
+    /// unregisters the previous `nav.project.`/`nav.person.` set first (the
+    /// registry has no by-prefix clear, so it filters `allCommands()` by id
+    /// prefix) and re-registers the current set — no `@State` bookkeeping, no leak.
+    ///
+    /// Lists are capped (projects 300, people 400) so a very large store can't
+    /// register thousands of commands; the cap is on the bounded, named sets the
+    /// SCOPE allows. Notes/meetings are intentionally NOT included — they're
+    /// large/unbounded and want a dynamic search-provider, deferred as a follow-up.
+    @MainActor
+    func refreshNavigationEntityCommands() async {
+        // 1. Drop the previously-registered entity commands.
+        let existing = await CommandRegistry.shared.allCommands()
+        for command in existing
+        where command.id.hasPrefix("nav.project.") || command.id.hasPrefix("nav.person.") {
+            await CommandRegistry.shared.unregister(id: command.id)
+        }
+
+        // 2. Active projects (not deleted, not archived), capped + name-sorted.
+        let projectDescriptor = FetchDescriptor<Project>(
+            predicate: #Predicate { $0.deletedAt == nil && $0.archivedAt == nil },
+            sortBy: [SortDescriptor(\.name)]
+        )
+        let projects = (try? modelContext.fetch(projectDescriptor)) ?? []
+        for project in projects.prefix(300) {
+            let id = project.id
+            let name = project.title
+            let command = ShellNavigateCommand(
+                id: "nav.project.\(id.uuidString)",
+                title: "Open project: \(name)",
+                subtitle: "Jump to this project",
+                iconName: "square.stack.3d.up",
+                keywords: ["project", "open", name.lowercased()],
+                action: { withAnimation(DS.Motion.nav) { navigator.open(.projects, deepLink: .project(id)) } }
+            )
+            await CommandRegistry.shared.register(command)
+        }
+
+        // 3. People (not deleted), capped + name-sorted.
+        let personDescriptor = FetchDescriptor<Person>(
+            predicate: #Predicate { $0.deletedAt == nil },
+            sortBy: [SortDescriptor(\.displayName)]
+        )
+        let people = (try? modelContext.fetch(personDescriptor)) ?? []
+        for person in people.prefix(400) {
+            let id = person.id
+            let name = person.displayName
+            guard !name.isEmpty else { continue }
+            let command = ShellNavigateCommand(
+                id: "nav.person.\(id.uuidString)",
+                title: "Open person: \(name)",
+                subtitle: "Jump to this person",
+                iconName: "person.crop.circle",
+                keywords: ["person", "people", "open", name.lowercased()],
+                action: { withAnimation(DS.Motion.nav) { navigator.open(.people, deepLink: .person(id)) } }
+            )
+            await CommandRegistry.shared.register(command)
+        }
     }
 
     @MainActor

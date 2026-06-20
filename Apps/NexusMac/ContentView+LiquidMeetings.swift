@@ -27,6 +27,23 @@ extension ContentView {
             // Pin structural identity so `destinationMain` branch
             // re-evaluations never tear down the screen's internal @State.
             .id(TodayNavSelection.meetings)
+            // onPopToRoot + deep-link consumption live in the SHELL: writes to
+            // the router don't need shell observation (the navigator IS
+            // observed). Tapping the "Meetings" ancestor crumb clears the
+            // selection so the screen returns to the list.
+            .onAppear {
+                navigator.onPopToRoot = { meetingNavigationRouter.selectedMeetingID = nil }
+            }
+            // Consume a pending `.meeting` deep-link (sidebar / back-forward).
+            // `navigate` (not raw set) so it also yields to the router's
+            // `selections` stream, matching the list's `onSelect`. `initial: true`
+            // catches a link staged before this view mounts.
+            .onChange(of: navigator.pendingDeepLink, initial: true) { _, link in
+                if case .meeting(let mid)? = link {
+                    meetingNavigationRouter.navigate(to: mid)
+                    navigator.pendingDeepLink = nil
+                }
+            }
         } else {
             // The meetings stack failed to compose at launch (no store) —
             // nothing real to show.
@@ -69,8 +86,13 @@ extension ContentView {
             openTask: { openTask($0) },
             openNotes: { navigate(to: .notes) },
             openProject: { projectID in
-                liquidProjectsModel.selectedProjectID = projectID
-                navigate(to: .projects)
+                // Route through the navigator's deep-link channel (same pattern
+                // as the sidebar / back-forward) so Projects consumes it via its
+                // own `pendingDeepLink` seam and re-derives its crumb — keeps
+                // cross-feature project-open consistent with the new pattern.
+                withAnimation(DS.Motion.nav) {
+                    navigator.open(.projects, deepLink: .project(projectID))
+                }
             },
             openPeople: { navigate(to: .people) },
             openSettings: { navigate(to: .settings) },
@@ -79,6 +101,15 @@ extension ContentView {
             // helper control is injected, which hides the Cancel affordance.
             cancelProcessing: meetingHelperControl.map { control in
                 { meetingID in control.cancelProcessing(meetingID: meetingID) }
+            },
+            // Publish the leaf breadcrumb to the shell. Derivation happens inside
+            // the screen (the only place `selectedMeetingID` is observed); here we
+            // map id+title → the navigator's detail crumb (no loop — writing the
+            // crumb never writes the selection). `(nil, nil)` at root clears it.
+            onDetailChange: { id, title in
+                navigator.detailCrumb = id.map {
+                    NavCrumb(id: "meeting:\($0)", label: title ?? "Meeting", isLeaf: true)
+                }
             }
         )
     }

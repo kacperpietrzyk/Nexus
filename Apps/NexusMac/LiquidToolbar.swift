@@ -4,32 +4,51 @@ import SwiftUI
 /// The 58 pt Liquid toolbar that tops the glass content shell
 /// (`docs/03_COMPONENTS.md` §Toolbar). Leading is a per-destination slot
 /// (breadcrumb title, Inbox filter tabs, the Agent control strip, …);
-/// trailing is the fixed search → bell → New cluster wired to the SAME seams
+/// trailing is the fixed search → New cluster wired to the SAME seams
 /// the old `NexusTopBar`/`NexusCommandBar` band used:
 /// - search field → command palette (the global ⌘K `CommandGroup` still
 ///   posts `.nexusOpenCommandPalette`, handled by `ContentView`)
-/// - bell → Inbox destination
 /// - New → the existing capture seam (`.nexusOpenCapture`, same as ⌘N/⌘⌃N)
+///
+/// Back/forward chevrons (`canGoBack`/`canGoForward`) sit at the very leading
+/// edge — they are the ONLY chevron back affordances in the app (native
+/// `NavigationStack` chevrons are suppressed per-destination in later tasks).
 struct LiquidToolbar<Leading: View>: View {
     @ViewBuilder let leading: () -> Leading
     let onOpenCommandPalette: () -> Void
-    let onOpenInbox: () -> Void
     let onOpenCapture: () -> Void
+    let canGoBack: Bool
+    let canGoForward: Bool
+    let onBack: () -> Void
+    let onForward: () -> Void
 
     var body: some View {
         HStack(spacing: DS.Space.m) {
+            HStack(spacing: DS.Space.xs) {
+                LiquidIconButton(
+                    systemImage: "chevron.left",
+                    accessibilityLabel: "Back",
+                    action: onBack
+                )
+                .opacity(canGoBack ? 1 : 0.35)
+                .disabled(!canGoBack)
+                .help("Back (⌘[)")
+
+                LiquidIconButton(
+                    systemImage: "chevron.right",
+                    accessibilityLabel: "Forward",
+                    action: onForward
+                )
+                .opacity(canGoForward ? 1 : 0.35)
+                .disabled(!canGoForward)
+                .help("Forward (⌘])")
+            }
+
             leading()
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             LiquidSearchField("Search anything…", action: onOpenCommandPalette)
                 .frame(width: 300)
-
-            LiquidIconButton(
-                systemImage: "bell",
-                accessibilityLabel: "Open inbox",
-                action: onOpenInbox
-            )
-            .help("Open inbox")
 
             LiquidPrimaryButton("New", systemImage: "plus", action: onOpenCapture)
                 .help("New task (⌘N)")
@@ -47,29 +66,65 @@ struct LiquidToolbar<Leading: View>: View {
 }
 
 /// Breadcrumb/title leading content for plain destinations — the Liquid
-/// replacement for `NexusTopBar`'s `crumbs` (e.g. "Personal / Today": parent
-/// crumbs muted, current page emphasized).
+/// replacement for `NexusTopBar`'s `crumbs`. Ancestor crumbs are tappable
+/// buttons (muted, hover-wash) that call `onTap`; the leaf crumb is
+/// non-interactive emphasized text. No "Personal" root — the first crumb
+/// is always the destination title (e.g. "Tasks", "Projects").
 struct LiquidToolbarBreadcrumb: View {
-    let crumbs: [String]
+    let crumbs: [NavCrumb]
+    let onTap: (NavCrumb) -> Void
 
     var body: some View {
         HStack(spacing: DS.Space.xs) {
-            ForEach(Array(crumbs.dropLast().enumerated()), id: \.offset) { _, crumb in
-                Text(crumb)
-                    .font(DS.FontToken.body)
-                    .foregroundStyle(DS.ColorToken.textTertiary)
-                Text("/")
-                    .font(DS.FontToken.body)
-                    .foregroundStyle(DS.ColorToken.textMuted)
-            }
-            if let current = crumbs.last {
-                Text(current)
-                    .font(DS.FontToken.bodyStrong)
-                    .foregroundStyle(DS.ColorToken.textPrimary)
+            ForEach(crumbs) { crumb in
+                if crumb.isLeaf {
+                    Text(crumb.label)
+                        .font(DS.FontToken.bodyStrong)
+                        .foregroundStyle(DS.ColorToken.textPrimary)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(crumb.label)
+                } else {
+                    AncestorCrumbButton(crumb: crumb, onTap: onTap)
+                    Text("/")
+                        .font(DS.FontToken.body)
+                        .foregroundStyle(DS.ColorToken.textMuted)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .lineLimit(1)
-        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A single tappable ancestor breadcrumb with a hover-wash background,
+/// consistent with other Liquid toolbar controls (§IconButton hover #FFFFFF10).
+private struct AncestorCrumbButton: View {
+    let crumb: NavCrumb
+    let onTap: (NavCrumb) -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            onTap(crumb)
+        } label: {
+            Text(crumb.label)
+                .font(DS.FontToken.body)
+                .foregroundStyle(DS.ColorToken.textTertiary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(hovering ? Color.white.opacity(0.04) : .clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { value in
+            withAnimation(DS.Motion.hover) { hovering = value }
+        }
+        .accessibilityLabel(crumb.label)
+        .accessibilityAddTraits(.isButton)
     }
 }
 

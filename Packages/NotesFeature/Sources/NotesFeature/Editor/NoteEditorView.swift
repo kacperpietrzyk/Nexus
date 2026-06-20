@@ -56,8 +56,15 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
 
     var body: some View {
         editorList
-            .navigationTitle(model.title.isEmpty ? "Untitled" : model.title)
+            // macOS: the shell owns the window toolbar + breadcrumb (Task 8). The
+            // editor is pushed via the right-pane `NavigationStack` under the
+            // `.hiddenTitleBar` window, so applying `.navigationTitle`/`.toolbar`
+            // here promotes a stray back-chevron into the traffic-light zone
+            // (Image #2). Both stay iOS-only; the macOS image-insert action is
+            // relocated in-content (see `documentBody`'s `macHeaderRow`), so
+            // dropping `.toolbar` on macOS loses nothing.
             #if os(iOS)
+        .navigationTitle(model.title.isEmpty ? "Untitled" : model.title)
         .navigationBarTitleDisplayMode(.inline)
             #endif
             .task(id: note.id) { rebindModel() }
@@ -65,10 +72,8 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
         .task(id: selectedPhotoItem) {
             await handleSelectedPhotoItem(selectedPhotoItem)
         }
-        #endif
         .toolbar {
             ToolbarItemGroup {
-                #if os(iOS)
                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                     Image(systemName: "photo.badge.plus")
                 }
@@ -84,17 +89,9 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
                 }
                 .accessibilityLabel("More image import options")
                 .disabled(!model.canEdit)
-                #else
-                Button {
-                    imageImporterPresented = true
-                } label: {
-                    Image(systemName: "photo.badge.plus")
-                }
-                .accessibilityLabel("Insert image")
-                .disabled(!model.canEdit)
-                #endif
             }
         }
+        #endif
         .fileImporter(
             isPresented: $imageImporterPresented,
             allowedContentTypes: [.image],
@@ -155,9 +152,31 @@ struct NoteEditorView: View {  // swiftlint:disable:this type_body_length
     /// the 34pt hover gutter + the row's `DS.Space.xs` spacing.
     private var macBlockTextInset: CGFloat { 34 + DS.Space.xs }
 
+    /// macOS in-content header. Carries the image-insert action that used to live
+    /// in the window toolbar (relocated in Task 8 so the shell breadcrumb owns the
+    /// toolbar and no stray back-chevron is promoted). The `.fileImporter`/error
+    /// alert wiring stays on `body`.
+    private var macHeaderRow: some View {
+        HStack(spacing: DS.Space.s) {
+            Spacer(minLength: 0)
+            Button {
+                imageImporterPresented = true
+            } label: {
+                Label("Insert image", systemImage: "photo.badge.plus")
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textSecondary)
+            }
+            .buttonStyle(.borderless)
+            .disabled(!model.canEdit)
+            .help("Insert image")
+            .accessibilityLabel("Insert image")
+        }
+    }
+
     private var documentBody: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                macHeaderRow
                 if model.role == .dailyNote { dailyNoteNavRow.padding(.leading, macBlockTextInset) }
                 titleField.padding(.leading, macBlockTextInset)
                 propertiesSection.padding(.leading, macBlockTextInset)

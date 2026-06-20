@@ -18,6 +18,13 @@ public struct LiquidMeetingsNavigation {
     /// backs this with the XPC helper control; `nil` (tests/previews, or no
     /// helper available) hides the in-app Cancel affordance entirely.
     public let cancelProcessing: ((UUID) -> Void)?
+    /// Published to the shell whenever the selected meeting changes: the
+    /// selected id + title, or `(nil, nil)` at the list root. The shell maps
+    /// this to the toolbar breadcrumb crumb. The crumb is DERIVED from
+    /// selection here (inside the screen, the only place the router is
+    /// observed) — the shell can't see `selectedMeetingID` (env-injected, not
+    /// observed), hence this callback seam.
+    public let onDetailChange: (UUID?, String?) -> Void
 
     public init(
         openTask: @escaping (TaskItem) -> Void,
@@ -25,7 +32,8 @@ public struct LiquidMeetingsNavigation {
         openProject: @escaping (UUID) -> Void,
         openPeople: @escaping () -> Void,
         openSettings: @escaping () -> Void,
-        cancelProcessing: ((UUID) -> Void)? = nil
+        cancelProcessing: ((UUID) -> Void)? = nil,
+        onDetailChange: @escaping (UUID?, String?) -> Void = { _, _ in }
     ) {
         self.openTask = openTask
         self.openNotes = openNotes
@@ -33,6 +41,7 @@ public struct LiquidMeetingsNavigation {
         self.openPeople = openPeople
         self.openSettings = openSettings
         self.cancelProcessing = cancelProcessing
+        self.onDetailChange = onDetailChange
     }
 }
 
@@ -68,6 +77,16 @@ public struct LiquidMeetingsScreen: View {
         content
             .task { reloadSelectingDefault() }
             .task(id: router.selectedMeetingID) { reload() }
+            // Publish the leaf breadcrumb to the shell whenever the selection
+            // changes. DERIVED from `router.selectedMeetingID` (this is the one
+            // place the router is `@ObservedObject`); the title comes from the
+            // already-loaded `model.meetings`. If the title isn't loaded yet at
+            // `initial` (e.g. a deep-link before the list loads), a follow-up
+            // reload re-fires this onChange with the resolved title.
+            .onChange(of: router.selectedMeetingID, initial: true) { _, id in
+                navigation.onDetailChange(
+                    id, id.flatMap { mid in model.meetings.first { $0.id == mid }?.title })
+            }
             // Coalesce local saves AND cross-process / CloudKit imports into one
             // debounced reload. The MeetingsHelper records into a SEPARATE persistent
             // container, so its writes never post this process's
