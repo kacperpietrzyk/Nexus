@@ -95,8 +95,8 @@ private struct KnowledgeGraphSheetContent: View {
             .id(redrawToken)  // reset / depth change re-runs onAppear layout
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 720, minHeight: 560)
-        .frame(idealWidth: 1000, idealHeight: 760)
+        .frame(minWidth: 1024, minHeight: 720)
+        .frame(idealWidth: 1280, idealHeight: 1000)
     }
 }
 #endif

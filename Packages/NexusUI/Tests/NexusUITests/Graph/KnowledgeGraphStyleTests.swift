@@ -1,6 +1,7 @@
 import NexusCore
 import SwiftUI
 import Testing
+
 @testable import NexusUI
 
 @Suite struct KnowledgeGraphStyleTests {

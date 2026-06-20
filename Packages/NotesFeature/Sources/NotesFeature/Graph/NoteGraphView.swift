@@ -2,14 +2,13 @@ import NexusCore
 import NexusUI
 import SwiftUI
 
-/// Force-directed Canvas visualization of the `Link` graph. The model owns
-/// graph assembly and simulation; this view draws positions and forwards
-/// gestures/selection.
+/// The Notes knowledge graph. Assembly/scope/filter/selection live in the model;
+/// layout + rendering are delegated to the shared `NexusUI.KnowledgeGraphView`
+/// (the one constellation renderer used app-wide). This view owns the chrome:
+/// scope/depth controls, kind filters, and the selection card.
 struct NoteGraphView: View {
     @State private var model: NoteGraphModel
-    @State private var transform = GraphViewTransform()
-    @State private var dragStartPan: CGSize?
-    @State private var magnifyStartZoom: CGFloat?
+    @State private var resetToken = 0
 
     private let onOpenNote: (UUID) -> Void
     private let onClose: () -> Void
@@ -30,7 +29,7 @@ struct NoteGraphView: View {
             if model.snapshot.nodes.isEmpty {
                 emptyState
             } else {
-                graphCanvas
+                graphArea
             }
         }
         .background(DS.ColorToken.backgroundApp)
@@ -51,14 +50,8 @@ struct NoteGraphView: View {
                     )
                     .help("Largest items by connections are shown. Filter kinds to narrow the graph.")
                 }
-                iconButton("plus.magnifyingglass", label: "Zoom in") {
-                    transform.setZoom(transform.zoom * 1.25)
-                }
-                iconButton("minus.magnifyingglass", label: "Zoom out") {
-                    transform.setZoom(transform.zoom / 1.25)
-                }
                 iconButton("arrow.counterclockwise", label: "Reset view") {
-                    transform = GraphViewTransform()
+                    resetToken += 1
                 }
                 iconButton("xmark", label: "Close graph") {
                     onClose()
@@ -70,6 +63,37 @@ struct NoteGraphView: View {
         .padding(.top, DS.Space.l)
         .padding(.bottom, DS.Space.s)
         .background(DS.ColorToken.glassToolbar)
+    }
+
+    /// Local scope anchors the graph on its center (orbital ego layout); global
+    /// has no focus, so the shared view falls back to force-directed.
+    private var rootID: GraphNodeID? {
+        if case .local(let center, _) = model.scope { return center }
+        return nil
+    }
+
+    private var graphArea: some View {
+        ZStack(alignment: .bottomLeading) {
+            KnowledgeGraphView(
+                snapshot: model.snapshot,
+                rootID: rootID,
+                style: .standard,
+                selectedID: model.selectedNodeID,
+                onSelect: { model.select($0) }
+            )
+            .id(resetToken)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Graph canvas")
+            .accessibilityValue(graphAccessibilityValue)
+
+            if let node = model.selectedNode {
+                selectionCard(for: node)
+            }
+        }
+    }
+
+    private var graphAccessibilityValue: String {
+        "\(model.snapshot.nodes.count) nodes, \(model.snapshot.edges.count) links"
     }
 
     @ViewBuilder private var scopeControls: some View {
@@ -128,128 +152,6 @@ struct NoteGraphView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var graphCanvas: some View {
-        GeometryReader { proxy in
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: model.isSettled)) { timeline in
-                ZStack(alignment: .bottomLeading) {
-                    Canvas { context, size in
-                        draw(in: context, size: size)
-                    }
-                    .contentShape(Rectangle())
-                    .gesture(panGesture)
-                    .simultaneousGesture(magnifyGesture)
-                    .onTapGesture(count: 1, coordinateSpace: .local) { location in
-                        handleTap(at: location, in: proxy.size)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Graph canvas")
-                    .accessibilityValue(graphAccessibilityValue)
-
-                    if let node = model.selectedNode {
-                        selectionCard(for: node)
-                    }
-                }
-                .onChange(of: timeline.date) {
-                    model.tick()
-                }
-            }
-        }
-    }
-
-    private var graphAccessibilityValue: String {
-        "\(model.snapshot.nodes.count) nodes, \(model.snapshot.edges.count) links"
-    }
-
-    private func draw(in context: GraphicsContext, size: CGSize) {
-        let nodes = model.snapshot.nodes
-        let positions = model.engine.positions
-        guard !nodes.isEmpty, nodes.count == positions.count else { return }
-
-        let points = positions.map { transform.screenPoint(for: $0, in: size) }
-        var indexByID: [GraphNodeID: Int] = [:]
-        indexByID.reserveCapacity(nodes.count)
-        for (index, node) in nodes.enumerated() {
-            indexByID[node.nodeID] = index
-        }
-
-        drawEdges(in: context, points: points, indexByID: indexByID)
-        drawNodes(in: context, nodes: nodes, points: points)
-    }
-
-    private func drawEdges(
-        in context: GraphicsContext,
-        points: [CGPoint],
-        indexByID: [GraphNodeID: Int]
-    ) {
-        var edgePath = Path()
-        for edge in model.snapshot.edges {
-            guard let from = indexByID[edge.from], let to = indexByID[edge.to] else { continue }
-            edgePath.move(to: points[from])
-            edgePath.addLine(to: points[to])
-        }
-        context.stroke(edgePath, with: .color(DS.ColorToken.strokeDefault), lineWidth: 1)
-    }
-
-    private func drawNodes(in context: GraphicsContext, nodes: [GraphNode], points: [CGPoint]) {
-        let showAllLabels = transform.zoom >= 0.8 || nodes.count <= 40
-        for (index, node) in nodes.enumerated() {
-            let point = points[index]
-            let radius = GraphStyle.nodeRadius(degree: node.degree) * transform.zoom
-            let rect = CGRect(
-                x: point.x - radius,
-                y: point.y - radius,
-                width: radius * 2,
-                height: radius * 2
-            )
-            let accent = GraphStyle.accent(for: node.nodeID.kind)
-
-            context.fill(Path(ellipseIn: rect), with: .color(accent.opacity(0.85)))
-            drawSelectionRing(for: node, rect: rect, in: context)
-            drawNodeGlyph(for: node, radius: radius, point: point, in: context)
-            if showAllLabels || node.nodeID == model.selectedNodeID {
-                drawLabel(for: node, radius: radius, point: point, in: context)
-            }
-        }
-    }
-
-    private func drawSelectionRing(for node: GraphNode, rect: CGRect, in context: GraphicsContext) {
-        guard node.nodeID == model.selectedNodeID else { return }
-        context.stroke(
-            Path(ellipseIn: rect.insetBy(dx: -3, dy: -3)),
-            with: .color(DS.ColorToken.textPrimary),
-            lineWidth: 1.5
-        )
-    }
-
-    private func drawNodeGlyph(
-        for node: GraphNode,
-        radius: CGFloat,
-        point: CGPoint,
-        in context: GraphicsContext
-    ) {
-        guard transform.zoom >= 1.2 else { return }
-        context.draw(
-            Text(Image(systemName: GraphStyle.glyph(for: node.nodeID.kind)))
-                .font(.system(size: max(6, radius * 0.9)))
-                .foregroundStyle(DS.ColorToken.backgroundApp),
-            at: point
-        )
-    }
-
-    private func drawLabel(
-        for node: GraphNode,
-        radius: CGFloat,
-        point: CGPoint,
-        in context: GraphicsContext
-    ) {
-        context.draw(
-            Text(GraphStyle.displayTitle(node.title))
-                .font(DS.FontToken.caption)
-                .foregroundStyle(DS.ColorToken.textSecondary),
-            at: CGPoint(x: point.x, y: point.y + radius + 9)
-        )
-    }
-
     private func selectionCard(for node: GraphNode) -> some View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
             HStack(spacing: DS.Space.xs) {
@@ -285,38 +187,6 @@ struct NoteGraphView: View {
         .liquidLightCard(cornerRadius: DS.Radius.l)
         .padding(DS.Space.l)
         .accessibilityElement(children: .contain)
-    }
-
-    private var panGesture: some Gesture {
-        DragGesture(minimumDistance: 1)
-            .onChanged { value in
-                if dragStartPan == nil { dragStartPan = transform.pan }
-                let base = dragStartPan ?? .zero
-                transform.pan = CGSize(
-                    width: base.width + value.translation.width,
-                    height: base.height + value.translation.height
-                )
-            }
-            .onEnded { _ in dragStartPan = nil }
-    }
-
-    private var magnifyGesture: some Gesture {
-        MagnifyGesture()
-            .onChanged { value in
-                if magnifyStartZoom == nil { magnifyStartZoom = transform.zoom }
-                transform.setZoom((magnifyStartZoom ?? 1) * value.magnification)
-            }
-            .onEnded { _ in magnifyStartZoom = nil }
-    }
-
-    private func handleTap(at location: CGPoint, in size: CGSize) {
-        let hit = transform.hitTest(
-            location,
-            nodeIDs: model.engine.nodeIDs,
-            positions: model.engine.positions,
-            in: size
-        )
-        model.select(hit)
     }
 
     private func iconButton(

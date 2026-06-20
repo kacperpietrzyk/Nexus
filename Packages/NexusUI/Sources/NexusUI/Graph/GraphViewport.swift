@@ -31,4 +31,20 @@ public struct GraphViewport: Equatable {
         let center = CGPoint(x: worldBounds.midX, y: worldBounds.midY)
         offset = CGSize(width: -center.x * scale, height: -center.y * scale)
     }
+
+    /// Pins `focus` dead-center and scales so the farthest node fits within half
+    /// the viewport (minus padding) on each axis. Unlike `fit`, which centers the
+    /// bounding-box midpoint, this anchors a specific node — so a star/ego graph
+    /// reads as orbiting its focus instead of drifting off to one side.
+    public mutating func fitFocused(
+        on focus: CGPoint, points: [CGPoint], in size: CGSize, padding: CGFloat
+    ) {
+        guard !points.isEmpty, size.width > 0, size.height > 0 else { return }
+        let halfW = max(points.map { abs($0.x - focus.x) }.max() ?? 0, 1)
+        let halfH = max(points.map { abs($0.y - focus.y) }.max() ?? 0, 1)
+        let sx = (size.width / 2 - padding) / halfW
+        let sy = (size.height / 2 - padding) / halfH
+        scale = min(Self.maxScale, max(Self.minScale, min(sx, sy)))
+        offset = CGSize(width: -focus.x * scale, height: -focus.y * scale)
+    }
 }

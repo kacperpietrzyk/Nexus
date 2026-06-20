@@ -6,32 +6,12 @@ import SwiftUI
 
 #if os(macOS)
 
-/// Pill accent per linked-item kind — the spec's "kind pills" use the DS
-/// accent ramp; the mapping is fixed so a kind always reads the same color.
-private func kindColor(_ kind: ItemKind) -> Color {
-    switch kind {
-    case .note: return DS.ColorToken.accentAmber
-    case .task: return DS.ColorToken.accentBlue
-    case .project: return DS.ColorToken.accentPurple
-    case .person: return DS.ColorToken.accentGreen
-    case .meeting: return DS.ColorToken.accentCyan
-    default: return DS.ColorToken.statusNeutral
-    }
-}
+/// Pill accent + glyph per linked-item kind. Delegates to the shared
+/// `KnowledgeGraphStyle.standard` so the Related chips, the graph nodes, and the
+/// Notes graph all read the same color/icon for a given kind.
+private func kindColor(_ kind: ItemKind) -> Color { KnowledgeGraphStyle.accent(for: kind) }
 
-/// SF Symbol name for a linked-item kind.  Pure function — no state
-/// dependencies — defined once here so `KnowledgeSections` and
-/// `RelatedKnowledgeSection` share the same mapping.
-private func kindIcon(_ kind: ItemKind) -> String {
-    switch kind {
-    case .task: return "checklist"
-    case .note: return "doc.text"
-    case .project: return "folder"
-    case .meeting: return "calendar"
-    case .person: return "person"
-    default: return "circle"
-    }
-}
+private func kindIcon(_ kind: ItemKind) -> String { KnowledgeGraphStyle.glyph(for: kind) }
 
 // MARK: - Related chips grouping helper
 

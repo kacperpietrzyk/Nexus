@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import NexusCore
 import Testing
+
 @testable import NexusUI
 
 @Suite struct GraphForceLayoutTests {
