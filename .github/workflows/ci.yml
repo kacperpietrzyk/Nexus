@@ -62,7 +62,10 @@ jobs:
         run: swiftlint lint --strict --reporter github-actions-logging
 
       - name: swift-format
-        run: swift format lint --recursive --strict Apps Packages
+        # Exclude vendored third-party code (Grape/ForceSimulation, MIT) — not our
+        # style; already excluded from SwiftLint. Lists every package dir but the
+        # vendor, so new packages are still covered automatically.
+        run: swift format lint --recursive --strict Apps $(ls -d Packages/*/ | grep -v ForceSimulationVendor)
 
   packages:
     name: Test Swift Packages
