@@ -198,9 +198,11 @@ public struct TodayDashboard: View {
     // Internal (not `private`): written from the `+DigestData` extension file.
     @State var heroService: HeroBriefService?
     @State private var reloadGeneration = 0
-    // Internal (not `private`): bound from the `+Standalone` extension file.
-    @State var taskFilter: TaskFilter = .all  // .upcoming hides overdue/today/undated → empty Tasks view
-
+    // §1b: Mac shell hoists task filter; nil = iOS/standalone owns it (mirrors `activeSelection`).
+    private let externalTaskFilter: Binding<TaskFilter>?
+    @State private var internalTaskFilter: TaskFilter = .all  // .upcoming hides overdue/today/undated → empty Tasks view
+    // Internal (not `private`): read from the `+Standalone` extension file.
+    var taskFilter: Binding<TaskFilter> { externalTaskFilter ?? $internalTaskFilter }
     public init(
         selection: Binding<TodayNavSelection>? = nil,
         showsNavigationRail: Bool = true,
@@ -214,6 +216,7 @@ public struct TodayDashboard: View {
         onInboxDismiss: ((FeedItem) async -> Void)? = nil,
         onInboxSnooze: ((FeedItem, Date) async -> Void)? = nil,
         onOpenTask: ((TaskItem) -> Void)? = nil,
+        taskFilter externalTaskFilter: Binding<TaskFilter>? = nil,
         meetingsContent: (() -> AnyView)? = nil,
         onOpenCapture: @escaping (CapturePane.Mode) -> Void = { _ in },
         onOpenCommandPalette: @escaping () -> Void = {},
@@ -233,6 +236,7 @@ public struct TodayDashboard: View {
         self.onInboxDismiss = onInboxDismiss
         self.onInboxSnooze = onInboxSnooze
         self.onOpenTask = onOpenTask
+        self.externalTaskFilter = externalTaskFilter
         self.meetingsContent = meetingsContent
         self.onOpenCapture = onOpenCapture
         self.onOpenCommandPalette = onOpenCommandPalette
@@ -419,7 +423,7 @@ public struct TodayDashboard: View {
             // window edge. (An earlier width cap left a lopsided void + a
             // floating scrollbar on wide monitors — worse than the drift it
             // tried to fix.) `.tasks` case only.
-            TaskListView(filter: taskFilter, onSelect: onOpenTask)
+            TaskListView(filter: taskFilter.wrappedValue, onSelect: onOpenTask)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 // Route gutter = chrome gutter (18); matches Today + Inbox (was 28).
                 .padding(.horizontal, 18)
@@ -478,21 +482,15 @@ public struct TodayDashboard: View {
 
     // Internal (not `private`): read from the `+Standalone` extension file.
     var taskFilterTitle: String {
-        taskFilter.resolvedDisplayTitle(
-            projectName: { projectID in
-                projectName(projectID)
-            },
+        taskFilter.wrappedValue.resolvedDisplayTitle(
+            projectName: { projectName($0) },
             sectionName: { projectID, sectionID in
                 guard let section = sectionName(projectID: projectID, sectionID: sectionID) else { return nil }
                 guard let project = projectName(projectID) else { return section }
                 return "\(project) / \(section)"
             },
-            savedFilterName: { filterID in
-                savedFilterName(filterID)
-            },
-            cycleName: { cycleID in
-                cycleName(cycleID)
-            }
+            savedFilterName: { savedFilterName($0) },
+            cycleName: { cycleName($0) }
         )
     }
 

@@ -22,6 +22,39 @@ extension ContentView {
             // Pin the view's structural identity so `destinationMain` branch
             // re-evaluations never tear down the screen's internal @State.
             .id(TodayNavSelection.calendar)
+            // Task 10: Month→Day drill breadcrumb. Observe scope changes on the
+            // @Observable CalendarViewModel. When the user taps a day from Month
+            // scope, scope transitions Month→Day; we record that and publish a
+            // detail crumb. Any exit from Day scope (user taps Week/Month in the
+            // segmented control) clears the flag and crumb.
+            .onChange(of: calendarViewModel.scope) { oldScope, newScope in
+                if oldScope == .month && newScope == .day {
+                    calendarDrilledFromMonth = true
+                } else if newScope != .day {
+                    calendarDrilledFromMonth = false
+                }
+                updateCalendarCrumb(viewModel: calendarViewModel)
+            }
+            // When anchor changes while drilled (user navigates to a different
+            // day), refresh the crumb label.
+            .onChange(of: calendarViewModel.anchor) { _, _ in
+                if calendarDrilledFromMonth {
+                    updateCalendarCrumb(viewModel: calendarViewModel)
+                }
+            }
+            .onAppear {
+                // onPopToRoot: "Calendar" ancestor in the breadcrumb → return
+                // to Month and clear the drill state.
+                navigator.onPopToRoot = {
+                    calendarViewModel.scope = .month
+                    // scope onChange fires and clears flag+crumb, but be explicit
+                    // to avoid a frame gap.
+                    calendarDrilledFromMonth = false
+                    navigator.detailCrumb = nil
+                }
+                // Re-derive crumb if returning to Calendar while still drilled.
+                updateCalendarCrumb(viewModel: calendarViewModel)
+            }
         } else {
             Color.clear
                 .onAppear {
@@ -71,4 +104,30 @@ extension ContentView {
             AnyView(SchedulingInspector(viewModel: viewModel))
         }
     }
+
+    // MARK: - Task 10: Month→Day breadcrumb helpers
+
+    /// Publishes or clears `navigator.detailCrumb` based on whether the user
+    /// is currently in a Month→Day drill. Terminal write — nothing observes
+    /// `detailCrumb` to write back to scope/anchor, so the update is loop-free.
+    func updateCalendarCrumb(viewModel: CalendarViewModel) {
+        if calendarDrilledFromMonth {
+            navigator.detailCrumb = NavCrumb(
+                id: "calday:\(viewModel.anchor.timeIntervalSince1970)",
+                label: Self.calendarCrumbFormatter.string(from: viewModel.anchor),
+                isLeaf: true
+            )
+        } else {
+            navigator.detailCrumb = nil
+        }
+    }
+
+    /// English UI rule: explicit en_US (system locale may be pl_PL), matching
+    /// the `LiquidToolbar` date formatter idiom. Format: "Sat, Jun 14".
+    static let calendarCrumbFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = "EEE, MMM d"
+        return formatter
+    }()
 }

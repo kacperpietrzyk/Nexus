@@ -53,6 +53,8 @@ struct NoteTreeLeaf: View {
 
 /// A recursive Library folder node using `DisclosureGroup`.
 /// Each folder shows its name, nested sub-folders, and leaf notes.
+/// Tapping the folder **name** selects it as a container (via `onSelectFolder`);
+/// the system disclosure chevron retains its own hit target for expansion.
 struct NoteFolderDisclosure<Menu: View>: View {
     let node: NoteTreeModel.FolderNode
     let selection: UUID?
@@ -68,6 +70,10 @@ struct NoteFolderDisclosure<Menu: View>: View {
     @ViewBuilder let noteMenu: (Note) -> Menu
     /// Optional multi-select model; when provided, each leaf gets `.selectable`.
     var selectionModel: SelectionModel<UUID>?
+    /// Called with the folder's full path when the folder name is tapped.
+    var onSelectFolder: ((String) -> Void)?
+    /// Returns `true` when the folder at the given path is the active container.
+    var isSelectedFolder: ((String) -> Bool)?
 
     var body: some View {
         DisclosureGroup(
@@ -85,7 +91,9 @@ struct NoteFolderDisclosure<Menu: View>: View {
                     onSelect: onSelect,
                     onTogglePin: onTogglePin,
                     noteMenu: noteMenu,
-                    selectionModel: selectionModel
+                    selectionModel: selectionModel,
+                    onSelectFolder: onSelectFolder,
+                    isSelectedFolder: isSelectedFolder
                 )
                 .padding(.leading, DS.Space.m)
             }
@@ -94,9 +102,18 @@ struct NoteFolderDisclosure<Menu: View>: View {
                     .padding(.leading, DS.Space.m)
             }
         } label: {
-            Label(node.name, systemImage: "folder")
-                .font(DS.FontToken.bodyStrong)
-                .foregroundStyle(DS.ColorToken.textPrimary)
+            HStack(spacing: DS.Space.xs) {
+                Label(node.name, systemImage: "folder")
+                    .font(DS.FontToken.bodyStrong)
+                    .foregroundStyle(
+                        (isSelectedFolder?(node.id) ?? false)
+                            ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary
+                    )
+                Spacer(minLength: 0)
+                NexusCount(value: node.totalNoteCount, font: NexusType.metaMono)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { onSelectFolder?(node.id) }
         }
     }
 

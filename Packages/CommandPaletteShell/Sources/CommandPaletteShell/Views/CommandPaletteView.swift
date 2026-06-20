@@ -49,7 +49,15 @@ public struct CommandPaletteView: View {
         .nexusOverlayEnter()
         .padding(.bottom, 120)
         .task { await reload(for: query) }
-        .onAppear { inputFocused = true }
+        .task {
+            // macOS: setting `@FocusState` in `.onAppear` races the window's
+            // first-responder assignment for a conditionally-inserted overlay —
+            // the field often loses, so ⌘K opens but the cursor isn't in the
+            // search box (you'd have to click it). A one-runloop hop lets the
+            // TextField win focus so the palette is keyboard-ready immediately.
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            inputFocused = true
+        }
         .onChange(of: query) { _, newQuery in
             selectedIndex = 0
             Task { await reload(for: newQuery) }

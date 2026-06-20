@@ -29,7 +29,13 @@ private let sidebarCornerRadius: CGFloat = 16
 struct LiquidSidebar: View {
     let selection: TodayNavSelection
     let inboxUnreadCount: Int
+    /// The UUID of the active saved filter, if any. Drives the selected state
+    /// on "Views" rows — set by the shell when `taskFilter == .savedFilter(id)`.
+    var activeSavedFilterID: UUID?
     let onNavigate: (TodayNavSelection) -> Void
+    /// Stages a deep link for a sidebar shortcut row (e.g. a project).
+    /// The host calls `navigator.open(_:deepLink:)` wrapped in animation.
+    let onDeepLink: (TodayNavSelection, DeepLinkTarget) -> Void
 
     @Query private var projects: [Project]
     @Query(sort: \SavedFilter.orderIndex) private var savedFilters: [SavedFilter]
@@ -88,11 +94,7 @@ struct LiquidSidebar: View {
                             project.name,
                             systemImage: nexusProjectGlyph(token: project.color, id: project.id)
                         ) {
-                            // No public project-selection seam on
-                            // `ProjectsRootView` (its `selectedProjectID` is
-                            // private @State), so this navigates to the
-                            // Projects destination without preselecting.
-                            onNavigate(.projects)
+                            onDeepLink(.projects, .project(project.id))
                         }
                     }
                 }
@@ -105,12 +107,10 @@ struct LiquidSidebar: View {
                     ForEach(visibleSavedFilters) { filter in
                         LiquidSidebarNavRow(
                             filter.name,
-                            systemImage: filter.icon
+                            systemImage: filter.icon,
+                            isSelected: filter.id == activeSavedFilterID
                         ) {
-                            // The Tasks destination's saved-filter selection
-                            // lives in TodayDashboard-internal state (no host
-                            // seam), so this routes to Tasks unfiltered.
-                            onNavigate(.tasks)
+                            onDeepLink(.tasks, .savedFilter(filter.id))
                         }
                     }
                 }
@@ -143,19 +143,12 @@ struct LiquidSidebar: View {
         .liquidGlass(.sidebar, radius: sidebarCornerRadius)
     }
 
+    /// Traffic-light clearance: reserves the 58 pt band where macOS traffic
+    /// lights overlap the sidebar top. The Settings icon was removed (Settings
+    /// is reachable via the pinned row and the footer avatar); the vertical
+    /// reservation must remain so content does not slide under the traffic lights.
     private var sidebarTopControl: some View {
-        HStack {
-            Spacer(minLength: 0)
-
-            LiquidIconButton(
-                systemImage: "slider.horizontal.3",
-                accessibilityLabel: "Open settings"
-            ) {
-                onNavigate(.settings)
-            }
-            .help("Open settings")
-        }
-        .frame(height: trafficLightClearance, alignment: .top)
+        Color.clear.frame(height: trafficLightClearance)
     }
 
     /// Real macOS account display name + an initials avatar; opens Settings.

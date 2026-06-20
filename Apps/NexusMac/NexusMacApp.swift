@@ -494,6 +494,18 @@ struct NexusMacApp: App {
             }
 
             CommandMenu("Navigate") {
+                Button("Back") {
+                    NotificationCenter.default.post(name: .nexusNavBack, object: nil)
+                }
+                .keyboardShortcut("[", modifiers: [.command])
+
+                Button("Forward") {
+                    NotificationCenter.default.post(name: .nexusNavForward, object: nil)
+                }
+                .keyboardShortcut("]", modifiers: [.command])
+
+                Divider()
+
                 Button("Go to Today") {
                     NotificationCenter.default.post(name: .nexusGoToToday, object: nil)
                 }
@@ -962,6 +974,8 @@ extension Notification.Name {
     static let nexusCompleteSelectedTask = Notification.Name("nexus.completeSelectedTask")
     static let nexusSnoozeSelectedTask = Notification.Name("nexus.snoozeSelectedTask")
     static let nexusToggleSelectedTaskFocus = Notification.Name("nexus.toggleSelectedTaskFocus")
+    static let nexusNavBack = Notification.Name("nexus.navBack")
+    static let nexusNavForward = Notification.Name("nexus.navForward")
 }
 
 /// Keeps the app alive when the main window is closed and reopens it on Dock click.
