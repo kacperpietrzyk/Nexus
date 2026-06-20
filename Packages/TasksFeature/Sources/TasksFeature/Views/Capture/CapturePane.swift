@@ -74,9 +74,17 @@ public struct CapturePane: View {
             #endif
         }
         .onAppear {
-            inputFocused = true
             ensureState()
             loadTemplates()
+        }
+        .task {
+            // macOS: setting `@FocusState` in `.onAppear` races the window's
+            // first-responder assignment for this conditionally-inserted overlay,
+            // so Quick Capture opens but the cursor isn't in the field (you'd
+            // have to click it). A one-runloop hop lets the field win focus so
+            // capture is keyboard-ready immediately. (Same fix as the palette.)
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            inputFocused = true
         }
         .onKeyPress(.escape) {
             cancel()
