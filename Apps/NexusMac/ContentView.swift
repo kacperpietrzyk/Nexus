@@ -185,7 +185,7 @@ struct ContentView: View {
                 navigate(to: .settings)
             }
             .onReceive(NotificationCenter.default.publisher(for: .nexusNavBack)) { _ in
-                withAnimation(DS.Motion.nav) { navigator.goBack() }
+                withAnimation(DS.Motion.nav) { navigator.back() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .nexusNavForward)) { _ in
                 withAnimation(DS.Motion.nav) { navigator.goForward() }
@@ -323,9 +323,9 @@ struct ContentView: View {
                     leading: { toolbarLeading },
                     onOpenCommandPalette: { commandPalettePresented = true },
                     onOpenCapture: openTaskCapture,
-                    canGoBack: navigator.canGoBack,
+                    canGoBack: navigator.canGoBackOrPopDetail,
                     canGoForward: navigator.canGoForward,
-                    onBack: { withAnimation(DS.Motion.nav) { navigator.goBack() } },
+                    onBack: { withAnimation(DS.Motion.nav) { navigator.back() } },
                     onForward: { withAnimation(DS.Motion.nav) { navigator.goForward() } }
                 )
             },

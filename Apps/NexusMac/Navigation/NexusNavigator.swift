@@ -51,6 +51,28 @@ final class NexusNavigator {
     var canGoBack: Bool { history.canGoBack }
     var canGoForward: Bool { history.canGoForward }
 
+    /// The visible back affordance (⌘[ / toolbar chevron) is enabled whenever
+    /// there is somewhere to go back to — either an open detail to close, or a
+    /// prior destination in history.
+    var canGoBackOrPopDetail: Bool { detailCrumb != nil || history.canGoBack }
+
+    // MARK: Back affordance
+
+    /// "Up one level": if a detail is open, close it (return the destination to
+    /// its root list) BEFORE traversing destination history. This matches the
+    /// user's mental model — pressing back inside a project/note/person detail
+    /// returns to that destination's grid/list, not to the previous destination.
+    /// Entering a detail (e.g. tapping a project card) is not always recorded in
+    /// history, so a plain `goBack()` would skip the grid; this closes the detail
+    /// first, then a second back traverses history normally.
+    func back() {
+        if detailCrumb != nil {
+            popToRoot()
+        } else {
+            goBack()
+        }
+    }
+
     // MARK: Navigation
 
     /// Switches to `destination`, optionally staging a deep link, and records the

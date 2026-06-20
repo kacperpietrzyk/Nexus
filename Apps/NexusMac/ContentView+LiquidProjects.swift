@@ -45,11 +45,23 @@ extension ContentView {
         .onChange(of: navigator.pendingDeepLink, initial: true) { _, link in
             if case .project(let pid)? = link {
                 liquidProjectsModel.selectedProjectID = pid
+                // `selectedProject` (and the execution feeds) are resolved from
+                // `selectedProjectID` only inside `reload()` — mutating the id
+                // alone leaves the screen on its previous state. Mirror the
+                // screen's own `select()`, which sets the id then reloads.
+                liquidProjectsModel.reload(modelContext: modelContext)
                 navigator.pendingDeepLink = nil
             }
         }
         .onAppear {
-            navigator.onPopToRoot = { liquidProjectsModel.selectedProjectID = nil }
+            // Breadcrumb "Projects" (popToRoot) must return to the grid. Setting
+            // the id alone won't: `selectedProject` is a stored property cleared
+            // only by `reload()` (→ `loadSelectedProject` sees a nil id). Reload
+            // after clearing so the screen actually drops back to the picker.
+            navigator.onPopToRoot = {
+                liquidProjectsModel.selectedProjectID = nil
+                liquidProjectsModel.reload(modelContext: modelContext)
+            }
         }
     }
 
