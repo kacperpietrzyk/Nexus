@@ -6,6 +6,49 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-20
+A sweeping interface pass across every module — Today, Calendar, Meetings, Projects,
+Tasks, Notes and navigation — plus a new knowledge graph, an activity feed in place of
+the old Inbox, and system-wide bulk actions. Most of the visual rework lands on the Mac
+app first.
+
+### Added
+- **Knowledge graph.** A reusable, interactive constellation graph that draws the
+  relationships between your notes, meetings, people and projects. Meetings and Notes
+  both render it — an ego-graph around the item you're viewing (concentric rings around a
+  focused center) and a force-directed view for the wider picture.
+- **Activity Feed.** The Inbox is reborn as an activity feed: AI/agent proposals and
+  meeting captures land here as a single chronological stream, with a one-tap bridge to
+  turn unscheduled items into tasks.
+- **Bulk actions, context menus, copy and undo** across Tasks, Inbox, Notes, People and
+  Meetings — multi-select, right-click menus, copy-to-clipboard, and undo for destructive
+  edits.
+
+### Changed
+- **An interface pass across every module** (most visible on the Mac app):
+  - **Today** — the Daily Brief now shows the canonical, synced note instead of an
+    in-memory regeneration, and the toolbar is decluttered.
+  - **Calendar** — multi-day events render as spanning bars, a single unified panel
+    replaces the old multi-column layout, the Month view is informative, and you can drag
+    a task onto a slot to schedule it.
+  - **Meetings** — the five-column layout collapses into one panel that hides what's
+    empty, with first-class speaker assignment and in-place rename, related notes and a
+    collision-safe mini-graph, and cleaner topic extraction.
+  - **Projects** — the picker, roadmap and pipeline surfaces are fed real data: key dates
+    become roadmap spans with markers, id-derived shapes, drag-to-stage in the pipeline,
+    header quick-edit, and Overview empty states.
+  - **Tasks** — a project pill on each row, a Group-by switch (project / date / priority),
+    a Classification card for tags and labels, and Pin-to-Today.
+  - **Notes** — a two-pane navigator with a document-style editor: focus-to-edit blocks,
+    a Notion-style drag gutter, inline note properties, and pinned/recent entry points.
+  - **Navigation** — a single clickable breadcrumb replaces seven inconsistent back
+    behaviors, with deep links, ⌘[ / ⌘] history, and a command palette.
+
+### Fixed
+- **Navigating the app no longer lags as data grows.** Today, Inbox and Tasks stopped
+  re-materializing their entire dataset on every navigation, and the longest lists are
+  now windowed, so moving around stays smooth on large libraries.
+
 ## [0.3.3] - 2026-06-16
 Adds on-device meeting summaries with manual recording, a local Obsidian vault
 importer, and back-datable MCP task creation; fixes device-tier model selection on
@@ -131,8 +174,11 @@ the app, alongside a Linear-inspired redesign and a broad correctness pass.
 - First TestFlight beta: tasks (quick capture ⌘N, Today, Inbox), Mac/iPhone/iPad/Watch,
   CloudKit sync, on-device AI assist, MCP external access (Mac).
 
-[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.3...HEAD
-[0.3.3]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.0...v0.3.3
+[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.3...v0.4.0
+[0.3.3]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/kacperpietrzyk/Nexus/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kacperpietrzyk/Nexus/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kacperpietrzyk/Nexus/releases/tag/v0.1.0
