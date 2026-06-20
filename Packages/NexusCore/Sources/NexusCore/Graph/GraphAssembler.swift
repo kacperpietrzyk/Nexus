@@ -1,5 +1,4 @@
 import Foundation
-import NexusCore
 
 /// Pure assembly of a `GraphSnapshot` from value-copied link rows + a resolved
 /// title index. Deterministic: identical inputs (in any order) produce an

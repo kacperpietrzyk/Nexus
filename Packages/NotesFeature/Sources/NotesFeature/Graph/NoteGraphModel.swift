@@ -4,8 +4,8 @@ import Observation
 import SwiftData
 
 /// Orchestrates the graph surface: pulls links/titles/seeds through injected
-/// providers, assembles the deterministic snapshot, owns the layout engine and
-/// the scope/filter/selection state. Rendering stays in `NoteGraphView`.
+/// providers, assembles the deterministic snapshot, and owns the scope/filter/
+/// selection state. Layout + rendering live in the shared `KnowledgeGraphView`.
 @MainActor
 @Observable
 public final class NoteGraphModel {
@@ -26,28 +26,22 @@ public final class NoteGraphModel {
     }
 
     public private(set) var snapshot: GraphSnapshot = .empty
-    public private(set) var engine: ForceLayoutEngine
     public private(set) var includedKinds: Set<ItemKind> = GraphAssembler.renderableKinds
     public private(set) var scope: GraphScope
     public private(set) var selectedNodeID: GraphNodeID?
 
-    public var isSettled: Bool { engine.isSettled }
     public var selectedNode: GraphNode? {
         snapshot.nodes.first { $0.nodeID == selectedNodeID }
     }
 
     @ObservationIgnored private let providers: Providers
-    @ObservationIgnored private let layoutSeed: UInt64
 
     public init(
         providers: Providers,
-        scope: GraphScope = .global,
-        layoutSeed: UInt64 = 0x4E58_4752_4150_4831
+        scope: GraphScope = .global
     ) {
         self.providers = providers
         self.scope = scope
-        self.layoutSeed = layoutSeed
-        self.engine = ForceLayoutEngine(snapshot: .empty, seed: layoutSeed)
         reload()
     }
 
@@ -88,7 +82,6 @@ public final class NoteGraphModel {
             includedKinds: includedKinds,
             scope: scope
         )
-        engine = ForceLayoutEngine(snapshot: snapshot, seed: layoutSeed)
         if let selectedNodeID, !snapshot.nodes.contains(where: { $0.nodeID == selectedNodeID }) {
             self.selectedNodeID = nil
         }
@@ -110,13 +103,5 @@ public final class NoteGraphModel {
 
     public func select(_ nodeID: GraphNodeID?) {
         selectedNodeID = nodeID
-    }
-
-    /// One display frame's simulation budget.
-    public func tick(substeps: Int = 4) {
-        guard !engine.isSettled else { return }
-        for _ in 0..<substeps where !engine.isSettled {
-            engine.step()
-        }
     }
 }

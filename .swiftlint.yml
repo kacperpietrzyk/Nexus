@@ -13,6 +13,7 @@ excluded:
   - Packages/*/build
   - Packages/*/Package.swift
   - Packages/NexusUI/Sources/NexusUI/Lab
+  - Packages/ForceSimulationVendor  # vendored third-party code (Grape/ForceSimulation, MIT); do not lint or reformat
 
 disabled_rules:
   - todo                       # TODO/FIXME OK at this stage

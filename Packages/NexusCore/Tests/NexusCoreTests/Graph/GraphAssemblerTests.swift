@@ -2,8 +2,6 @@ import Foundation
 import NexusCore
 import Testing
 
-@testable import NotesFeature
-
 @Suite("GraphAssembler - pure snapshot assembly")
 struct GraphAssemblerTests {
     private func uuid(_ n: Int) -> UUID {

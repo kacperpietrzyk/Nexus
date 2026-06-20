@@ -6,16 +6,27 @@ import SwiftUI
 
 #if os(macOS)
 
-/// Pill accent per linked-item kind — the spec's "kind pills" use the DS
-/// accent ramp; the mapping is fixed so a kind always reads the same color.
-private func kindColor(_ kind: ItemKind) -> Color {
-    switch kind {
-    case .note: return DS.ColorToken.accentAmber
-    case .task: return DS.ColorToken.accentBlue
-    case .project: return DS.ColorToken.accentPurple
-    case .person: return DS.ColorToken.accentGreen
-    case .meeting: return DS.ColorToken.accentCyan
-    default: return DS.ColorToken.statusNeutral
+/// Pill accent + glyph per linked-item kind. Delegates to the shared
+/// `KnowledgeGraphStyle.standard` so the Related chips, the graph nodes, and the
+/// Notes graph all read the same color/icon for a given kind.
+private func kindColor(_ kind: ItemKind) -> Color { KnowledgeGraphStyle.accent(for: kind) }
+
+private func kindIcon(_ kind: ItemKind) -> String { KnowledgeGraphStyle.glyph(for: kind) }
+
+// MARK: - Related chips grouping helper
+
+/// Groups knowledge-link items (persons excluded) by kind for the panel.
+/// Display order: task, note, project, meeting.
+enum RelatedChips {
+    static let order: [ItemKind] = [.task, .note, .project, .meeting]
+
+    static func groups(
+        _ items: [LiquidMeetingsModel.LinkedItem]
+    ) -> [(kind: ItemKind, items: [LiquidMeetingsModel.LinkedItem])] {
+        order.compactMap { kind in
+            let matches = items.filter { $0.kind == kind }
+            return matches.isEmpty ? nil : (kind, matches)
+        }
     }
 }
 
@@ -128,24 +139,27 @@ struct KnowledgeSections {
 
     // MARK: - Related section (empty-hides)
 
-    /// Merged "Related notes" list + Backlinks graph under one "Related" card.
-    /// Hidden entirely when both are empty (empty-hides: no card rendered).
+    /// Related notes list + grouped chips + knowledge graph sheet, under one
+    /// "Related" card. Hidden entirely when both notes and chips are empty.
     @ViewBuilder
     var relatedSection: some View {
         let hasRelatedNotes = !model.relatedNotes.isEmpty
-        let hasBacklinks = !model.graphItems.isEmpty
-        if hasRelatedNotes || hasBacklinks {
+        let chips = RelatedChips.groups(model.graphItems)
+        if hasRelatedNotes || !chips.isEmpty {
             LiquidGlassCard("Related") {
-                VStack(spacing: DS.Space.m) {
-                    if hasRelatedNotes {
-                        relatedNotesList
-                    }
-                    if hasBacklinks {
-                        if hasRelatedNotes {
-                            Divider()
-                                .overlay(DS.ColorToken.strokeHairline)
-                        }
-                        backlinksGraph
+                VStack(alignment: .leading, spacing: DS.Space.m) {
+                    if hasRelatedNotes { relatedNotesList }
+                    if !chips.isEmpty {
+                        if hasRelatedNotes { Divider().overlay(DS.ColorToken.strokeHairline) }
+                        RelatedKnowledgeSection(
+                            chips: chips,
+                            meeting: model.meeting,
+                            composition: composition,
+                            navigation: navigation,
+                            router: router,
+                            model: model,
+                            onOpen: { open($0) }
+                        )
                     }
                 }
             }
@@ -174,17 +188,6 @@ struct KnowledgeSections {
                 }
                 .buttonStyle(.plain)
             }
-        }
-    }
-
-    @ViewBuilder
-    private var backlinksGraph: some View {
-        if let meeting = model.meeting {
-            BacklinksGraph(
-                centerTitle: meeting.title,
-                nodes: model.graphItems,
-                onTap: { open($0) }
-            )
         }
     }
 
@@ -227,6 +230,7 @@ struct KnowledgeSections {
             break
         }
     }
+
 }
 
 // MARK: - Placeholder check (nonisolated copy for use in synchronous contexts)
@@ -332,230 +336,99 @@ struct PersonRow: Identifiable {
     }
 }
 
-/// Collision-safe backlinks graph (spec §Backlinks).
-///
-/// In-panel **mini** mode: capped at `miniMaxNodes` peripheral nodes; positions
-/// computed by `placeNodes(...)` which guarantees no two pill rects overlap and
-/// all stay within the card bounds.  The centre node is rendered as a small
-/// accent dot to avoid overlapping the peripheral pills.  Tapping any pill
-/// navigates directly.  Tapping the "expand" chevron opens the full graph in a
-/// popover where all nodes + full-width labels are shown.
-///
-/// **Full** mode (inside the popover): all nodes, larger canvas, no node cap.
-private struct BacklinksGraph: View {
+// MARK: - Related knowledge section (real View — owns sheet state)
 
-    // MARK: Configuration
+/// A real SwiftUI View so `@State private var showingGraph` persists across
+/// `KnowledgeSections` re-instantiation (the parent struct has no `body` and is
+/// recreated each render). Renders grouped chips and an "Open graph" button that
+/// presents the full `KnowledgeGraphView` sheet.
+private struct RelatedKnowledgeSection: View {
+    let chips: [(kind: ItemKind, items: [LiquidMeetingsModel.LinkedItem])]
+    let meeting: Meeting?
+    let composition: MeetingsComposition
+    let navigation: LiquidMeetingsNavigation
+    let router: MeetingNavigationRouter
+    let model: LiquidMeetingsModel
+    let onOpen: (LiquidMeetingsModel.LinkedItem) -> Void
 
-    /// Pill dimensions used by the layout helper for the mini-graph.
-    private static let miniPillSize = CGSize(width: 88, height: 22)
-    /// Maximum number of peripheral nodes shown in the mini-graph.
-    private static let miniMaxNodes = 5
-    /// Height of the mini-graph card.
-    private static let miniHeight: CGFloat = 190
-    /// Popover canvas size.
-    /// Keep in sync with BacklinksGraphLayoutTests.popooverCanvasPlacesNodesOn2DRingNotColumn
-    /// (n=8, 104×24 pills must ring-fit: minFromSpacing≈144.7 ≤ maxRadius=186).
-    private static let fullSize = CGSize(width: 480, height: 440)
-    /// Pill dimensions for the full graph in the popover.
-    /// Keep in sync with BacklinksGraphLayoutTests.popooverCanvasPlacesNodesOn2DRingNotColumn
-    private static let fullPillSize = CGSize(width: 104, height: 24)
-
-    let centerTitle: String
-    let nodes: [LiquidMeetingsModel.LinkedItem]
-    let onTap: (LiquidMeetingsModel.LinkedItem) -> Void
-
-    @State private var showingFullGraph = false
-
-    // MARK: - Body
+    @State private var showingGraph = false
 
     var body: some View {
-        miniGraph
-            .popover(isPresented: $showingFullGraph) {
-                fullGraphPopover
-            }
-    }
-
-    // MARK: - Mini-graph (collision-safe)
-
-    @ViewBuilder
-    private var miniGraph: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let rects = placeNodes(
-                nodes.count,
-                in: size,
-                pillSize: Self.miniPillSize,
-                maxNodes: Self.miniMaxNodes
-            )
-            // Only render as many nodes as we placed rects for.
-            let visibleNodes = Array(nodes.prefix(rects.count))
-
-            ZStack {
-                // Lines from centre to each peripheral node centre.
-                Canvas { context, _ in
-                    for rect in rects {
-                        let nodeCenter = CGPoint(x: rect.midX, y: rect.midY)
-                        var path = Path()
-                        path.move(to: center)
-                        path.addLine(to: nodeCenter)
-                        context.stroke(
-                            path, with: .color(DS.ColorToken.strokeStrong), lineWidth: 1)
-                    }
-                }
-
-                // Peripheral node pills.
-                ForEach(Array(zip(visibleNodes, rects)), id: \.0.id) { node, rect in
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            ForEach(chips, id: \.kind) { group in
+                Text(group.kind.displayName.uppercased())
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                ForEach(group.items) { item in
                     Button {
-                        onTap(node)
+                        onOpen(item)
                     } label: {
-                        nodePill(
-                            node.title,
-                            color: kindColor(node.kind),
-                            emphasized: false,
-                            pillSize: Self.miniPillSize
-                        )
+                        HStack(spacing: DS.Space.s) {
+                            Image(systemName: kindIcon(item.kind))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(kindColor(item.kind))
+                            Text(item.title)
+                                .font(DS.FontToken.body)
+                                .foregroundStyle(DS.ColorToken.textSecondary)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .position(CGPoint(x: rect.midX, y: rect.midY))
-                    .accessibilityLabel("\(node.kind.displayName): \(node.title)")
                 }
+            }
 
-                // Centre node — small accent dot to avoid pill-on-pill collision.
-                Circle()
-                    .fill(DS.ColorToken.accentPrimary)
-                    .frame(width: 10, height: 10)
-                    .overlay {
-                        Circle().stroke(DS.ColorToken.accentPrimary.opacity(0.4), lineWidth: 2)
-                    }
-                    .position(center)
-                    .accessibilityLabel(centerTitle)
-                    .accessibilityHint("Meeting centre node")
-
-                // Expand button — bottom-trailing corner.
+            if let meeting {
                 Button {
-                    showingFullGraph = true
+                    showingGraph = true
                 } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(DS.ColorToken.textMuted)
-                        .padding(4)
-                        .background {
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(DS.ColorToken.glassStrong)
-                        }
+                    Label("Open graph", systemImage: "point.3.connected.trianglepath.dotted")
+                        .font(DS.FontToken.caption)
                 }
                 .buttonStyle(.plain)
-                .position(
-                    CGPoint(x: size.width - 14, y: size.height - 14)
+                .foregroundStyle(DS.ColorToken.accentPrimary)
+                .knowledgeGraphSheet(
+                    isPresented: $showingGraph,
+                    rootID: GraphNodeID(.meeting, meeting.id),
+                    style: KnowledgeGraphStyle(color: kindColor, icon: kindIcon),
+                    header: meeting.title,
+                    initialDepth: 1, maxDepth: 2,
+                    snapshotForDepth: { depth in
+                        model.knowledgeGraphSnapshot(
+                            composition: composition, depth: depth,
+                            isPlaceholder: { id, name in
+                                id.kind == .person && isPlaceholderName(name)
+                            }
+                        )
+                    },
+                    onSelect: { openGraphNode($0) }
                 )
-                .accessibilityLabel("Expand backlinks graph")
             }
         }
-        .frame(height: Self.miniHeight)
     }
 
-    // MARK: - Full-graph popover
-
-    private var fullGraphPopover: some View {
-        VStack(alignment: .leading, spacing: DS.Space.s) {
-            HStack {
-                Text("Backlinks")
-                    .font(DS.FontToken.caption.weight(.semibold))
-                    .foregroundStyle(DS.ColorToken.textSecondary)
-                Spacer(minLength: 0)
-                Button {
-                    showingFullGraph = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(DS.ColorToken.textMuted)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close")
-            }
-            .padding(.bottom, DS.Space.xxs)
-
-            fullGraphCanvas
+    private func openGraphNode(_ node: GraphNodeID) {
+        switch node.kind {
+        case .task:
+            let id = node.id
+            var descriptor = FetchDescriptor<TaskItem>(
+                predicate: #Predicate { $0.id == id && $0.deletedAt == nil })
+            descriptor.fetchLimit = 1
+            guard let task = try? composition.meetingRepository.context.fetch(descriptor).first
+            else { return }
+            navigation.openTask(task)
+        case .note:
+            navigation.openNotes()
+        case .project:
+            navigation.openProject(node.id)
+        case .person:
+            navigation.openPeople()
+        case .meeting:
+            router.navigate(to: node.id)
+        default:
+            break
         }
-        .padding(DS.Space.m)
-        .frame(width: Self.fullSize.width)
-    }
-
-    @ViewBuilder
-    private var fullGraphCanvas: some View {
-        let size = Self.fullSize
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let rects = placeNodes(
-            nodes.count,
-            in: size,
-            pillSize: Self.fullPillSize,
-            maxNodes: nodes.count,  // show all in the full view
-            centerClear: Self.fullPillSize  // reserve space for the centre pill
-        )
-        let visibleNodes = Array(nodes.prefix(rects.count))
-
-        ZStack {
-            Canvas { context, _ in
-                for rect in rects {
-                    let nodeCenter = CGPoint(x: rect.midX, y: rect.midY)
-                    var path = Path()
-                    path.move(to: center)
-                    path.addLine(to: nodeCenter)
-                    context.stroke(
-                        path, with: .color(DS.ColorToken.strokeStrong), lineWidth: 1)
-                }
-            }
-
-            ForEach(Array(zip(visibleNodes, rects)), id: \.0.id) { node, rect in
-                Button {
-                    onTap(node)
-                    showingFullGraph = false
-                } label: {
-                    nodePill(
-                        node.title,
-                        color: kindColor(node.kind),
-                        emphasized: false,
-                        pillSize: Self.fullPillSize
-                    )
-                }
-                .buttonStyle(.plain)
-                .position(CGPoint(x: rect.midX, y: rect.midY))
-                .accessibilityLabel("\(node.kind.displayName): \(node.title)")
-            }
-
-            // Centre pill — full label, room in the popover.
-            nodePill(
-                centerTitle,
-                color: DS.ColorToken.accentPrimary,
-                emphasized: true,
-                pillSize: Self.fullPillSize
-            )
-            .position(center)
-        }
-        .frame(width: size.width, height: size.height)
-    }
-
-    // MARK: - Pill
-
-    private func nodePill(
-        _ title: String, color: Color, emphasized: Bool, pillSize: CGSize
-    ) -> some View {
-        Text(title)
-            .font(emphasized ? DS.FontToken.caption.weight(.semibold) : DS.FontToken.caption)
-            .foregroundStyle(
-                emphasized ? DS.ColorToken.textPrimary : DS.ColorToken.textSecondary
-            )
-            .lineLimit(1)
-            .padding(.horizontal, DS.Space.s)
-            .frame(width: pillSize.width, height: pillSize.height)
-            .background {
-                Capsule(style: .continuous).fill(DS.ColorToken.glassStrong)
-            }
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(color.opacity(emphasized ? 0.6 : 0.35), lineWidth: 1)
-            }
     }
 }
 #endif

@@ -15,6 +15,7 @@ let package = Package(
         .package(path: "../NexusCore"),
         .package(path: "../NexusAI"),
         .package(path: "../NexusAgentTools"),
+        .package(path: "../ForceSimulationVendor"),
     ],
     targets: [
         .target(
@@ -25,6 +26,11 @@ let package = Package(
                 .product(
                     name: "NexusAgentTools",
                     package: "NexusAgentTools",
+                    condition: .when(platforms: [.macOS, .iOS])
+                ),
+                .product(
+                    name: "ForceSimulation",
+                    package: "ForceSimulationVendor",
                     condition: .when(platforms: [.macOS, .iOS])
                 ),
             ],

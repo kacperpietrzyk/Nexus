@@ -31,22 +31,20 @@ struct NoteGraphModelTests {
         )
     }
 
-    @Test("init loads the snapshot and primes the engine")
+    @Test("init loads the snapshot")
     func initialLoad() {
         let model = makeModel()
         #expect(model.snapshot.nodes.count == 4)
         #expect(model.snapshot.edges.count == 2)
-        #expect(model.engine.nodeIDs == model.snapshot.nodes.map(\.nodeID))
-        #expect(!model.isSettled)
     }
 
-    @Test("toggling a kind off removes its nodes and restarts layout")
+    @Test("toggling a kind off removes its nodes and rebuilds the snapshot")
     func toggleKind() {
         let model = makeModel()
         model.toggle(.task)
         #expect(!model.includedKinds.contains(.task))
         #expect(model.snapshot.nodes.allSatisfy { $0.nodeID.kind == .note })
-        #expect(model.engine.nodeIDs.count == 3)
+        #expect(model.snapshot.nodes.count == 3)
 
         model.toggle(.task)
         #expect(model.snapshot.nodes.count == 4)
@@ -58,21 +56,6 @@ struct NoteGraphModelTests {
         #expect(model.snapshot.nodes.count == 3)
         model.setScope(.global)
         #expect(model.snapshot.nodes.count == 4)
-    }
-
-    @Test("tick advances the simulation toward settle")
-    func tickSettles() {
-        let model = makeModel()
-        let before = model.engine.stepCount
-        model.tick()
-        #expect(model.engine.stepCount > before)
-
-        var budget = 2000
-        while !model.isSettled && budget > 0 {
-            model.tick()
-            budget -= 1
-        }
-        #expect(model.isSettled)
     }
 
     @Test("selection resolves a node and survives only while the node exists")
