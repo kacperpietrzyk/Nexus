@@ -30,6 +30,11 @@ public struct PersonProfileView: View {
     @Environment(\.dismiss) private var dismiss
 
     let personID: UUID
+    /// macOS: the shell drives navigation via a plain `path` array (no
+    /// `NavigationStack`), so `@Environment(\.dismiss)` can't pop. The list
+    /// passes a closure to clear the path after a delete. `nil` (iOS) falls
+    /// back to `dismiss()`.
+    private let onClose: (() -> Void)?
 
     @State private var person: Person?
     @State private var meetingRows: [any Linkable] = []
@@ -40,8 +45,9 @@ public struct PersonProfileView: View {
     @State private var deleteConfirmPresented = false
     @State private var loadError: String?
 
-    public init(personID: UUID) {
+    public init(personID: UUID, onClose: (() -> Void)? = nil) {
         self.personID = personID
+        self.onClose = onClose
     }
 
     public var body: some View {
@@ -203,7 +209,7 @@ public struct PersonProfileView: View {
     private func deletePerson() {
         guard let personRepository, let person else { return }
         try? personRepository.softDelete(person)
-        dismiss()
+        if let onClose { onClose() } else { dismiss() }
     }
 
     @ViewBuilder

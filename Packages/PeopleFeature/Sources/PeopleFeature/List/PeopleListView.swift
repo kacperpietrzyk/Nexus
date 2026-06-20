@@ -76,40 +76,71 @@ public struct PeopleListView: View {
     }
 
     public var body: some View {
+        #if os(macOS)
+        macOSBody
+        #else
         NavigationStack(path: pathBinding) {
-            platformContent
+            listContent
                 .navigationDestination(for: UUID.self) { id in
                     PersonProfileView(personID: id)
                 }
-                .alert(
-                    "Couldn't add person",
-                    isPresented: Binding(
-                        get: { newPersonError != nil },
-                        set: { if !$0 { newPersonError = nil } }
-                    )
-                ) {
-                    Button("OK", role: .cancel) { newPersonError = nil }
-                } message: {
-                    Text(newPersonError ?? "")
-                }
-                .task(id: people.count) { reloadMeetingCounts() }
-                // Global ⌘A + palette "Select All Items": select every person.
-                .selectAllCommandTarget(in: selection, ids: people.map(\.id))
-                .onReceive(NotificationCenter.default.publisher(for: .nexusSelectAllActiveSurface)) { _ in
-                    selection.enterSelection()
-                    selection.selectAll(people.map(\.id))
-                }
-                #if os(macOS)
-            // Publish the breadcrumb leaf for the shell: deepest path id +
-            // the person's displayName, or `(nil, nil)` at root.
-            .onChange(of: path, initial: true) { _, newPath in
-                let lastID = newPath.last
-                let name = lastID.flatMap { id in people.first(where: { $0.id == id })?.displayName }
-                onActivePersonChange?(lastID, (name?.isEmpty ?? true) ? nil : name)
+        }
+        #endif
+    }
+
+    /// The people list plus its shared list-scoped modifiers (add-person alert,
+    /// meeting-count load, Select-All). Used as the `NavigationStack` root on iOS
+    /// and as the list branch of the macOS swap.
+    private var listContent: some View {
+        platformContent
+            .alert(
+                "Couldn't add person",
+                isPresented: Binding(
+                    get: { newPersonError != nil },
+                    set: { if !$0 { newPersonError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { newPersonError = nil }
+            } message: {
+                Text(newPersonError ?? "")
             }
-                #endif
+            .task(id: people.count) { reloadMeetingCounts() }
+            // Global ⌘A + palette "Select All Items": select every person.
+            .selectAllCommandTarget(in: selection, ids: people.map(\.id))
+            .onReceive(NotificationCenter.default.publisher(for: .nexusSelectAllActiveSurface)) { _ in
+                selection.enterSelection()
+                selection.selectAll(people.map(\.id))
+            }
+    }
+
+    #if os(macOS)
+    /// macOS: no `NavigationStack`. Pushing a profile promotes the stack's auto
+    /// back-chevron into the window toolbar, which collapses into the
+    /// traffic-light zone under `.hiddenTitleBar` and shifts the layout. The
+    /// shell breadcrumb is the back affordance, so the detail is a plain
+    /// conditional swap on `path` (open = `path.append`, back = the shell clears
+    /// `path`; a delete pops one level via `onClose`).
+    private var macOSBody: some View {
+        Group {
+            if let activeID = path.last {
+                PersonProfileView(
+                    personID: activeID,
+                    onClose: { if !path.isEmpty { path.removeLast() } }
+                )
+            } else {
+                listContent
+            }
+        }
+        // Publish the breadcrumb leaf for the shell: deepest path id + the
+        // person's displayName, or `(nil, nil)` at root. Lives on the container
+        // so it fires in both the list and detail states.
+        .onChange(of: path, initial: true) { _, newPath in
+            let lastID = newPath.last
+            let name = lastID.flatMap { id in people.first(where: { $0.id == id })?.displayName }
+            onActivePersonChange?(lastID, (name?.isEmpty ?? true) ? nil : name)
         }
     }
+    #endif
 
     // Platform-specific views are in extensions below (macOS / iOS).
 

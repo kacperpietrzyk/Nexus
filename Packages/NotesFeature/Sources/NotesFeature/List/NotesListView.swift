@@ -265,21 +265,19 @@ public struct NotesListView: View {
                     )
                     .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
 
-                    NavigationStack(path: pathBinding) {
-                        NoteListPane(
-                            container: selectedContainer,
-                            tree: noteTree,
-                            allNotes: notes,
-                            backlinkCounts: backlinkCounts,
-                            onOpenNote: { path.append($0) },
-                            onDeleteNote: { deleteNote($0) },
-                            extraContextMenu: { note in
-                                AnyView(moveToFolderMenu(for: note))
-                            }
-                        )
-                        .navigationDestination(for: UUID.self) { id in
+                    // macOS: no `NavigationStack`. Pushing a note promotes the
+                    // stack's auto back-chevron into the window toolbar, which
+                    // collapses into the traffic-light zone under `.hiddenTitleBar`
+                    // AND shifts the whole layout down (Image #2/#3). The shell
+                    // breadcrumb is the back affordance, so the right pane is a
+                    // plain conditional swap on `path`: open = `path.append`,
+                    // back = the shell clears `path` (popToRoot). Same
+                    // list-replaced-by-editor behaviour the push had, minus the
+                    // chevron.
+                    Group {
+                        if let activeID = path.last {
                             NoteDetailLoader(
-                                noteID: id,
+                                noteID: activeID,
                                 onOpenNote: { path.append($0) },
                                 onOpenGraph: { noteID in
                                     path.removeAll()
@@ -288,9 +286,21 @@ public struct NotesListView: View {
                                             center: GraphNodeID(.note, noteID), depth: 1))
                                 }
                             )
+                        } else {
+                            NoteListPane(
+                                container: selectedContainer,
+                                tree: noteTree,
+                                allNotes: notes,
+                                backlinkCounts: backlinkCounts,
+                                onOpenNote: { path.append($0) },
+                                onDeleteNote: { deleteNote($0) },
+                                extraContextMenu: { note in
+                                    AnyView(moveToFolderMenu(for: note))
+                                }
+                            )
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
