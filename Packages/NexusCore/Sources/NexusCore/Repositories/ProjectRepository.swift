@@ -174,6 +174,19 @@ public final class ProjectRepository {
         return try context.fetch(descriptor)
     }
 
+    /// Returns all non-deleted projects. When `includeArchived` is false this is
+    /// identical to `allActive()` (archived also excluded). When true, archived
+    /// projects are included but soft-deleted ones remain hidden — callers that need
+    /// deleted-project fallout should use `orphanedTasks()` on the task repository.
+    public func all(includeArchived: Bool) throws -> [Project] {
+        guard includeArchived else { return try allActive() }
+        let descriptor = FetchDescriptor<Project>(
+            predicate: #Predicate { project in project.deletedAt == nil },
+            sortBy: [SortDescriptor(\.name)]
+        )
+        return try context.fetch(descriptor)
+    }
+
     /// Case-insensitive lookup of an active project by NL-capture token
     /// (`@project` in quick add). Two-pass resolution: an exact lowercased-name
     /// match always wins over a space-stripped match (so `@ABC` prefers project

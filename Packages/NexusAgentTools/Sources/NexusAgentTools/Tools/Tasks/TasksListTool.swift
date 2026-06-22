@@ -11,8 +11,9 @@ public struct TasksListTool: AgentTool {
             "filter": .object(
                 properties: [
                     "bucket": .string(
-                        enumValues: ["today", "upcoming", "inbox", "all"],
-                        description: "Task bucket to list. Defaults to all."
+                        enumValues: ["today", "upcoming", "inbox", "all", "unfiled"],
+                        description: "Task bucket to list. Defaults to all. "
+                            + "unfiled returns live tasks with no project assigned (open, done, and snoozed — not soft-deleted)."
                     ),
                     "state": .string(
                         enumValues: ["open", "done", "any"],
@@ -102,8 +103,19 @@ public struct TasksListTool: AgentTool {
         // query paths already apply this; the direct SwiftData fetch here did not,
         // which is why every task was returned twice over MCP.
         var tasks = try context.modelContext.context.fetch(descriptor).dedupedByID()
+
+        // Orphan exclusion: for open/done states, drop tasks whose project was
+        // soft-deleted. state=any's contract ("includes deleted rows") surfaces
+        // orphans so agents can diagnose them — use tasks.orphaned for a targeted
+        // query. The live-ID set is cheap (one fetch over Project rows).
+        let liveIDs: Set<UUID>? =
+            (state != .any) ? try context.taskRepository.repository.liveProjectIDs() : nil
+
         tasks = tasks.filter { task in
-            matches(task, state: state)
+            // unfiled bypasses the normal state predicate: it returns live tasks
+            // (deletedAt == nil) at any status (open/done/snoozed). Using state=any
+            // would also surface soft-deleted rows, which is not the intent.
+            (bucket == .unfiled ? task.deletedAt == nil : matches(task, state: state))
                 && matches(task, bucket: bucket, startOfTomorrow: startOfTomorrow)
                 && matches(task, tag: tag)
                 && matches(task, projectID: projectID)
@@ -112,6 +124,7 @@ public struct TasksListTool: AgentTool {
                 && matchesDeadlineWithin(task, days: deadlineWithinDays, now: now)
                 && matchesPriorityAtLeast(task, floor: priorityAtLeast)
                 && (includeTemplates || !task.isTemplate)
+                && isNotOrphaned(task, liveProjectIDs: liveIDs)
         }
         tasks.sort { lhs, rhs in
             compare(lhs, rhs, sort: sort)
@@ -132,6 +145,7 @@ public struct TasksListTool: AgentTool {
         case upcoming
         case inbox
         case all
+        case unfiled
     }
 
     private enum State: String {
@@ -169,6 +183,8 @@ public struct TasksListTool: AgentTool {
             return task.dueAt == nil
         case .all:
             return true
+        case .unfiled:
+            return task.projectID == nil
         }
     }
 
@@ -206,6 +222,16 @@ public struct TasksListTool: AgentTool {
     private func matchesPriorityAtLeast(_ task: TaskItem, floor: TaskPriority?) -> Bool {
         guard let floor else { return true }
         return task.priority.rawValue >= floor.rawValue
+    }
+
+    /// Returns true when the task is not an orphan. A task is orphaned when it
+    /// references a project that no longer exists (deleted or missing). When
+    /// `liveProjectIDs` is nil (state=any) orphans are surfaced — callers that
+    /// need a targeted orphan query should use `tasks.orphaned` instead.
+    private func isNotOrphaned(_ task: TaskItem, liveProjectIDs: Set<UUID>?) -> Bool {
+        guard let liveIDs = liveProjectIDs else { return true }
+        guard let pid = task.projectID else { return true }
+        return liveIDs.contains(pid)
     }
 
     /// Maps an optional MCP priority integer (1=high … 4=none) to a `TaskPriority`.
@@ -247,11 +273,24 @@ public struct TasksListTool: AgentTool {
             }
             return tieBreak(lhs, rhs)
         case .created:
-            if lhs.createdAt != rhs.createdAt {
-                return lhs.createdAt > rhs.createdAt
+            // Coalesce occurredAt ?? createdAt so a back-dated event date drives
+            // chronology (issue #9). The fallthrough tieBreak intentionally stays
+            // on raw createdAt — it is shared by due/priority sorts and must not
+            // change their tiebreaking; a deterministic id tiebreak still resolves
+            // equal event dates.
+            let lhsEvent = eventDate(lhs)
+            let rhsEvent = eventDate(rhs)
+            if lhsEvent != rhsEvent {
+                return lhsEvent > rhsEvent
             }
             return tieBreak(lhs, rhs)
         }
+    }
+
+    /// Event date for chronology sorting: the dedicated `occurredAt` when set,
+    /// otherwise the record-creation `createdAt`. Read-path only — never mutates.
+    private func eventDate(_ task: TaskItem) -> Date {
+        task.occurredAt ?? task.createdAt
     }
 
     private func tieBreak(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {

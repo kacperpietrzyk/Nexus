@@ -8,6 +8,8 @@ public enum NexusAgentToolsExtras {
         [
             TasksCreateFromTextTool(),
             TasksDailySummaryTool(),
+            BatchBeginTool(),
+            BatchEndTool(),
         ]
     }
 }

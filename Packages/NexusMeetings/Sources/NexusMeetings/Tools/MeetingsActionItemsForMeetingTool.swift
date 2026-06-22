@@ -45,6 +45,7 @@ public struct MeetingsActionItemsForMeetingTool: AgentTool {
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
         let tasks = try context.fetch(descriptor)
+            .dedupedByID()
             .filter { taskIDs.contains($0.id) }
             .map(MeetingTaskSnapshotDTO.init(task:))
         return try MeetingsToolJSON.encode(["tasks": tasks])

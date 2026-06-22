@@ -5,7 +5,11 @@ import SwiftData
 
 public struct AgentLinkItemsTool: MutatingAgentTool {
     public let name = "agent.link_items"
-    public let description = "Create a Link between two Nexus items."
+    public let description =
+        "Create a directed Link between two Nexus items. Direction is FROM source → TO target: "
+        + "`fromKind`/`fromID` is the source endpoint and `toKind`/`toID` is the target. "
+        + "Use `kind: child` only for task→task subtask hierarchy. "
+        + "Idempotent (findOrCreate)."
     public let inputSchema: JSONSchema = AgentLinkItemsArguments.inputSchema
 
     private let modelContext: ModelContextRef
@@ -129,17 +133,18 @@ enum AgentLinkItemsArguments {
         properties: [
             "fromKind": .string(
                 enumValues: ItemKind.allCases.map(\.rawValue),
-                description: "Source item kind."
+                description: "Source (origin) item kind. The link runs FROM this endpoint."
             ),
-            "fromID": .string(description: "Source item UUID."),
+            "fromID": .string(description: "Source (origin) item UUID."),
             "toKind": .string(
                 enumValues: ItemKind.allCases.map(\.rawValue),
-                description: "Target item kind."
+                description: "Target (destination) item kind. The link points TO this endpoint."
             ),
-            "toID": .string(description: "Target item UUID."),
+            "toID": .string(description: "Target (destination) item UUID."),
             "linkKind": .string(
                 enumValues: LinkKind.allCases.map(\.rawValue),
-                description: "Link relationship kind."
+                description:
+                    "Link relationship kind. `child` is reserved for task→task subtask hierarchy only."
             ),
             "order": .integer(description: "Optional ordering value."),
         ],

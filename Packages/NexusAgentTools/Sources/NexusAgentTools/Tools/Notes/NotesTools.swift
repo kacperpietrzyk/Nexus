@@ -292,13 +292,14 @@ public struct NotesDeleteTool: AgentTool {
 public struct NotesLinkTool: AgentTool {
     public let name = "note.link"
     public let description =
-        "Creates an explicit graph link from a note to a target item. For checkbox→task, embed, or "
+        "Creates a directed graph link FROM a note TO a target item. The note is always the source "
+        + "endpoint; `target_id`/`target_kind` is the destination. For checkbox→task, embed, or "
         + "wikilink relationships, put them in the note body via note.update instead (those are derived "
         + "from content). Idempotent."
     public let inputSchema: JSONSchema = .object(
         properties: [
-            "note_id": .string(description: "Source note UUID."),
-            "target_id": .string(description: "Target item UUID."),
+            "note_id": .string(description: "Source note UUID (the FROM endpoint)."),
+            "target_id": .string(description: "Target item UUID (the TO endpoint)."),
             "target_kind": .string(
                 enumValues: ItemKind.allCases.map(\.rawValue),
                 description: "Target item kind, e.g. task | project | note | meeting."

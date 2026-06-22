@@ -60,6 +60,12 @@ import SwiftData
 ///   agent proposals awaiting user confirmation — stored as encoded JSON so the confirm
 ///   flow survives a relaunch. Synced via CloudKit private DB; no `@Attribute(.unique)`
 ///   per CloudKit constraints). Pure additive — no data move, no backfill.
+///   The additive optional `TaskItem.occurredAt` (a dedicated event date so
+///   back-dating stops overloading `createdAt`) ALSO rides V17 with NO version
+///   bump — SwiftData lightweight inference adds the column automatically, exactly
+///   like the `isPinned`/`pinnedAt` precedent in V15 above. Existing rows stay nil
+///   (NO backfill — that would be a CloudKit write-storm); MCP read/sort paths
+///   coalesce `occurredAt ?? createdAt` at read time.
 ///
 /// WHY the body -> Note move is NOT a `.custom` migration stage (a deliberate
 /// deviation from the spec's "custom stage" wording, forced by this codebase's

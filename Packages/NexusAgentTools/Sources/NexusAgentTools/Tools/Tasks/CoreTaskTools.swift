@@ -91,6 +91,7 @@ public enum CoreTaskTools {
         [
             TasksGetTool(),
             TasksListTool(),
+            TasksOrphanedTool(),
             TasksSearchTool(),
             TasksCreateTool(),
             TasksCreateIdempotentTool(),
@@ -101,6 +102,7 @@ public enum CoreTaskTools {
             TasksSetRemindersTool(),
             TasksReorderTool(),
             TasksDeleteTool(),
+            TasksMergeTool(),
             TasksInstantiateTemplateTool(),
             CommentsListTool(),
             CommentsAddTool(),
@@ -151,6 +153,7 @@ public enum CoreTaskTools {
             ProjectsSetKeyDateTool(),
             ProjectsListKeyDatesTool(),
             ProjectsDeleteKeyDateTool(),
+            ProjectOverviewTool(),
         ]
     }
 

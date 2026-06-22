@@ -6,6 +6,13 @@ import Foundation
 actor AgentSocketClient {
     private var fd: Int32 = -1
 
+    /// Read/write timeout for the MANIFEST request only, so a connected-but-silent
+    /// app can't hang `ListTools` forever. Tool DISPATCH is intentionally
+    /// unbounded: legitimate tools (semantic search, on-device summarization,
+    /// export) can run well past any short timeout. The fd is sticky, so the
+    /// timeout is set per request and explicitly cleared for dispatch.
+    private let manifestTimeoutSeconds: Int = 5
+
     func connect() async throws {
         if fd >= 0 { return }
         guard let url = AgentServiceConstants.socketURL() else {
@@ -31,9 +38,21 @@ actor AgentSocketClient {
         fd = sock
     }
 
+    /// Set the socket read/write timeout (`SO_RCVTIMEO` / `SO_SNDTIMEO`).
+    /// Zero seconds = blocking / no timeout. A timed-out read returns -1/EAGAIN,
+    /// which the request loop maps to a thrown error via its `n <= 0` path. The
+    /// fd is sticky across requests, so this is set explicitly per request.
+    private func setSocketTimeout(seconds: Int) {
+        var tv = timeval(tv_sec: seconds, tv_usec: 0)
+        let len = socklen_t(MemoryLayout<timeval>.size)
+        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, len)
+        _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, len)
+    }
+
     func getToolManifest() async throws -> Data {
         try await connect()
-        let response = try request(AgentSocketRequest(op: .manifest))
+        // Bound the manifest fetch so a silent app can't hang ListTools forever.
+        let response = try request(AgentSocketRequest(op: .manifest), timeoutSeconds: manifestTimeoutSeconds)
         if let error = response.error { throw MCPError(code: error.code, message: error.message) }
         guard let payload = response.payload else { throw MCPError(code: -32_099, message: "empty manifest") }
         return payload
@@ -41,13 +60,17 @@ actor AgentSocketClient {
 
     func dispatchTool(name: String, argsJSON: Data) async throws -> Data {
         try await connect()
-        let response = try request(AgentSocketRequest(op: .dispatch, name: name, argsJSON: argsJSON))
+        // Tool execution is unbounded: long-running tools must not be cut off.
+        let response = try request(AgentSocketRequest(op: .dispatch, name: name, argsJSON: argsJSON), timeoutSeconds: 0)
         if let error = response.error { throw MCPError(code: error.code, message: error.message) }
         guard let payload = response.payload else { throw MCPError(code: -32_099, message: "empty result") }
         return payload
     }
 
-    private func request(_ req: AgentSocketRequest) throws -> AgentSocketResponse {
+    private func request(_ req: AgentSocketRequest, timeoutSeconds: Int) throws -> AgentSocketResponse {
+        // The fd is reused across requests, so set the timeout explicitly each
+        // time (manifest bounded; dispatch cleared to blocking).
+        setSocketTimeout(seconds: timeoutSeconds)
         let body = try JSONEncoder().encode(req)
         let framed = AgentFrameCodec.frame(body)
         try writeAll(framed)

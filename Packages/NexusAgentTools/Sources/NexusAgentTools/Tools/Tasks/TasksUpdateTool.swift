@@ -94,6 +94,14 @@ public struct TasksUpdateTool: AgentTool {
                     "created_at": .string(
                         description: "ISO8601 creation timestamp; back-dates the task to its true event date for inbox/timeline chronology."
                     ),
+                    "occurred_at": .anyOf(
+                        [
+                            .string(description: "ISO8601 event timestamp."),
+                            .null(description: "Clear the event date."),
+                        ],
+                        description: "ISO8601 event date (distinct from created_at) for inbox/timeline "
+                            + "chronology; null to clear. Prefer this over created_at for back-dating."
+                    ),
                 ],
                 required: []
             ),
@@ -239,6 +247,9 @@ private struct TasksUpdatePatch {
     // cannot be cleared — an omitted arg leaves it unchanged (nil), a present
     // ISO8601 string back-dates it.
     let createdAt: Date?
+    // Double-optional, nullable (the `dueDate` pattern): occurredAt IS optional on
+    // the model, so a present null clears it; an absent arg leaves it unchanged.
+    let occurredAt: Date??
 
     static func parse(_ patch: [String: JSONValue]) throws -> Self {
         let anchorIsCompletion = try TasksStructuredCreateArguments.optionalRecurrenceAnchorIsCompletion(
@@ -266,7 +277,8 @@ private struct TasksUpdatePatch {
             recurrenceAnchorIsCompletion: anchorIsCompletion,
             estimatedDurationSeconds: try nullableEstimatedDurationSeconds(patch["estimated_duration_minutes"]),
             reminders: try nullableReminders(patch["reminders"]),
-            createdAt: try TasksMutationToolSupport.iso8601Date(patch["created_at"], field: "created_at")
+            createdAt: try TasksMutationToolSupport.iso8601Date(patch["created_at"], field: "created_at"),
+            occurredAt: try nullableOccurredAt(patch["occurred_at"])
         )
     }
 
@@ -321,6 +333,9 @@ private struct TasksUpdatePatch {
         if let createdAt {
             task.createdAt = createdAt
         }
+        if let occurredAt {
+            task.occurredAt = occurredAt
+        }
     }
 
     private static func nullableTitle(_ value: JSONValue?) throws -> String?? {
@@ -349,6 +364,14 @@ private struct TasksUpdatePatch {
             return .some(nil)
         }
         return .some(try TasksMutationToolSupport.iso8601Date(value, field: "due_date"))
+    }
+
+    private static func nullableOccurredAt(_ value: JSONValue?) throws -> Date?? {
+        guard let value else { return nil }
+        if value == .null {
+            return .some(nil)
+        }
+        return .some(try TasksMutationToolSupport.iso8601Date(value, field: "occurred_at"))
     }
 
     private static func nullableDeadlineAt(_ value: JSONValue?) throws -> Date?? {

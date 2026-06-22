@@ -36,6 +36,11 @@ public struct TaskDTO: Codable, Sendable, Equatable {
     /// create/update tools accept minutes and convert. Appended last so existing
     /// positional callers keep compiling.
     public let estimatedDurationSeconds: Int?
+    /// Dedicated event date for inbox/timeline chronology (issue #9), distinct
+    /// from `createdAt` (record creation). `nil` when unset — emitted RAW, NOT
+    /// coalesced; the `occurredAt ?? createdAt` fallback lives only in MCP
+    /// read/sort paths. Appended last so existing positional callers keep compiling.
+    public let occurredAt: String?
 
     private enum CodingKeys: String, CodingKey {
         case id, title, notes, priority, tags, state, reminders
@@ -53,6 +58,7 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         case updatedAt = "updated_at"
         case cycleID = "cycle_id"
         case estimatedDurationSeconds = "estimated_duration_seconds"
+        case occurredAt = "occurred_at"
     }
 
     public init(
@@ -76,7 +82,8 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         createdAt: String,
         updatedAt: String,
         cycleID: String? = nil,
-        estimatedDurationSeconds: Int? = nil
+        estimatedDurationSeconds: Int? = nil,
+        occurredAt: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -99,6 +106,7 @@ public struct TaskDTO: Codable, Sendable, Equatable {
         self.updatedAt = updatedAt
         self.cycleID = cycleID
         self.estimatedDurationSeconds = estimatedDurationSeconds
+        self.occurredAt = occurredAt
     }
 
     @MainActor
@@ -149,7 +157,10 @@ public struct TaskDTO: Codable, Sendable, Equatable {
             createdAt: formatter.string(from: task.createdAt),
             updatedAt: formatter.string(from: task.updatedAt),
             cycleID: task.cycleID?.uuidString,
-            estimatedDurationSeconds: task.estimatedDurationSeconds
+            estimatedDurationSeconds: task.estimatedDurationSeconds,
+            // Raw, NOT coalesced — nil when unset. The occurredAt ?? createdAt
+            // fallback lives only in the MCP read/sort path (TasksListTool).
+            occurredAt: task.occurredAt.map { formatter.string(from: $0) }
         )
     }
 

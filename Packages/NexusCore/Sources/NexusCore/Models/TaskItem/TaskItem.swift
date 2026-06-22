@@ -25,6 +25,16 @@ public final class TaskItem: Searchable {
     public var updatedAt: Date = Date.now
     public var deletedAt: Date?
 
+    // TODO: the migrate skill should set `occurred_at` instead of `created_at`
+    // for back-dating (skill change is out of scope for this task).
+    /// True event date for inbox/timeline chronology, distinct from `createdAt`
+    /// (the record-creation timestamp). Back-dating sets this rather than
+    /// overloading `createdAt`, keeping audit semantics intact. `nil` = no
+    /// dedicated event date; read paths coalesce `occurredAt ?? createdAt`.
+    /// Additive/optional — rides V17 via SwiftData lightweight inference (no
+    /// version bump, mirroring the `isPinned`/`pinnedAt` precedent).
+    public var occurredAt: Date?
+
     public var dueAt: Date?
     public var startAt: Date?
     public var endAt: Date?

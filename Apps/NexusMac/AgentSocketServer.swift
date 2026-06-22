@@ -84,7 +84,13 @@ final class AgentSocketServer: @unchecked Sendable {
     private func acceptOne() {
         let client = accept(listenerFD, nil, nil)
         guard client >= 0 else { return }
-        queue.async { [weak self] in self?.serve(client) }
+        // Serve each client on its own serial queue so a connection parked in
+        // `serve()`'s blocking `read()` loop cannot starve the accept source (which
+        // stays on `queue`) or any other client. The queue is retained by this
+        // async block and auto-released when `serve()` returns on EOF.
+        let clientQueue = DispatchQueue(
+            label: "com.kacperpietrzyk.Nexus.agentSocket.client", qos: .utility)
+        clientQueue.async { [weak self] in self?.serve(client) }
     }
 
     /// Reads framed requests on `client` until EOF; answers each in order.
