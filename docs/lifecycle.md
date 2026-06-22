@@ -19,8 +19,8 @@ Read it when choosing between `projects.set_stage` vs `projects.set_status`, bet
 
 - **Typed projects** (`type != .generic`): `stageRaw` is canonical. `statusRaw` is **derived** from it
   via `ProjectStage.coarseStatus` (`ProjectStage.swift:51–64`). The repository keeps the two in sync
-  when a stage is set (`Project.swift:87–91`). Do **not** set `statusRaw` directly on a typed project
-  — set the stage and let the sync handle it.
+  when a stage is set (`ProjectRepository.swift:75–82`; `Project.swift:87–91` is the accessor). Do **not**
+  set `statusRaw` directly on a typed project — set the stage and let the sync handle it.
 - **Generic projects** (`type == .generic`): No pipeline exists (`ProjectType.stages` returns `[]`),
   so `stageRaw` is always `nil`. `statusRaw` is the only lifecycle field and IS the source of truth.
 

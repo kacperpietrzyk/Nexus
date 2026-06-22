@@ -126,6 +126,7 @@ extension TaskItemRepository {
         if into.startAt == nil { into.startAt = from.startAt }
         if into.endAt == nil { into.endAt = from.endAt }
         if into.deadlineAt == nil { into.deadlineAt = from.deadlineAt }
+        if into.occurredAt == nil { into.occurredAt = from.occurredAt }
         if into.priority == .none { into.priorityRaw = from.priorityRaw }
         if into.projectID == nil { into.projectID = from.projectID }
         if into.sectionID == nil { into.sectionID = from.sectionID }

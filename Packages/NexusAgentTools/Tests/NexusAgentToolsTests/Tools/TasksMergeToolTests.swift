@@ -290,6 +290,52 @@ struct TasksMergeToolTests {
         #expect(survivor.assignedAgent == AgentAssignee.claude.rawValue)
     }
 
+    // MARK: - tasks.merge: occurredAt carry (whole-branch fix)
+
+    @MainActor
+    @Test("merge carries loser's occurredAt when survivor has none")
+    func mergeCarriesOccurredAt() async throws {
+        let eventDate = Date(timeIntervalSince1970: 1_650_000_000)
+        let survivor = TaskItem(title: "Survivor")
+        // survivor has NO occurredAt
+        let duplicate = TaskItem(title: "Duplicate")
+        duplicate.occurredAt = eventDate
+        let fixture = try await InMemoryAgentContext.make(tasks: [survivor, duplicate])
+
+        _ = try await TasksMergeTool().call(
+            args: .object([
+                "into_id": .string(survivor.id.uuidString),
+                "from_id": .string(duplicate.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(survivor.occurredAt == eventDate)
+    }
+
+    @MainActor
+    @Test("merge does not overwrite survivor occurredAt when already set")
+    func mergeSurvivorOccurredAtNotOverwritten() async throws {
+        let survivorDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let loserDate = Date(timeIntervalSince1970: 1_600_000_000)
+        let survivor = TaskItem(title: "Survivor")
+        survivor.occurredAt = survivorDate
+        let duplicate = TaskItem(title: "Duplicate")
+        duplicate.occurredAt = loserDate
+        let fixture = try await InMemoryAgentContext.make(tasks: [survivor, duplicate])
+
+        _ = try await TasksMergeTool().call(
+            args: .object([
+                "into_id": .string(survivor.id.uuidString),
+                "from_id": .string(duplicate.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+
+        // Survivor's existing occurredAt must NOT be overwritten.
+        #expect(survivor.occurredAt == survivorDate)
+    }
+
     // MARK: - tasks.merge: subtask re-parenting (Fix 3)
 
     @MainActor

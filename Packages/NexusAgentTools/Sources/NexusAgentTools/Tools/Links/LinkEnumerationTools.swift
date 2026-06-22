@@ -62,6 +62,6 @@ public struct LinksListTool: AgentTool {
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let limit = try TasksToolArguments.boundedInt(args["limit"], field: "limit", default: 1000, range: 1...5000)
-        return try LinkToolSupport.encode(Array(context.linkRepository.allLinks().prefix(limit)))
+        return try LinkToolSupport.encode(Array(context.linkRepository.allLinks().dedupedByID().prefix(limit)))
     }
 }
