@@ -53,8 +53,13 @@ extension TaskItemRepository {
     }
 
     /// Repoints every `Link` whose endpoint points at `fromID` onto `intoID`,
-    /// deleting any edge that would become a duplicate. Both incoming (`toID`) and
-    /// outgoing (`fromID`) directions are handled defensively.
+    /// deleting any edge that would become a duplicate after repointing. Both
+    /// incoming (`toID`) and outgoing (`fromID`) directions are handled defensively.
+    ///
+    /// **Self-loop guard:** if repointing an outgoing edge would produce a
+    /// task→task edge where `fromID == toID` (i.e., `from` and `into` were
+    /// connected to each other — a dependency/blocks relationship), the edge is
+    /// dropped rather than preserved as a self-referential loop.
     private func repointEdges(from fromID: UUID, into intoID: UUID) throws {
         let links = LinkRepository(context: context)
         let intoEndpoint: (ItemKind, UUID) = (.task, intoID)
@@ -63,6 +68,11 @@ extension TaskItemRepository {
         var existingIncoming = Set(try links.backlinks(to: intoEndpoint).map { Self.edgeKey($0) })
         for edge in try links.backlinks(to: fromEndpoint) {
             edge.toID = intoID
+            // Drop self-loops (e.g. from blocks into — would produce into→into).
+            if edge.fromID == intoID {
+                context.delete(edge)
+                continue
+            }
             let key = Self.edgeKey(edge)
             if existingIncoming.contains(key) {
                 context.delete(edge)
@@ -74,6 +84,11 @@ extension TaskItemRepository {
         var existingOutgoing = Set(try links.outgoing(from: intoEndpoint).map { Self.edgeKey($0) })
         for edge in try links.outgoing(from: fromEndpoint) {
             edge.fromID = intoID
+            // Drop self-loops (e.g. into blocks from — would produce into→into).
+            if edge.toID == intoID {
+                context.delete(edge)
+                continue
+            }
             let key = Self.edgeKey(edge)
             if existingOutgoing.contains(key) {
                 context.delete(edge)
@@ -86,6 +101,8 @@ extension TaskItemRepository {
     /// Fills nil / zero-sentinel survivor fields from the loser's values.
     /// Only nilable fields are candidates; non-optional fields are overwritten
     /// only when the survivor holds the zero-value sentinel (empty body, `.none` priority).
+    /// `externalSourceID` and `externalSourceMetadata` are treated as a paired blob —
+    /// both are carried together so that re-migration sentinels remain valid.
     private func fillEmptyFields(into: TaskItem, from: TaskItem) {
         if into.body.isEmpty { into.body = from.body }
         if into.noteRef == nil { into.noteRef = from.noteRef }
@@ -97,7 +114,12 @@ extension TaskItemRepository {
         if into.projectID == nil { into.projectID = from.projectID }
         if into.sectionID == nil { into.sectionID = from.sectionID }
         if into.recurrenceRule == nil { into.recurrenceRule = from.recurrenceRule }
-        if into.externalSourceID == nil { into.externalSourceID = from.externalSourceID }
+        if into.externalSourceID == nil {
+            // Carry the paired (id, metadata) blob together — a partial carry would
+            // leave the re-migration sentinel without its raw-record blob.
+            into.externalSourceID = from.externalSourceID
+            into.externalSourceMetadata = from.externalSourceMetadata
+        }
         if into.estimatedDurationSeconds == nil { into.estimatedDurationSeconds = from.estimatedDurationSeconds }
     }
 

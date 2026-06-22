@@ -57,10 +57,11 @@ struct TasksMergeToolTests {
     // MARK: - tasks.merge: fill-empty fields
 
     @MainActor
-    @Test("merge fills empty survivor fields from the duplicate")
+    @Test("merge fills empty survivor fields and does not overwrite set survivor fields")
     func mergeFillsEmptyFields() async throws {
         let dueDate = Date(timeIntervalSince1970: 1_700_100_000)
-        let survivor = TaskItem(title: "Task A")
+        let survivorDue = Date(timeIntervalSince1970: 1_800_000_000)
+        let survivor = TaskItem(title: "Task A", dueAt: survivorDue)
         let duplicate = TaskItem(title: "Task B", dueAt: dueDate, tags: ["work"])
         let fixture = try await InMemoryAgentContext.make(tasks: [survivor, duplicate])
 
@@ -72,9 +73,9 @@ struct TasksMergeToolTests {
             context: fixture.context
         )
 
-        // Empty `dueAt` filled from duplicate.
-        #expect(survivor.dueAt == dueDate)
-        // Tags unioned.
+        // Survivor's already-set dueAt must NOT be overwritten by the duplicate's.
+        #expect(survivor.dueAt == survivorDue)
+        // Tags unioned (duplicate's tag appears on survivor).
         #expect(survivor.tags.contains("work"))
     }
 
@@ -136,7 +137,7 @@ struct TasksMergeToolTests {
     // MARK: - tasks.merge: atomicity / self-merge guard
 
     @MainActor
-    @Test("merge rejects merging a task into itself")
+    @Test("merge rejects merging a task into itself, leaving the task untouched")
     func mergeRejectsSelf() async throws {
         let task = TaskItem(title: "Solo task")
         let fixture = try await InMemoryAgentContext.make(tasks: [task])
@@ -150,6 +151,11 @@ struct TasksMergeToolTests {
                 context: fixture.context
             )
         }
+
+        // Atomicity: guard throws before any mutation — task must be live.
+        #expect(task.deletedAt == nil)
+        let all = try fixture.context.modelContext.context.fetch(FetchDescriptor<TaskItem>())
+        #expect(all.contains { $0.id == task.id })
     }
 
     // MARK: - tasks.merge: already-deleted source
