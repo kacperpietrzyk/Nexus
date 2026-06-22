@@ -81,19 +81,25 @@ public enum NexusModelContainer {
     ///     NexusSync. Duplicate entries are accepted and deduplicated by `NexusSchemaV17`.
     ///   - localOnlyExtraModels: composition-time models that must be present in the
     ///     container but excluded from CloudKit-backed configurations.
+    ///   - forceLocalOnly: when `true`, CloudKit mirroring is unconditionally disabled
+    ///     regardless of `environment.cloudKitEnabled`. For auxiliary processes that
+    ///     share the App Group store but lack iCloud entitlements (e.g.
+    ///     `NexusMeetingsHelper`): an `NSCloudKitMirroringDelegate` without them traps on
+    ///     launch (SIGTRAP). The main app owns the single mirror and exports their writes.
     public static func make(
         environment: NexusEnvironmentProviding = NexusEnvironment.current,
         fileURL: URL? = nil,
         groupContainerIdentifier: String? = nil,
         extraModels: [any PersistentModel.Type] = [],
-        localOnlyExtraModels: [any PersistentModel.Type] = []
+        localOnlyExtraModels: [any PersistentModel.Type] = [],
+        forceLocalOnly: Bool = false
     ) throws -> ModelContainer {
         let url = try resolveStoreURL(
             fileURL: fileURL,
             groupContainerIdentifier: groupContainerIdentifier
         )
         let cloudKitDatabase: ModelConfiguration.CloudKitDatabase =
-            if environment.cloudKitEnabled {
+            if !forceLocalOnly, environment.cloudKitEnabled {
                 .private(environment.cloudKitContainerIdentifier)
             } else {
                 .none
