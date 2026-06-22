@@ -21,6 +21,7 @@ struct CoreTaskToolsRegistryTests {
             "calendar.preferences.get", "calendar.preferences.update",
             "stats.goals.get", "stats.goals.update", "stats.productivity",
             "export.item", "export.bundle",
+            "projects.overview",
         ]
         #expect(expected.isSubset(of: names))
     }

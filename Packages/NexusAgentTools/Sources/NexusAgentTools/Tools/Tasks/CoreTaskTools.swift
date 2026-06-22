@@ -152,6 +152,7 @@ public enum CoreTaskTools {
             ProjectsSetKeyDateTool(),
             ProjectsListKeyDatesTool(),
             ProjectsDeleteKeyDateTool(),
+            ProjectOverviewTool(),
         ]
     }
 

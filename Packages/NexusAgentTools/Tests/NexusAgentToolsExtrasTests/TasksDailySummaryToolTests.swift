@@ -106,7 +106,7 @@ struct TasksDailySummaryToolTests {
     func registration() {
         let names = AgentToolsAll.tools().map(\.name)
 
-        #expect(names.count == 100)
+        #expect(names.count == 101)
         #expect(Set(names).count == names.count)
         #expect(names.contains("export.item"))
         #expect(names.contains("export.bundle"))
