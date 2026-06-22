@@ -101,6 +101,7 @@ public enum CoreTaskTools {
             TasksSetRemindersTool(),
             TasksReorderTool(),
             TasksDeleteTool(),
+            TasksMergeTool(),
             TasksInstantiateTemplateTool(),
             CommentsListTool(),
             CommentsAddTool(),
