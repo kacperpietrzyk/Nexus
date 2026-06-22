@@ -431,6 +431,41 @@ struct TasksListToolTests {
         #expect(response.total == 2)
     }
 
+    @MainActor
+    @Test("unfiled bucket returns open, done, and snoozed unassigned tasks but not assigned or soft-deleted")
+    func unfiledBucketReturnsLiveUnassignedAnyState() async throws {
+        let fixture = try await InMemoryAgentContext.make()
+        let project = Project(name: "Work")
+        fixture.repo.context.insert(project)
+        try fixture.repo.context.save()
+
+        let unassignedOpen = TaskItem(title: "Unassigned Open")
+        let unassignedDone = TaskItem(title: "Unassigned Done", status: .done)
+        let unassignedSnoozed = TaskItem(title: "Unassigned Snoozed", status: .snoozed)
+        unassignedSnoozed.snoozedUntil = Date(timeIntervalSince1970: 1_800_000_000)
+        let unassignedDeleted = TaskItem(title: "Unassigned Deleted")
+        unassignedDeleted.deletedAt = Date()
+        let assigned = TaskItem(title: "Assigned")
+
+        try fixture.repo.insert(unassignedOpen)
+        try fixture.repo.insert(unassignedDone)
+        try fixture.repo.insert(unassignedSnoozed)
+        try fixture.repo.insert(unassignedDeleted)
+        try fixture.repo.insert(assigned)
+        try fixture.repo.assign(assigned, toProject: project.id, section: nil)
+
+        let response = try await callList(
+            args: .object(["filter": .object(["bucket": .string("unfiled")])]),
+            context: fixture.context
+        )
+
+        #expect(response.total == 3)
+        let titles = Set(response.tasks.map(\.title))
+        #expect(titles == ["Unassigned Open", "Unassigned Done", "Unassigned Snoozed"])
+        #expect(!titles.contains("Assigned"))
+        #expect(!titles.contains("Unassigned Deleted"))
+    }
+
     private func callList(args: JSONValue, context: AgentContext) async throws -> TaskListResponseDTO {
         let result = try await TasksListTool().call(args: args, context: context)
         let data = try JSONEncoder().encode(result)

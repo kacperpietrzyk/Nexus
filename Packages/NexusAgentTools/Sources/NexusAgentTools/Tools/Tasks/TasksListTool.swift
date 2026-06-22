@@ -11,8 +11,9 @@ public struct TasksListTool: AgentTool {
             "filter": .object(
                 properties: [
                     "bucket": .string(
-                        enumValues: ["today", "upcoming", "inbox", "all"],
-                        description: "Task bucket to list. Defaults to all."
+                        enumValues: ["today", "upcoming", "inbox", "all", "unfiled"],
+                        description: "Task bucket to list. Defaults to all. "
+                            + "unfiled returns live tasks with no project assigned (open, done, and snoozed — not soft-deleted)."
                     ),
                     "state": .string(
                         enumValues: ["open", "done", "any"],
@@ -111,7 +112,10 @@ public struct TasksListTool: AgentTool {
             (state != .any) ? try context.taskRepository.repository.liveProjectIDs() : nil
 
         tasks = tasks.filter { task in
-            matches(task, state: state)
+            // unfiled bypasses the normal state predicate: it returns live tasks
+            // (deletedAt == nil) at any status (open/done/snoozed). Using state=any
+            // would also surface soft-deleted rows, which is not the intent.
+            (bucket == .unfiled ? task.deletedAt == nil : matches(task, state: state))
                 && matches(task, bucket: bucket, startOfTomorrow: startOfTomorrow)
                 && matches(task, tag: tag)
                 && matches(task, projectID: projectID)
@@ -141,6 +145,7 @@ public struct TasksListTool: AgentTool {
         case upcoming
         case inbox
         case all
+        case unfiled
     }
 
     private enum State: String {
@@ -178,6 +183,8 @@ public struct TasksListTool: AgentTool {
             return task.dueAt == nil
         case .all:
             return true
+        case .unfiled:
+            return task.projectID == nil
         }
     }
 
