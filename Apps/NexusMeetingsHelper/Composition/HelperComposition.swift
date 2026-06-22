@@ -27,10 +27,16 @@ final class HelperComposition {
         appPatternRegistryStore = patternStore
         retentionPolicyStore = retentionStore
 
+        // The helper bundle carries NO iCloud entitlements (only the App Group), so it
+        // MUST NOT stand up a CloudKit mirror — doing so traps on launch (SIGTRAP in
+        // NSCloudKitMirroringDelegate setup) and crash-loops the helper, killing both
+        // auto-detection and the manual-record XPC endpoint. The main app owns the single
+        // mirror and exports the helper's writes via persistent-history on the shared store.
         container = try NexusModelContainer.make(
             groupContainerIdentifier: NexusModelContainer.appGroupIdentifier,
             extraModels: MeetingsComposition.extraModels,
-            localOnlyExtraModels: MeetingsComposition.localOnlyExtraModels
+            localOnlyExtraModels: MeetingsComposition.localOnlyExtraModels,
+            forceLocalOnly: true
         )
         context = ModelContext(container)
 

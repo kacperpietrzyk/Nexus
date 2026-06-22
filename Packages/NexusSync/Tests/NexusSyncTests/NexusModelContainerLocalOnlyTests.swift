@@ -73,6 +73,24 @@ import Testing
     #expect(entityNames(in: plan.containerSchema).contains("TaskItem"))
 }
 
+/// Regression for the `NexusMeetingsHelper` crash-loop: the helper shares the App Group
+/// store but has NO iCloud entitlements, so a CloudKit mirror traps on launch (SIGTRAP).
+/// `forceLocalOnly` must override a cloud-ENABLED env so the synced config opens `.none`.
+@MainActor
+@Test func forceLocalOnlyDisablesCloudKitEvenWhenEnvironmentEnablesIt() throws {
+    let storeURL = temporaryStoreURL(prefix: "nexus-force-local-only")
+    defer { cleanupStores(at: [storeURL, NexusModelContainer.localOnlyStoreURL(for: storeURL)]) }
+    let container = try NexusModelContainer.make(
+        environment: CloudEnabledTestEnvironment(),
+        fileURL: storeURL,
+        forceLocalOnly: true
+    )
+    let syncedConfiguration = try #require(
+        container.configurations.first { $0.name == NexusModelContainer.syncedConfigurationName }
+    )
+    #expect(isNoCloudKitDatabase(syncedConfiguration.cloudKitDatabase))
+}
+
 @Test func migrateStoreFamiliesCopiesMainAndLocalOnlySidecars() throws {
     let dir = try temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: dir) }
@@ -390,6 +408,11 @@ private func appendConflictLog(to sourceURL: URL, conflictID: UUID, summary: Str
 
 private struct LocalOnlySplitTestEnvironment: NexusEnvironmentProviding {
     let cloudKitEnabled = false
+    let cloudKitContainerIdentifier = "iCloud.com.kacperpietrzyk.Nexus"
+}
+
+private struct CloudEnabledTestEnvironment: NexusEnvironmentProviding {
+    let cloudKitEnabled = true
     let cloudKitContainerIdentifier = "iCloud.com.kacperpietrzyk.Nexus"
 }
 
