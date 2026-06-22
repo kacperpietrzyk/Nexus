@@ -26,4 +26,8 @@ public enum LinkKind: String, Codable, Sendable, CaseIterable {
     /// Distinct from `.mentions` (task/note → person), which is the related/mentioned
     /// edge — never ownership/assignee (invariant I1).
     case attendee
+    /// The canonical edge relating a non-task item (note or meeting) to a project.
+    /// Direction is (note|meeting) → project. Distinct from `.child`, which is
+    /// reserved exclusively for task→task subtask hierarchy.
+    case relatedProject
 }

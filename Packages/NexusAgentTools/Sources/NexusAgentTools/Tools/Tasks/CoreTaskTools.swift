@@ -34,14 +34,15 @@ public enum CoreTaskTools {
         ]
     }
 
-    /// `links.*` tools — read-only enumeration of the polymorphic `Link` graph
-    /// (backlinks / outgoing edges / whole-graph dump). Thin wrappers over
-    /// `LinkRepository`.
+    /// `links.*` tools — read-only enumeration and idempotent maintenance of the
+    /// polymorphic `Link` graph (backlinks / outgoing edges / whole-graph dump /
+    /// project-membership reclassification). Thin wrappers over `LinkRepository`.
     private static var linkEnumeration: [any AgentTool] {
         [
             LinksBacklinksTool(),
             LinksOutgoingTool(),
             LinksListTool(),
+            LinksReclassifyProjectMembershipTool(),
         ]
     }
 

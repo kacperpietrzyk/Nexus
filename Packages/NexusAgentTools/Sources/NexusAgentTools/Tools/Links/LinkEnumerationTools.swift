@@ -1,5 +1,6 @@
 import Foundation
 import NexusCore
+import SwiftData
 
 private enum LinkToolSupport {
     static func endpoint(from args: JSONValue) throws -> (ItemKind, UUID) {
@@ -63,5 +64,66 @@ public struct LinksListTool: AgentTool {
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
         let limit = try TasksToolArguments.boundedInt(args["limit"], field: "limit", default: 1000, range: 1...5000)
         return try LinkToolSupport.encode(Array(context.linkRepository.allLinks().dedupedByID().prefix(limit)))
+    }
+}
+
+/// One-shot idempotent backfill: reclassify semantically wrong `child` edges from notes/meetings
+/// to projects as `relatedProject`. Safe to run multiple times — a second pass finds nothing and
+/// returns `reclassified_count: 0`.
+public struct LinksReclassifyProjectMembershipTool: AgentTool {
+    public let name = "links.reclassify_project_membership"
+    public let description =
+        "Idempotent backfill that reclassifies incorrect `.child` edges from notes or meetings to "
+        + "projects as the canonical `.relatedProject` kind. Optionally scoped to a single project "
+        + "via `project_id`. Task→task `.child` edges and all other link kinds are never touched. "
+        + "Safe to run multiple times — subsequent runs return `reclassified_count: 0`."
+    public let inputSchema: JSONSchema = .object(
+        properties: [
+            "project_id": .string(
+                description: "Optional UUID of a specific project. When provided, only edges whose "
+                    + "target is that project are reclassified. Omit to reclassify across all projects."
+            )
+        ],
+        required: []
+    )
+    public init() {}
+
+    @MainActor
+    public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
+        let modelContext = context.modelContext.context
+
+        // Parse optional project_id scope.
+        let scopeID: UUID?
+        if let raw = args["project_id"]?.stringValue {
+            guard let id = UUID(uuidString: raw) else {
+                throw AgentError.validation("project_id must be a valid UUID string")
+            }
+            scopeID = id
+        } else {
+            scopeID = nil
+        }
+
+        // Fetch all Link rows from the shared context so mutations persist.
+        let descriptor = FetchDescriptor<Link>()
+        let allLinks = try modelContext.fetch(descriptor)
+
+        // Filter: child edges FROM note|meeting TO project (optionally scoped).
+        let targets = allLinks.filter { link in
+            link.linkKind == .child
+                && link.toKind == .project
+                && (link.fromKind == .note || link.fromKind == .meeting)
+                && (scopeID == nil || link.toID == scopeID!)
+        }
+
+        // Mutate in-place; all objects share the same context — one save is enough.
+        for link in targets {
+            link.linkKind = .relatedProject
+        }
+
+        if !targets.isEmpty {
+            try modelContext.save()
+        }
+
+        return .object(["reclassified_count": .int(targets.count)])
     }
 }

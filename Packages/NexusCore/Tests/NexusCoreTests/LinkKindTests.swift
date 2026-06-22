@@ -14,6 +14,8 @@ import Testing
     #expect(LinkKind.containsTask.rawValue == "containsTask")
     #expect(LinkKind.scheduledAs.rawValue == "scheduledAs")
     #expect(LinkKind.labeled.rawValue == "labeled")
+    #expect(LinkKind.attendee.rawValue == "attendee")
+    #expect(LinkKind.relatedProject.rawValue == "relatedProject")
 }
 
 @Test func linkKind_isCodable() throws {

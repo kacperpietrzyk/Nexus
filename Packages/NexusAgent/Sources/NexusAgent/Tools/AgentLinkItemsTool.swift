@@ -8,7 +8,8 @@ public struct AgentLinkItemsTool: MutatingAgentTool {
     public let description =
         "Create a directed Link between two Nexus items. Direction is FROM source → TO target: "
         + "`fromKind`/`fromID` is the source endpoint and `toKind`/`toID` is the target. "
-        + "Use `kind: child` only for task→task subtask hierarchy. "
+        + "Use `relatedProject` to relate a note or meeting to a project (note|meeting → project). "
+        + "Use `child` only for task→task subtask hierarchy — not for notes or meetings. "
         + "Idempotent (findOrCreate)."
     public let inputSchema: JSONSchema = AgentLinkItemsArguments.inputSchema
 
@@ -144,7 +145,8 @@ enum AgentLinkItemsArguments {
             "linkKind": .string(
                 enumValues: LinkKind.allCases.map(\.rawValue),
                 description:
-                    "Link relationship kind. `child` is reserved for task→task subtask hierarchy only."
+                    "Link relationship kind. Use `relatedProject` to relate a note or meeting to a project. "
+                    + "`child` is reserved for task→task subtask hierarchy only — not for notes or meetings."
             ),
             "order": .integer(description: "Optional ordering value."),
         ],
