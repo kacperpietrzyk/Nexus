@@ -523,3 +523,78 @@ struct TasksUpdateToolCreatedAtTests {
         #expect(stored.createdAt == Date(timeIntervalSince1970: 1_579_075_200))
     }
 }
+
+/// `occurred_at` event-date coverage, a separate suite to keep the main
+/// `TasksUpdateToolTests` struct inside the type-body lint budget.
+@Suite("TasksUpdateTool occurred_at patch")
+struct TasksUpdateToolOccurredAtTests {
+    @MainActor
+    @Test("sets occurred_at as a dedicated event date without touching created_at")
+    func setsOccurredAt() async throws {
+        let task = TaskItem(title: "Backdate event")
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+        let originalCreatedAt = task.createdAt
+
+        let dto = try await callUpdate(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object([
+                    "occurred_at": .string("2020-01-15T08:00:00Z")
+                ]),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(dto.occurredAt == "2020-01-15T08:00:00.000Z")
+        let stored = try TasksMutationToolSupport.liveTask(id: task.id, context: fixture.context)
+        #expect(stored.occurredAt == Date(timeIntervalSince1970: 1_579_075_200))
+        // created_at is untouched — occurred_at is a distinct field.
+        #expect(stored.createdAt == originalCreatedAt)
+    }
+
+    @MainActor
+    @Test("null clears occurred_at")
+    func nullClearsOccurredAt() async throws {
+        let task = TaskItem(title: "Has event date")
+        task.occurredAt = Date(timeIntervalSince1970: 1_579_075_200)
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+
+        let dto = try await callUpdate(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object(["occurred_at": .null]),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(dto.occurredAt == nil)
+        let stored = try TasksMutationToolSupport.liveTask(id: task.id, context: fixture.context)
+        #expect(stored.occurredAt == nil)
+    }
+
+    @MainActor
+    @Test("omitted occurred_at leaves the field unchanged")
+    func omittedOccurredAtUnchanged() async throws {
+        let task = TaskItem(title: "Keep event date")
+        let existing = Date(timeIntervalSince1970: 1_579_075_200)
+        task.occurredAt = existing
+        let fixture = try await InMemoryAgentContext.make(tasks: [task])
+
+        _ = try await callUpdate(
+            args: .object([
+                "task_id": .string(task.id.uuidString),
+                "patch": .object(["title": .string("Renamed")]),
+            ]),
+            context: fixture.context
+        )
+
+        let stored = try TasksMutationToolSupport.liveTask(id: task.id, context: fixture.context)
+        #expect(stored.occurredAt == existing)
+    }
+
+    private func callUpdate(args: JSONValue, context: AgentContext) async throws -> TaskDTO {
+        let result = try await TasksUpdateTool().call(args: args, context: context)
+        let data = try JSONEncoder().encode(result)
+        return try JSONDecoder().decode(TaskDTO.self, from: data)
+    }
+}

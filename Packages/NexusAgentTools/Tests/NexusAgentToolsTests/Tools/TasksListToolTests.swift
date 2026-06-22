@@ -472,3 +472,58 @@ struct TasksListToolTests {
         return try JSONDecoder().decode(TaskListResponseDTO.self, from: data)
     }
 }
+
+/// `sort=created` chronology coverage: the comparator coalesces
+/// `occurredAt ?? createdAt`, so a back-dated event date wins over the
+/// record-creation timestamp. A separate suite to keep the main struct inside
+/// the type-body lint budget.
+@Suite("TasksListTool sort=created occurred_at")
+struct TasksListToolCreatedSortTests {
+    @MainActor
+    @Test("sort=created orders by occurredAt when set, else createdAt")
+    func sortCreatedCoalescesOccurredAt() async throws {
+        // `early` was created LAST (latest createdAt) but carries an EARLY
+        // occurredAt → it must sort as the OLDEST event (last, descending order).
+        let early = TaskItem(title: "Early event, late record")
+        early.createdAt = Date(timeIntervalSince1970: 3_000)
+        early.occurredAt = Date(timeIntervalSince1970: 1_000)
+
+        // `late` has no occurredAt → coalesces to its createdAt (newest event).
+        let late = TaskItem(title: "No event date")
+        late.createdAt = Date(timeIntervalSince1970: 2_000)
+
+        let fixture = try await InMemoryAgentContext.make(tasks: [early, late])
+
+        let response = try await callList(
+            args: .object(["sort": .string("created")]),
+            context: fixture.context
+        )
+
+        // Descending by event date: late (2000) before early (1000).
+        #expect(response.tasks.map(\.title) == ["No event date", "Early event, late record"])
+    }
+
+    @MainActor
+    @Test("sort=created falls back to createdAt for nil occurredAt rows")
+    func sortCreatedNilFallsBackToCreatedAt() async throws {
+        let older = TaskItem(title: "Older")
+        older.createdAt = Date(timeIntervalSince1970: 1_000)
+        let newer = TaskItem(title: "Newer")
+        newer.createdAt = Date(timeIntervalSince1970: 2_000)
+
+        let fixture = try await InMemoryAgentContext.make(tasks: [older, newer])
+
+        let response = try await callList(
+            args: .object(["sort": .string("created")]),
+            context: fixture.context
+        )
+
+        #expect(response.tasks.map(\.title) == ["Newer", "Older"])
+    }
+
+    private func callList(args: JSONValue, context: AgentContext) async throws -> TaskListResponseDTO {
+        let result = try await TasksListTool().call(args: args, context: context)
+        let data = try JSONEncoder().encode(result)
+        return try JSONDecoder().decode(TaskListResponseDTO.self, from: data)
+    }
+}

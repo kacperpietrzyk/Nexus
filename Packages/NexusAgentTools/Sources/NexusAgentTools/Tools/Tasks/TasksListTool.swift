@@ -273,11 +273,24 @@ public struct TasksListTool: AgentTool {
             }
             return tieBreak(lhs, rhs)
         case .created:
-            if lhs.createdAt != rhs.createdAt {
-                return lhs.createdAt > rhs.createdAt
+            // Coalesce occurredAt ?? createdAt so a back-dated event date drives
+            // chronology (issue #9). The fallthrough tieBreak intentionally stays
+            // on raw createdAt — it is shared by due/priority sorts and must not
+            // change their tiebreaking; a deterministic id tiebreak still resolves
+            // equal event dates.
+            let lhsEvent = eventDate(lhs)
+            let rhsEvent = eventDate(rhs)
+            if lhsEvent != rhsEvent {
+                return lhsEvent > rhsEvent
             }
             return tieBreak(lhs, rhs)
         }
+    }
+
+    /// Event date for chronology sorting: the dedicated `occurredAt` when set,
+    /// otherwise the record-creation `createdAt`. Read-path only — never mutates.
+    private func eventDate(_ task: TaskItem) -> Date {
+        task.occurredAt ?? task.createdAt
     }
 
     private func tieBreak(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
