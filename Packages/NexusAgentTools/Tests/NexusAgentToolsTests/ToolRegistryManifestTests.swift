@@ -10,6 +10,7 @@ struct ToolRegistryManifestTests {
         #expect(names.contains("links.backlinks"))
         #expect(names.contains("links.outgoing"))
         #expect(names.contains("links.list"))
+        #expect(names.contains("links.reclassify_project_membership"))
     }
 
     @Test("tasks.reorder is registered in the core task tools")

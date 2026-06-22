@@ -293,9 +293,10 @@ public struct NotesLinkTool: AgentTool {
     public let name = "note.link"
     public let description =
         "Creates a directed graph link FROM a note TO a target item. The note is always the source "
-        + "endpoint; `target_id`/`target_kind` is the destination. For checkbox→task, embed, or "
+        + "endpoint; `target_id`/`target_kind` is the destination. Use `kind: relatedProject` to relate "
+        + "the note to a project (canonical edge for note → project). For checkbox→task, embed, or "
         + "wikilink relationships, put them in the note body via note.update instead (those are derived "
-        + "from content). Idempotent."
+        + "from content). `child` is task→task hierarchy only — not for notes. Idempotent."
     public let inputSchema: JSONSchema = .object(
         properties: [
             "note_id": .string(description: "Source note UUID (the FROM endpoint)."),
@@ -306,8 +307,9 @@ public struct NotesLinkTool: AgentTool {
             ),
             "kind": .string(
                 enumValues: NotesLinkTool.allowedKinds.map(\.rawValue),
-                description: "Link relationship kind. Content-derived kinds (containsTask/embed/mentions) "
-                    + "are rejected — express those in the note body."
+                description: "Link relationship kind. Use `relatedProject` for note → project. "
+                    + "`child` is task→task hierarchy only — not for notes. "
+                    + "Content-derived kinds (containsTask/embed/mentions) are rejected — express those in the note body."
             ),
         ],
         required: ["note_id", "target_id", "target_kind", "kind"]

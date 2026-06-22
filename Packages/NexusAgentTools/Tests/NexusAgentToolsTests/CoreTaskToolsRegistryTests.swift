@@ -22,6 +22,7 @@ struct CoreTaskToolsRegistryTests {
             "stats.goals.get", "stats.goals.update", "stats.productivity",
             "export.item", "export.bundle",
             "projects.overview",
+            "links.reclassify_project_membership",
         ]
         #expect(expected.isSubset(of: names))
     }
