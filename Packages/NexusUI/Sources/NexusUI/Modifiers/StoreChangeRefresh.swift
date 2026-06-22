@@ -1,4 +1,5 @@
 import CoreData
+import NexusCore
 import SwiftData
 import SwiftUI
 
@@ -49,6 +50,15 @@ private struct ReloadOnStoreChange: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                 schedule()
             }
+            // Quiet mode (batch.begin/end): when an external agent brackets a write
+            // series the per-save reload above is swallowed (see `schedule`). The
+            // coordinator posts this once when the batch ends (or self-expires), so
+            // every observing view reloads exactly once to pick up the final state.
+            .onReceive(
+                NotificationCenter.default.publisher(for: RefreshSuspensionCoordinator.resumedNotification)
+            ) { _ in
+                schedule()
+            }
             .onDisappear {
                 pending?.cancel()
                 pending = nil
@@ -60,6 +70,12 @@ private struct ReloadOnStoreChange: ViewModifier {
         pending = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(StoreChangeCoalescer.windowMilliseconds))
             guard !Task.isCancelled else { return }
+            // Quiet mode: an open batch swallows this reload. The trailing
+            // `resumedNotification` re-runs `schedule()` once the batch resolves,
+            // so the final post-batch state is loaded exactly once. The suspend is
+            // hard-bounded by the coordinator's self-expiry, so a dropped
+            // `batch.end` can never wedge refresh off permanently.
+            guard !RefreshSuspensionCoordinator.shared.isSuspended else { return }
             action()
         }
     }

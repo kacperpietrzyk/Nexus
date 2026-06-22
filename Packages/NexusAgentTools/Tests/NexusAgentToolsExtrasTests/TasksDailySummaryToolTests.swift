@@ -106,7 +106,7 @@ struct TasksDailySummaryToolTests {
     func registration() {
         let names = AgentToolsAll.tools().map(\.name)
 
-        #expect(names.count == 102)
+        #expect(names.count == 104)
         #expect(Set(names).count == names.count)
         #expect(names.contains("export.item"))
         #expect(names.contains("export.bundle"))
@@ -134,6 +134,8 @@ struct TasksDailySummaryToolTests {
         #expect(names.contains("projects.sections.reorder"))
         #expect(names.contains("tasks.create_from_text"))
         #expect(names.contains("tasks.daily_summary"))
+        #expect(names.contains("batch.begin"))
+        #expect(names.contains("batch.end"))
         #expect(names.contains("note.create"))
         #expect(names.contains("note.delete"))
         #expect(names.contains("search.global"))
@@ -154,7 +156,7 @@ struct TasksDailySummaryToolTests {
     func extrasOnlyRegistration() {
         let names = NexusAgentToolsExtras.tools().map(\.name)
 
-        #expect(names == ["tasks.create_from_text", "tasks.daily_summary"])
+        #expect(names == ["tasks.create_from_text", "tasks.daily_summary", "batch.begin", "batch.end"])
         #expect(Set(names).count == names.count)
     }
 

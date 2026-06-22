@@ -78,7 +78,7 @@ struct AgentToolConformanceTests {
             "tasks", "comments", "note", "schedule", "calendar",
             "projects", "agents", "labels", "blocks", "people", "activity", "cycles", "search",
             "saved_filters", "stats", "export", "organizations", "links", "items",
-            "attachments",
+            "attachments", "batch",
         ]
         guard parts.count >= 2, let first = parts.first, knownNamespaces.contains(first) else { return false }
         return parts.allSatisfy { part in
