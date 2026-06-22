@@ -29,7 +29,9 @@ public struct MeetingsListByDateTool: AgentTool {
         }
 
         let repository = MeetingRepository(context: contextRef.context)
-        let meetings = try repository.range(from: from, to: to).filter { $0.deletedAt == nil }
+        let meetings = try repository.range(from: from, to: to)
+            .dedupedByID()
+            .filter { $0.deletedAt == nil }
         return try MeetingsToolJSON.encode(["meetings": meetings.map(MeetingSnapshotDTO.init(meeting:))])
     }
 }

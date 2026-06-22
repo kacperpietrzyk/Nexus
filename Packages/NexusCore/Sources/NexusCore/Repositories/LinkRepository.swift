@@ -65,7 +65,7 @@ public final class LinkRepository {
             predicate: #Predicate { link in link.toID == id },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        return try context.fetch(descriptor).filter { $0.toKind == kind }
+        return try context.fetch(descriptor).dedupedByID().filter { $0.toKind == kind }
     }
 
     public func outgoing(from endpoint: (ItemKind, UUID)) throws -> [Link] {
@@ -78,7 +78,7 @@ public final class LinkRepository {
             predicate: #Predicate { link in link.fromID == id },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        return try context.fetch(descriptor).filter { $0.fromKind == kind }
+        return try context.fetch(descriptor).dedupedByID().filter { $0.fromKind == kind }
     }
 
     /// Batched form of ``outgoing(from:)``: resolves outgoing links for MANY
