@@ -206,13 +206,21 @@ public struct ProjectsSetStageTool: AgentTool {
 
 public struct ProjectsListTool: AgentTool {
     public let name = "projects.list"
-    public let description = "Lists active (non-deleted, non-archived) projects, optionally filtered by status."
+    public let description = """
+        Lists non-deleted projects. By default returns only active (non-archived) projects. \
+        Pass include_archived:true to also surface archived projects (useful after bulk \
+        migrations). Soft-deleted projects are never included; use tasks.orphaned to surface \
+        tasks whose projects were deleted.
+        """
     public let inputSchema: JSONSchema = .object(
         properties: [
             "status": .string(
                 enumValues: ProjectStatus.allCases.map(\.rawValue),
                 description: "Optional ProjectStatus filter."
-            )
+            ),
+            "include_archived": .boolean(
+                description: "If true, archived (non-deleted) projects are included. Defaults to false."
+            ),
         ],
         required: []
     )
@@ -221,7 +229,16 @@ public struct ProjectsListTool: AgentTool {
 
     @MainActor
     public func call(args: JSONValue, context: AgentContext) async throws -> JSONValue {
-        var projects = try context.projectRepository.allActive()
+        let includeArchived: Bool
+        if let raw = args["include_archived"] {
+            guard let flag = raw.boolValue else {
+                throw AgentError.validation("include_archived must be a boolean")
+            }
+            includeArchived = flag
+        } else {
+            includeArchived = false
+        }
+        var projects = try context.projectRepository.all(includeArchived: includeArchived)
         if let statusText = args["status"]?.stringValue {
             guard let status = ProjectStatus(rawValue: statusText) else {
                 throw AgentError.validation(

@@ -91,6 +91,7 @@ public enum CoreTaskTools {
         [
             TasksGetTool(),
             TasksListTool(),
+            TasksOrphanedTool(),
             TasksSearchTool(),
             TasksCreateTool(),
             TasksCreateIdempotentTool(),
