@@ -6,6 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-22
+
+### Fixed
+- **Meeting recording works again.** The background helper that detects meetings and
+  records them was crashing the instant it launched on release builds, which silently
+  broke both automatic detection (no prompt when a Teams/Zoom meeting started) and the
+  manual **Record Meeting…** command. The helper now opens its shared local store without
+  standing up a second iCloud sync engine it isn't entitled to use; your data still syncs
+  through the main app as before.
+
 ## [0.4.0] - 2026-06-20
 A sweeping interface pass across every module — Today, Calendar, Meetings, Projects,
 Tasks, Notes and navigation — plus a new knowledge graph, an activity feed in place of
@@ -174,7 +184,8 @@ the app, alongside a Linear-inspired redesign and a broad correctness pass.
 - First TestFlight beta: tasks (quick capture ⌘N, Today, Inbox), Mac/iPhone/iPad/Watch,
   CloudKit sync, on-device AI assist, MCP external access (Mac).
 
-[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.1...v0.3.2
