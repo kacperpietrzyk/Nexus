@@ -180,6 +180,145 @@ struct TasksMergeToolTests {
         }
     }
 
+    // MARK: - tasks.merge: duration paired carry (Fix 1)
+
+    @MainActor
+    @Test("merge carries both estimatedDurationSeconds and durationSourceRaw when survivor has no estimate")
+    func mergeFillsDurationPaired() async throws {
+        let survivor = TaskItem(title: "Survivor")
+        // survivor has NO duration or source
+        let duplicate = TaskItem(
+            title: "Duplicate",
+            estimatedDurationSeconds: 3600,
+            durationSource: .explicit
+        )
+        let fixture = try await InMemoryAgentContext.make(tasks: [survivor, duplicate])
+
+        _ = try await TasksMergeTool().call(
+            args: .object([
+                "into_id": .string(survivor.id.uuidString),
+                "from_id": .string(duplicate.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+
+        // Both value AND source must arrive together.
+        #expect(survivor.estimatedDurationSeconds == 3600)
+        #expect(survivor.durationSourceRaw == DurationSource.explicit.rawValue)
+    }
+
+    @MainActor
+    @Test("merge does not overwrite survivor duration or source when survivor already has an estimate")
+    func mergeDurationNotOverwrittenWhenSurvivorHasEstimate() async throws {
+        let survivor = TaskItem(
+            title: "Survivor",
+            estimatedDurationSeconds: 1800,
+            durationSource: .explicit
+        )
+        let duplicate = TaskItem(
+            title: "Duplicate",
+            estimatedDurationSeconds: 7200,
+            durationSource: .estimated
+        )
+        let fixture = try await InMemoryAgentContext.make(tasks: [survivor, duplicate])
+
+        _ = try await TasksMergeTool().call(
+            args: .object([
+                "into_id": .string(survivor.id.uuidString),
+                "from_id": .string(duplicate.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+
+        // Survivor's existing value+source must NOT be overwritten.
+        #expect(survivor.estimatedDurationSeconds == 1800)
+        #expect(survivor.durationSourceRaw == DurationSource.explicit.rawValue)
+    }
+
+    // MARK: - tasks.merge: nilable scalar fill — cycleID and assignedAgent (Fix 2)
+
+    @MainActor
+    @Test("merge fills cycleID and assignedAgent when survivor fields are nil")
+    func mergeFillsCycleAndAgent() async throws {
+        let cycleID = UUID()
+        let survivor = TaskItem(title: "Survivor")
+        let duplicate = TaskItem(
+            title: "Duplicate",
+            assignedAgent: .codex,
+            cycleID: cycleID
+        )
+        let fixture = try await InMemoryAgentContext.make(tasks: [survivor, duplicate])
+
+        _ = try await TasksMergeTool().call(
+            args: .object([
+                "into_id": .string(survivor.id.uuidString),
+                "from_id": .string(duplicate.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(survivor.cycleID == cycleID)
+        #expect(survivor.assignedAgent == AgentAssignee.codex.rawValue)
+    }
+
+    @MainActor
+    @Test("merge does not overwrite survivor cycleID or assignedAgent when already set")
+    func mergeCycleAndAgentNotOverwritten() async throws {
+        let survivorCycle = UUID()
+        let loserCycle = UUID()
+        let survivor = TaskItem(
+            title: "Survivor",
+            assignedAgent: .claude,
+            cycleID: survivorCycle
+        )
+        let duplicate = TaskItem(
+            title: "Duplicate",
+            assignedAgent: .codex,
+            cycleID: loserCycle
+        )
+        let fixture = try await InMemoryAgentContext.make(tasks: [survivor, duplicate])
+
+        _ = try await TasksMergeTool().call(
+            args: .object([
+                "into_id": .string(survivor.id.uuidString),
+                "from_id": .string(duplicate.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+
+        #expect(survivor.cycleID == survivorCycle)
+        #expect(survivor.assignedAgent == AgentAssignee.claude.rawValue)
+    }
+
+    // MARK: - tasks.merge: subtask re-parenting (Fix 3)
+
+    @MainActor
+    @Test("merge detaches loser's subtasks to root and keeps them live")
+    func mergeReparentsSubtasks() async throws {
+        let survivor = TaskItem(title: "Survivor")
+        let loser = TaskItem(title: "Loser")
+        let child = TaskItem(title: "Child subtask")
+        child.parentTaskID = loser.id
+        let fixture = try await InMemoryAgentContext.make(tasks: [survivor, loser, child])
+
+        _ = try await TasksMergeTool().call(
+            args: .object([
+                "into_id": .string(survivor.id.uuidString),
+                "from_id": .string(loser.id.uuidString),
+            ]),
+            context: fixture.context
+        )
+
+        // Loser is soft-deleted.
+        #expect(loser.deletedAt != nil)
+
+        // Child is still live (not cascade-deleted).
+        #expect(child.deletedAt == nil)
+
+        // Child's parent pointer is cleared to root — no longer points at the tombstone.
+        #expect(child.parentTaskID == nil)
+    }
+
     // MARK: - tasks.merge: duplicate edge dedup
 
     @MainActor
