@@ -451,7 +451,7 @@ struct NexusMacApp: App {
                     )
                 }
                 .onReceive(NotificationCenter.default.publisher(for: MeetingRecordingRequest.startManual)) { _ in
-                    Task { @MainActor in manualRecordingStarter.startWithPicker() }
+                    Task { @MainActor in manualRecordingStarter.start() }
                 }
                 .sheet(
                     isPresented: Binding(
