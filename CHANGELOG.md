@@ -6,6 +6,29 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-29
+
+### Added
+- **Record a meeting without picking a window.** Manual **Record Meeting…** now captures
+  system audio through a global tap (excluding Nexus' own output), so you no longer get a
+  screen/window picker before recording starts.
+- **Tasks can carry a real event date.** A task can now record when something actually
+  happened, separate from when it was created — so back-dating an item no longer distorts
+  its creation time. Ordering and listing fall back to the creation date when no event
+  date is set.
+
+### Changed
+- **More capable assistant access to your projects and tasks (MCP).** New read tools give
+  the assistant a full project overview and surface archived projects and orphaned tasks,
+  a merge tool folds a duplicate task into another (carrying over its links, subtasks and
+  dates), and notes/meetings can be linked to a project with a dedicated relationship.
+
+### Fixed
+- **Assistant reliability.** Concurrent assistant sessions no longer block each other, the
+  tool list recovers when the helper starts before its tools are ready, write bursts no
+  longer trigger redundant refreshes, and duplicate "ghost" rows from sync are filtered
+  out of meeting and link results.
+
 ## [0.4.1] - 2026-06-22
 
 ### Fixed
@@ -184,7 +207,8 @@ the app, alongside a Linear-inspired redesign and a broad correctness pass.
 - First TestFlight beta: tasks (quick capture ⌘N, Today, Inbox), Mac/iPhone/iPad/Watch,
   CloudKit sync, on-device AI assist, MCP external access (Mac).
 
-[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/kacperpietrzyk/Nexus/compare/v0.3.2...v0.3.3
