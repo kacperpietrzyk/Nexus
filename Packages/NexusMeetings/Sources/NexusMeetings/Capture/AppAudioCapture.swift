@@ -7,6 +7,19 @@ public protocol AppAudioTapping: Sendable {
     func stop()
 }
 
+/// Selects what a Core Audio process tap captures. A positive pid taps that one
+/// app (used by background auto-detection, which already has a title-verified
+/// pid); a non-positive pid means "no specific app" and taps all system output
+/// globally — the Circleback-style manual-record path passes `pid: 0`.
+enum CATapScope: Equatable {
+    case process(pid_t)
+    case global
+
+    static func resolve(pid: pid_t) -> CATapScope {
+        pid > 0 ? .process(pid) : .global
+    }
+}
+
 public struct NoopAppAudioTap: AppAudioTapping {
     public init() {}
     public func start(pid: pid_t) throws {}
@@ -144,9 +157,21 @@ public final class CATapAppAudioTap: AppAudioTapping, @unchecked Sendable {
         AudioCaptureConsentStore.shared.record(.granted)
     }
 
+    private func makeTapDescription(pid: pid_t) throws -> CATapDescription {
+        switch CATapScope.resolve(pid: pid) {
+        case .process(let pid):
+            let processObjectID = try processObjectID(for: pid)
+            return CATapDescription(stereoMixdownOfProcesses: [processObjectID])
+        case .global:
+            // Capture all system output audio, excluding our own (helper)
+            // process so the tap never feeds back on itself.
+            let excluded = [try? processObjectID(for: getpid())].compactMap { $0 }
+            return CATapDescription(stereoGlobalTapButExcludeProcesses: excluded)
+        }
+    }
+
     private func startTap(pid: pid_t) throws {
-        let processObjectID = try processObjectID(for: pid)
-        let tap = CATapDescription(stereoMixdownOfProcesses: [processObjectID])
+        let tap = try makeTapDescription(pid: pid)
         var id: AudioObjectID = 0
         let createStatus = AudioHardwareCreateProcessTap(tap, &id)
         guard createStatus == noErr else {
