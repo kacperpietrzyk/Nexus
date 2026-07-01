@@ -28,6 +28,22 @@ struct AssistantChatSkillTests {
         #expect(macTools.isDisjoint(with: writingTools))
     }
 
+    /// Read questions like "what do I have tomorrow?" need a calendar read tool;
+    /// its absence forced the 12B to invent `activity.get` with a fabricated id.
+    @Test func macExposesCalendarReadTool() {
+        #expect(AssistantChatConfig.mac.toolNames.contains("calendar.events.list"))
+        // Calendar writes stay out of the read-only assistant surface.
+        #expect(AssistantChatConfig.mac.toolNames.contains("calendar.events.create") == false)
+    }
+
+    /// The prompt must steer read questions to read tools rather than a proposal block.
+    @Test func promptSteersReadsAwayFromProposals() {
+        let p = AssistantChatConfig.mac.systemPrompt
+        #expect(p.contains("Reading vs. proposing"))
+        #expect(p.contains("calendar.events.list"))
+        #expect(p.contains("NEVER emit a proposal block for a read"))
+    }
+
     @Test func macSystemPromptContainsProposalSchema() {
         let prompt = AssistantChatConfig.mac.systemPrompt
         // Must contain the fenced block marker the parser expects.
