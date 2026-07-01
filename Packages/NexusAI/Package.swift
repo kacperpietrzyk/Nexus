@@ -15,8 +15,12 @@ let package = Package(
         .package(path: "../NexusSync"),
         .package(url: "https://github.com/argmaxinc/argmax-oss-swift.git", from: "1.0.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.3"),
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.31.3"),
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.3"),
+        // Pin exact 0.31.4: 0.31.5 adds an iOS-incompatible Encuda/Process target
+        // (no #if os(macOS) guard → NexusiOS build fails) + a CudaBuild build-tool
+        // plugin headless xcodebuild rejects. Revisit when upstream guards Encuda
+        // for non-macOS. mlx-swift-lm 3.31.4 allows >=0.31.4 <0.32.0.
+        .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.31.4"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.4"),
     ],
     targets: [
         .target(

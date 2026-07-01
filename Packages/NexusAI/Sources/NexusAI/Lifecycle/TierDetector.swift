@@ -70,18 +70,22 @@ public enum TierDetector {
                     recommendedChat: nil,
                     recommendedEmbedder: embedderFits ? e5LargeID : nil)
             }
-            // Two loadable Gemma-4 tiers (both `model_type: gemma4`, supported by the
-            // pinned mlx-swift-lm; the dense 12B is `gemma4_unified`, unsupported by the
-            // Swift runtime today). ≥24 GB RAM gets the big MoE 26B/A4B (~14.6 GB
-            // resident — MoE keeps every expert in memory, so this is a RAM tier, not a
-            // compute one); 16–24 GB gets the elastic E4B (~4.9 GB). The assistant is a
-            // lightweight in-app helper (recommendations, calendar, task breakdown), not
-            // a heavy reasoner — E4B is sufficient there. WHEN mlx-swift-lm adds
-            // `gemma4_unified`, collapse both tiers to a single ~7 GB 12B entry (fits
-            // 16 GB) and drop the RAM split.
-            if physicalMemoryGB >= 24, storageAllows(modelSizeGB: 14.6, availableGB: availableStorageGB) {
+            // Two loadable Gemma-4 tiers. ≥24 GB RAM gets the dense 12B
+            // (`model_type: gemma4_unified`, registered in mlx-swift-lm 3.31.4 onto the
+            // existing `Gemma4Model`; ~11 GB resident at qat-4bit). It replaced the MoE
+            // 26B/A4B, which was removed from the catalog entirely — a dense 12B plausibly
+            // beats a 26B MoE with only 4B active at lower RAM, and dropping it sheds a
+            // 14.6 GB manual-override option for a lightweight helper that never needed it.
+            // (Any already-downloaded 26B is reclaimed by ModelStoreReconciler as a
+            // non-canonical orphan, independent of catalog membership.) 16–24 GB gets the
+            // elastic E4B (~4.9 GB). The qat-4bit 12B is 11 GB, not the ~7 GB once assumed,
+            // so it does NOT fit 16 GB comfortably (~69% of RAM) — hence still a ≥24 GB
+            // gate and no single-tier collapse. The assistant is a lightweight in-app
+            // helper (recommendations, calendar, task breakdown), not a heavy reasoner —
+            // E4B is sufficient on 16 GB.
+            if physicalMemoryGB >= 24, storageAllows(modelSizeGB: 11.0, availableGB: availableStorageGB) {
                 return DeviceTier(
-                    recommendedChat: "gemma-4-26b-a4b",
+                    recommendedChat: "gemma-4-12b",
                     recommendedEmbedder: e5LargeID)
             }
             if storageAllows(modelSizeGB: 4.9, availableGB: availableStorageGB) {
