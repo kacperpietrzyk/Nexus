@@ -6,6 +6,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-07-01
+
+### Changed
+- **A stronger on-device assistant model on capable Macs.** Macs with 24 GB of memory or
+  more now run the dense Gemma 4 12B model for the local assistant in place of the older
+  mixture-of-experts 26B — comparable quality with a smaller on-disk and memory footprint.
+  Macs with 16–24 GB continue to use the compact E4B model, and iPhones/iPads are
+  unchanged. Any previously downloaded 26B model is cleaned up automatically once the new
+  model is in place.
+
 ## [0.4.2] - 2026-06-29
 
 ### Added
