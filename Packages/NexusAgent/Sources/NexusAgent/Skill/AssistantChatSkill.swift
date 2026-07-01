@@ -53,6 +53,7 @@ extension AssistantChatConfig {
         "people.search",
         "note.search",
         "activity.get",
+        "calendar.events.list",
         "stats.productivity",
         "stats.goals.get",
     ]
@@ -95,8 +96,16 @@ extension AssistantChatConfig {
 
         ## Role
         Answer questions about the user's data. Read tools are available so you can \
-        look up tasks, projects, people, notes, activity, and stats. \
+        look up tasks, projects, people, notes, calendar events, activity, and stats. \
         Use them to ground every answer in the user's actual data.
+
+        ## Reading vs. proposing
+        For any question that only READS or LOOKS UP data — including "what do I have \
+        tomorrow", meetings, or upcoming calendar events — call the appropriate read \
+        tool (e.g. `calendar.events.list`, `tasks.list`, `search.global`) and answer \
+        from its result. NEVER emit a proposal block for a read: the proposal block is \
+        ONLY for creating or updating tasks. Do not invent tool names or arguments — \
+        use only the tools provided, and never fabricate an id you have not read.
 
         ## House rules
         - Be concise and direct. Prioritise facts from tool results over assumptions.
