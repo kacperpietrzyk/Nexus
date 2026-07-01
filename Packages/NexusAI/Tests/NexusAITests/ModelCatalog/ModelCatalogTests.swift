@@ -6,8 +6,10 @@ import Testing
 
 @testable import NexusAI
 
-// NOTE: Task 11 (2026-06-14) — catalog updated to 2 Gemma chat entries only.
-// All assertions updated from Qwen counts/IDs to Gemma equivalents.
+// NOTE: Task 11 (2026-06-14) — catalog switched Qwen→Gemma.
+// 2026-07-01 — dense 12B (`gemma-4-12b`) added (mlx-swift-lm 3.31.4 registered
+// `gemma4_unified`) as the ≥24 GB flagship and the MoE 26B/A4B removed to drop its
+// 14.6 GB manual-override footprint, leaving 2 Gemma chat entries (12B + E4B).
 
 @MainActor
 @Test func defaultCatalogParsesFromBundle() throws {
@@ -16,13 +18,16 @@ import Testing
     #expect(catalog.chat.count >= 2)
     #expect(catalog.embedders.count >= 1)
 
-    let gemma26b = catalog.chat.first { $0.id == "gemma-4-26b-a4b" }
-    #expect(gemma26b != nil)
-    #expect(gemma26b?.hfPath == "mlx-community/gemma-4-26B-A4B-it-qat-4bit")
-    #expect(gemma26b?.family == "gemma4")
-    #expect(gemma26b?.sizeGB == 14.6)
-    #expect(gemma26b?.recommendedRAMGB == 32)
-    #expect(gemma26b?.supportsTools == true)
+    let gemma12b = catalog.chat.first { $0.id == "gemma-4-12b" }
+    #expect(gemma12b != nil)
+    #expect(gemma12b?.hfPath == "mlx-community/gemma-4-12B-it-qat-4bit")
+    #expect(gemma12b?.family == "gemma4")
+    #expect(gemma12b?.sizeGB == 11.0)
+    #expect(gemma12b?.recommendedRAMGB == 24)
+    #expect(gemma12b?.supportsTools == true)
+
+    // The MoE 26B/A4B was removed (2026-07-01) — its dense 12B replacement is the flagship.
+    #expect(!catalog.chat.contains { $0.id == "gemma-4-26b-a4b" })
 
     // Regression guard: no qwen2.5 family, no capital-I "Instruct" in hfPath.
     #expect(!catalog.chat.contains { $0.family == "qwen2.5" })
@@ -38,7 +43,7 @@ import Testing
     try ModelCatalog.bootstrap.seed(into: ctx)
     let manifests = try ctx.fetch(FetchDescriptor<ModelManifest>())
     #expect(manifests.count >= 3)  // 2 Gemma chat + 1 embedder
-    #expect(manifests.contains { $0.id == "gemma-4-26b-a4b" })
+    #expect(manifests.contains { $0.id == "gemma-4-12b" })
     #expect(manifests.contains { $0.id == "gemma-4-e4b" })
     #expect(manifests.contains { $0.id == "multilingual-e5-large" })
 }

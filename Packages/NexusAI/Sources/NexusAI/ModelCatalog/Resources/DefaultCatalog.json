@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "lastUpdated": "2026-06-16",
+  "lastUpdated": "2026-07-01",
   "chat": [
     {
-      "id": "gemma-4-26b-a4b",
-      "hfPath": "mlx-community/gemma-4-26B-A4B-it-qat-4bit",
+      "id": "gemma-4-12b",
+      "hfPath": "mlx-community/gemma-4-12B-it-qat-4bit",
       "family": "gemma4",
-      "displayName": "Gemma 4 26B (A4B)",
-      "sizeGB": 14.6,
-      "recommendedRAMGB": 32,
+      "displayName": "Gemma 4 12B",
+      "sizeGB": 11.0,
+      "recommendedRAMGB": 24,
       "contextLength": 262144,
       "supportsTools": true,
       "supportsVision": false,

@@ -5,31 +5,32 @@ import Testing
 
 // NOTE: Task 11 (2026-06-14) — all Qwen IDs replaced by Gemma IDs.
 // 2026-06-16 — Mac chat corrected from the fabricated `gemma-4.5-12b-1m`
-// (HF 401) to a RAM-tiered pair of loadable Gemma-4 models (both `model_type:
-// gemma4`): ≥24 GB → `gemma-4-26b-a4b` (MoE, ~14.6 GB resident); 16–24 GB →
-// `gemma-4-e4b` (elastic, ~4.9 GB). The dense 12B (`gemma4_unified`) is absent
-// from the pinned mlx-swift-lm registry — would download but never load — so it
-// is deliberately not used until Swift-runtime support lands.
+// (HF 401) to a RAM-tiered pair of loadable Gemma-4 models.
+// 2026-07-01 — mlx-swift-lm 3.31.4 registered `gemma4_unified`, so the dense 12B
+// (`gemma-4-12b`, ~11 GB resident) now loads and becomes the ≥24 GB top-tier
+// recommendation; the MoE 26B/A4B was removed from the catalog. 16–24 GB still →
+// `gemma-4-e4b` (elastic, ~4.9 GB); the 11 GB 12B does not fit 16 GB comfortably,
+// so the ≥24 GB gate stands.
 
-@Test func macHighRAMRecommends26BA4B() {
+@Test func macHighRAMRecommends12B() {
     let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 64, availableStorageGB: 200)
-    #expect(tier.recommendedChat == "gemma-4-26b-a4b")
+    #expect(tier.recommendedChat == "gemma-4-12b")
     #expect(tier.recommendedEmbedder == "multilingual-e5-large")
 }
 
-@Test func mac24GBBoundaryGets26BA4B() {
+@Test func mac24GBBoundaryGets12B() {
     let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 24, availableStorageGB: 50)
-    #expect(tier.recommendedChat == "gemma-4-26b-a4b")
+    #expect(tier.recommendedChat == "gemma-4-12b")
 }
 
 @Test func macLowRAMRecommendsE4B() {
-    // 16–24 GB RAM is below the 26B/A4B floor → the elastic E4B that fits.
+    // 16–24 GB RAM is below the 12B floor → the elastic E4B that fits.
     let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 16, availableStorageGB: 20)
     #expect(tier.recommendedChat == "gemma-4-e4b")
 }
 
 @Test func macHighRAMLowStorageFallsToE4B() {
-    // ≥24 GB RAM but not enough disk for the 26B (needs ~29 GB) → E4B, not nil.
+    // ≥24 GB RAM but not enough disk for the 12B (needs ~22 GB) → E4B, not nil.
     let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 32, availableStorageGB: 15)
     #expect(tier.recommendedChat == "gemma-4-e4b")
 }

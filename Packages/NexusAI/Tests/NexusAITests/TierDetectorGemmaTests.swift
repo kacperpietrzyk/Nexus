@@ -10,9 +10,9 @@ import Testing
         #expect(tier.recommendedEmbedder == "multilingual-e5-large")
     }
 
-    @Test func macRecommends26BA4B() {
+    @Test func macRecommends12B() {
         let tier = TierDetector.recommend(platform: .macOS, physicalMemoryGB: 32, availableStorageGB: 256)
-        #expect(tier.recommendedChat == "gemma-4-26b-a4b")
+        #expect(tier.recommendedChat == "gemma-4-12b")
     }
 
     @Test func watchGetsNoChat() {
