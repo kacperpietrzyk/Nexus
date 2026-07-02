@@ -8,22 +8,27 @@ import Foundation
 /// structured-first dispatch) owns the actual tool execution, audit, and undo;
 /// this provider just folds engine output into `AIResponse.toolCalls`.
 ///
-/// ## Context completeness
+/// ## Prompt assembly
 ///
-/// `AIRequest.messages` / `AIRequest.systemPrompt` are NOT context-complete.
-/// `AgentRuntime.makeAIRequest` folds the memory section, RAG hits, and the
-/// ephemeral context prefix ONLY into the flat `AIRequest.prompt`, never into
-/// `messages`/`systemPrompt`. Therefore the final user-turn content handed to
-/// the model MUST be `request.prompt`. The message list is assembled as:
+/// The message list is assembled as:
 ///
 /// 1. an optional `.system` message from `request.systemPrompt` (only when
 ///    non-nil and non-blank — no invented default that could fight the model's
 ///    own chat template),
-/// 2. any `request.messages` prior turns (converted via `MLXChatConverters`),
-/// 3. a FINAL `.user` message whose text is exactly `request.prompt`.
+/// 2. then EITHER the structured `request.messages` turns (converted via
+///    `MLXChatConverters`) when the caller supplied a conversation, OR a single
+///    `.user` turn carrying `request.prompt` when it did not.
 ///
-/// Dropping `request.prompt` while forwarding `request.messages` would be a
-/// silent context regression.
+/// These two shapes are mutually exclusive. On the agent path,
+/// `AgentRuntime.makeAIRequest` sets `request.messages` to the real conversation
+/// (already ending with the current user turn) and folds the memory section, RAG
+/// hits, and the ephemeral context prefix into `request.systemPrompt`. The flat
+/// `request.prompt` is the SEPARATE context-complete carrier consumed by the
+/// Apple/Whisper providers and by direct callers (e.g. TaskAssist) that pass no
+/// `messages`. Feeding that flat, role-labeled transcript as an extra `.user`
+/// turn alongside `request.messages` duplicated the conversation and made the
+/// model echo `user:` / invent further assistant turns — so it is not appended
+/// when structured messages are present.
 public actor MLXProvider: AIProvider {
     public nonisolated let id: ProviderID = .mlx
     public nonisolated let capabilities: Set<AICapability> = [.generate]
@@ -71,13 +76,26 @@ public actor MLXProvider: AIProvider {
             messages.append(MLXChatMessage(role: .system, text: systemPrompt))
         }
 
-        if let priorMessages = request.messages {
+        // Two mutually-exclusive shapes, keyed on whether the caller supplied a
+        // structured conversation:
+        //
+        // * Structured (agent) path — `request.messages` non-empty. The list is the
+        //   real conversation and already ends with the current user turn (or, mid
+        //   tool-loop, a `.tool` result). It is fed verbatim and the flat
+        //   `request.prompt` is NOT appended: doing so re-fed the whole role-labeled
+        //   transcript as an extra `.user` turn, which made the model echo `user:`
+        //   and hallucinate further `Nexus Assistant:` turns. Memory + RAG +
+        //   ephemeral context reach this path via `request.systemPrompt`, which
+        //   `AgentRuntime.makeAIRequest` enriches for exactly this reason.
+        //
+        // * Flat path — no `request.messages` (direct callers such as TaskAssist,
+        //   and the Apple/Whisper providers). `request.prompt` is the sole,
+        //   context-complete user turn.
+        if let priorMessages = request.messages, !priorMessages.isEmpty {
             messages.append(contentsOf: MLXChatConverters.mlxChatMessages(from: priorMessages))
+        } else {
+            messages.append(MLXChatMessage(role: .user, text: request.prompt))
         }
-
-        // `request.prompt` is the context-complete user-turn carrier (memory +
-        // RAG + ephemeral prefix are folded here, NOT into messages/systemPrompt).
-        messages.append(MLXChatMessage(role: .user, text: request.prompt))
 
         // nil tools ⇒ empty ⇒ plain generation (correct for non-agent callers
         // such as TaskAssist).

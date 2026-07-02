@@ -201,6 +201,11 @@ final class ScriptedAgentAIProvider: AIProvider, @unchecked Sendable {
     private(set) var prompts: [String] = []
     /// Tool specs received in the most-recent `generate` call.
     private(set) var lastToolSpecs: [AIToolSpec] = []
+    /// System prompt received in the most-recent `generate` call — the structured
+    /// (MLX) path folds memory/RAG/ephemeral context here, so tests can assert it.
+    private(set) var lastSystemPrompt: String?
+    /// Structured conversation received in the most-recent `generate` call.
+    private(set) var lastMessages: [AIChatMessage]?
 
     init(
         scripts: [Script],
@@ -220,6 +225,8 @@ final class ScriptedAgentAIProvider: AIProvider, @unchecked Sendable {
         callCount += 1
         prompts.append(request.prompt)
         lastToolSpecs = request.tools ?? []
+        lastSystemPrompt = request.systemPrompt
+        lastMessages = request.messages
         let script = scripts.isEmpty ? .text("") : scripts.removeFirst()
         switch script {
         case .text(let text):
