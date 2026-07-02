@@ -44,6 +44,22 @@ private final class StubMLXChat: MLXChatGenerating, @unchecked Sendable {
     func unload() async {}
 }
 
+/// Generator whose stream never yields and never finishes — models a wedged
+/// `MLX.eval` that blocks the engine forever (and holds its busy gate).
+private final class HangingMLXChat: MLXChatGenerating, @unchecked Sendable {
+    func generate(
+        messages: [MLXChatMessage],
+        tools: [MLXToolSpec],
+        params: MLXGenerateParameters
+    ) async throws -> AsyncThrowingStream<MLXChunk, Error> {
+        AsyncThrowingStream { _ in
+            // Intentionally retain the continuation without ever resuming it.
+        }
+    }
+
+    func unload() async {}
+}
+
 private struct Boom: Error {}
 
 private func makeEngine(_ stub: StubMLXChat) -> MLXChatEngine {
@@ -243,6 +259,90 @@ struct MLXProviderTests {
                 AIRequest(prompt: "hi", capability: .generate)
             )
         }
+    }
+
+    @Test("recreateEngine abandons a wedged engine so the next generate succeeds")
+    func recreateEngineAbandonsWedgedEngineAndNextGenerateSucceeds() async throws {
+        // The initial engine's generator hangs forever (mimics a wedged MLX.eval
+        // holding the busy gate); the factory builds engines whose generator works.
+        let hangingEngine = MLXChatEngine(folder: URL(fileURLWithPath: "/dev/null")) { _, _ in
+            HangingMLXChat()
+        }
+        let engineFactory: @Sendable () -> MLXChatEngine = {
+            MLXChatEngine(folder: URL(fileURLWithPath: "/dev/null")) { _, _ in
+                StubMLXChat(cannedChunks: [.text("recovered")])
+            }
+        }
+        let provider = MLXProvider(
+            engine: hangingEngine,
+            availabilityProbe: { true },
+            engineFactory: engineFactory
+        )
+
+        // Fire the wedged turn and abandon it (never awaited to completion).
+        let wedged = Task {
+            try await provider.generate(AIRequest(prompt: "hang", capability: .generate))
+        }
+        // Give the wedged turn a moment to take the busy gate on the old engine.
+        try await Task.sleep(for: .milliseconds(50))
+
+        // Abandon the wedged engine and swap in a fresh one.
+        await provider.recreateEngine()
+
+        // The NEXT generate must succeed on the fresh engine — the clause that
+        // actually proves ABANDON (a reset-in-place would jam behind the gate).
+        let response = try await provider.generate(
+            AIRequest(prompt: "again", capability: .generate)
+        )
+        #expect(response.text == "recovered")
+
+        wedged.cancel()
+    }
+
+    @Test("recreateEngine clears the stale lifecycle slot so the fresh engine re-warms")
+    func recreateEngineClearsStaleLifecycleAvailability() async throws {
+        // A real lifecycle marked loaded (as a completed first load would leave it).
+        let lifecycle = MLXLifecycleController(
+            modelsRoot: URL(fileURLWithPath: NSTemporaryDirectory())
+                .appending(path: "nexus-mlxprov-recreate", directoryHint: .isDirectory),
+            localStateStore: ModelManifestLocalState.Store(),
+            initiallyForeground: true,
+            startSweep: false
+        )
+        lifecycle.markChatLoaded()
+        #expect(lifecycle.isChatAvailable == true)
+
+        let provider = MLXProvider(
+            engine: MLXChatEngine(folder: URL(fileURLWithPath: "/dev/null")) { _, _ in
+                HangingMLXChat()
+            },
+            availabilityProbe: { lifecycle.isChatAvailable },
+            engineFactory: {
+                MLXChatEngine(folder: URL(fileURLWithPath: "/dev/null")) { _, _ in
+                    StubMLXChat(cannedChunks: [.text("ok")])
+                }
+            },
+            resetLifecycleSlot: { lifecycle.unloadChat() }
+        )
+
+        await provider.recreateEngine()
+
+        // Availability must flip false: otherwise the app's `!isChatAvailable`-guarded
+        // warm would skip, and the cold fresh engine would silently load inside generate.
+        #expect(lifecycle.isChatAvailable == false)
+    }
+
+    @Test("recreateEngine is a no-op when no engineFactory was injected")
+    func recreateEngineIsNoOpWithoutFactory() async throws {
+        let stub = StubMLXChat(cannedChunks: [.text("ok")])
+        let provider = MLXProvider(engine: makeEngine(stub), availabilityProbe: { true })
+
+        await provider.recreateEngine()
+
+        let response = try await provider.generate(
+            AIRequest(prompt: "hi", capability: .generate)
+        )
+        #expect(response.text == "ok")
     }
 
     @Test("transcribe throws the shared unsupported-capability error")
