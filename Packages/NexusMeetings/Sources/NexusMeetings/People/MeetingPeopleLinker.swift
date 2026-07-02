@@ -142,7 +142,13 @@ public struct MeetingPeopleLinker {
             let person: Person?
             if let nonEmptyName, let existing = try? people.suggestExisting(matching: nonEmptyName) {
                 // Enrich the already-surfaced person in place — no duplicate row (I2).
-                if let nonEmptyEmail {
+                // Only FILL a missing email; never overwrite a curated one.
+                // suggestExisting is a fuzzy displayName/alias match, so a different
+                // person who merely shares a name or alias would otherwise have their
+                // real email clobbered by this attendee (re-applied on every reprocess).
+                let existingEmailIsBlank =
+                    existing.email?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true
+                if let nonEmptyEmail, existingEmailIsBlank {
                     try? people.update(existing, email: .some(nonEmptyEmail))
                 }
                 person = existing

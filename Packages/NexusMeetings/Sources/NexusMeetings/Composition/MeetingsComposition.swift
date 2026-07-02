@@ -44,6 +44,13 @@ public final class MeetingsComposition {
     public let linkRepository: LinkRepository
     private let calendarProvider: any CalendarEventProviding
 
+    /// The on-device ASR providers, retained so `recoverASREngines()` can abandon
+    /// and rebuild their wedged engines when the pipeline watchdog fires (only the
+    /// ASR-owning process — the helper — feeds transcription jobs, so only it wires
+    /// this into the queue's `recover` hook).
+    private let primaryTranscriptionProvider: ParakeetTDTProvider
+    private let fallbackTranscriptionProvider: WhisperKitMeetingProvider
+
     public var taskItemRepository: TaskItemRepository { taskRepository }
 
     /// Wires named speakers to `Person` records (`.attendee` edges), graph-only.
@@ -72,7 +79,9 @@ public final class MeetingsComposition {
         appPatternRegistryProvider: AppPatternRegistryProvider? = nil,
         appCaptureFactory: @escaping (AudioFileWriter) -> any MeetingAppAudioCapturing = {
             AppAudioCapture(writer: $0, tap: NoopAppAudioTap())
-        }
+        },
+        recover: (@Sendable () async -> Void)? = nil,
+        recoversASREngines: Bool = false
     ) throws {
         try FileManager.default.createDirectory(
             at: rootAudioFolder,
@@ -95,30 +104,29 @@ public final class MeetingsComposition {
 
         let primaryProvider = ParakeetTDTProvider()
         let fallbackProvider = WhisperKitMeetingProvider()
+        primaryTranscriptionProvider = primaryProvider
+        fallbackTranscriptionProvider = fallbackProvider
         let transcriptionStage = TranscriptionStage(
             primary: primaryProvider,
             fallback: fallbackProvider
         )
 
-        pipelineQueue = PipelineQueue()
-        pipeline = MeetingProcessingPipeline(
+        pipelineQueue = PipelineQueue(
+            recover: Self.makeQueueRecover(
+                recover: recover,
+                recoversASREngines: recoversASREngines,
+                primary: primaryProvider,
+                fallback: fallbackProvider
+            )
+        )
+        pipeline = Self.makePipeline(
             repo: meetingRepository,
-            vad: VADTrimStage(),
             transcription: transcriptionStage,
-            diarization: DiarizationStage(),
-            merge: MergeStage(),
-            summary: SummaryStage(router: router),
-            actionItems: ActionItemsStage(
-                router: router,
-                taskRepository: self.taskRepository,
-                meetingRepository: meetingRepository,
-                linkRepository: linkRepository,
-                sourceID: MeetingsComposition.actionItemSourceID,
-                dateExtractor: dateExtractor
-            ),
-            providerProfile: {
-                "\(primaryProvider.identifier)+sortformer"
-            }
+            router: router,
+            taskRepository: self.taskRepository,
+            linkRepository: linkRepository,
+            dateExtractor: dateExtractor,
+            providerIdentifier: primaryProvider.identifier
         )
 
         self.recorder =
@@ -232,6 +240,67 @@ public final class MeetingsComposition {
         case .tentative: return 1
         case .accepted, .pending, .none: return 0
         }
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    private static func makePipeline(
+        repo: MeetingRepository,
+        transcription: TranscriptionStage,
+        router: any MeetingProcessingRouting,
+        taskRepository: TaskItemRepository,
+        linkRepository: LinkRepository,
+        dateExtractor: (any DateExtracting)?,
+        providerIdentifier: String
+    ) -> MeetingProcessingPipeline {
+        MeetingProcessingPipeline(
+            repo: repo,
+            vad: VADTrimStage(),
+            transcription: transcription,
+            diarization: DiarizationStage(),
+            merge: MergeStage(),
+            summary: SummaryStage(router: router),
+            actionItems: ActionItemsStage(
+                router: router,
+                taskRepository: taskRepository,
+                meetingRepository: repo,
+                linkRepository: linkRepository,
+                sourceID: MeetingsComposition.actionItemSourceID,
+                dateExtractor: dateExtractor
+            ),
+            providerProfile: {
+                "\(providerIdentifier)+sortformer"
+            }
+        )
+    }
+
+    /// Builds the pipeline watchdog's `recover` hook for THIS process. In an
+    /// ASR-owning process the watchdog must reset the transcription engines, not
+    /// the caller-supplied `recover` (which targets whatever ML is resident there —
+    /// e.g. the app's MLX chat engine). The ASR closure captures the two provider
+    /// instances DIRECTLY (not `self`), so it is cycle-free and needs no post-init
+    /// wiring. Non-ASR callers pass `recover` through unchanged; iOS passes neither
+    /// and gets `nil`.
+    nonisolated private static func makeQueueRecover(
+        recover: (@Sendable () async -> Void)?,
+        recoversASREngines: Bool,
+        primary: ParakeetTDTProvider,
+        fallback: WhisperKitMeetingProvider
+    ) -> (@Sendable () async -> Void)? {
+        guard recoversASREngines else { return recover }
+        return {
+            primary.recreateEngine()
+            fallback.recreateEngine()
+        }
+    }
+
+    /// Abandons both wedged ASR engines and swaps in fresh ones (see
+    /// `ParakeetTDTProvider.recreateEngine()`). The pipeline watchdog wires the
+    /// equivalent provider-capturing closure directly into the queue's `recover`
+    /// hook (see `init`, `recoversASREngines`); this is the same reset exposed as a
+    /// method for callers holding the composition.
+    public func recoverASREngines() async {
+        primaryTranscriptionProvider.recreateEngine()
+        fallbackTranscriptionProvider.recreateEngine()
     }
 
     public func agentTools() -> [any AgentTool] {

@@ -97,8 +97,13 @@ public final class MeetingRecorder {
             },
             appCaptureFactory: { writer, levelStore in
                 let sink = AppAudioCaptureSink()
-                let tap = CATapAppAudioTap { buffer in
-                    sink.enqueue(buffer)
+                // Capture `sink` weakly: the tap holds `onBuffer` strongly and the
+                // sink holds `capture` (which holds the tap) strongly, so a strong
+                // capture here closes a retain cycle that leaks the whole
+                // capture/converter graph on every stop. `sink` outlives each buffer
+                // callback via the strong chain, so a weak ref is safe.
+                let tap = CATapAppAudioTap { [weak sink] buffer in
+                    sink?.enqueue(buffer)
                 }
                 let capture = AppAudioCapture(
                     writer: writer, tap: tap,
@@ -124,8 +129,13 @@ public final class MeetingRecorder {
             },
             appCaptureFactory: { writer, levelStore in
                 let sink = AppAudioCaptureSink()
-                let tap = CATapAppAudioTap { buffer in
-                    sink.enqueue(buffer)
+                // Capture `sink` weakly: the tap holds `onBuffer` strongly and the
+                // sink holds `capture` (which holds the tap) strongly, so a strong
+                // capture here closes a retain cycle that leaks the whole
+                // capture/converter graph on every stop. `sink` outlives each buffer
+                // callback via the strong chain, so a weak ref is safe.
+                let tap = CATapAppAudioTap { [weak sink] buffer in
+                    sink?.enqueue(buffer)
                 }
                 let capture = AppAudioCapture(
                     writer: writer, tap: tap,

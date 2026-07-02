@@ -29,9 +29,13 @@ public struct MeetingsListByDateTool: AgentTool {
         }
 
         let repository = MeetingRepository(context: contextRef.context)
+        // Filter soft-deleted BEFORE dedup: dedupedByID() keeps the first occurrence
+        // regardless of deletedAt, so a (deleted, live) ghost pair with equal startedAt
+        // could otherwise keep the deleted twin and then drop it — hiding the live
+        // meeting entirely. Order matches LiquidMeetingsModel.reload.
         let meetings = try repository.range(from: from, to: to)
-            .dedupedByID()
             .filter { $0.deletedAt == nil }
+            .dedupedByID()
         return try MeetingsToolJSON.encode(["meetings": meetings.map(MeetingSnapshotDTO.init(meeting:))])
     }
 }

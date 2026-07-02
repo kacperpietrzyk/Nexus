@@ -129,7 +129,9 @@ struct NexusMacApp: App {
             rootFolder: Self.meetingsRootFolder()
         )
         self.meetingSummaryClaimer.start()
-        let meetingNavigation = Self.makeMeetingNavigationInfrastructure()
+        let meetingNavigation = Self.makeMeetingNavigationInfrastructure(
+            appPipelineQueue: self.meetingsComposition.pipelineQueue
+        )
         self.meetingsHelperXPCClient = meetingNavigation.xpcClient
         self.meetingNavigationRouter = meetingNavigation.router
         self.helperToastBridge = meetingNavigation.bridge
@@ -721,7 +723,11 @@ struct NexusMacApp: App {
                 rootAudioFolder: meetingsRootFolder(),
                 calendarProvider: EventKitCalendarProvider.shared,
                 dateExtractor: NLParserDateExtractor(),
-                taskRepository: taskRepository
+                taskRepository: taskRepository,
+                // The app's meeting queue runs only MLX summary/action stages (the
+                // helper owns ASR). When the watchdog abandons a hung MLX job, reset
+                // the app's shared MLX chat engine so the zombie stops holding the GPU.
+                recover: { await router.recoverMLXChat() }
             )
             composition.registerInboxSource()
             return composition
@@ -730,10 +736,16 @@ struct NexusMacApp: App {
         }
     }
 
-    private static func makeMeetingNavigationInfrastructure() -> MeetingNavigationInfrastructure {
+    private static func makeMeetingNavigationInfrastructure(
+        appPipelineQueue: PipelineQueue
+    ) -> MeetingNavigationInfrastructure {
         let xpcClient = MeetingsHelperXPCClient()
         let router = MeetingNavigationRouter()
-        let bridge = HelperToastBridge(xpcClient: xpcClient, router: router)
+        let bridge = HelperToastBridge(
+            xpcClient: xpcClient,
+            router: router,
+            appPipelineQueue: appPipelineQueue
+        )
         bridge.start()
         return MeetingNavigationInfrastructure(
             xpcClient: xpcClient,

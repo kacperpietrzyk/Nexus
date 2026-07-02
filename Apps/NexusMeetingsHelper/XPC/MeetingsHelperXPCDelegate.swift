@@ -27,6 +27,14 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
     // System content-sharing picker for manual app-driven recording.
     private let pickerPresenter: any ContentSharingPickerPresenting
 
+    /// Fired on the main actor after ANY successful start (detection-initiated via
+    /// `HelperComposition.startRecording`, or app-initiated directly over XPC), so
+    /// the helper's AppDelegate presents the Stop/Pause panel + status bar + opens
+    /// the meeting. Without this the app-initiated path recorded headless with no
+    /// stop control and the meeting was never surfaced. The single hook keeps both
+    /// entry points behaving identically.
+    @MainActor var onRecordingStarted: ((MeetingHandlePayload, String) -> Void)?
+
     @MainActor
     init(
         recorder: MeetingRecorder,
@@ -106,10 +114,21 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
                 // unless the opt-in toggle is on).
                 screenContextRecorder.start(folder: URL(fileURLWithPath: payload.folderPath))
                 reply.send(payload, nil)
+                onRecordingStarted?(payload, resolvedTitle(suggestedTitle, meetingID: payload.meetingID))
             } catch {
                 reply.send(nil, error)
             }
         }
+    }
+
+    /// Prefers an explicit suggested title, falling back to the persisted meeting
+    /// title (then a generic label) so the recording panel always has a name.
+    @MainActor
+    private func resolvedTitle(_ suggested: String?, meetingID: UUID) -> String {
+        if let trimmed = suggested?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty {
+            return trimmed
+        }
+        return (try? meetingRepository.find(id: meetingID))?.title ?? "Meeting"
     }
 
     func startRecordingWithPicker(reply: @escaping (MeetingHandlePayload?, Error?) -> Void) {
@@ -127,6 +146,7 @@ final class MeetingsHelperXPCDelegate: NSObject, NSXPCListenerDelegate, Meetings
                 )
                 screenContextRecorder.start(folder: URL(fileURLWithPath: payload.folderPath))
                 reply.send(payload, nil)
+                onRecordingStarted?(payload, resolvedTitle(selection.displayName, meetingID: payload.meetingID))
             } catch is CancellationError {
                 // User dismissed the picker — not an error, just no recording.
                 reply.send(nil, nil)

@@ -9,7 +9,13 @@ public enum MeetingTranscriptionProviderError: Error, Equatable, Sendable {
 public final class WhisperKitMeetingProvider: MeetingTranscriptionProvider, @unchecked Sendable {
     public let identifier = "whisperkit-large"
 
-    private let engine: WhisperKitMeetingProviderEngine
+    /// Swappable so a WEDGED engine can be ABANDONED and replaced (see
+    /// `recreateEngine()`). `var`, not `let`: recovery reassigns it. Guarded by
+    /// `engineLock` because this type is `@unchecked Sendable` (not an actor) and
+    /// `recreateEngine` can race a concurrent `transcribe`.
+    private var engine: WhisperKitMeetingProviderEngine
+    private let engineFactory: @Sendable () -> WhisperKitMeetingProviderEngine
+    private let engineLock = NSLock()
 
     /// - Parameter vocabularyProvider: returns the user's custom vocabulary, used
     ///   to *bias* transcription via WhisperKit's prompt tokens (best-effort —
@@ -21,11 +27,15 @@ public final class WhisperKitMeetingProvider: MeetingTranscriptionProvider, @unc
             UserDefaultsCustomVocabularyStore.shared.load()
         }
     ) {
-        self.engine = WhisperKitMeetingProviderEngine(
-            resolveModelFolder: { WhisperKitProvider.defaultLocalModelFolder() },
-            tokenizerFolder: WhisperKitProvider.defaultDownloadBase(),
-            vocabularyProvider: vocabularyProvider
-        )
+        let factory: @Sendable () -> WhisperKitMeetingProviderEngine = {
+            WhisperKitMeetingProviderEngine(
+                resolveModelFolder: { WhisperKitProvider.defaultLocalModelFolder() },
+                tokenizerFolder: WhisperKitProvider.defaultDownloadBase(),
+                vocabularyProvider: vocabularyProvider
+            )
+        }
+        self.engineFactory = factory
+        self.engine = factory()
     }
 
     init(
@@ -33,11 +43,15 @@ public final class WhisperKitMeetingProvider: MeetingTranscriptionProvider, @unc
         vocabularyProvider: @escaping @Sendable () -> [CustomVocabularyEntry] = { [] },
         loader: @escaping WhisperKitMeetingProviderEngine.Loader
     ) {
-        self.engine = WhisperKitMeetingProviderEngine(
-            resolveModelFolder: { localModelFolder },
-            vocabularyProvider: vocabularyProvider,
-            loader: loader
-        )
+        let factory: @Sendable () -> WhisperKitMeetingProviderEngine = {
+            WhisperKitMeetingProviderEngine(
+                resolveModelFolder: { localModelFolder },
+                vocabularyProvider: vocabularyProvider,
+                loader: loader
+            )
+        }
+        self.engineFactory = factory
+        self.engine = factory()
     }
 
     public func transcribe(
@@ -45,7 +59,23 @@ public final class WhisperKitMeetingProvider: MeetingTranscriptionProvider, @unc
         languageHint: String?,
         progress: @MainActor @Sendable (Double) -> Void
     ) async throws -> TranscriptionResult {
-        try await engine.transcribe(audioURL: audioURL, languageHint: languageHint, progress: progress)
+        // Snapshot the engine reference under the lock, then call it OUTSIDE the
+        // lock — never hold `engineLock` across the `await`, or a `recreateEngine`
+        // during a hung transcription would itself block.
+        let engine = engineLock.withLock { self.engine }
+        return try await engine.transcribe(audioURL: audioURL, languageHint: languageHint, progress: progress)
+    }
+
+    /// Recovery for a WEDGED engine: abandon the current engine and swap in a
+    /// fresh one built exactly as `init` builds it. Crucially this NEVER touches
+    /// the old engine — no `cleanup()`/`reset()`. Its `transcribe` may be wedged
+    /// in non-cancellable ASR inference that holds the engine actor's executor, so
+    /// any call would itself hang. The old engine leaks until process exit — an
+    /// accepted tradeoff so the queue recovers. This is ABANDON, not cancel.
+    public func recreateEngine() {
+        // Build the fresh engine outside the lock; only the pointer swap is locked.
+        let fresh = engineFactory()
+        engineLock.withLock { engine = fresh }
     }
 
     /// Shares NexusAI's persisted WhisperKit model location, so a model

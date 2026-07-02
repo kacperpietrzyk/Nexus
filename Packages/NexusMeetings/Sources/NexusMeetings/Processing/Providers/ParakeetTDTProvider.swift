@@ -4,13 +4,22 @@ import Foundation
 public final class ParakeetTDTProvider: MeetingTranscriptionProvider, @unchecked Sendable {
     public let identifier = "parakeet-tdt-v3"
 
-    private let engine: ParakeetTDTProviderEngine
+    /// Swappable so a WEDGED engine can be ABANDONED and replaced (see
+    /// `recreateEngine()`). `var`, not `let`: recovery reassigns it. Guarded by
+    /// `engineLock` because this type is `@unchecked Sendable` (not an actor) and
+    /// `recreateEngine` can race a concurrent `transcribe`.
+    private var engine: ParakeetTDTProviderEngine
+    private let engineFactory: @Sendable () -> ParakeetTDTProviderEngine
+    private let engineLock = NSLock()
 
     public init() {
-        self.engine = ParakeetTDTProviderEngine()
+        let factory: @Sendable () -> ParakeetTDTProviderEngine = { ParakeetTDTProviderEngine() }
+        self.engineFactory = factory
+        self.engine = factory()
     }
 
     init(engine: ParakeetTDTProviderEngine) {
+        self.engineFactory = { engine }
         self.engine = engine
     }
 
@@ -19,7 +28,23 @@ public final class ParakeetTDTProvider: MeetingTranscriptionProvider, @unchecked
         languageHint: String?,
         progress: @MainActor @Sendable (Double) -> Void
     ) async throws -> TranscriptionResult {
-        try await engine.transcribe(audioURL: audioURL, languageHint: languageHint, progress: progress)
+        // Snapshot the engine reference under the lock, then call it OUTSIDE the
+        // lock — never hold `engineLock` across the `await`, or a `recreateEngine`
+        // during a hung transcription would itself block.
+        let engine = engineLock.withLock { self.engine }
+        return try await engine.transcribe(audioURL: audioURL, languageHint: languageHint, progress: progress)
+    }
+
+    /// Recovery for a WEDGED engine: abandon the current engine and swap in a
+    /// fresh one built exactly as `init` builds it. Crucially this NEVER touches
+    /// the old engine — no `cleanup()`/`reset()`. Its `transcribe` may be wedged
+    /// in non-cancellable ASR inference that holds the engine actor's executor, so
+    /// any call would itself hang. The old engine leaks until process exit — an
+    /// accepted tradeoff so the queue recovers. This is ABANDON, not cancel.
+    public func recreateEngine() {
+        // Build the fresh engine outside the lock; only the pointer swap is locked.
+        let fresh = engineFactory()
+        engineLock.withLock { engine = fresh }
     }
 }
 

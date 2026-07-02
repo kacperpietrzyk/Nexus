@@ -15,6 +15,10 @@ public final class Meeting: Linkable, Searchable {
     public var detectionSource: String = MeetingDetectionSource.manual.rawValue
     public var processingStatus: String = MeetingProcessingStatus.recording.rawValue
     public var processedAt: Date?
+    /// Set when the main app claims a deferred summary; used by helper crash-recovery
+    /// to distinguish a live claim from an orphaned one. Additive/defaulted —
+    /// CloudKit-safe lightweight migration.
+    public var claimedAt: Date?
     @Attribute(.allowsCloudEncryption) public var transcriptText: String = ""
     @Attribute(.allowsCloudEncryption) public var summaryText: String = ""
     public var segmentsJSON: Data = Data("[]".utf8)
@@ -43,6 +47,7 @@ public final class Meeting: Linkable, Searchable {
         detectionSource: MeetingDetectionSource,
         processingStatus: MeetingProcessingStatus = .recording,
         processedAt: Date? = nil,
+        claimedAt: Date? = nil,
         transcriptText: String = "",
         summaryText: String = "",
         segmentsJSON: Data = Data("[]".utf8),
@@ -64,6 +69,7 @@ public final class Meeting: Linkable, Searchable {
         self.detectionSource = detectionSource.rawValue
         self.processingStatus = processingStatus.rawValue
         self.processedAt = processedAt
+        self.claimedAt = claimedAt
         self.transcriptText = transcriptText
         self.summaryText = summaryText
         self.segmentsJSON = segmentsJSON

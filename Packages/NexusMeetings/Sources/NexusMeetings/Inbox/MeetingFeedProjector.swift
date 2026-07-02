@@ -21,7 +21,13 @@ public struct MeetingFeedSnapshotBuilder {
     }
 
     public func snapshots() throws -> [MeetingFeedProjector.Snapshot] {
-        let meetings = try meetingRepository.allChronological().filter { $0.deletedAt == nil }
+        // Collapse ghost duplicate-id rows (filter soft-deleted first) so a synced
+        // meeting materialized as two rows sharing one id does not emit two
+        // FeedItems with the same "meeting:<id>" key — which FeedRegistry would
+        // both count (inflated unread badge) and append (duplicate row).
+        let meetings = try meetingRepository.allChronological()
+            .filter { $0.deletedAt == nil }
+            .dedupedByID()
         guard !meetings.isEmpty else { return [] }
         // Single batched outgoing-link fetch for ALL meetings (no per-meeting
         // N+1), filtered to action-item → task edges for the count.

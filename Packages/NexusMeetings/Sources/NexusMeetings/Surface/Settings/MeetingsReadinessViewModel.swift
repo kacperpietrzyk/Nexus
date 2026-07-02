@@ -22,6 +22,12 @@ public final class MeetingsReadinessViewModel {
     private let mapper: ReadinessRowMapper
     private let now: () -> Date
     private let post: (Notification.Name) -> Void
+    /// Live check for whether the helper agent process is actually running. The
+    /// snapshot staleness heuristic can no longer detect a dead helper: the main
+    /// app now computes and persists the snapshot IN-PROCESS with `lastUpdated=now`,
+    /// so the "Helper running" row would always look live (masking a
+    /// disabled/crash-looping helper — the exact failure the row exists to surface).
+    private let helperRunning: @MainActor () -> Bool
 
     /// In-flight per-model download fractions, merged over the persisted snapshot
     /// at render time so the rows show live `.downloading` / progress without
@@ -58,6 +64,11 @@ public final class MeetingsReadinessViewModel {
                 name, object: nil, userInfo: nil, deliverImmediately: true
             )
         },
+        helperRunning: @escaping @MainActor () -> Bool = {
+            !NSRunningApplication.runningApplications(
+                withBundleIdentifier: "com.kacperpietrzyk.nexus.meetings-helper"
+            ).isEmpty
+        },
         debounceInterval: Duration = .milliseconds(400)
     ) {
         self.reader = reader
@@ -69,6 +80,7 @@ public final class MeetingsReadinessViewModel {
         self.mapper = mapper
         self.now = now
         self.post = post
+        self.helperRunning = helperRunning
         self.debounceInterval = debounceInterval
     }
 
@@ -96,7 +108,7 @@ public final class MeetingsReadinessViewModel {
     /// first render are surfaced immediately — real setup prompts are never
     /// hidden, only a brand-new loud transition is briefly delayed.
     private func apply(_ snapshot: MeetingsReadinessSnapshot?, debounced: Bool) {
-        let newSections = mapper.sections(from: merge(inFlightDownloads, into: snapshot), now: now())
+        let newSections = computeSections(from: snapshot)
         if debounced, Self.introducesLoudRegression(from: sections, to: newSections) {
             scheduleDebouncedReprobe()
         } else {
@@ -120,7 +132,29 @@ public final class MeetingsReadinessViewModel {
     }
 
     private func render(from snapshot: MeetingsReadinessSnapshot?) {
-        sections = mapper.sections(from: merge(inFlightDownloads, into: snapshot), now: now())
+        sections = computeSections(from: snapshot)
+    }
+
+    /// Maps a snapshot to sections (merging in-flight download progress) and then
+    /// overrides the "Helper running" row using the live `helperRunning` process
+    /// check instead of snapshot staleness — see `helperRunning`.
+    private func computeSections(from snapshot: MeetingsReadinessSnapshot?) -> [ReadinessSection] {
+        let base = mapper.sections(from: merge(inFlightDownloads, into: snapshot), now: now())
+        let running = helperRunning()
+        return base.map { section in
+            guard section.id == .environment else { return section }
+            let rows = section.rows.map { row -> ReadinessRow in
+                guard row.id == "env.helper" else { return row }
+                return ReadinessRow(
+                    id: row.id,
+                    title: row.title,
+                    detail: running ? nil : "The Meetings helper is not running.",
+                    state: running ? .ok : .error,
+                    action: running ? nil : .startHelper
+                )
+            }
+            return ReadinessSection(id: section.id, title: section.title, rows: rows)
+        }
     }
 
     /// A row is "loud" when its state is `.warning`/`.error` — the taller
@@ -207,14 +241,21 @@ public final class MeetingsReadinessViewModel {
     }
 
     private func download(_ ids: [MeetingsModelID]) {
-        for id in ids where inFlightDownloads[id] == nil {
+        // Only start models that are not already downloading. Without this a second
+        // tap (or Download-then-Download-All) launched a duplicate concurrent
+        // prefetch of the same model — two writers to one on-disk cache, and the
+        // first to finish cleared the shared in-flight flag, dropping the other's
+        // progress callbacks and flipping the row mid-download.
+        let toStart = ids.filter { inFlightDownloads[$0] == nil }
+        guard !toStart.isEmpty else { return }
+        for id in toStart {
             inFlightDownloads[id] = 0
         }
         render(from: computer?.snapshot() ?? reader.read())
 
         let prefetcher = prefetcher
         Task { @MainActor in
-            for id in ids {
+            for id in toStart {
                 do {
                     try await prefetcher.prefetch(id) { [weak self] fraction in
                         Task { @MainActor in self?.updateProgress(id, fraction: fraction) }

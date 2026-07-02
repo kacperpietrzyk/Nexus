@@ -16,6 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let composition = try HelperComposition()
             self.composition = composition
             composition.readinessCoordinator.start()
+            // Present the Stop/Pause panel + status bar for EVERY recording start,
+            // whether it began via detection or the in-app "Record" button. Without
+            // this the app-initiated path recorded headless with no way to stop it.
+            composition.setRecordingStartedHandler { [weak self] payload, title in
+                guard let self, let composition = self.composition else { return }
+                self.handleRecordingStarted(payload: payload, title: title, composition: composition)
+            }
             startDetectionLoop(composition)
             if UserDefaultsHelperAutoRecordStore.shared.isEnabled() {
                 AccessibilityPromptGate().promptIfNeeded()
@@ -50,6 +57,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startDetectionLoop(_ composition: HelperComposition) {
         detectionTask = Task { @MainActor in
             for await event in composition.meetingsComposition.detector.events() {
+                // Suppress detection while a recording is already in progress. The
+                // meeting window keeps matching the poller for the whole meeting, so
+                // without this guard the detector re-emits every debounce window
+                // (~60s) — popping a fresh "Start recording?" toast and flipping the
+                // status bar away from `.recording` repeatedly. Covers recordings
+                // started by detection AND by the in-app manual path (both set the
+                // shared recorder state the helper reports here).
+                guard composition.currentRecordingState().isRecording == false else { continue }
                 presentDetectionToast(event, composition: composition)
             }
         }
@@ -87,22 +102,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func startRecording(event: MeetingDetectionEvent, composition: HelperComposition) {
-        composition.startRecording(from: event) { [weak self, weak composition] handle, error in
-            guard let self, let composition else { return }
+        composition.startRecording(from: event) { [weak composition] _, error in
+            // Success UI (Stop/Pause panel + status bar + openMeeting) is presented
+            // by the shared `onRecordingStarted` hook, so detection- and
+            // app-initiated recordings behave identically. Only the failure path is
+            // handled here.
+            guard let composition else { return }
             if let error {
                 NSAlert(error: error).runModal()
                 composition.statusBar.update(state: .idle)
-                return
             }
-            guard let handle else { return }
-            Self.postOpenMeetingNotification(meetingID: handle.meetingID)
-            composition.statusBar.update(state: .recording(elapsedSec: 0))
-            showRecordingPanel(
-                title: event.suggestedTitle,
-                handle: handle,
-                composition: composition
-            )
         }
+    }
+
+    /// Shared success presenter for a started recording, invoked by the helper's
+    /// `onRecordingStarted` hook for both the detection and app-initiated paths.
+    @MainActor
+    private func handleRecordingStarted(
+        payload: MeetingHandlePayload,
+        title: String,
+        composition: HelperComposition
+    ) {
+        Self.postOpenMeetingNotification(meetingID: payload.meetingID)
+        composition.statusBar.update(state: .recording(elapsedSec: 0))
+        showRecordingPanel(title: title, handle: payload, composition: composition)
     }
 
     @MainActor
