@@ -63,7 +63,10 @@ public struct MLXGenerateParameters: Sendable {
         self.topP = topP
     }
 
-    public static let `default` = MLXGenerateParameters()
+    // Low temperature: the on-device 12B (qat 4-bit) needs tight sampling to hold a
+    // structured format (real tool call / direct answer) instead of wandering into a
+    // fabricated ReAct transcript. 0.7 was far too hot for this grounded, structured task.
+    public static let `default` = MLXGenerateParameters(temperature: 0.15)
 }
 
 /// Abstraction over an on-device chat generator. The unit tests substitute a stub;
