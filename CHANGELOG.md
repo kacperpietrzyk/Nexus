@@ -6,6 +6,30 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-07-02
+
+### Fixed
+- **The on-device assistant no longer leaks raw JSON or invents actions for read
+  questions.** When the local Gemma model fenced a proposal as a plain ```json``` block
+  its contents used to spill into the chat; those blocks are now recognised and handled
+  as proposals. Read-only questions such as "what meetings do I have tomorrow" are routed
+  to read tools instead of producing a bogus change proposal.
+- **The assistant recovers instead of freezing on the large on-device model.** A slow
+  turn on the 12B model no longer locks the composer indefinitely: turns are now bounded
+  by a timeout, a wedged model engine is abandoned and rebuilt so the next message works,
+  and the first slow model load shows a distinct "Loading model…" state.
+- **Meeting readiness cards stop flickering.** The Meetings settings readiness rows no
+  longer flip from green into warnings during a re-probe (toggling the helper or changing
+  a permission), and they refresh correctly once a microphone-permission prompt is
+  answered instead of sticking on the mid-prompt state.
+- **Meeting recording and processing are more robust.** App-initiated recording now shows
+  the Stop/Pause panel instead of running headless, the "Helper running" row reflects the
+  live process state, a stuck transcription stage can no longer wedge the pipeline
+  forever, crash recovery no longer re-transcribes already-finished meetings (which had
+  discarded transcripts and duplicated action items), and duplicate "ghost" rows from
+  sync are filtered out of meeting lists, the activity feed and summary claiming. Also
+  fixes a memory leak in audio capture and a duplicate model-prefetch.
+
 ## [0.4.3] - 2026-07-01
 
 ### Changed
@@ -217,7 +241,8 @@ the app, alongside a Linear-inspired redesign and a broad correctness pass.
 - First TestFlight beta: tasks (quick capture ⌘N, Today, Inbox), Mac/iPhone/iPad/Watch,
   CloudKit sync, on-device AI assist, MCP external access (Mac).
 
-[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/kacperpietrzyk/Nexus/compare/v0.4.0...v0.4.1
