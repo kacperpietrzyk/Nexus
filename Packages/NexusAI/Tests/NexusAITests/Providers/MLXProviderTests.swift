@@ -115,31 +115,58 @@ struct MLXProviderTests {
         #expect(response.tokensUsed == TokenUsage(prompt: 42, completion: 7))
     }
 
-    @Test("request.prompt is the final user message even when messages are present")
-    func promptIsNotDroppedWhenMessagesPresent() async throws {
+    @Test("structured messages drive the turns; the flat prompt is NOT a trailing user turn")
+    func flatPromptIsNotAppendedWhenStructuredMessagesPresent() async throws {
         let stub = StubMLXChat(cannedChunks: [.text("ok")])
         let provider = MLXProvider(engine: makeEngine(stub), availabilityProbe: { true })
 
+        // The agent path (AgentRuntime.makeAIRequest) sets `messages` to the real
+        // conversation, ending with the CURRENT user question, and folds memory/RAG
+        // context into `systemPrompt`. The flat `prompt` is the Apple/Whisper carrier
+        // and MUST NOT be re-fed here — doing so duplicates the transcript and makes
+        // the model echo `user:` / invent `Nexus Assistant:` turns.
         let priorMessages: [AIChatMessage] = [
-            AIChatMessage(role: .system, text: "be terse"),
-            AIChatMessage(role: .assistant, text: "earlier turn"),
+            AIChatMessage(role: .user, text: "earlier question"),
+            AIChatMessage(role: .assistant, text: "earlier reply"),
+            AIChatMessage(role: .user, text: "Jakie mam jutro spotkania?"),
         ]
-        var request = AIRequest(prompt: "CONTEXT-COMPLETE-USER-TURN", capability: .generate)
-        request.systemPrompt = "system instructions"
+        var request = AIRequest(prompt: "FLAT-TRANSCRIPT-BLOB-MUST-NOT-APPEAR", capability: .generate)
+        request.systemPrompt = "You are Nexus Assistant.\n\nMemory:\n(none)"
         request.messages = priorMessages
 
         _ = try await provider.generate(request)
 
-        // System prompt first, then prior messages, then a FINAL .user message
-        // whose text is EXACTLY request.prompt (not concatenated elsewhere).
-        #expect(stub.lastMessages.map(\.role) == [.system, .system, .assistant, .user])
-        #expect(stub.lastMessages.first?.text == "system instructions")
-        // Prior request.messages are forwarded too.
-        #expect(stub.lastMessages[1].text == "be terse")
-        #expect(stub.lastMessages[2].text == "earlier turn")
-        // The context-complete prompt is the last message and is not dropped.
+        // system, then the three structured turns — and nothing else.
+        #expect(stub.lastMessages.map(\.role) == [.system, .user, .assistant, .user])
+        #expect(stub.lastMessages.first?.role == .system)
+        // The FINAL turn is the current user question, not the flat prompt.
         #expect(stub.lastMessages.last?.role == .user)
-        #expect(stub.lastMessages.last?.text == "CONTEXT-COMPLETE-USER-TURN")
+        #expect(stub.lastMessages.last?.text == "Jakie mam jutro spotkania?")
+        // The flat prompt appears nowhere in the message list.
+        #expect(stub.lastMessages.contains { $0.text.contains("FLAT-TRANSCRIPT-BLOB") } == false)
+    }
+
+    @Test("mid tool-loop: a trailing .tool turn is the final turn, not the flat prompt")
+    func toolTurnIsFinalTurnNotFlatPrompt() async throws {
+        let stub = StubMLXChat(cannedChunks: [.text("ok")])
+        let provider = MLXProvider(engine: makeEngine(stub), availabilityProbe: { true })
+
+        // Inside the agent tool loop, `messages` ends with a `.tool` result and there
+        // is no fresh user turn. The flat prompt must still not be appended.
+        let loopMessages: [AIChatMessage] = [
+            AIChatMessage(role: .user, text: "add a task"),
+            AIChatMessage(role: .assistant, text: "calling tool"),
+            AIChatMessage(role: .tool, text: #"{"ok":true}"#),
+        ]
+        var request = AIRequest(prompt: "FLAT-BLOB", capability: .generate)
+        request.systemPrompt = "sys"
+        request.messages = loopMessages
+
+        _ = try await provider.generate(request)
+
+        #expect(stub.lastMessages.map(\.role) == [.system, .user, .assistant, .tool])
+        #expect(stub.lastMessages.last?.role == .tool)
+        #expect(stub.lastMessages.contains { $0.text.contains("FLAT-BLOB") } == false)
     }
 
     @Test("no systemPrompt and no messages yields a single user message from prompt")

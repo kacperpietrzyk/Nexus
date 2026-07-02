@@ -54,6 +54,22 @@ extension AgentRuntime {
                 toolCallsExecuted: &toolCallsExecuted
             )
         case .final(let content):
+            // The weak on-device model routinely wraps a read intent in a
+            // `nexus-proposal` block instead of emitting a tool call. If that block
+            // names an allowlisted (read) tool, dispatch it here and loop — otherwise
+            // the raw JSON would leak to the chat (or be stripped to an empty reply).
+            // Writes are not in the allowlist, so they fall through to the confirm card.
+            let readIntent = AgentProviderTextEnvelope.proposalReadIntent(
+                content, allowlist: request.toolAllowlist)
+            if let readIntent {
+                return try await handleToolCall(
+                    readIntent,
+                    request: request,
+                    window: window,
+                    aiResponse: aiResponse,
+                    toolCallsExecuted: &toolCallsExecuted
+                )
+            }
             try appendAssistantFinal(content, request: request, window: window, aiResponse: aiResponse)
             return .return(
                 AgentTurnResponse(
@@ -222,6 +238,29 @@ extension AgentRuntime {
             sections.insert("Ephemeral context for this turn only:\n\(contextPrefix)", at: 3)
         }
 
+        if !window.retrievedHits.isEmpty {
+            sections.append("Retrieved context:\n\(retrievedHitsText(window.retrievedHits))")
+        }
+        return sections.joined(separator: "\n\n")
+    }
+
+    /// System prompt for structured (native tool-calling) providers such as MLX.
+    ///
+    /// Those providers drive their turns from `AIRequest.messages` and take a
+    /// single `.system` message — they do NOT consume the flat `makePrompt`
+    /// output. So the non-transcript context that `makePrompt` folds into the flat
+    /// prompt (memory, ephemeral turn context, RAG hits) must ALSO ride here, or
+    /// it would be lost on the structured path. The recent-messages transcript and
+    /// the tool-definitions JSON are deliberately omitted: the conversation is
+    /// carried structurally via `messages`, and tools via `AIRequest.tools`.
+    func makeStructuredSystemPrompt(request: AgentTurnRequest, window: AgentContextWindow) -> String {
+        var sections = [
+            window.systemPrompt,
+            "Memory:\n\(window.memorySection.isEmpty ? "(none)" : window.memorySection)",
+        ]
+        if let contextPrefix = Self.normalizedContextPrefix(request.contextPrefix) {
+            sections.append("Ephemeral context for this turn only:\n\(contextPrefix)")
+        }
         if !window.retrievedHits.isEmpty {
             sections.append("Retrieved context:\n\(retrievedHitsText(window.retrievedHits))")
         }

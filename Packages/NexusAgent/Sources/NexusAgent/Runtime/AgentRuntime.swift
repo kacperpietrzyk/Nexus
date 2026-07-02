@@ -310,7 +310,7 @@ public final class AgentRuntime {
             attachments: effectiveAttachments,
             messages: structuredMessages(from: window),
             tools: toolSpecs(from: dispatcher.toolManifest, allowlist: request.toolAllowlist),
-            systemPrompt: window.systemPrompt
+            systemPrompt: makeStructuredSystemPrompt(request: request, window: window)
         )
     }
 
@@ -318,13 +318,13 @@ public final class AgentRuntime {
     /// values for native tool-calling providers (e.g. MLX). Non-structured providers
     /// (Apple/Whisper) ignore `messages` and use the flattened `prompt`.
     ///
-    /// NOTE: `messages` (this) and `systemPrompt` (= `window.systemPrompt`) are NOT
-    /// context-complete. `makePrompt` additionally folds `window.memorySection`,
-    /// `window.retrievedHits` (RAG), and ephemeral `request.contextPrefix` into the
-    /// flat `prompt` — none of that is reflected here. A provider that consumes
-    /// `messages` instead of `prompt` would lose memory + RAG hits + ephemeral file
-    /// context. The MLX integration (Task 11/12) must therefore either keep consuming
-    /// `prompt`, or be wired to carry that extra context into the structured form too.
+    /// NOTE: `messages` (this) carries only the conversation transcript. The
+    /// non-transcript context — `window.memorySection`, `window.retrievedHits`
+    /// (RAG), and ephemeral `request.contextPrefix` — rides in the structured
+    /// `systemPrompt` built by `makeStructuredSystemPrompt`, so the structured
+    /// (MLX) path is context-complete via `messages` + `systemPrompt` alone and
+    /// never needs the flat `prompt`. The flat `prompt` remains the context-complete
+    /// carrier for providers that read only it (Apple/Whisper).
     private func structuredMessages(from window: AgentContextWindow) -> [AIChatMessage] {
         window.recentMessages.map { snapshot in
             AIChatMessage(role: Self.chatRole(for: snapshot.role), text: snapshot.content)
@@ -435,13 +435,19 @@ enum AgentProviderTextEnvelope: Equatable {
     case malformedToolCall(String)
 
     static func parse(_ text: String) -> AgentProviderTextEnvelope {
+        // The weak on-device model fences JSON as ```json, so also accept a JSON
+        // object inside a code fence — not just one at the very start of the text.
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("{"), let data = trimmed.data(using: .utf8) else {
+        guard let body = jsonObjectBody(in: text), let data = body.data(using: .utf8) else {
             return .final(text)
         }
 
         guard let raw = try? JSONDecoder().decode(RawEnvelope.self, from: data) else {
-            return .malformedToolCall("malformed response envelope JSON")
+            // A bare `{…}` that fails to decode is a botched envelope; a fenced block
+            // that isn't one is just content the model chose to show.
+            return trimmed.hasPrefix("{")
+                ? .malformedToolCall("malformed response envelope JSON")
+                : .final(text)
         }
 
         switch raw.type {
@@ -459,11 +465,65 @@ enum AgentProviderTextEnvelope: Equatable {
         }
     }
 
+    /// A read intent the weak model expressed as a `nexus-proposal`-shaped block
+    /// (`{rationale, mutations:[{tool,args}]}`) instead of a tool call. Returns the
+    /// first mutation as a tool call ONLY when its tool is in `allowlist` — i.e. a
+    /// dispatchable read. Writes (not in the allowlist) return nil so they keep
+    /// routing to the VM-layer confirm card, never auto-executing without consent.
+    static func proposalReadIntent(
+        _ text: String,
+        allowlist: [String]?
+    ) -> AgentToolCallEnvelope? {
+        guard let allowlist, !allowlist.isEmpty,
+            let body = jsonObjectBody(in: text),
+            let data = body.data(using: .utf8),
+            let block = try? JSONDecoder().decode(ProposalShape.self, from: data),
+            let mutation = block.mutations.first
+        else {
+            return nil
+        }
+        let tool = mutation.tool.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard allowlist.contains(tool) else { return nil }
+        return AgentToolCallEnvelope(name: tool, input: mutation.args ?? .object([:]))
+    }
+
+    /// Extracts a JSON object string from `text`: the trimmed text itself when it
+    /// starts with `{`, otherwise the body of the first ```-fenced block whose
+    /// content is a JSON object. `nil` when neither is present.
+    private static func jsonObjectBody(in text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("{") {
+            return trimmed
+        }
+        guard let open = text.range(of: "```"),
+            let close = text.range(of: "```", range: open.upperBound..<text.endIndex)
+        else {
+            return nil
+        }
+        // Skip the opener line (it may carry a language tag such as ```json).
+        let bodyStart =
+            text[open.upperBound...].firstIndex(where: { $0.isNewline })
+            .map { text.index(after: $0) } ?? open.upperBound
+        guard bodyStart <= close.lowerBound else { return nil }
+        let body = text[bodyStart..<close.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+        return body.hasPrefix("{") ? body : nil
+    }
+
     private struct RawEnvelope: Decodable {
         let type: String?
         let name: String?
         let input: JSONValue?
         let content: String?
+    }
+
+    private struct ProposalMutation: Decodable {
+        let tool: String
+        let args: JSONValue?
+    }
+
+    private struct ProposalShape: Decodable {
+        let rationale: String
+        let mutations: [ProposalMutation]
     }
 }
 
