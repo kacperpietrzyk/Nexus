@@ -50,6 +50,14 @@ private final class PostLog {
     var names: [Notification.Name] = []
 }
 
+private final class MutablePermissionProbe: PermissionProbing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: MeetingsPermissionsReadiness
+    init(_ value: MeetingsPermissionsReadiness) { self.value = value }
+    func set(_ newValue: MeetingsPermissionsReadiness) { lock.withLock { value = newValue } }
+    func currentPermissions() -> MeetingsPermissionsReadiness { lock.withLock { value } }
+}
+
 @MainActor
 @Suite("MeetingsReadinessViewModel")
 struct MeetingsReadinessViewModelTests {
@@ -226,5 +234,151 @@ struct MeetingsReadinessViewModelTests {
         vm.perform(.info("some message"))
 
         #expect(log.names.isEmpty)
+    }
+
+    // MARK: - transient-loud gate / debounce
+
+    private func microphoneState(_ vm: MeetingsReadinessViewModel) -> ReadinessRowState? {
+        vm.sections
+            .first { $0.id == .permissions }?
+            .rows.first { $0.id == "permission.microphone" }?
+            .state
+    }
+
+    /// Builds a VM whose live microphone permission is mutable, so a re-probe can
+    /// transiently flip a calm row loud (the "flip" this fix debounces).
+    private func makeGatedViewModel(
+        probe: MutablePermissionProbe,
+        writer: RecordingWriter,
+        debounceInterval: Duration
+    ) -> MeetingsReadinessViewModel {
+        let fixed = Date()
+        let computer = MeetingsReadinessComputer(
+            permissions: probe,
+            models: StubModelProbe(
+                value: MeetingsModelID.allCases.map { ModelReadiness(id: $0, sizeBytes: 1, state: .ready) }
+            ),
+            environment: StubEnvironmentProbe(value: .init(macOSCompatible: true, autoRecordEnabled: true)),
+            clock: { fixed }
+        )
+        return MeetingsReadinessViewModel(
+            reader: FixedReader(snapshot: nil),
+            writer: writer,
+            computer: computer,
+            prefetcher: RecordingPrefetcher(),
+            requestMicrophoneAccess: { $0(true) },
+            openAccessibilitySettings: {},
+            mapper: ReadinessRowMapper(stalenessThreshold: 120),
+            now: { fixed },
+            post: { _ in },
+            debounceInterval: debounceInterval
+        )
+    }
+
+    @Test("a transient calm→loud re-probe is held, not surfaced immediately")
+    func transientLoudIsHeld() {
+        let probe = MutablePermissionProbe(
+            .init(microphone: .granted, accessibility: .granted, audioCapture: .granted)
+        )
+        let vm = makeGatedViewModel(probe: probe, writer: RecordingWriter(), debounceInterval: .seconds(10))
+
+        vm.refresh()
+        #expect(microphoneState(vm) == .ok)
+
+        // Simulate the mid-toggle re-probe catching a transient `.notDetermined`.
+        probe.set(.init(microphone: .notDetermined, accessibility: .granted, audioCapture: .granted))
+        vm.refresh()
+
+        // Held: the panel keeps the calm state instead of flipping to a loud card.
+        #expect(microphoneState(vm) == .ok)
+    }
+
+    @Test("a settled needs-setup state surfaces its loud card after the debounce")
+    func settledNeedsSetupSurfaces() async {
+        let probe = MutablePermissionProbe(
+            .init(microphone: .granted, accessibility: .granted, audioCapture: .granted)
+        )
+        let writer = RecordingWriter()
+        let vm = makeGatedViewModel(probe: probe, writer: writer, debounceInterval: .milliseconds(20))
+
+        vm.refresh()  // write #1
+        probe.set(.init(microphone: .notDetermined, accessibility: .granted, audioCapture: .granted))
+        vm.refresh()  // write #2 (held)
+        #expect(microphoneState(vm) == .ok)  // held first
+
+        // The state stays loud → after the debounced re-probe (write #3) it surfaces.
+        await wait { writer.written.count >= 3 }
+        #expect(microphoneState(vm) == .warning)
+    }
+
+    @Test("a transient that clears before the debounce never surfaces the loud card")
+    func transientThatClearsNeverSurfaces() async {
+        let probe = MutablePermissionProbe(
+            .init(microphone: .granted, accessibility: .granted, audioCapture: .granted)
+        )
+        let writer = RecordingWriter()
+        let vm = makeGatedViewModel(probe: probe, writer: writer, debounceInterval: .milliseconds(20))
+
+        vm.refresh()  // write #1
+        probe.set(.init(microphone: .notDetermined, accessibility: .granted, audioCapture: .granted))
+        vm.refresh()  // write #2 (held)
+        #expect(microphoneState(vm) == .ok)
+
+        // Transient clears before the debounced re-probe fires.
+        probe.set(.init(microphone: .granted, accessibility: .granted, audioCapture: .granted))
+
+        // Wait for the debounced re-probe (write #3) to run.
+        await wait { writer.written.count >= 3 }
+        #expect(microphoneState(vm) == .ok)  // never flipped loud
+    }
+
+    @Test("a genuine needs-setup state on first render surfaces immediately")
+    func firstRenderNeedsSetupSurfacesImmediately() {
+        let probe = MutablePermissionProbe(
+            .init(microphone: .notDetermined, accessibility: .granted, audioCapture: .granted)
+        )
+        let vm = makeGatedViewModel(probe: probe, writer: RecordingWriter(), debounceInterval: .seconds(10))
+
+        vm.refresh()
+
+        // No prior calm reading → not a regression → real setup prompt shows now.
+        #expect(microphoneState(vm) == .warning)
+    }
+
+    // MARK: - introducesLoudRegression (pure)
+
+    private func section(_ id: ReadinessSectionID, _ rows: [ReadinessRow]) -> [ReadinessSection] {
+        [ReadinessSection(id: id, title: "t", rows: rows)]
+    }
+
+    private func row(_ id: String, _ state: ReadinessRowState) -> ReadinessRow {
+        ReadinessRow(id: id, title: id, detail: nil, state: state, action: nil)
+    }
+
+    @Test("calm→loud is a regression")
+    func calmToLoudIsRegression() {
+        let old = section(.permissions, [row("a", .ok)])
+        let new = section(.permissions, [row("a", .warning)])
+        #expect(MeetingsReadinessViewModel.introducesLoudRegression(from: old, to: new))
+    }
+
+    @Test("already-loud→loud is not a regression")
+    func loudToLoudIsNotRegression() {
+        let old = section(.permissions, [row("a", .error)])
+        let new = section(.permissions, [row("a", .warning)])
+        #expect(!MeetingsReadinessViewModel.introducesLoudRegression(from: old, to: new))
+    }
+
+    @Test("first render (no prior rows) is not a regression")
+    func firstRenderIsNotRegression() {
+        let new = section(.permissions, [row("a", .error)])
+        #expect(!MeetingsReadinessViewModel.introducesLoudRegression(from: [], to: new))
+    }
+
+    @Test("calm→calm is not a regression")
+    func calmToCalmIsNotRegression() {
+        let old = section(.permissions, [row("a", .ok)])
+        let new = section(.permissions, [row("a", .info)])
+        #expect(!MeetingsReadinessViewModel.introducesLoudRegression(from: old, to: new))
     }
 }

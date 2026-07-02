@@ -28,6 +28,16 @@ public final class MeetingsReadinessViewModel {
     /// waiting for the directory probe to observe the finished files.
     private var inFlightDownloads: [MeetingsModelID: Double] = [:]
 
+    /// Delay before a transient-looking loud regression is surfaced. A re-probe
+    /// (helper toggle, permission round-trip) briefly flips calm rows into taller
+    /// warning/error cards; holding the calm state for this window absorbs the
+    /// flicker, then the current truth is rendered regardless.
+    private let debounceInterval: Duration
+
+    /// Pending re-probe that surfaces the settled state after `debounceInterval`.
+    /// Ignored by observation: it is bookkeeping, not rendered state.
+    @ObservationIgnored private var debounceTask: Task<Void, Never>?
+
     public init(
         reader: any MeetingsReadinessReading = UserDefaultsMeetingsReadinessStore.shared,
         writer: (any MeetingsReadinessWriting)? = UserDefaultsMeetingsReadinessStore.shared,
@@ -47,7 +57,8 @@ public final class MeetingsReadinessViewModel {
             DistributedNotificationCenter.default().postNotificationName(
                 name, object: nil, userInfo: nil, deliverImmediately: true
             )
-        }
+        },
+        debounceInterval: Duration = .milliseconds(400)
     ) {
         self.reader = reader
         self.writer = writer
@@ -58,6 +69,7 @@ public final class MeetingsReadinessViewModel {
         self.mapper = mapper
         self.now = now
         self.post = post
+        self.debounceInterval = debounceInterval
     }
 
     /// Recomputes readiness IN-PROCESS from the live probes, persists the fresh
@@ -65,17 +77,76 @@ public final class MeetingsReadinessViewModel {
     /// whether the helper agent is running. Falls back to the last persisted
     /// snapshot if no in-process computer was injected (e.g. in tests).
     public func refresh() {
-        if let computer {
-            let snapshot = computer.snapshot()
-            writer?.write(snapshot)
-            render(from: snapshot)
+        apply(probe(), debounced: true)
+    }
+
+    /// Recomputes a snapshot from the live probes (persisting it) or falls back
+    /// to the last persisted snapshot when no in-process computer was injected.
+    private func probe() -> MeetingsReadinessSnapshot? {
+        guard let computer else { return reader.read() }
+        let snapshot = computer.snapshot()
+        writer?.write(snapshot)
+        return snapshot
+    }
+
+    /// Renders a freshly-probed snapshot. When `debounced` and the snapshot turns
+    /// a previously-calm row loud, the loud state is treated as a transient
+    /// re-probe glitch and held for `debounceInterval` before the current truth
+    /// is shown. A row that was ALREADY loud (settled needs-setup) and the very
+    /// first render are surfaced immediately — real setup prompts are never
+    /// hidden, only a brand-new loud transition is briefly delayed.
+    private func apply(_ snapshot: MeetingsReadinessSnapshot?, debounced: Bool) {
+        let newSections = mapper.sections(from: merge(inFlightDownloads, into: snapshot), now: now())
+        if debounced, Self.introducesLoudRegression(from: sections, to: newSections) {
+            scheduleDebouncedReprobe()
         } else {
-            render(from: reader.read())
+            debounceTask?.cancel()
+            debounceTask = nil
+            sections = newSections
+        }
+    }
+
+    private func scheduleDebouncedReprobe() {
+        debounceTask?.cancel()
+        debounceTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: self.debounceInterval)
+            guard !Task.isCancelled else { return }
+            self.debounceTask = nil
+            // Show whatever is true now: a cleared transient renders calm; a
+            // state that stayed loud renders its (real) needs-setup prompt.
+            self.apply(self.probe(), debounced: false)
         }
     }
 
     private func render(from snapshot: MeetingsReadinessSnapshot?) {
         sections = mapper.sections(from: merge(inFlightDownloads, into: snapshot), now: now())
+    }
+
+    /// A row is "loud" when its state is `.warning`/`.error` — the taller
+    /// warning/error card (with an action button) the tab reflows around.
+    static func isLoud(_ state: ReadinessRowState) -> Bool {
+        state == .warning || state == .error
+    }
+
+    /// True when the new sections turn a previously-calm row loud — the visible
+    /// "flip". Rows already loud (settled needs-setup) and rows with no prior
+    /// reading (first render) are NOT regressions, so genuine setup prompts
+    /// surface immediately.
+    static func introducesLoudRegression(
+        from old: [ReadinessSection],
+        to new: [ReadinessSection]
+    ) -> Bool {
+        var previous: [String: ReadinessRowState] = [:]
+        for section in old {
+            for row in section.rows { previous[row.id] = row.state }
+        }
+        for section in new {
+            for row in section.rows where isLoud(row.state) {
+                if let prior = previous[row.id], !isLoud(prior) { return true }
+            }
+        }
+        return false
     }
 
     /// Overlays any in-flight download progress onto the snapshot's model rows so

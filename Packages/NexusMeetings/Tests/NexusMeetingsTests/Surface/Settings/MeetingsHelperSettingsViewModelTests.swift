@@ -66,6 +66,47 @@ private final class MicRequestFlag: @unchecked Sendable {
 }
 
 @MainActor
+@Test func enablingHelperRefreshesReadinessAfterMicCompletion() {
+    let posts = PostRecorder()
+    let vm = MeetingsHelperSettingsViewModel(
+        statusProvider: { .enabled },
+        registrar: RecordingRegistrar(),
+        preferenceStore: RecordingAutoRecordStore(),
+        requestMicrophoneAccess: { completion in completion(true) },
+        post: { posts.append($0) }
+    )
+
+    vm.toggle(enabled: true)
+
+    // The mic-completion path must re-probe readiness (so the panel doesn't
+    // stick on the transient mid-prompt state), plus the best-effort helper nudge.
+    #expect(posts.names.contains(MeetingsReadinessNotification.readinessDidChange))
+    #expect(posts.names.contains(MeetingsReadinessNotification.refreshReadiness))
+}
+
+@MainActor
+@Test func disablingHelperDoesNotRefreshReadiness() {
+    let posts = PostRecorder()
+    let vm = MeetingsHelperSettingsViewModel(
+        statusProvider: { .notRegistered },
+        registrar: RecordingRegistrar(),
+        preferenceStore: RecordingAutoRecordStore(),
+        post: { posts.append($0) }
+    )
+
+    vm.toggle(enabled: false)
+
+    #expect(posts.names.isEmpty)
+}
+
+private final class PostRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [Notification.Name] = []
+    var names: [Notification.Name] { lock.withLock { stored } }
+    func append(_ name: Notification.Name) { lock.withLock { stored.append(name) } }
+}
+
+@MainActor
 @Test func disablingHelperUnregistersViaRegistrar() {
     let registrar = RecordingRegistrar()
     let preferences = RecordingAutoRecordStore()
