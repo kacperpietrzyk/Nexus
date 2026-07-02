@@ -466,6 +466,7 @@ struct NexusiOSApp: App {
                 chatModelAvailability: Self.makeChatModelAvailabilityProbe(
                     lifecycle: dependencies.mlxLifecycle
                 ),
+                recoverEngine: { await dependencies.router.recoverMLXChat() },
                 eventsProvider: {
                     let end = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
                     return

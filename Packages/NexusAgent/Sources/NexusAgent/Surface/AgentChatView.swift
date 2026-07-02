@@ -280,6 +280,7 @@ public struct AgentChatView: View {
                 )
             },
             isThinking: viewModel.isThinking,
+            isLoadingModel: viewModel.isLoadingModel,
             voiceCapture: viewModel.voiceCapture,
             imageCaptureAvailability: {
                 viewModel.isImageCaptureAvailable()

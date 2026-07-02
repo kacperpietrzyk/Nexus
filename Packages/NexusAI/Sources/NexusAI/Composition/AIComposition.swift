@@ -101,17 +101,25 @@ public enum AIComposition {
         // load to the new model instead of the folder captured here. `lifecycle`
         // is captured strongly — it is already retained by the returned
         // `AIGraph`, and the engine holds it strongly anyway, so no new cycle.
-        let chatEngine = MLXChatEngine(
-            folderProvider: { lifecycle.chatFolderURL() },
-            lifecycle: lifecycle
-        )
+        // Factory (not a one-off engine): the chat provider needs to build a
+        // FRESH engine when it abandons a wedged one after a turn timeout
+        // (`MLXProvider.recreateEngine()`). Each engine re-resolves the folder
+        // dynamically, so a rebuilt engine still targets the assigned model.
+        let chatEngineFactory: @Sendable () -> MLXChatEngine = {
+            MLXChatEngine(
+                folderProvider: { lifecycle.chatFolderURL() },
+                lifecycle: lifecycle
+            )
+        }
         let embedderEngine = MLXEmbedderEngine(
             folderProvider: { lifecycle.embedderFolderURL() },
             lifecycle: lifecycle
         )
         let mlxChat = MLXProvider(
-            engine: chatEngine,
-            availabilityProbe: { [weak lifecycle] in lifecycle?.isChatAvailable ?? false }
+            engine: chatEngineFactory(),
+            availabilityProbe: { [weak lifecycle] in lifecycle?.isChatAvailable ?? false },
+            engineFactory: chatEngineFactory,
+            resetLifecycleSlot: { [weak lifecycle] in lifecycle?.unloadChat() }
         )
         let mlxEmbedder = MLXEmbedderProvider(
             engine: embedderEngine,

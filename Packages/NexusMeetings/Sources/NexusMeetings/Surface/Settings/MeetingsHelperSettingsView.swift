@@ -39,6 +39,7 @@ public final class MeetingsHelperSettingsViewModel: ObservableObject {
     private let registrar: any HelperRegistrar
     private let preferenceStore: any HelperAutoRecordStoring
     private let requestMicrophoneAccess: @Sendable (@escaping @Sendable (Bool) -> Void) -> Void
+    private let post: @Sendable (Notification.Name) -> Void
 
     public init(
         statusProvider: @escaping () -> SMAppService.Status = {
@@ -48,12 +49,18 @@ public final class MeetingsHelperSettingsViewModel: ObservableObject {
         preferenceStore: any HelperAutoRecordStoring = UserDefaultsHelperAutoRecordStore.shared,
         requestMicrophoneAccess: @escaping @Sendable (@escaping @Sendable (Bool) -> Void) -> Void = { completion in
             AVCaptureDevice.requestAccess(for: .audio) { granted in completion(granted) }
+        },
+        post: @escaping @Sendable (Notification.Name) -> Void = { name in
+            DistributedNotificationCenter.default().postNotificationName(
+                name, object: nil, userInfo: nil, deliverImmediately: true
+            )
         }
     ) {
         self.statusProvider = statusProvider
         self.registrar = registrar
         self.preferenceStore = preferenceStore
         self.requestMicrophoneAccess = requestMicrophoneAccess
+        self.post = post
 
         let status = statusProvider()
         isEnabled = status == .enabled
@@ -77,13 +84,16 @@ public final class MeetingsHelperSettingsViewModel: ObservableObject {
             if enabled {
                 // Request microphone IN-PROCESS (main app has `audio-input`); the
                 // cross-app post to the sandboxed helper was unreliable.
-                requestMicrophoneAccess { _ in }
+                requestMicrophoneAccess { [post] _ in
+                    // Re-probe readiness once the mic prompt is answered so the
+                    // panel reflects the SETTLED permission instead of sticking on
+                    // the transient (mid-prompt) state captured during the toggle.
+                    // The readiness section observes `readinessDidChange`.
+                    post(MeetingsReadinessNotification.readinessDidChange)
+                }
                 // Nudge the (now-launching) helper to refresh its Accessibility /
                 // system-audio view as a best-effort fallback.
-                DistributedNotificationCenter.default().postNotificationName(
-                    MeetingsReadinessNotification.refreshReadiness,
-                    object: nil, userInfo: nil, deliverImmediately: true
-                )
+                post(MeetingsReadinessNotification.refreshReadiness)
             }
             refresh()
         } catch {

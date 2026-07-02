@@ -195,6 +195,19 @@ extension AIRouter {
         try await provider.reload()
     }
 
+    /// Recovers a WEDGED MLX chat engine after a wall-clock turn timeout: the
+    /// provider abandons its stuck engine and swaps in a fresh, cold one so the
+    /// next turn starts clean. Never throws — recovery must not itself fail the
+    /// UI recovery path; a missing provider is a silent no-op. Same concrete-type
+    /// disambiguation as `preloadMLXChat` (both MLX providers share `id == .mlx`).
+    public func recoverMLXChat() async {
+        guard let provider = providers.compactMap({ $0 as? MLXProvider }).first else {
+            return
+        }
+
+        await provider.recreateEngine()
+    }
+
     /// In-process rebind of the MLX embedder provider after an embedder
     /// assignment change.
     public func reloadMLXEmbedder() async throws {

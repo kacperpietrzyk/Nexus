@@ -162,6 +162,7 @@ struct AgentBottomInput: View {
                 )
             },
             isThinking: viewModel.isThinking,
+            isLoadingModel: viewModel.isLoadingModel,
             voiceCapture: viewModel.voiceCapture,
             imageCaptureAvailability: {
                 viewModel.isImageCaptureAvailable()

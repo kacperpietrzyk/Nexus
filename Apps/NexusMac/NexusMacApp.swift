@@ -173,7 +173,10 @@ struct NexusMacApp: App {
                     && FileManager.default.fileExists(atPath: agentLifecycle.chatFolderURL().path)
                 guard assigned, !agentLifecycle.isChatAvailable else { return }
                 try? await agentRouter.preloadMLXChat()
-            }
+            },
+            // Recovery for a wedged on-device engine after a turn timeout: abandon
+            // the stuck engine and swap in a fresh one so the next send is clean.
+            recoverEngine: { await agentRouter.recoverMLXChat() }
         )
         let handler = Self.installNotificationHandler(repository: self.taskRepository, scheduler: notifScheduler)
         self.actionHandler = handler
@@ -784,7 +787,8 @@ struct NexusMacApp: App {
         meetingTools: [any AgentTool],
         ocrPipeline: OCRPipeline,
         meetingCandidatesProvider: (@MainActor () -> [MeetingDecomposeCandidate])? = nil,
-        warmChatModel: @escaping @MainActor () async -> Void
+        warmChatModel: @escaping @MainActor () async -> Void,
+        recoverEngine: @escaping @MainActor () async -> Void
     ) -> AgentComposition {
         let additionalTools =
             NexusAgentToolsExtras.tools() + meetingTools
@@ -809,6 +813,7 @@ struct NexusMacApp: App {
                 additionalTools: additionalTools,
                 ocrPipeline: ocrPipeline,
                 warmChatModel: warmChatModel,
+                recoverEngine: recoverEngine,
                 chatReadiness: chatReadiness,
                 eventsProvider: {
                     let end = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now

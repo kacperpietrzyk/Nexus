@@ -89,6 +89,7 @@ public struct AgentComposition {
         ocrPipeline: OCRPipeline? = nil,
         chatModelAvailability: (@MainActor () -> Bool)? = nil,
         warmChatModel: (@MainActor () async -> Void)? = nil,
+        recoverEngine: (@MainActor () async -> Void)? = nil,
         chatReadiness: (@MainActor () -> AssistantReadiness)? = nil,
         /// Optional calendar-event provider for the overload insight.
         /// Defaults to `{ [] }` (no events). Apps supply their EventKit provider.
@@ -245,7 +246,8 @@ public struct AgentComposition {
             chatConfig: platform == .mac ? .mac : .iOS,
             proposalCoordinator: chatCoordinator,
             readinessProbe: chatReadiness,
-            assembleContext: iosAssembleContext
+            assembleContext: iosAssembleContext,
+            recoverEngine: recoverEngine
         )
         let settingsContext = AgentSettingsContext(
             memoryStore: stores.memoryStore,

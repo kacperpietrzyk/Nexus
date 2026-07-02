@@ -35,14 +35,32 @@ public actor MLXProvider: AIProvider {
     public nonisolated var isAvailableOnThisPlatform: Bool { availabilityProbe() }
 
     private nonisolated let availabilityProbe: @Sendable () -> Bool
-    private let engine: MLXChatEngine
+    /// Swappable so a wedged engine can be ABANDONED and replaced (see
+    /// `recreateEngine()`). `var`, not `let`: recovery reassigns it.
+    private var engine: MLXChatEngine
+    /// Builds a fresh, cold engine on demand. Injected by `AIComposition` so the
+    /// replacement targets the same dynamic model folder + lifecycle. `nil` for
+    /// static-folder / test construction that has no recovery need.
+    private let engineFactory: (@Sendable () -> MLXChatEngine)?
+    /// Clears the chat lifecycle slot on recreate (mirrors `MLXChatEngine.unload()`'s
+    /// `lifecycle?.unloadChat()`). Without this, `isChatAvailable` stays stale-`true`
+    /// after the wedged engine is dropped: the availability probe would keep routing
+    /// to a nil-container fresh engine, and the app's warm closure (guarded on
+    /// `!isChatAvailable`) would skip warming — silently cold-loading the recreated
+    /// engine inside the next `generate` (reintroducing the silent freeze). Resetting
+    /// re-opens the warm so `preload()` loads the fresh engine visibly.
+    private let resetLifecycleSlot: (@Sendable () -> Void)?
 
     public init(
         engine: MLXChatEngine,
-        availabilityProbe: @escaping @Sendable () -> Bool
+        availabilityProbe: @escaping @Sendable () -> Bool,
+        engineFactory: (@Sendable () -> MLXChatEngine)? = nil,
+        resetLifecycleSlot: (@Sendable () -> Void)? = nil
     ) {
         self.engine = engine
         self.availabilityProbe = availabilityProbe
+        self.engineFactory = engineFactory
+        self.resetLifecycleSlot = resetLifecycleSlot
     }
 
     public func generate(_ request: AIRequest) async throws -> AIResponse {
@@ -126,5 +144,24 @@ public actor MLXProvider: AIProvider {
     public func reload() async throws {
         await engine.unload()
         try await engine.preload()
+    }
+
+    /// Recovery for a WEDGED engine: abandon the current engine reference and
+    /// swap in a fresh instance from `engineFactory`, so the next `generate` /
+    /// `preload` runs on a clean engine.
+    ///
+    /// Crucially this does NOT touch the old engine — no `unload()`, no `reset`.
+    /// A hung `MLX.eval` is blocking, non-cancellable C++ that holds the old
+    /// engine actor's executor (and its busy gate); any method call on it would
+    /// itself hang. The old engine (and its GPU/RAM) therefore leaks until
+    /// process exit — an accepted tradeoff so the UI recovers. This is ABANDON,
+    /// not cancel. No-op when no `engineFactory` was injected.
+    public func recreateEngine() {
+        guard let engineFactory else { return }
+        // Clear the (stale-loaded) lifecycle slot BEFORE swapping so availability
+        // flips false while the fresh engine is still cold — the warm path then
+        // re-loads it visibly instead of a silent cold load inside `generate`.
+        resetLifecycleSlot?()
+        engine = engineFactory()
     }
 }

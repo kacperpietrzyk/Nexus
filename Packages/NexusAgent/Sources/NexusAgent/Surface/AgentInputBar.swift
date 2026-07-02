@@ -101,6 +101,7 @@ public struct AgentInputBar: View {
 
     private let onSend: OnSendWithAttachments
     private let isThinking: Bool
+    private let isLoadingModel: Bool
     private let voiceCapture: AgentVoiceCapture?
     private let imageCaptureAvailability: ImageCaptureAvailability?
     private let imageAttachmentDeferralReasonProvider: ImageAttachmentDeferralReasonProvider?
@@ -132,6 +133,7 @@ public struct AgentInputBar: View {
     public init(
         onSend: @escaping OnSend,
         isThinking: Bool,
+        isLoadingModel: Bool = false,
         voiceCapture: AgentVoiceCapture? = nil
     ) {
         self.onSend = { text, _, _ in
@@ -139,6 +141,7 @@ public struct AgentInputBar: View {
             return .accepted
         }
         self.isThinking = isThinking
+        self.isLoadingModel = isLoadingModel
         self.voiceCapture = voiceCapture
         self.imageCaptureAvailability = nil
         self.imageAttachmentDeferralReasonProvider = nil
@@ -147,12 +150,14 @@ public struct AgentInputBar: View {
     public init(
         onSendWithAttachments: @escaping OnSendWithAttachments,
         isThinking: Bool,
+        isLoadingModel: Bool = false,
         voiceCapture: AgentVoiceCapture? = nil,
         imageCaptureAvailability: ImageCaptureAvailability? = nil,
         imageAttachmentDeferralReason: ImageAttachmentDeferralReasonProvider? = nil
     ) {
         self.onSend = onSendWithAttachments
         self.isThinking = isThinking
+        self.isLoadingModel = isLoadingModel
         self.voiceCapture = voiceCapture
         self.imageCaptureAvailability = imageCaptureAvailability
         self.imageAttachmentDeferralReasonProvider = imageAttachmentDeferralReason
@@ -201,7 +206,12 @@ public struct AgentInputBar: View {
                 .accessibilityLabel("Send message")
             }
 
-            if isThinking {
+            if isLoadingModel {
+                Text("Loading model…")
+                    .font(DS.FontToken.metadata)
+                    .foregroundStyle(DS.ColorToken.textTertiary)
+                    .accessibilityLabel("Loading on-device model")
+            } else if isThinking {
                 Text("Nexus is thinking...")
                     .font(DS.FontToken.metadata)
                     .foregroundStyle(DS.ColorToken.textTertiary)
