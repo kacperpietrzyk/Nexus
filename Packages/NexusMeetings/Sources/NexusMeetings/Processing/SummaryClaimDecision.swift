@@ -15,4 +15,18 @@ public enum SummaryClaimDecision {
         currentStatus == MeetingProcessingStatus.awaitingExternalSummary.rawValue
             || currentStatus == MeetingProcessingStatus.claimedExternalSummary.rawValue
     }
+
+    /// Whether the HELPER should re-arm a transcript-complete-but-summary-pending
+    /// meeting on its own relaunch. `awaiting` always re-arms (no live claim). A
+    /// `claimed` meeting is only reclaimed when the claim has gone STALE (older than
+    /// `staleness`) or its claim time is unknown (pre-migration) — otherwise a live
+    /// app session owns it and must be left alone (avoids a double summary).
+    public static func shouldReclaimOnHelperLaunch(
+        status: String, claimedAt: Date?, now: Date, staleness: TimeInterval
+    ) -> Bool {
+        if status == MeetingProcessingStatus.awaitingExternalSummary.rawValue { return true }
+        guard status == MeetingProcessingStatus.claimedExternalSummary.rawValue else { return false }
+        guard let claimedAt else { return true }
+        return now.timeIntervalSince(claimedAt) > staleness
+    }
 }

@@ -81,10 +81,15 @@ extension MeetingSummaryClaimer {
         rootFolder: URL
     ) {
         self.init(
-            pendingMeetings: { (try? repo.recent(limit: 50)) ?? [] },
+            // Dedup ghost duplicate-id rows before the launch sweep: otherwise two
+            // rows sharing one Meeting.id each pass canRecoverOnLaunch and enqueue a
+            // separate summary job for the same meeting (double-summary that overwrites
+            // the first result and re-runs action-item extraction).
+            pendingMeetings: { ((try? repo.recent(limit: 50)) ?? []).dedupedByID() },
             find: { try? repo.find(id: $0) },
             claim: { meeting in
                 meeting.processingStatus = MeetingProcessingStatus.claimedExternalSummary.rawValue
+                meeting.claimedAt = Date()
                 meeting.updatedAt = Date()
                 try? repo.upsert(meeting)
             },

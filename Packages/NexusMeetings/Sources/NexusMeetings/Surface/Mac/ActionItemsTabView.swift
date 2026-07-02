@@ -66,9 +66,9 @@ public struct ActionItemsTabView: View {
         .onAppear {
             reload()
         }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            reload()
-        }
+        // Also refresh on remote/cross-process store changes (CloudKit imports and
+        // helper-process writes post .NSPersistentStoreRemoteChange, not didSave).
+        .reloadOnStoreChange { reload() }
     }
 
     // MARK: - Actions

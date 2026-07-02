@@ -102,9 +102,11 @@ struct IOSMeetingsListContentView: View {
         .onAppear {
             reload()
         }
-        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-            reload()
-        }
+        // Observe remote/cross-process store changes too: CloudKit imports from
+        // other devices (and helper-process writes) merge on a background context
+        // and post .NSPersistentStoreRemoteChange, NOT ModelContext.didSave — a
+        // didSave-only view never refreshed for those until re-created.
+        .reloadOnStoreChange { reload() }
         .undoToast(undo)
     }
 
@@ -147,8 +149,14 @@ struct IOSMeetingsListContentView: View {
     }
 
     private func reload() {
+        // Filter soft-deleted BEFORE collapsing duplicate ids: synced Meeting UUIDs
+        // are not unique (CloudKit forbids @Attribute(.unique); the live store carries
+        // real duplicate-id rows). Without dedup, `ForEach(id: \.id)` sees two elements
+        // sharing one UUID → "ID occurs multiple times … undefined results" and
+        // swipe-to-delete can hit the wrong row. Matches LiquidMeetingsModel.reload.
         meetings = ((try? composition.meetingRepository.allChronological()) ?? [])
             .filter { $0.deletedAt == nil }
+            .dedupedByID()
     }
 }
 
