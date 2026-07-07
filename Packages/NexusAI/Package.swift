@@ -19,7 +19,7 @@ let package = Package(
         // (no #if os(macOS) guard → NexusiOS build fails) + a CudaBuild build-tool
         // plugin headless xcodebuild rejects. Revisit when upstream guards Encuda
         // for non-macOS. mlx-swift-lm 3.31.4 allows >=0.31.4 <0.32.0.
-        .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.31.4"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.31.6"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.4"),
     ],
     targets: [
